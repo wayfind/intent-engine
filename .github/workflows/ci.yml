@@ -86,7 +86,7 @@ jobs:
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: test-results-${{ matrix.os }}-${{ matrix.rust }}
           path: |
@@ -140,7 +140,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Archive coverage results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: code-coverage-report
           path: cobertura.xml
@@ -265,7 +265,7 @@ jobs:
         continue-on-error: true
 
       - name: Archive benchmark results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: benchmark-results
           path: target/criterion/
