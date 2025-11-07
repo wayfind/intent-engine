@@ -5,26 +5,37 @@ on:
     branches: [ main, master, claude/** ]
   pull_request:
     branches: [ main, master ]
+  schedule:
+    # Run daily at 00:00 UTC to catch dependency issues
+    - cron: '0 0 * * *'
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   test:
-    name: Test
+    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable]
+        rust: [stable, beta]
+        include:
+          # Also test on nightly, but allow it to fail
+          - os: ubuntu-latest
+            rust: nightly
+            experimental: true
+
+    continue-on-error: ${{ matrix.experimental || false }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
@@ -54,9 +65,11 @@ jobs:
             ${{ runner.os }}-cargo-build-target-
 
       - name: Check formatting
+        if: matrix.rust == 'stable'
         run: cargo fmt --all -- --check
 
       - name: Run clippy
+        if: matrix.rust == 'stable' || matrix.rust == 'beta'
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build
@@ -71,6 +84,109 @@ jobs:
       - name: Run doctor command
         run: cargo run --release -- doctor
 
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.rust }}
+          path: |
+            target/debug/deps/*.log
+            target/release/deps/*.log
+
+  # Test with minimal dependency versions
+  test-minimal-versions:
+    name: Test Minimal Versions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (nightly for -Z minimal-versions)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate minimal lockfile
+        run: cargo +nightly update -Z minimal-versions
+
+      - name: Build with minimal versions
+        run: cargo +stable build --verbose
+
+      - name: Test with minimal versions
+        run: cargo +stable test --verbose
+
+  # Code coverage
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Generate coverage
+        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./cobertura.xml
+          fail_ci_if_error: false
+
+      - name: Archive coverage results
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-coverage-report
+          path: cobertura.xml
+
+  # Security audit
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo-audit
+        run: cargo audit
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Run cargo-deny
+        run: cargo deny check
+
+  # Documentation check
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check documentation
+        run: cargo doc --no-deps --all-features --document-private-items
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+      - name: Test documentation examples
+        run: cargo test --doc --all-features
+
   # Check that Cargo.toml is ready for crates.io
   check-package:
     name: Check Package
@@ -84,6 +200,45 @@ jobs:
 
       - name: Check package
         run: cargo package --list --allow-dirty
+
+      - name: Verify package contents
+        run: |
+          cargo package --allow-dirty
+          tar -xzf target/package/intent-engine-*.tar.gz -C target/package
+          cd target/package/intent-engine-*/
+          cargo build --verbose
+          cargo test --verbose
+
+  # Dependency review
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v3
+
+  # Check for outdated dependencies
+  outdated:
+    name: Outdated Dependencies
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-outdated
+        run: cargo install cargo-outdated
+
+      - name: Check for outdated dependencies
+        run: cargo outdated --exit-code 1
+        continue-on-error: true
 
   # Run benchmarks (but don't fail if they're slow)
   bench:
@@ -108,3 +263,65 @@ jobs:
       - name: Run benchmarks
         run: cargo bench --no-fail-fast
         continue-on-error: true
+
+      - name: Archive benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: target/criterion/
+
+  # Check installation scripts
+  install-scripts:
+    name: Test Install Scripts
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test install.sh
+        run: |
+          chmod +x install.sh
+          ./install.sh
+          intent-engine doctor
+
+  # Final status check
+  ci-success:
+    name: CI Success
+    needs:
+      - test
+      - coverage
+      - security-audit
+      - docs
+      - check-package
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "Test job failed"
+            exit 1
+          fi
+          if [ "${{ needs.coverage.result }}" != "success" ]; then
+            echo "Coverage job failed"
+            exit 1
+          fi
+          if [ "${{ needs.security-audit.result }}" != "success" ]; then
+            echo "Security audit job failed"
+            exit 1
+          fi
+          if [ "${{ needs.docs.result }}" != "success" ]; then
+            echo "Documentation job failed"
+            exit 1
+          fi
+          if [ "${{ needs.check-package.result }}" != "success" ]; then
+            echo "Package check job failed"
+            exit 1
+          fi
+          echo "All required jobs passed!"

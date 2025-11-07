@@ -14,7 +14,7 @@ This guide explains how to add Intent-Engine as an MCP (Model Context Protocol) 
 
 ```bash
 # Clone or download Intent-Engine
-git clone https://github.com/yourusername/intent-engine.git
+git clone https://github.com/wayfind/intent-engine.git
 cd intent-engine
 
 # Build and install
@@ -34,7 +34,7 @@ sudo cp target/release/intent-engine /usr/local/bin/
 cargo build --release
 
 # Or download pre-built binary from releases
-# https://github.com/yourusername/intent-engine/releases
+# https://github.com/wayfind/intent-engine/releases
 
 # Make sure it's in PATH
 sudo cp target/release/intent-engine /usr/local/bin/

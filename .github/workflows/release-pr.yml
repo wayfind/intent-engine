@@ -1,0 +1,71 @@
+name: Release PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, master]
+
+jobs:
+  release-check:
+    name: Release Readiness Check
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'release')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check version bump
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "Version in Cargo.toml: $VERSION"
+
+          # Check if this version already exists as a tag
+          if git ls-remote --tags origin | grep "refs/tags/v$VERSION"; then
+            echo "Error: Version v$VERSION already exists as a tag"
+            exit 1
+          fi
+
+          echo "Version check passed: v$VERSION is new"
+
+      - name: Check changelog
+        run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "Warning: No CHANGELOG.md found"
+            exit 0
+          fi
+
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          if ! grep -q "$VERSION" CHANGELOG.md; then
+            echo "Warning: Version $VERSION not found in CHANGELOG.md"
+          else
+            echo "CHANGELOG.md contains version $VERSION"
+          fi
+
+      - name: Verify package builds
+        run: |
+          cargo package --allow-dirty
+          tar -xzf target/package/intent-engine-*.tar.gz -C target/package
+          cd target/package/intent-engine-*/
+          cargo build --release --verbose
+          cargo test --verbose
+
+      - name: Dry run publish
+        run: cargo publish --dry-run --allow-dirty
+
+      - name: Comment on PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const version = require('fs').readFileSync('Cargo.toml', 'utf8')
+              .match(/^version = "(.+)"$/m)[1];
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              body: `✅ Release readiness check passed for version \`v${version}\`\n\nOnce merged, tag this commit with \`v${version}\` to trigger the release workflow.`
+            })
