@@ -51,6 +51,9 @@ pub enum Commands {
     /// Event logging commands
     #[command(subcommand)]
     Event(EventCommands),
+
+    /// Check system health and dependencies
+    Doctor,
 }
 
 #[derive(Subcommand)]

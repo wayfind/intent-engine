@@ -5,7 +5,6 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::path::Path;
 
 pub async fn create_pool(db_path: &Path) -> Result<SqlitePool> {
-
     let options = SqliteConnectOptions::new()
         .filename(db_path)
         .create_if_missing(true)

@@ -2,6 +2,15 @@
 name = "intent-engine"
 version = "0.1.0"
 edition = "2021"
+authors = ["Intent Engine Contributors"]
+description = "A command-line database service for tracking strategic intent, tasks, and events"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/wayfind/intent-engine"
+homepage = "https://github.com/wayfind/intent-engine"
+documentation = "https://docs.rs/intent-engine"
+readme = "README.md"
+keywords = ["cli", "task-management", "intent", "database", "workflow"]
+categories = ["command-line-utilities", "database"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }

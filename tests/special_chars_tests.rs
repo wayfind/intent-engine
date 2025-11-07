@@ -7,7 +7,6 @@
 /// - Control characters
 /// - Extreme length inputs
 /// - Empty and null-like inputs
-
 use intent_engine::db::{create_pool, run_migrations};
 use intent_engine::events::EventManager;
 use intent_engine::report::ReportManager;
@@ -31,10 +30,7 @@ async fn test_sql_injection_single_quote() {
 
     // Attempt SQL injection with single quote
     let malicious_name = "Task'; DROP TABLE tasks; --";
-    let task = task_mgr
-        .add_task(malicious_name, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(malicious_name, None, None).await.unwrap();
 
     assert_eq!(task.name, malicious_name);
 
@@ -49,10 +45,7 @@ async fn test_sql_injection_union_select() {
     let task_mgr = TaskManager::new(&pool);
 
     let malicious_name = "Task' UNION SELECT * FROM tasks WHERE '1'='1";
-    let task = task_mgr
-        .add_task(malicious_name, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(malicious_name, None, None).await.unwrap();
 
     assert_eq!(task.name, malicious_name);
 
@@ -108,10 +101,7 @@ async fn test_unicode_chinese_characters() {
     let task_mgr = TaskManager::new(&pool);
 
     let chinese_name = "实现用户认证功能";
-    let task = task_mgr
-        .add_task(chinese_name, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(chinese_name, None, None).await.unwrap();
 
     assert_eq!(task.name, chinese_name);
 
@@ -125,10 +115,7 @@ async fn test_unicode_japanese_characters() {
     let task_mgr = TaskManager::new(&pool);
 
     let japanese_name = "タスクを実装する";
-    let task = task_mgr
-        .add_task(japanese_name, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(japanese_name, None, None).await.unwrap();
 
     assert_eq!(task.name, japanese_name);
 }
@@ -139,10 +126,7 @@ async fn test_unicode_arabic_characters() {
     let task_mgr = TaskManager::new(&pool);
 
     let arabic_name = "تنفيذ المهمة";
-    let task = task_mgr
-        .add_task(arabic_name, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(arabic_name, None, None).await.unwrap();
 
     assert_eq!(task.name, arabic_name);
 }
@@ -153,10 +137,7 @@ async fn test_emoji_in_task_name() {
     let task_mgr = TaskManager::new(&pool);
 
     let emoji_name = "🚀 Deploy to production 🎉";
-    let task = task_mgr
-        .add_task(emoji_name, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(emoji_name, None, None).await.unwrap();
 
     assert_eq!(task.name, emoji_name);
 
@@ -170,10 +151,7 @@ async fn test_complex_emoji_sequences() {
     let task_mgr = TaskManager::new(&pool);
 
     let complex_emoji = "👨‍👩‍👧‍👦 Family task 🏳️‍🌈 🇺🇸";
-    let task = task_mgr
-        .add_task(complex_emoji, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(complex_emoji, None, None).await.unwrap();
 
     assert_eq!(task.name, complex_emoji);
 }
@@ -274,10 +252,7 @@ async fn test_multiline_task_name() {
     let task_mgr = TaskManager::new(&pool);
 
     let multiline_name = "Task title\nWith description\nAnd multiple lines";
-    let task = task_mgr
-        .add_task(multiline_name, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(multiline_name, None, None).await.unwrap();
 
     assert_eq!(task.name, multiline_name);
 }
@@ -326,10 +301,7 @@ async fn test_carriage_return() {
     let task_mgr = TaskManager::new(&pool);
 
     let name_with_cr = "Task\r\nwith\r\nCRLF";
-    let task = task_mgr
-        .add_task(name_with_cr, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(name_with_cr, None, None).await.unwrap();
 
     assert_eq!(task.name, name_with_cr);
 }
@@ -435,10 +407,7 @@ async fn test_markdown_in_task_name() {
     let task_mgr = TaskManager::new(&pool);
 
     let markdown_name = "# Task **bold** *italic* `code`";
-    let task = task_mgr
-        .add_task(markdown_name, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(markdown_name, None, None).await.unwrap();
 
     assert_eq!(task.name, markdown_name);
 }
@@ -552,14 +521,20 @@ async fn test_fts5_search_unicode() {
     // For better CJK support, would need custom tokenizers or external solutions
     // Testing with the full word that FTS5 can match
     let report = report_mgr
-        .generate_report(None, None, Some("实现用户认证功能".to_string()), None, false)
+        .generate_report(
+            None,
+            None,
+            Some("实现用户认证功能".to_string()),
+            None,
+            false,
+        )
         .await
         .unwrap();
 
     // Should find at least the exact match
     assert!(report.tasks.is_some());
     let tasks = report.tasks.unwrap();
-    assert!(tasks.len() >= 1);
+    assert!(!tasks.is_empty());
 }
 
 // ==================== Edge Cases ====================
@@ -588,10 +563,7 @@ async fn test_task_name_all_special_chars() {
     let task_mgr = TaskManager::new(&pool);
 
     let special_name = "!@#$%^&*()_+-=[]{}|;':\",./<>?~`";
-    let task = task_mgr
-        .add_task(special_name, None, None)
-        .await
-        .unwrap();
+    let task = task_mgr.add_task(special_name, None, None).await.unwrap();
 
     assert_eq!(task.name, special_name);
 }

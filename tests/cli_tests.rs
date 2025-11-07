@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
@@ -463,10 +465,7 @@ fn test_cli_project_awareness_from_subdirectory() {
 
     // Access from subdirectory (should find parent's database)
     let mut find_cmd = Command::cargo_bin("intent-engine").unwrap();
-    find_cmd
-        .current_dir(&subdir)
-        .arg("task")
-        .arg("find");
+    find_cmd.current_dir(&subdir).arg("task").arg("find");
 
     find_cmd
         .assert()
@@ -494,20 +493,12 @@ fn test_cli_project_awareness_deep_nesting() {
         .success();
 
     // Create deeply nested directory
-    let deep_dir = temp_dir
-        .path()
-        .join("a")
-        .join("b")
-        .join("c")
-        .join("d");
+    let deep_dir = temp_dir.path().join("a").join("b").join("c").join("d");
     fs::create_dir_all(&deep_dir).unwrap();
 
     // Access from deep directory (should traverse up and find root's database)
     let mut find_cmd = Command::cargo_bin("intent-engine").unwrap();
-    find_cmd
-        .current_dir(&deep_dir)
-        .arg("task")
-        .arg("find");
+    find_cmd.current_dir(&deep_dir).arg("task").arg("find");
 
     find_cmd
         .assert()
