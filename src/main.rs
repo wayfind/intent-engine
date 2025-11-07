@@ -6,6 +6,7 @@ use intent_engine::project::ProjectContext;
 use intent_engine::report::ReportManager;
 use intent_engine::tasks::TaskManager;
 use intent_engine::workspace::WorkspaceManager;
+use sqlx::Row;
 use std::io::{self, Read};
 
 #[tokio::main]
@@ -34,6 +35,7 @@ async fn run() -> Result<()> {
             handle_report_command(since, status, filter_name, filter_spec, summary_only).await?
         }
         Commands::Event(event_cmd) => handle_event_command(event_cmd).await?,
+        Commands::Doctor => handle_doctor_command().await?,
     }
 
     Ok(())
@@ -251,4 +253,98 @@ fn read_stdin() -> Result<String> {
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
     Ok(buffer.trim().to_string())
+}
+
+async fn handle_doctor_command() -> Result<()> {
+    use serde_json::json;
+
+    let mut checks = vec![];
+    let mut all_passed = true;
+
+    // Check OS and architecture
+    checks.push(json!({
+        "check": "System Information",
+        "status": "✓ PASS",
+        "details": format!("OS: {}, Arch: {}", std::env::consts::OS, std::env::consts::ARCH)
+    }));
+
+    // Check SQLite version
+    match sqlx::query("SELECT sqlite_version()")
+        .fetch_optional(&sqlx::SqlitePool::connect(":memory:").await?)
+        .await
+    {
+        Ok(Some(row)) => {
+            let version: String = row.try_get(0).unwrap_or_else(|_| "unknown".to_string());
+            checks.push(json!({
+                "check": "SQLite",
+                "status": "✓ PASS",
+                "details": format!("SQLite version: {}", version)
+            }));
+        }
+        Ok(None) | Err(_) => {
+            all_passed = false;
+            checks.push(json!({
+                "check": "SQLite",
+                "status": "✗ FAIL",
+                "details": "Unable to query SQLite version"
+            }));
+        }
+    }
+
+    // Check database initialization
+    match ProjectContext::load_or_init().await {
+        Ok(ctx) => {
+            // Test a simple query
+            match sqlx::query("SELECT COUNT(*) FROM tasks")
+                .fetch_one(&ctx.pool)
+                .await
+            {
+                Ok(row) => {
+                    let count: i64 = row.try_get(0).unwrap_or(0);
+                    checks.push(json!({
+                        "check": "Database Connection",
+                        "status": "✓ PASS",
+                        "details": format!("Connected to database, {} tasks found", count)
+                    }));
+                }
+                Err(e) => {
+                    all_passed = false;
+                    checks.push(json!({
+                        "check": "Database Connection",
+                        "status": "✗ FAIL",
+                        "details": format!("Database query failed: {}", e)
+                    }));
+                }
+            }
+        }
+        Err(e) => {
+            all_passed = false;
+            checks.push(json!({
+                "check": "Database Initialization",
+                "status": "✗ FAIL",
+                "details": format!("Failed to initialize database: {}", e)
+            }));
+        }
+    }
+
+    // Check intent-engine version
+    checks.push(json!({
+        "check": "Intent Engine Version",
+        "status": "✓ PASS",
+        "details": format!("v{}", env!("CARGO_PKG_VERSION"))
+    }));
+
+    let result = json!({
+        "summary": if all_passed { "✓ All checks passed" } else { "✗ Some checks failed" },
+        "overall_status": if all_passed { "healthy" } else { "unhealthy" },
+        "checks": checks
+    });
+
+    println!("{}", serde_json::to_string_pretty(&result)?);
+
+    if !all_passed {
+        std::process::exit(1);
+    }
+
+    Ok(())
 }
