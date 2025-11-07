@@ -288,7 +288,13 @@ jobs:
         run: |
           chmod +x install.sh
           ./install.sh
+        shell: bash
+
+      - name: Verify installation
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           intent-engine doctor
+        shell: bash
 
   # Final status check
   ci-success:
