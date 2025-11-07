@@ -1,0 +1,183 @@
+/// CLI integration tests for special characters
+///
+/// Tests that special characters work correctly through the CLI interface
+
+use assert_cmd::Command;
+use predicates::prelude::*;
+use tempfile::TempDir;
+
+fn setup_test_env() -> TempDir {
+    TempDir::new().unwrap()
+}
+
+#[test]
+fn test_cli_unicode_task_name() {
+    let temp_dir = setup_test_env();
+
+    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    cmd.current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("实现用户认证功能");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("实现用户认证功能"));
+}
+
+#[test]
+fn test_cli_emoji_task_name() {
+    let temp_dir = setup_test_env();
+
+    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    cmd.current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("🚀 Deploy to production 🎉");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("🚀 Deploy to production 🎉"));
+}
+
+#[test]
+fn test_cli_quotes_in_task_name() {
+    let temp_dir = setup_test_env();
+
+    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    cmd.current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg(r#"Task with "quoted" text"#);
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains(r#"Task with \"quoted\" text"#));
+}
+
+#[test]
+fn test_cli_multiline_spec() {
+    let temp_dir = setup_test_env();
+
+    let multiline_spec = "Line 1\nLine 2\nLine 3";
+
+    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    cmd.current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Test")
+        .arg("--spec-stdin")
+        .write_stdin(multiline_spec);
+
+    cmd.assert().success();
+}
+
+#[test]
+fn test_cli_special_chars_in_event() {
+    let temp_dir = setup_test_env();
+
+    // Create task first
+    let mut add_cmd = Command::cargo_bin("intent-engine").unwrap();
+    add_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Test")
+        .assert()
+        .success();
+
+    // Add event with special characters
+    let mut event_cmd = Command::cargo_bin("intent-engine").unwrap();
+    event_cmd
+        .current_dir(temp_dir.path())
+        .arg("event")
+        .arg("add")
+        .arg("--task-id")
+        .arg("1")
+        .arg("--type")
+        .arg("decision")
+        .arg("--data-stdin")
+        .write_stdin("Decision with <tags> & special chars");
+
+    event_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Decision with"));
+}
+
+#[test]
+fn test_cli_very_long_task_name() {
+    let temp_dir = setup_test_env();
+
+    let long_name = "A".repeat(1000);
+
+    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    cmd.current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg(&long_name);
+
+    cmd.assert().success();
+}
+
+#[test]
+fn test_cli_url_in_task_name() {
+    let temp_dir = setup_test_env();
+
+    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    cmd.current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Deploy to https://example.com/api?key=value&test=1");
+
+    cmd.assert().success();
+}
+
+#[test]
+fn test_cli_shell_metacharacters() {
+    let temp_dir = setup_test_env();
+
+    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    cmd.current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Task && echo test | grep bad");
+
+    cmd.assert().success();
+}
+
+#[test]
+fn test_cli_markdown_in_name() {
+    let temp_dir = setup_test_env();
+
+    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    cmd.current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("# Header **bold** *italic*");
+
+    cmd.assert().success();
+}
+
+#[test]
+fn test_cli_backslash_path() {
+    let temp_dir = setup_test_env();
+
+    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    cmd.current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg(r"C:\Users\test\path");
+
+    cmd.assert().success();
+}

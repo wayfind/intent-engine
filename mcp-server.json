@@ -1,0 +1,272 @@
+{
+  "name": "intent-engine",
+  "version": "0.1.0",
+  "description": "Intent-Engine MCP Server - Manage strategic intent and task workflow for human-AI collaboration",
+  "tools": [
+    {
+      "name": "task_add",
+      "description": "Create a new task to capture strategic intent. Use when a requirement is complex enough to need multiple steps, context, or long-term tracking.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Task name (required)"
+          },
+          "spec": {
+            "type": "string",
+            "description": "Detailed specification in markdown format (optional but recommended)"
+          },
+          "parent_id": {
+            "type": "integer",
+            "description": "Parent task ID for creating subtasks (optional)"
+          }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "task_start",
+      "description": "Start working on a task. ATOMIC operation: updates status to 'doing', sets as current task, and returns full context with events. Always use this to begin work.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "Task ID to start"
+          },
+          "with_events": {
+            "type": "boolean",
+            "description": "Include events summary (recommended: true)",
+            "default": true
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "task_pick_next",
+      "description": "Intelligently select next tasks from todo list. Use when you have multiple tasks and need to decide optimal order based on priority and complexity.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "max_count": {
+            "type": "integer",
+            "description": "Maximum number of tasks to pick",
+            "default": 5
+          },
+          "capacity": {
+            "type": "integer",
+            "description": "Maximum total tasks allowed in 'doing' status",
+            "default": 5
+          }
+        }
+      }
+    },
+    {
+      "name": "task_spawn_subtask",
+      "description": "Create a subtask under current task and switch to it. ATOMIC operation. Use when you discover a sub-problem that must be solved first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Subtask name"
+          },
+          "spec": {
+            "type": "string",
+            "description": "Subtask specification (optional)"
+          }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "task_switch",
+      "description": "Switch to a different task. ATOMIC operation: updates to 'doing' if needed, sets as current, returns context with events.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "Task ID to switch to"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "task_done",
+      "description": "Mark task as complete. Enforces that all subtasks must be done first. Use when all objectives in spec are achieved.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "Task ID to complete"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "task_update",
+      "description": "Update task properties including complexity (1-10) and priority (higher = more important).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "Task ID to update"
+          },
+          "name": {
+            "type": "string",
+            "description": "New name (optional)"
+          },
+          "spec": {
+            "type": "string",
+            "description": "New specification (optional)"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["todo", "doing", "done"],
+            "description": "New status (optional, prefer atomic commands)"
+          },
+          "complexity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "Task complexity 1-10 (optional)"
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Task priority, higher = more important (optional)"
+          },
+          "parent_id": {
+            "type": "integer",
+            "description": "New parent task ID (optional)"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "task_find",
+      "description": "Find tasks by status or parent. Use to review task list.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["todo", "doing", "done"],
+            "description": "Filter by status (optional)"
+          },
+          "parent": {
+            "type": "string",
+            "description": "Filter by parent ID or 'null' for root tasks (optional)"
+          }
+        }
+      }
+    },
+    {
+      "name": "task_get",
+      "description": "Get detailed information about a specific task.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "Task ID"
+          },
+          "with_events": {
+            "type": "boolean",
+            "description": "Include events summary",
+            "default": false
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "event_add",
+      "description": "Record a key event for a task. Use to log decisions, blockers, milestones. This is AI's external long-term memory.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "Task ID"
+          },
+          "event_type": {
+            "type": "string",
+            "enum": ["decision", "blocker", "milestone", "discussion", "note"],
+            "description": "Event type"
+          },
+          "data": {
+            "type": "string",
+            "description": "Event content in markdown format"
+          }
+        },
+        "required": ["task_id", "event_type", "data"]
+      }
+    },
+    {
+      "name": "event_list",
+      "description": "List events for a task. Use to recover context when resuming work.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "Task ID"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Limit number of events (optional)"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "current_task_get",
+      "description": "Get the current task being worked on.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "report_generate",
+      "description": "Generate work report. ALWAYS use --summary-only to save tokens unless you need full details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "string",
+            "enum": ["1h", "6h", "1d", "7d", "30d"],
+            "description": "Time range (optional)"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["todo", "doing", "done"],
+            "description": "Filter by status (optional)"
+          },
+          "filter_name": {
+            "type": "string",
+            "description": "FTS5 search in task names (optional)"
+          },
+          "filter_spec": {
+            "type": "string",
+            "description": "FTS5 search in task specs (optional)"
+          },
+          "summary_only": {
+            "type": "boolean",
+            "description": "Return only summary (recommended: true)",
+            "default": true
+          }
+        }
+      }
+    }
+  ]
+}

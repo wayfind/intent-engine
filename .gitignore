@@ -1,0 +1,22 @@
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.iml
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Intent-Engine data
+.intent-engine/
+
+# OS
+.DS_Store
+Thumbs.db
