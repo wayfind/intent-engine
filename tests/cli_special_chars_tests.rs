@@ -1,7 +1,8 @@
+#![allow(deprecated)]
+
 /// CLI integration tests for special characters
 ///
 /// Tests that special characters work correctly through the CLI interface
-
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;

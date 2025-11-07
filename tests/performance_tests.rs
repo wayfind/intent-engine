@@ -33,10 +33,7 @@ async fn test_deep_task_hierarchy() {
     }
 
     let elapsed = start.elapsed();
-    println!(
-        "Created {}-level deep hierarchy in {:?}",
-        depth, elapsed
-    );
+    println!("Created {}-level deep hierarchy in {:?}", depth, elapsed);
 
     // Test retrieving leaf task
     let start = Instant::now();
@@ -66,10 +63,7 @@ async fn test_very_deep_task_hierarchy() {
     }
 
     let elapsed = start.elapsed();
-    println!(
-        "Created {}-level deep hierarchy in {:?}",
-        depth, elapsed
-    );
+    println!("Created {}-level deep hierarchy in {:?}", depth, elapsed);
     assert!(elapsed.as_secs() < 10, "Should complete within 10 seconds");
 }
 
@@ -185,11 +179,7 @@ async fn test_massive_events() {
     let events = event_mgr.list_events(task.id, Some(100)).await.unwrap();
     let elapsed = start.elapsed();
 
-    println!(
-        "Listed {} events (limited) in {:?}",
-        events.len(),
-        elapsed
-    );
+    println!("Listed {} events (limited) in {:?}", events.len(), elapsed);
     assert_eq!(events.len(), 100);
 }
 
@@ -199,10 +189,7 @@ async fn test_wide_task_hierarchy() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
 
-    let parent = task_mgr
-        .add_task("Parent task", None, None)
-        .await
-        .unwrap();
+    let parent = task_mgr.add_task("Parent task", None, None).await.unwrap();
 
     let children_count = 1000;
     let start = Instant::now();
@@ -243,7 +230,7 @@ async fn test_fts5_search_performance() {
     let count = 5_000;
 
     // Create tasks with various names
-    let keywords = vec![
+    let keywords = [
         "authentication",
         "database",
         "frontend",
@@ -330,10 +317,7 @@ async fn test_report_generation_performance() {
         .unwrap();
     let elapsed = start.elapsed();
 
-    println!(
-        "Generated summary-only report in {:?}",
-        elapsed
-    );
+    println!("Generated summary-only report in {:?}", elapsed);
     assert!(elapsed.as_millis() < 500, "Summary should be fast");
 
     // Test full report

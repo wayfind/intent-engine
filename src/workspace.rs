@@ -21,11 +21,10 @@ impl<'a> WorkspaceManager<'a> {
 
     /// Get the current task
     pub async fn get_current_task(&self) -> Result<CurrentTaskResponse> {
-        let current_task_id: Option<String> = sqlx::query_scalar(
-            "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-        )
-        .fetch_optional(self.pool)
-        .await?;
+        let current_task_id: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(self.pool)
+                .await?;
 
         let current_task_id = current_task_id.and_then(|id| id.parse::<i64>().ok());
 

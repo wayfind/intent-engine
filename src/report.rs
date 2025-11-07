@@ -47,7 +47,10 @@ impl<'a> ReportManager<'a> {
 
         // If FTS filters were applied, intersect with other filters
         let tasks = if !task_ids.is_empty() {
-            task_query.push_str(&format!(" AND id IN ({})", task_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ")));
+            task_query.push_str(&format!(
+                " AND id IN ({})",
+                task_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+            ));
             let full_query = task_query.replace("SELECT id", "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at");
             let mut q = sqlx::query_as::<_, Task>(&full_query);
             for cond in &task_conditions {
@@ -69,23 +72,28 @@ impl<'a> ReportManager<'a> {
         };
 
         // Count tasks by status
-        let todo_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'todo'")
-            .fetch_one(self.pool)
-            .await?;
+        let todo_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'todo'")
+                .fetch_one(self.pool)
+                .await?;
 
-        let doing_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
-            .fetch_one(self.pool)
-            .await?;
+        let doing_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
+                .fetch_one(self.pool)
+                .await?;
 
-        let done_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'done'")
-            .fetch_one(self.pool)
-            .await?;
+        let done_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'done'")
+                .fetch_one(self.pool)
+                .await?;
 
         let total_tasks = tasks.len() as i64;
 
         // Get events
         let events = if !summary_only {
-            let mut event_query = String::from("SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE 1=1");
+            let mut event_query = String::from(
+                "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE 1=1",
+            );
             let mut event_conditions = Vec::new();
 
             if let Some(ref dt) = since_datetime {
@@ -157,9 +165,7 @@ impl<'a> ReportManager<'a> {
 
         query.push_str(&conditions.join(" AND "));
 
-        let ids: Vec<i64> = sqlx::query_scalar(&query)
-            .fetch_all(self.pool)
-            .await?;
+        let ids: Vec<i64> = sqlx::query_scalar(&query).fetch_all(self.pool).await?;
 
         Ok(ids)
     }
@@ -209,10 +215,7 @@ mod tests {
 
         // Create tasks with different statuses
         task_mgr.add_task("Todo task", None, None).await.unwrap();
-        let doing = task_mgr
-            .add_task("Doing task", None, None)
-            .await
-            .unwrap();
+        let doing = task_mgr.add_task("Doing task", None, None).await.unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
         let done = task_mgr.add_task("Done task", None, None).await.unwrap();
         task_mgr.done_task(done.id).await.unwrap();
@@ -255,10 +258,7 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr.add_task("Todo task", None, None).await.unwrap();
-        let doing = task_mgr
-            .add_task("Doing task", None, None)
-            .await
-            .unwrap();
+        let doing = task_mgr.add_task("Doing task", None, None).await.unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
 
         let report = report_mgr

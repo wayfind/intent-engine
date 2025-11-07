@@ -38,10 +38,7 @@ fn bench_task_get(c: &mut Criterion) {
             let (_temp_dir, pool) = setup_test_db().await;
             let task_mgr = TaskManager::new(&pool);
 
-            let task = task_mgr
-                .add_task("Test task", None, None)
-                .await
-                .unwrap();
+            let task = task_mgr.add_task("Test task", None, None).await.unwrap();
 
             black_box(task_mgr.get_task(task.id).await.unwrap());
         });
@@ -62,7 +59,15 @@ fn bench_task_update(c: &mut Criterion) {
                 .unwrap();
 
             task_mgr
-                .update_task(task.id, Some("New name"), None, None, Some("doing"))
+                .update_task(
+                    task.id,
+                    Some("New name"),
+                    None,
+                    None,
+                    Some("doing"),
+                    None,
+                    None,
+                )
                 .await
                 .unwrap();
         });
@@ -105,10 +110,7 @@ fn bench_event_add(c: &mut Criterion) {
             let task_mgr = TaskManager::new(&pool);
             let event_mgr = EventManager::new(&pool);
 
-            let task = task_mgr
-                .add_task("Test task", None, None)
-                .await
-                .unwrap();
+            let task = task_mgr.add_task("Test task", None, None).await.unwrap();
 
             event_mgr
                 .add_event(task.id, "decision", "Benchmark decision")
@@ -130,10 +132,7 @@ fn bench_event_list(c: &mut Criterion) {
                 let task_mgr = TaskManager::new(&pool);
                 let event_mgr = EventManager::new(&pool);
 
-                let task = task_mgr
-                    .add_task("Test task", None, None)
-                    .await
-                    .unwrap();
+                let task = task_mgr.add_task("Test task", None, None).await.unwrap();
 
                 // Create events
                 for i in 0..size {

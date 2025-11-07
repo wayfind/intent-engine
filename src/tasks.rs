@@ -73,12 +73,10 @@ impl<'a> TaskManager<'a> {
 
     /// Get events summary for a task
     async fn get_events_summary(&self, task_id: i64) -> Result<EventsSummary> {
-        let total_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM events WHERE task_id = ?"
-        )
-        .bind(task_id)
-        .fetch_one(self.pool)
-        .await?;
+        let total_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE task_id = ?")
+            .bind(task_id)
+            .fetch_one(self.pool)
+            .await?;
 
         let recent_events = sqlx::query_as::<_, Event>(
             r#"
@@ -100,6 +98,7 @@ impl<'a> TaskManager<'a> {
     }
 
     /// Update a task
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_task(
         &self,
         id: i64,
@@ -310,11 +309,10 @@ impl<'a> TaskManager<'a> {
         .await?;
 
         // Check if this was the current task and clear it
-        let current_task_id: Option<String> = sqlx::query_scalar(
-            "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
+        let current_task_id: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(&mut *tx)
+                .await?;
 
         if let Some(current) = current_task_id {
             if current == id.to_string() {
@@ -352,12 +350,11 @@ impl<'a> TaskManager<'a> {
                 return Err(IntentError::CircularDependency);
             }
 
-            let parent: Option<i64> = sqlx::query_scalar(
-                "SELECT parent_id FROM tasks WHERE id = ?",
-            )
-            .bind(current_id)
-            .fetch_optional(self.pool)
-            .await?;
+            let parent: Option<i64> =
+                sqlx::query_scalar("SELECT parent_id FROM tasks WHERE id = ?")
+                    .bind(current_id)
+                    .fetch_optional(self.pool)
+                    .await?;
 
             match parent {
                 Some(pid) => current_id = pid,
@@ -412,17 +409,14 @@ impl<'a> TaskManager<'a> {
     /// Returns error if there is no current task
     pub async fn spawn_subtask(&self, name: &str, spec: Option<&str>) -> Result<Task> {
         // Get current task
-        let current_task_id: Option<String> = sqlx::query_scalar(
-            "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-        )
-        .fetch_optional(self.pool)
-        .await?;
+        let current_task_id: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(self.pool)
+                .await?;
 
-        let parent_id = current_task_id
-            .and_then(|s| s.parse::<i64>().ok())
-            .ok_or(IntentError::InvalidInput(
-                "No current task to create subtask under".to_string(),
-            ))?;
+        let parent_id = current_task_id.and_then(|s| s.parse::<i64>().ok()).ok_or(
+            IntentError::InvalidInput("No current task to create subtask under".to_string()),
+        )?;
 
         // Create the subtask
         let subtask = self.add_task(name, spec, Some(parent_id)).await?;
@@ -453,11 +447,10 @@ impl<'a> TaskManager<'a> {
         let mut tx = self.pool.begin().await?;
 
         // Get current doing count
-        let doing_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM tasks WHERE status = 'doing'",
-        )
-        .fetch_one(&mut *tx)
-        .await?;
+        let doing_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
+                .fetch_one(&mut *tx)
+                .await?;
 
         // Calculate available capacity
         let available = capacity_limit.saturating_sub(doing_count as usize);
@@ -696,12 +689,11 @@ mod tests {
         assert!(started.task.first_doing_at.is_some());
 
         // Verify it's set as current task
-        let current: Option<String> = sqlx::query_scalar(
-            "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-        )
-        .fetch_optional(ctx.pool())
-        .await
-        .unwrap();
+        let current: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(ctx.pool())
+                .await
+                .unwrap();
 
         assert_eq!(current, Some(task.id.to_string()));
     }
@@ -714,15 +706,13 @@ mod tests {
         let task = manager.add_task("Test task", None, None).await.unwrap();
 
         // Add an event
-        sqlx::query(
-            "INSERT INTO events (task_id, log_type, discussion_data) VALUES (?, ?, ?)",
-        )
-        .bind(task.id)
-        .bind("test")
-        .bind("test event")
-        .execute(ctx.pool())
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO events (task_id, log_type, discussion_data) VALUES (?, ?, ?)")
+            .bind(task.id)
+            .bind("test")
+            .bind("test event")
+            .execute(ctx.pool())
+            .await
+            .unwrap();
 
         let started = manager.start_task(task.id, true).await.unwrap();
 
@@ -744,12 +734,11 @@ mod tests {
         assert!(done.first_done_at.is_some());
 
         // Verify current task is cleared
-        let current: Option<String> = sqlx::query_scalar(
-            "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-        )
-        .fetch_optional(ctx.pool())
-        .await
-        .unwrap();
+        let current: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(ctx.pool())
+                .await
+                .unwrap();
 
         assert!(current.is_none());
     }
@@ -846,12 +835,11 @@ mod tests {
         assert!(switched.task.first_doing_at.is_some());
 
         // Verify it's set as current task
-        let current: Option<String> = sqlx::query_scalar(
-            "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-        )
-        .fetch_optional(ctx.pool())
-        .await
-        .unwrap();
+        let current: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(ctx.pool())
+                .await
+                .unwrap();
 
         assert_eq!(current, Some(task.id.to_string()));
     }
@@ -890,12 +878,11 @@ mod tests {
         assert_eq!(subtask.spec.as_deref(), Some("Details"));
 
         // Verify subtask is now the current task
-        let current: Option<String> = sqlx::query_scalar(
-            "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-        )
-        .fetch_optional(ctx.pool())
-        .await
-        .unwrap();
+        let current: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(ctx.pool())
+                .await
+                .unwrap();
 
         assert_eq!(current, Some(subtask.id.to_string()));
 
@@ -937,12 +924,11 @@ mod tests {
         }
 
         // Verify total doing count
-        let doing_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM tasks WHERE status = 'doing'",
-        )
-        .fetch_one(ctx.pool())
-        .await
-        .unwrap();
+        let doing_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
+                .fetch_one(ctx.pool())
+                .await
+                .unwrap();
 
         assert_eq!(doing_count, 5);
     }
@@ -972,12 +958,11 @@ mod tests {
         assert_eq!(picked.len(), 3);
 
         // Verify total doing count
-        let doing_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM tasks WHERE status = 'doing'",
-        )
-        .fetch_one(ctx.pool())
-        .await
-        .unwrap();
+        let doing_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
+                .fetch_one(ctx.pool())
+                .await
+                .unwrap();
 
         assert_eq!(doing_count, 5);
     }
@@ -1022,7 +1007,10 @@ mod tests {
             .await
             .unwrap();
 
-        let medium = manager.add_task("Medium priority", None, None).await.unwrap();
+        let medium = manager
+            .add_task("Medium priority", None, None)
+            .await
+            .unwrap();
         manager
             .update_task(medium.id, None, None, None, None, None, Some(5))
             .await
@@ -1034,8 +1022,8 @@ mod tests {
         // Should be ordered by priority DESC
         assert_eq!(picked.len(), 3);
         assert_eq!(picked[0].priority, Some(10)); // high
-        assert_eq!(picked[1].priority, Some(5));  // medium
-        assert_eq!(picked[2].priority, Some(1));  // low
+        assert_eq!(picked[1].priority, Some(5)); // medium
+        assert_eq!(picked[2].priority, Some(1)); // low
     }
 
     #[tokio::test]

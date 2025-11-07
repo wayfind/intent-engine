@@ -31,9 +31,7 @@ async fn run() -> Result<()> {
             filter_spec,
             format: _,
             summary_only,
-        } => {
-            handle_report_command(since, status, filter_name, filter_spec, summary_only).await?
-        }
+        } => handle_report_command(since, status, filter_name, filter_spec, summary_only).await?,
         Commands::Event(event_cmd) => handle_event_command(event_cmd).await?,
         Commands::Doctor => handle_doctor_command().await?,
     }
@@ -94,7 +92,15 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let parent_opt = parent.map(Some);
             let task = task_mgr
-                .update_task(id, name.as_deref(), spec.as_deref(), parent_opt, status.as_deref(), complexity, priority)
+                .update_task(
+                    id,
+                    name.as_deref(),
+                    spec.as_deref(),
+                    parent_opt,
+                    status.as_deref(),
+                    complexity,
+                    priority,
+                )
                 .await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
         }
@@ -145,7 +151,10 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&task)?);
         }
 
-        TaskCommands::PickNext { max_count, capacity } => {
+        TaskCommands::PickNext {
+            max_count,
+            capacity,
+        } => {
             let ctx = ProjectContext::load_or_init().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 
