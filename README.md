@@ -1,5 +1,11 @@
 # Intent-Engine
 
+[![CI](https://github.com/wayfind/intent-engine/workflows/CI/badge.svg)](https://github.com/wayfind/intent-engine/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/wayfind/intent-engine/branch/main/graph/badge.svg)](https://codecov.io/gh/wayfind/intent-engine)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
+[![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
+[![Documentation](https://docs.rs/intent-engine/badge.svg)](https://docs.rs/intent-engine)
+
 Intent-Engine 是一个极简的、项目专属的命令行数据库服务，专门用于记录、追踪和回顾人类的战略意图。它是 AI 协作者工具箱中的核心动力，帮助回答"我们要去哪里？(What)"和"为什么要去那里？(Why)"这两个关键问题。
 
 > 📖 **新用户？** 推荐先阅读 [The Intent-Engine Way](THE_INTENT_ENGINE_WAY.md)，了解 Intent-Engine 的设计哲学和协作模式。本文档是技术参考，那份指南解释"为什么"和"何时"使用。
