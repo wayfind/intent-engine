@@ -1,0 +1,9 @@
+[advisories]
+# Ignore advisories for specific crates
+ignore = [
+    # Marvin Attack in RSA crate - transitive dependency through sqlx-mysql
+    # No fix available as of now. This is a timing side-channel attack that requires
+    # specific conditions to exploit. We're monitoring for updates from sqlx/rsa.
+    # See: https://rustsec.org/advisories/RUSTSEC-2023-0071
+    "RUSTSEC-2023-0071",
+]
