@@ -124,3 +124,10 @@ pub enum NextStepSuggestion {
         completed_task_id: i64,
     },
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSearchResult {
+    #[serde(flatten)]
+    pub task: Task,
+    pub match_snippet: String,
+}

@@ -183,6 +183,14 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             let task = task_mgr.switch_to_task(id).await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
         }
+
+        TaskCommands::Search { query } => {
+            let ctx = ProjectContext::load().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+
+            let results = task_mgr.search_tasks(&query).await?;
+            println!("{}", serde_json::to_string_pretty(&results)?);
+        }
     }
 
     Ok(())

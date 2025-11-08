@@ -1,10 +1,10 @@
 use crate::db::models::{
-    DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, Task, TaskWithEvents,
-    WorkspaceStatus,
+    DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, Task, TaskSearchResult,
+    TaskWithEvents, WorkspaceStatus,
 };
 use crate::error::{IntentError, Result};
 use chrono::Utc;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 pub struct TaskManager<'a> {
     pool: &'a SqlitePool,
@@ -235,6 +235,75 @@ impl<'a> TaskManager<'a> {
 
         let tasks = q.fetch_all(self.pool).await?;
         Ok(tasks)
+    }
+
+    /// Search tasks using full-text search (FTS5)
+    /// Returns tasks with match snippets showing highlighted keywords
+    pub async fn search_tasks(&self, query: &str) -> Result<Vec<TaskSearchResult>> {
+        // Escape special FTS5 characters in the query
+        let escaped_query = self.escape_fts_query(query);
+
+        // Use FTS5 to search and get snippets
+        // snippet(table, column, start_mark, end_mark, ellipsis, max_tokens)
+        // We search in both name (column 0) and spec (column 1)
+        let results = sqlx::query(
+            r#"
+            SELECT
+                t.id,
+                t.parent_id,
+                t.name,
+                t.spec,
+                t.status,
+                t.complexity,
+                t.priority,
+                t.first_todo_at,
+                t.first_doing_at,
+                t.first_done_at,
+                COALESCE(
+                    snippet(tasks_fts, 1, '**', '**', '...', 15),
+                    snippet(tasks_fts, 0, '**', '**', '...', 15)
+                ) as match_snippet
+            FROM tasks_fts
+            INNER JOIN tasks t ON tasks_fts.rowid = t.id
+            WHERE tasks_fts MATCH ?
+            ORDER BY rank
+            "#,
+        )
+        .bind(&escaped_query)
+        .fetch_all(self.pool)
+        .await?;
+
+        let mut search_results = Vec::new();
+        for row in results {
+            let task = Task {
+                id: row.get("id"),
+                parent_id: row.get("parent_id"),
+                name: row.get("name"),
+                spec: row.get("spec"),
+                status: row.get("status"),
+                complexity: row.get("complexity"),
+                priority: row.get("priority"),
+                first_todo_at: row.get("first_todo_at"),
+                first_doing_at: row.get("first_doing_at"),
+                first_done_at: row.get("first_done_at"),
+            };
+            let match_snippet: String = row.get("match_snippet");
+
+            search_results.push(TaskSearchResult {
+                task,
+                match_snippet,
+            });
+        }
+
+        Ok(search_results)
+    }
+
+    /// Escape FTS5 special characters in query
+    fn escape_fts_query(&self, query: &str) -> String {
+        // FTS5 queries are passed through as-is to support advanced syntax
+        // Users can use operators like AND, OR, NOT, *, "phrase search", etc.
+        // We only need to handle basic escaping for quotes
+        query.replace('"', "\"\"")
     }
 
     /// Start a task (atomic: update status + set current)
@@ -1319,5 +1388,136 @@ mod tests {
             }
             _ => panic!("Expected NoParentContext suggestion"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_by_name() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create tasks with different names
+        manager
+            .add_task("Authentication bug fix", Some("Fix login issue"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Database migration", Some("Migrate to PostgreSQL"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Authentication feature", Some("Add OAuth2 support"), None)
+            .await
+            .unwrap();
+
+        // Search for "authentication"
+        let results = manager.search_tasks("authentication").await.unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0].task.name.to_lowercase().contains("authentication"));
+        assert!(results[1].task.name.to_lowercase().contains("authentication"));
+
+        // Check that match_snippet is present
+        assert!(!results[0].match_snippet.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_by_spec() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create tasks
+        manager
+            .add_task("Task 1", Some("Implement JWT authentication"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Task 2", Some("Add user registration"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Task 3", Some("JWT token refresh"), None)
+            .await
+            .unwrap();
+
+        // Search for "JWT"
+        let results = manager.search_tasks("JWT").await.unwrap();
+
+        assert_eq!(results.len(), 2);
+        for result in &results {
+            assert!(result
+                .task
+                .spec
+                .as_ref()
+                .unwrap()
+                .to_uppercase()
+                .contains("JWT"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_with_advanced_query() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create tasks
+        manager
+            .add_task("Bug fix", Some("Fix critical authentication bug"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Feature", Some("Add authentication feature"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Bug report", Some("Report critical database bug"), None)
+            .await
+            .unwrap();
+
+        // Search with AND operator
+        let results = manager.search_tasks("authentication AND bug").await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].task.spec.as_ref().unwrap().contains("authentication"));
+        assert!(results[0].task.spec.as_ref().unwrap().contains("bug"));
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_no_results() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create tasks
+        manager
+            .add_task("Task 1", Some("Some description"), None)
+            .await
+            .unwrap();
+
+        // Search for non-existent term
+        let results = manager.search_tasks("nonexistent").await.unwrap();
+
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_snippet_highlighting() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create task with keyword in spec
+        manager
+            .add_task(
+                "Test task",
+                Some("This is a description with the keyword authentication in the middle"),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Search for "authentication"
+        let results = manager.search_tasks("authentication").await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        // Check that snippet contains highlighted keyword (marked with **)
+        assert!(results[0].match_snippet.contains("**authentication**"));
     }
 }

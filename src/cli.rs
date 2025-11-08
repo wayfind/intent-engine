@@ -175,6 +175,12 @@ pub enum TaskCommands {
         /// Task ID
         id: i64,
     },
+
+    /// Search tasks by content using full-text search
+    Search {
+        /// Search query (supports FTS5 syntax like "bug AND NOT critical")
+        query: String,
+    },
 }
 
 #[derive(Subcommand)]
