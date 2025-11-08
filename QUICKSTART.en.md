@@ -240,6 +240,16 @@ You've completed Intent-Engine's core workflow:
 - [**MCP Server**](docs/en/integration/mcp-server.md) - Integrate with Claude Code/Desktop
 - [**Claude Skill**](.claude-code/intent-engine.skill.md) - Lightweight integration method
 
+### 💻 Pre-contribution Setup
+
+If you want to contribute code to Intent-Engine, please install git hooks first:
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+This automatically formats code before each commit, preventing CI check failures. For more development tool commands, see [scripts/README.md](scripts/README.md).
+
 ---
 
 ## FAQ

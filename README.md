@@ -219,6 +219,34 @@ intent-engine report --since 1d --summary-only
 
 ---
 
+## 🔧 开发设置
+
+### 首次克隆项目后（贡献者必读）
+
+为了避免 CI 格式检查失败，请立即运行：
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+这会安装 git pre-commit hooks，在每次提交前自动运行 `cargo fmt`，确保代码格式符合规范。
+
+### 开发工具命令
+
+项目提供了 Makefile 简化常用操作：
+
+```bash
+make help          # 显示所有可用命令
+make fmt           # 格式化代码
+make check         # 运行格式化、clippy 和测试
+make test          # 运行所有测试
+make setup-hooks   # 安装 git hooks（同上述脚本）
+```
+
+> 📖 **详细说明**：查看 [scripts/README.md](scripts/README.md) 了解完整的开发工作流和自动化工具。
+
+---
+
 ## 🧪 测试
 
 Intent-Engine 包含完整的测试体系：

@@ -219,6 +219,34 @@ intent-engine report --since 1d --summary-only
 
 ---
 
+## 🔧 Development Setup
+
+### First-time Setup for Contributors (Required)
+
+To avoid CI formatting check failures, please run immediately after cloning:
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+This installs git pre-commit hooks that automatically run `cargo fmt` before each commit, ensuring code formatting compliance.
+
+### Development Tool Commands
+
+The project provides a Makefile to simplify common operations:
+
+```bash
+make help          # Show all available commands
+make fmt           # Format code
+make check         # Run format, clippy and tests
+make test          # Run all tests
+make setup-hooks   # Install git hooks (same as above script)
+```
+
+> 📖 **Detailed Documentation**: See [scripts/README.md](scripts/README.md) for complete development workflow and automation tools.
+
+---
+
 ## 🧪 Testing
 
 Intent-Engine includes a complete testing suite:
