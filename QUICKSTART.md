@@ -1,5 +1,7 @@
 # Intent-Engine 快速上手指南
 
+**中文 | [English](QUICKSTART.en.md)**
+
 **5 分钟从零开始体验 Intent-Engine 的核心功能。**
 
 ---
