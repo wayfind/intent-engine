@@ -1136,11 +1136,11 @@ intent-engine task pick-next --max-count 3 --capacity 5
 # 4. Process one by one and record
 intent-engine task switch 1
 echo "Cause: Did not check for null return value" | intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done
+intent-engine task done  # Complete current focused task
 
 intent-engine task switch 2
 echo "Decided to add index to user_id field" | intent-engine event add --task-id 2 --type decision --data-stdin
-intent-engine task done
+intent-engine task done  # Complete current focused task
 
 # 5. Generate report
 intent-engine report --since 1d --summary-only
@@ -1273,7 +1273,7 @@ veobd/
 1. **Start task**: Use `task start <ID> --with-events` to get context
 2. **Discover sub-problem**: Use `task spawn-subtask --name "sub-problem"` to create and switch
 3. **Record key information**: Use `event add` to record decisions, blockers and milestones
-4. **Complete task**: Use `task done <ID>` to mark complete (automatically checks subtasks)
+4. **Complete task**: Use `task done` to mark complete (automatically checks subtasks)
 
 #### Batch Problem Processing Workflow 🆕
 1. **Discover problems**: Batch create todo tasks
