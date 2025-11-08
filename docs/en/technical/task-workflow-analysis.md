@@ -1401,7 +1401,7 @@ intent-engine task update <id> [--name] [--spec] [--status] [--parent-id]
 intent-engine task del <id>
 intent-engine task find [--status] [--parent-id]
 intent-engine task start <id>
-intent-engine task done <id>
+intent-engine task done
 
 # Workspace Management
 intent-engine workspace current [--set-task-id]

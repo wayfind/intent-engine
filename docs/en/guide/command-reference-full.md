@@ -139,13 +139,13 @@ intent-engine task spawn-subtask --name "Fix password validation bug"
 echo "Decided to use bcrypt instead of MD5" | intent-engine event add --task-id 2 --type decision --data-stdin
 
 # 5. Complete subtask
-intent-engine task done 2
+intent-engine task done
 
 # 6. Switch back to parent task
 intent-engine task switch 1
 
 # 7. Complete parent task
-intent-engine task done 1
+intent-engine task done
 
 # 8. Generate work report
 intent-engine report --since 1d --summary-only
@@ -440,7 +440,7 @@ Atomic operation: check if all subtasks are complete, then mark task as "done".
 
 **Usage:**
 ```bash
-intent-engine task done <ID>
+intent-engine task done
 ```
 
 **Parameters:**
@@ -449,10 +449,10 @@ intent-engine task done <ID>
 **Examples:**
 ```bash
 # Complete task
-intent-engine task done 1
+intent-engine task done
 
 # If there are incomplete subtasks, returns error
-intent-engine task done 1
+intent-engine task done
 # Error: Cannot complete task 1: it has incomplete subtasks
 ```
 
@@ -609,11 +609,11 @@ echo "Need to upgrade tokio to 1.35" | \
 intent-engine task start 1  # Start: implement user authentication
 intent-engine task spawn-subtask --name "Implement password encryption"  # Discover sub-problem
 intent-engine task spawn-subtask --name "Choose encryption algorithm"  # Discover even finer sub-problem
-intent-engine task done 3  # Complete: choose encryption algorithm
+intent-engine task done  # Complete: choose encryption algorithm
 intent-engine task switch 2  # Switch back: implement password encryption
-intent-engine task done 2  # Complete: implement password encryption
+intent-engine task done  # Complete: implement password encryption
 intent-engine task switch 1  # Switch back: implement user authentication
-intent-engine task done 1  # Complete: implement user authentication
+intent-engine task done  # Complete: implement user authentication
 ```
 
 **Output Example:**
@@ -665,7 +665,7 @@ intent-engine task start 1
 intent-engine task spawn-subtask --name "Subtask A"
 intent-engine task spawn-subtask --name "Subtask B"
 intent-engine task switch 2  # Switch back to subtask A
-intent-engine task done 2
+intent-engine task done
 intent-engine task switch 3  # Switch to subtask B
 
 # View context after switching
@@ -698,6 +698,112 @@ intent-engine task switch 5 | jq '.events_summary'
 - Switch between multiple parallel tasks
 - Pause current task to handle more urgent task
 - Switch back to parent task after completing subtask
+
+---
+
+#### `task search` - Full-Text Search Tasks 🆕
+
+Use FTS5 full-text search to find content in all tasks' name and spec fields, returning a relevance-sorted result list.
+
+**Usage:**
+```bash
+intent-engine task search <QUERY>
+```
+
+**Parameters:**
+- `<QUERY>` - Search query string (required), supports FTS5 advanced syntax
+
+**FTS5 Advanced Syntax:**
+- `authentication` - Simple keyword search
+- `"user login"` - Exact phrase search
+- `authentication AND bug` - Contains both words
+- `JWT OR OAuth` - Contains either word
+- `authentication NOT critical` - Contains authentication but not critical
+- `auth*` - Prefix matching (e.g., auth, authentication, authorize)
+
+**Features:**
+- Searches both name and spec fields
+- Returns results with highlighted snippets (using `**` markers)
+- Automatically sorted by relevance
+- Millisecond-level query performance (based on FTS5 index)
+
+**Examples:**
+```bash
+# Simple search
+intent-engine task search "authentication"
+
+# Search for tasks containing JWT
+intent-engine task search "JWT"
+
+# Advanced search: contains both keywords
+intent-engine task search "authentication AND bug"
+
+# Search for either keyword
+intent-engine task search "JWT OR OAuth"
+
+# Exclude specific keyword
+intent-engine task search "bug NOT critical"
+
+# Prefix matching
+intent-engine task search "auth*"
+
+# Exact phrase search
+intent-engine task search '"user login flow"'
+
+# Combine with jq to view results
+intent-engine task search "authentication" | jq '.[].task | {id, name, status}'
+
+# View match snippets
+intent-engine task search "JWT" | jq '.[].match_snippet'
+```
+
+**Output Example:**
+```json
+[
+  {
+    "id": 5,
+    "parent_id": 1,
+    "name": "Authentication bug fix",
+    "spec": "Fix the JWT token validation bug in the authentication middleware",
+    "status": "todo",
+    "complexity": 5,
+    "priority": 8,
+    "first_todo_at": "2025-11-06T10:00:00Z",
+    "first_doing_at": null,
+    "first_done_at": null,
+    "match_snippet": "...Fix the **JWT** token validation bug in the **authentication** middleware..."
+  },
+  {
+    "id": 12,
+    "parent_id": null,
+    "name": "Implement OAuth2 authentication",
+    "spec": "Add OAuth2 support for third-party authentication",
+    "status": "doing",
+    "priority": 10,
+    "first_todo_at": "2025-11-05T15:00:00Z",
+    "first_doing_at": "2025-11-06T09:00:00Z",
+    "first_done_at": null,
+    "match_snippet": "Implement OAuth2 **authentication**"
+  }
+]
+```
+
+**match_snippet Field Explanation:**
+- Text snippet extracted from the matching field (spec or name)
+- Uses `**keyword**` to mark highlighted matches
+- Uses `...` to indicate omitted content
+- Prioritizes spec matches; if spec doesn't match, shows name matches
+
+**Use Cases:**
+- Quickly find tasks containing specific keywords
+- Locate related tasks in large projects
+- Search for previous decisions and technical approaches
+- AI context lookup
+- Find related tasks during code review
+
+**Difference from `task find`:**
+- `task find`: Exact filtering (by status, parent), returns complete task list
+- `task search`: Full-text search (by content keywords), returns results with match snippets, sorted by relevance
 
 ---
 
@@ -1028,11 +1134,11 @@ intent-engine task pick-next --max-count 3 --capacity 5
 # 4. Process one by one and record
 intent-engine task switch 1
 echo "Cause: Did not check for null return value" | intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done 1
+intent-engine task done
 
 intent-engine task switch 2
 echo "Decided to add index to user_id field" | intent-engine event add --task-id 2 --type decision --data-stdin
-intent-engine task done 2
+intent-engine task done
 
 # 5. Generate report
 intent-engine report --since 1d --summary-only
@@ -1055,16 +1161,16 @@ intent-engine task spawn-subtask --name "Configure payment keys and callback URL
 
 # 4. Complete deepest subtask
 echo "Configured Stripe API keys in backend" | intent-engine event add --task-id 3 --type milestone --data-stdin
-intent-engine task done 3
+intent-engine task done
 
 # 5. Switch back to parent task and continue
 intent-engine task switch 2
 echo "API integration complete, tests passing" | intent-engine event add --task-id 2 --type milestone --data-stdin
-intent-engine task done 2
+intent-engine task done
 
 # 6. Complete root task
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done
 
 # 7. View task hierarchy
 intent-engine task find --parent null  # Root tasks
@@ -1093,7 +1199,7 @@ echo "Completed database models" | intent-engine event add --task-id 2 --type mi
 
 intent-engine task switch 3
 # ... update docs ...
-intent-engine task done 3
+intent-engine task done
 
 # 4. View progress
 intent-engine report --status doing

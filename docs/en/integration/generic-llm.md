@@ -75,7 +75,7 @@ echo "Decision details..." | \
 
 ### Complete Task
 \`\`\`bash
-intent-engine task done <ID>
+intent-engine task done
 # Enforces: all subtasks must be done first
 \`\`\`
 
@@ -268,7 +268,7 @@ intent-engine task switch 1
 # ... fix ...
 echo "Cause: Did not check for null return value" | \
   intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done 1
+intent-engine task done
 
 # 5. Generate report
 intent-engine report --since 1d --summary-only
@@ -291,13 +291,13 @@ intent-engine task spawn-subtask --name "Configure webhook callback"
 # 4. Complete deepest task
 echo "Webhook endpoint configured" | \
   intent-engine event add --task-id 3 --type milestone --data-stdin
-intent-engine task done 3
+intent-engine task done
 
 # 5. Complete layer by layer
 intent-engine task switch 2
-intent-engine task done 2
+intent-engine task done
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done
 ```
 
 ---

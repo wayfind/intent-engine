@@ -137,11 +137,11 @@ echo "选择使用 HS256 算法，密钥存储在环境变量中" | \
   intent-engine event add --task-id 2 --type decision --data-stdin
 
 # 5. 完成子任务
-intent-engine task done 2
+intent-engine task done
 
 # 6. 切回父任务并完成
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done
 
 # 7. 生成工作报告
 intent-engine report --since 1d --summary-only
@@ -159,7 +159,7 @@ intent-engine report --since 1d --summary-only
 - **决策历史**：完整的事件流记录（decision、blocker、milestone 等）
 - **智能选择**：`pick-next` 基于优先级和复杂度自动选择任务
 - **原子操作**：`start`、`switch`、`spawn-subtask` 等复合命令节省 60-70% Token
-- **全文搜索**：基于 SQLite FTS5 的高效搜索
+- **🔍 FTS5 搜索引擎**：GB 级任务量下毫秒级响应，独特的 snippet 函数用 `**` 高亮匹配词，对 Agent 上下文极度友好
 - **JSON 输出**：所有命令输出结构化 JSON，完美集成 AI 工具
 
 ---
@@ -216,6 +216,34 @@ intent-engine report --since 1d --summary-only
 - **数据库**：SQLite with sqlx 0.7
 - **异步运行时**：tokio 1.35
 - **全文搜索**：SQLite FTS5
+
+---
+
+## 🔧 开发设置
+
+### 首次克隆项目后（贡献者必读）
+
+为了避免 CI 格式检查失败，请立即运行：
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+这会安装 git pre-commit hooks，在每次提交前自动运行 `cargo fmt`，确保代码格式符合规范。
+
+### 开发工具命令
+
+项目提供了 Makefile 简化常用操作：
+
+```bash
+make help          # 显示所有可用命令
+make fmt           # 格式化代码
+make check         # 运行格式化、clippy 和测试
+make test          # 运行所有测试
+make setup-hooks   # 安装 git hooks（同上述脚本）
+```
+
+> 📖 **详细说明**：查看 [scripts/README.md](scripts/README.md) 了解完整的开发工作流和自动化工具。
 
 ---
 

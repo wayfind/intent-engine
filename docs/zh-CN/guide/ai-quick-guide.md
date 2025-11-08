@@ -129,6 +129,7 @@ todo → (start/pick-next/spawn-subtask) → doing → (done) → done
 ```bash
 intent-engine current                          # What am I working on?
 intent-engine task find --status doing         # All active tasks
+intent-engine task search "keyword"            # Search tasks by content (FTS5)
 intent-engine event list --task-id <ID> --limit 5  # Recent context
 intent-engine report --since 1d --summary-only     # Today's summary
 ```

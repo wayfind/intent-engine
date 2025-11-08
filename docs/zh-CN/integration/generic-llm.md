@@ -75,8 +75,10 @@ echo "Decision details..." | \
 
 ### Complete Task
 \`\`\`bash
-intent-engine task done <ID>
+intent-engine task done
+# Completes the current focused task
 # Enforces: all subtasks must be done first
+# Prerequisite: task must be set as current
 \`\`\`
 
 ### Generate Report
@@ -268,7 +270,7 @@ intent-engine task switch 1
 # ... 修复 ...
 echo "原因：未检查 null 返回值" | \
   intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done 1
+intent-engine task done  # 完成当前焦点任务（task 1）
 
 # 5. 生成报告
 intent-engine report --since 1d --summary-only
@@ -291,13 +293,13 @@ intent-engine task spawn-subtask --name "配置 Webhook 回调"
 # 4. 完成最深层任务
 echo "已配置 webhook endpoint" | \
   intent-engine event add --task-id 3 --type milestone --data-stdin
-intent-engine task done 3
+intent-engine task done  # 完成任务3（当前焦点）
 
 # 5. 逐层完成
 intent-engine task switch 2
-intent-engine task done 2
+intent-engine task done  # 完成任务2
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done  # 完成任务1
 ```
 
 ---
@@ -380,7 +382,7 @@ git commit -m "Update task database"
 - Record all key decisions
 - Use spawn-subtask for sub-problems
 - Switch tasks with `task switch`
-- Complete with `task done` only when all subtasks are done
+- Complete with `task done` (no ID needed, uses current focused task)
 ```
 
 ### 2. 集成到自动化工作流

@@ -1,7 +1,10 @@
-use crate::db::models::{Event, EventsSummary, Task, TaskWithEvents};
+use crate::db::models::{
+    DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, Task, TaskSearchResult,
+    TaskWithEvents, WorkspaceStatus,
+};
 use crate::error::{IntentError, Result};
 use chrono::Utc;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 pub struct TaskManager<'a> {
     pool: &'a SqlitePool,
@@ -234,6 +237,75 @@ impl<'a> TaskManager<'a> {
         Ok(tasks)
     }
 
+    /// Search tasks using full-text search (FTS5)
+    /// Returns tasks with match snippets showing highlighted keywords
+    pub async fn search_tasks(&self, query: &str) -> Result<Vec<TaskSearchResult>> {
+        // Escape special FTS5 characters in the query
+        let escaped_query = self.escape_fts_query(query);
+
+        // Use FTS5 to search and get snippets
+        // snippet(table, column, start_mark, end_mark, ellipsis, max_tokens)
+        // We search in both name (column 0) and spec (column 1)
+        let results = sqlx::query(
+            r#"
+            SELECT
+                t.id,
+                t.parent_id,
+                t.name,
+                t.spec,
+                t.status,
+                t.complexity,
+                t.priority,
+                t.first_todo_at,
+                t.first_doing_at,
+                t.first_done_at,
+                COALESCE(
+                    snippet(tasks_fts, 1, '**', '**', '...', 15),
+                    snippet(tasks_fts, 0, '**', '**', '...', 15)
+                ) as match_snippet
+            FROM tasks_fts
+            INNER JOIN tasks t ON tasks_fts.rowid = t.id
+            WHERE tasks_fts MATCH ?
+            ORDER BY rank
+            "#,
+        )
+        .bind(&escaped_query)
+        .fetch_all(self.pool)
+        .await?;
+
+        let mut search_results = Vec::new();
+        for row in results {
+            let task = Task {
+                id: row.get("id"),
+                parent_id: row.get("parent_id"),
+                name: row.get("name"),
+                spec: row.get("spec"),
+                status: row.get("status"),
+                complexity: row.get("complexity"),
+                priority: row.get("priority"),
+                first_todo_at: row.get("first_todo_at"),
+                first_doing_at: row.get("first_doing_at"),
+                first_done_at: row.get("first_done_at"),
+            };
+            let match_snippet: String = row.get("match_snippet");
+
+            search_results.push(TaskSearchResult {
+                task,
+                match_snippet,
+            });
+        }
+
+        Ok(search_results)
+    }
+
+    /// Escape FTS5 special characters in query
+    fn escape_fts_query(&self, query: &str) -> String {
+        // FTS5 queries are passed through as-is to support advanced syntax
+        // Users can use operators like AND, OR, NOT, *, "phrase search", etc.
+        // We only need to handle basic escaping for quotes
+        query.replace('"', "\"\"")
+    }
+
     /// Start a task (atomic: update status + set current)
     pub async fn start_task(&self, id: i64, with_events: bool) -> Result<TaskWithEvents> {
         let mut tx = self.pool.begin().await?;
@@ -277,9 +349,31 @@ impl<'a> TaskManager<'a> {
         }
     }
 
-    /// Complete a task (atomic: check children + update status + clear current if needed)
-    pub async fn done_task(&self, id: i64) -> Result<Task> {
+    /// Complete the current focused task (atomic: check children + update status + clear current)
+    /// This command only operates on the current_task_id.
+    /// Prerequisites: A task must be set as current
+    pub async fn done_task(&self) -> Result<DoneTaskResponse> {
         let mut tx = self.pool.begin().await?;
+
+        // Get the current task ID
+        let current_task_id: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(&mut *tx)
+                .await?;
+
+        let id = current_task_id.and_then(|s| s.parse::<i64>().ok()).ok_or(
+            IntentError::InvalidInput(
+                "No current task is set. Use 'current --set <ID>' to set a task first.".to_string(),
+            ),
+        )?;
+
+        // Get the task info before completing it
+        let task_info: (String, Option<i64>) =
+            sqlx::query_as("SELECT name, parent_id FROM tasks WHERE id = ?")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+        let (task_name, parent_id) = task_info;
 
         // Check if all children are done
         let uncompleted_children: i64 = sqlx::query_scalar(
@@ -308,23 +402,110 @@ impl<'a> TaskManager<'a> {
         .execute(&mut *tx)
         .await?;
 
-        // Check if this was the current task and clear it
-        let current_task_id: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
-                .fetch_optional(&mut *tx)
+        // Clear the current task
+        sqlx::query("DELETE FROM workspace_state WHERE key = 'current_task_id'")
+            .execute(&mut *tx)
+            .await?;
+
+        // Determine next step suggestion based on context
+        let next_step_suggestion = if let Some(parent_task_id) = parent_id {
+            // Task has a parent - check sibling status
+            let remaining_siblings: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ?",
+            )
+            .bind(parent_task_id)
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+            if remaining_siblings == 0 {
+                // All siblings are done - parent is ready
+                let parent_name: String = sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
+                    .bind(parent_task_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+
+                NextStepSuggestion::ParentIsReady {
+                    message: format!(
+                        "All sub-tasks of parent #{} '{}' are now complete. The parent task is ready for your attention.",
+                        parent_task_id, parent_name
+                    ),
+                    parent_task_id,
+                    parent_task_name: parent_name,
+                }
+            } else {
+                // Siblings remain
+                let parent_name: String = sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
+                    .bind(parent_task_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+
+                NextStepSuggestion::SiblingTasksRemain {
+                    message: format!(
+                        "Task #{} completed. Parent task #{} '{}' has other sub-tasks remaining.",
+                        id, parent_task_id, parent_name
+                    ),
+                    parent_task_id,
+                    parent_task_name: parent_name,
+                    remaining_siblings_count: remaining_siblings,
+                }
+            }
+        } else {
+            // No parent - check if this was a top-level task with children or standalone
+            let child_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE parent_id = ?")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+
+            if child_count > 0 {
+                // Top-level task with children completed
+                NextStepSuggestion::TopLevelTaskCompleted {
+                    message: format!(
+                        "Top-level task #{} '{}' has been completed. Well done!",
+                        id, task_name
+                    ),
+                    completed_task_id: id,
+                    completed_task_name: task_name.clone(),
+                }
+            } else {
+                // Check if workspace is clear
+                let remaining_tasks: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ?",
+                )
+                .bind(id)
+                .fetch_one(&mut *tx)
                 .await?;
 
-        if let Some(current) = current_task_id {
-            if current == id.to_string() {
-                sqlx::query("DELETE FROM workspace_state WHERE key = 'current_task_id'")
-                    .execute(&mut *tx)
-                    .await?;
+                if remaining_tasks == 0 {
+                    NextStepSuggestion::WorkspaceIsClear {
+                        message: format!(
+                            "Project complete! Task #{} was the last remaining task. There are no more 'todo' or 'doing' tasks.",
+                            id
+                        ),
+                        completed_task_id: id,
+                    }
+                } else {
+                    NextStepSuggestion::NoParentContext {
+                        message: format!("Task #{} '{}' has been completed.", id, task_name),
+                        completed_task_id: id,
+                        completed_task_name: task_name.clone(),
+                    }
+                }
             }
-        }
+        };
 
         tx.commit().await?;
 
-        self.get_task(id).await
+        let completed_task = self.get_task(id).await?;
+
+        Ok(DoneTaskResponse {
+            completed_task,
+            workspace_status: WorkspaceStatus {
+                current_task_id: None,
+            },
+            next_step_suggestion,
+        })
     }
 
     /// Check if a task exists
@@ -728,10 +909,17 @@ mod tests {
 
         let task = manager.add_task("Test task", None, None).await.unwrap();
         manager.start_task(task.id, false).await.unwrap();
-        let done = manager.done_task(task.id).await.unwrap();
+        let response = manager.done_task().await.unwrap();
 
-        assert_eq!(done.status, "done");
-        assert!(done.first_done_at.is_some());
+        assert_eq!(response.completed_task.status, "done");
+        assert!(response.completed_task.first_done_at.is_some());
+        assert_eq!(response.workspace_status.current_task_id, None);
+
+        // Should be WORKSPACE_IS_CLEAR since it's the only task
+        match response.next_step_suggestion {
+            NextStepSuggestion::WorkspaceIsClear { .. } => {}
+            _ => panic!("Expected WorkspaceIsClear suggestion"),
+        }
 
         // Verify current task is cleared
         let current: Option<String> =
@@ -754,7 +942,10 @@ mod tests {
             .await
             .unwrap();
 
-        let result = manager.done_task(parent.id).await;
+        // Set parent as current task
+        manager.start_task(parent.id, false).await.unwrap();
+
+        let result = manager.done_task().await;
         assert!(matches!(result, Err(IntentError::UncompletedChildren)));
     }
 
@@ -770,11 +961,27 @@ mod tests {
             .unwrap();
 
         // Complete child first
-        manager.done_task(child.id).await.unwrap();
+        manager.start_task(child.id, false).await.unwrap();
+        let child_response = manager.done_task().await.unwrap();
+
+        // Child completion should suggest parent is ready
+        match child_response.next_step_suggestion {
+            NextStepSuggestion::ParentIsReady { parent_task_id, .. } => {
+                assert_eq!(parent_task_id, parent.id);
+            }
+            _ => panic!("Expected ParentIsReady suggestion"),
+        }
 
         // Now parent can be completed
-        let result = manager.done_task(parent.id).await;
-        assert!(result.is_ok());
+        manager.start_task(parent.id, false).await.unwrap();
+        let parent_response = manager.done_task().await.unwrap();
+        assert_eq!(parent_response.completed_task.status, "done");
+
+        // Parent completion should indicate top-level task completed (since it had children)
+        match parent_response.next_step_suggestion {
+            NextStepSuggestion::TopLevelTaskCompleted { .. } => {}
+            _ => panic!("Expected TopLevelTaskCompleted suggestion"),
+        }
     }
 
     #[tokio::test]
@@ -1058,5 +1265,272 @@ mod tests {
         assert_eq!(picked[0].complexity, Some(1)); // simple
         assert_eq!(picked[1].complexity, Some(5)); // medium
         assert_eq!(picked[2].complexity, Some(9)); // complex
+    }
+
+    #[tokio::test]
+    async fn test_done_task_sibling_tasks_remain() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create parent with multiple children
+        let parent = manager.add_task("Parent Task", None, None).await.unwrap();
+        let child1 = manager
+            .add_task("Child 1", None, Some(parent.id))
+            .await
+            .unwrap();
+        let child2 = manager
+            .add_task("Child 2", None, Some(parent.id))
+            .await
+            .unwrap();
+        let _child3 = manager
+            .add_task("Child 3", None, Some(parent.id))
+            .await
+            .unwrap();
+
+        // Complete first child
+        manager.start_task(child1.id, false).await.unwrap();
+        let response = manager.done_task().await.unwrap();
+
+        // Should indicate siblings remain
+        match response.next_step_suggestion {
+            NextStepSuggestion::SiblingTasksRemain {
+                parent_task_id,
+                remaining_siblings_count,
+                ..
+            } => {
+                assert_eq!(parent_task_id, parent.id);
+                assert_eq!(remaining_siblings_count, 2); // child2 and child3
+            }
+            _ => panic!("Expected SiblingTasksRemain suggestion"),
+        }
+
+        // Complete second child
+        manager.start_task(child2.id, false).await.unwrap();
+        let response2 = manager.done_task().await.unwrap();
+
+        // Should still indicate siblings remain
+        match response2.next_step_suggestion {
+            NextStepSuggestion::SiblingTasksRemain {
+                remaining_siblings_count,
+                ..
+            } => {
+                assert_eq!(remaining_siblings_count, 1); // only child3
+            }
+            _ => panic!("Expected SiblingTasksRemain suggestion"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_done_task_top_level_with_children() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create top-level task with children
+        let parent = manager.add_task("Epic Task", None, None).await.unwrap();
+        let child = manager
+            .add_task("Sub Task", None, Some(parent.id))
+            .await
+            .unwrap();
+
+        // Complete child first
+        manager.start_task(child.id, false).await.unwrap();
+        manager.done_task().await.unwrap();
+
+        // Complete parent
+        manager.start_task(parent.id, false).await.unwrap();
+        let response = manager.done_task().await.unwrap();
+
+        // Should be TOP_LEVEL_TASK_COMPLETED
+        match response.next_step_suggestion {
+            NextStepSuggestion::TopLevelTaskCompleted {
+                completed_task_id,
+                completed_task_name,
+                ..
+            } => {
+                assert_eq!(completed_task_id, parent.id);
+                assert_eq!(completed_task_name, "Epic Task");
+            }
+            _ => panic!("Expected TopLevelTaskCompleted suggestion"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_done_task_no_parent_context() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create multiple standalone tasks
+        let task1 = manager
+            .add_task("Standalone Task 1", None, None)
+            .await
+            .unwrap();
+        let _task2 = manager
+            .add_task("Standalone Task 2", None, None)
+            .await
+            .unwrap();
+
+        // Complete first task
+        manager.start_task(task1.id, false).await.unwrap();
+        let response = manager.done_task().await.unwrap();
+
+        // Should be NO_PARENT_CONTEXT since task2 is still pending
+        match response.next_step_suggestion {
+            NextStepSuggestion::NoParentContext {
+                completed_task_id,
+                completed_task_name,
+                ..
+            } => {
+                assert_eq!(completed_task_id, task1.id);
+                assert_eq!(completed_task_name, "Standalone Task 1");
+            }
+            _ => panic!("Expected NoParentContext suggestion"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_by_name() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create tasks with different names
+        manager
+            .add_task("Authentication bug fix", Some("Fix login issue"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Database migration", Some("Migrate to PostgreSQL"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Authentication feature", Some("Add OAuth2 support"), None)
+            .await
+            .unwrap();
+
+        // Search for "authentication"
+        let results = manager.search_tasks("authentication").await.unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0]
+            .task
+            .name
+            .to_lowercase()
+            .contains("authentication"));
+        assert!(results[1]
+            .task
+            .name
+            .to_lowercase()
+            .contains("authentication"));
+
+        // Check that match_snippet is present
+        assert!(!results[0].match_snippet.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_by_spec() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create tasks
+        manager
+            .add_task("Task 1", Some("Implement JWT authentication"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Task 2", Some("Add user registration"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Task 3", Some("JWT token refresh"), None)
+            .await
+            .unwrap();
+
+        // Search for "JWT"
+        let results = manager.search_tasks("JWT").await.unwrap();
+
+        assert_eq!(results.len(), 2);
+        for result in &results {
+            assert!(result
+                .task
+                .spec
+                .as_ref()
+                .unwrap()
+                .to_uppercase()
+                .contains("JWT"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_with_advanced_query() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create tasks
+        manager
+            .add_task("Bug fix", Some("Fix critical authentication bug"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Feature", Some("Add authentication feature"), None)
+            .await
+            .unwrap();
+        manager
+            .add_task("Bug report", Some("Report critical database bug"), None)
+            .await
+            .unwrap();
+
+        // Search with AND operator
+        let results = manager
+            .search_tasks("authentication AND bug")
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0]
+            .task
+            .spec
+            .as_ref()
+            .unwrap()
+            .contains("authentication"));
+        assert!(results[0].task.spec.as_ref().unwrap().contains("bug"));
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_no_results() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create tasks
+        manager
+            .add_task("Task 1", Some("Some description"), None)
+            .await
+            .unwrap();
+
+        // Search for non-existent term
+        let results = manager.search_tasks("nonexistent").await.unwrap();
+
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_search_tasks_snippet_highlighting() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create task with keyword in spec
+        manager
+            .add_task(
+                "Test task",
+                Some("This is a description with the keyword authentication in the middle"),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Search for "authentication"
+        let results = manager.search_tasks("authentication").await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        // Check that snippet contains highlighted keyword (marked with **)
+        assert!(results[0].match_snippet.contains("**authentication**"));
     }
 }

@@ -137,7 +137,7 @@ echo "决定将 JWT 密钥存储在环境变量中
 
 ```bash
 # 完成子任务
-intent-engine task done 2
+intent-engine task done
 
 # 切换回父任务
 intent-engine task switch 1
@@ -151,7 +151,7 @@ intent-engine task switch 1
 
 ```bash
 # 完成父任务
-intent-engine task done 1
+intent-engine task done
 
 # 如果还有未完成的子任务，系统会报错：
 # Error: Cannot complete task 1: it has incomplete subtasks
@@ -239,6 +239,16 @@ intent-engine report --since 1d
 
 - [**MCP Server**](docs/zh-CN/integration/mcp-server.md) - 集成到 Claude Code/Desktop
 - [**Claude Skill**](.claude-code/intent-engine.skill.md) - 轻量级集成方式
+
+### 💻 贡献代码前的准备
+
+如果你想为 Intent-Engine 贡献代码，请先安装 git hooks：
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+这会在每次提交前自动格式化代码，避免 CI 检查失败。更多开发工具命令请查看 [scripts/README.md](scripts/README.md)。
 
 ---
 

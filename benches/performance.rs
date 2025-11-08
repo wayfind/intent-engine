@@ -176,7 +176,8 @@ fn bench_report_summary(c: &mut Criterion) {
                             task_mgr.start_task(task.id, false).await.unwrap();
                         }
                         _ => {
-                            task_mgr.done_task(task.id).await.unwrap();
+                            task_mgr.start_task(task.id, false).await.unwrap();
+                            task_mgr.done_task().await.unwrap();
                         }
                     }
                 }

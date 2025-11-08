@@ -137,11 +137,11 @@ echo "Chose HS256 algorithm, store secret in environment variables" | \
   intent-engine event add --task-id 2 --type decision --data-stdin
 
 # 5. Complete subtask
-intent-engine task done 2
+intent-engine task done
 
 # 6. Switch back to parent task and complete
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done
 
 # 7. Generate work report
 intent-engine report --since 1d --summary-only
@@ -159,7 +159,7 @@ intent-engine report --since 1d --summary-only
 - **Decision History**: Complete event stream recording (decision, blocker, milestone, etc.)
 - **Smart Selection**: `pick-next` automatically selects tasks based on priority and complexity
 - **Atomic Operations**: Compound commands like `start`, `switch`, `spawn-subtask` save 60-70% tokens
-- **Full-text Search**: Efficient search based on SQLite FTS5
+- **🔍 FTS5 Search Engine**: Millisecond response under GB-scale tasks, unique snippet function highlights matches with `**`, extremely Agent-context-friendly
 - **JSON Output**: All commands output structured JSON, perfect for AI tool integration
 
 ---
@@ -216,6 +216,34 @@ intent-engine report --since 1d --summary-only
 - **Database**: SQLite with sqlx 0.7
 - **Async Runtime**: tokio 1.35
 - **Full-text Search**: SQLite FTS5
+
+---
+
+## 🔧 Development Setup
+
+### First-time Setup for Contributors (Required)
+
+To avoid CI formatting check failures, please run immediately after cloning:
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+This installs git pre-commit hooks that automatically run `cargo fmt` before each commit, ensuring code formatting compliance.
+
+### Development Tool Commands
+
+The project provides a Makefile to simplify common operations:
+
+```bash
+make help          # Show all available commands
+make fmt           # Format code
+make check         # Run format, clippy and tests
+make test          # Run all tests
+make setup-hooks   # Install git hooks (same as above script)
+```
+
+> 📖 **Detailed Documentation**: See [scripts/README.md](scripts/README.md) for complete development workflow and automation tools.
 
 ---
 

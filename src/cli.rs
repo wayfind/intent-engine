@@ -140,11 +140,14 @@ pub enum TaskCommands {
         with_events: bool,
     },
 
-    /// Complete a task (atomic: check children + update status)
-    Done {
-        /// Task ID
-        id: i64,
-    },
+    /// Complete the current focused task (atomic: check children + update status + clear current)
+    /// This command only operates on the current_task_id. It will:
+    /// - Check all subtasks are done
+    /// - Update the task status to done
+    /// - Clear the current_task_id
+    ///
+    /// Prerequisites: A task must be set as current (via `current --set <ID>`)
+    Done,
 
     /// Intelligently pick tasks from todo and move to doing
     PickNext {
@@ -172,6 +175,12 @@ pub enum TaskCommands {
     Switch {
         /// Task ID
         id: i64,
+    },
+
+    /// Search tasks by content using full-text search
+    Search {
+        /// Search query (supports FTS5 syntax like "bug AND NOT critical")
+        query: String,
     },
 }
 

@@ -137,7 +137,7 @@ Reasons:
 
 ```bash
 # Complete subtask
-intent-engine task done 2
+intent-engine task done
 
 # Switch back to parent task
 intent-engine task switch 1
@@ -151,7 +151,7 @@ intent-engine task switch 1
 
 ```bash
 # Complete parent task
-intent-engine task done 1
+intent-engine task done
 
 # If there are incomplete subtasks, system will error:
 # Error: Cannot complete task 1: it has incomplete subtasks
@@ -239,6 +239,16 @@ You've completed Intent-Engine's core workflow:
 
 - [**MCP Server**](docs/en/integration/mcp-server.md) - Integrate with Claude Code/Desktop
 - [**Claude Skill**](.claude-code/intent-engine.skill.md) - Lightweight integration method
+
+### 💻 Pre-contribution Setup
+
+If you want to contribute code to Intent-Engine, please install git hooks first:
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+This automatically formats code before each commit, preventing CI check failures. For more development tool commands, see [scripts/README.md](scripts/README.md).
 
 ---
 

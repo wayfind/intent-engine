@@ -199,16 +199,16 @@ echo "需要先完成域名所有权验证才能创建 OAuth 应用" | \
 
 intent-engine task spawn-subtask --name "完成域名所有权验证"
 
-# 完成最深层的子任务
-intent-engine task done <grandchild-task-id>
+# 完成最深层的子任务（spawn-subtask 后该任务已是焦点）
+intent-engine task done
 
 # 切回父任务继续
 intent-engine task switch <child-task-id>
-intent-engine task done <child-task-id>
+intent-engine task done  # 完成当前焦点任务
 
 # 最终完成根任务
 intent-engine task switch 42
-intent-engine task done 42
+intent-engine task done  # 完成任务42
 ```
 
 ### 原因 (Why)
@@ -272,25 +272,57 @@ intent-engine task switch 5
 
 ### 方法 (How)
 
-永远使用 `intent-engine task done <ID>`。
+使用 `intent-engine task done`（不需要 ID 参数，自动完成当前焦点任务）。
 
+**工作流:**
 ```bash
-intent-engine task done 42
+# 方式 1: 使用 switch/start 命令（自动设置焦点）
+intent-engine task switch 42
+intent-engine task done
+
+# 方式 2: 手动设置焦点
+intent-engine current --set 42
+intent-engine task done
+```
+
+**新的响应格式:**
+
+命令会返回一个包含三部分的智能响应：
+```json
+{
+  "completed_task": {
+    "id": 42,
+    "name": "实现用户认证",
+    "status": "done"
+  },
+  "workspace_status": {
+    "current_task_id": null
+  },
+  "next_step_suggestion": {
+    "type": "PARENT_IS_READY",
+    "message": "All sub-tasks of parent #10 'User System' are now complete...",
+    "parent_task_id": 10,
+    "parent_task_name": "User System"
+  }
+}
 ```
 
 如果任务还有未完成的子任务，系统会返回错误：
-
 ```json
 {
-  "error": "Cannot complete task 42: it has 2 incomplete subtasks"
+  "error": "UNCOMPLETED_CHILDREN"
 }
 ```
 
 ### 原因 (Why)
 
-与 `start` 类似，`done` 也是一个内置了安全检查的原子操作。它强制执行了"必须先完成所有子任务"这一核心业务规则，从而保证了 Intent-Engine 中任务树的逻辑一致性。
+`done` 是一个内置了安全检查的原子操作：
+- **强制先决条件**: 必须设置为当前焦点任务，确保操作意图明确
+- **子任务检查**: 强制执行"必须先完成所有子任务"的业务规则
+- **智能建议**: 返回上下文感知的下一步建议，帮助 AI 和用户理解工作流
+- **清空焦点**: 自动清空 `current_task_id`，避免误操作已完成的任务
 
-它不是一个简单的状态变更，而是对"这个意图连同其所有子意图都已圆满达成"的最终确认。
+它不是一个简单的状态变更，而是对"这个意图连同其所有子意图都已圆满达成"的最终确认，同时提供智能的后续行动建议。
 
 ---
 
