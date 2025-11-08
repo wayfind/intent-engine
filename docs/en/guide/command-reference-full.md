@@ -815,11 +815,11 @@ Record event for task (decisions, blockers, milestones, etc.).
 
 **Usage:**
 ```bash
-intent-engine event add --task-id <ID> --type <TYPE> --data-stdin
+intent-engine event add [--task-id <ID>] --type <TYPE> --data-stdin
 ```
 
 **Parameters:**
-- `--task-id <ID>` - Task ID (required)
+- `--task-id <ID>` - Task ID (optional, uses current task if omitted)
 - `--type <TYPE>` - Event type (required), suggested values:
   - `decision` - Key decision
   - `blocker` - Encountered obstacle
@@ -830,30 +830,30 @@ intent-engine event add --task-id <ID> --type <TYPE> --data-stdin
 
 **Examples:**
 ```bash
-# Record decision
+# Record to current task (concise workflow)
 echo "Decided to use bcrypt instead of MD5 for password encryption" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
-# Record encountered obstacle
+# Record to specific task (flexible workflow)
 echo "Found bcrypt library fails to compile on Windows, need alternative" | \
   intent-engine event add --task-id 1 --type blocker --data-stdin
 
-# Record milestone
+# Record milestone to current task
 echo "Completed core encryption logic, all unit tests passing" | \
-  intent-engine event add --task-id 1 --type milestone --data-stdin
+  intent-engine event add --type milestone --data-stdin
 
-# Record from file
+# Record from file to specific task
 cat discussion_notes.md | \
   intent-engine event add --task-id 1 --type discussion --data-stdin
 
-# Record long text
+# Record long text to current task
 echo "After research, compared the following options:
 1. bcrypt - Industry standard, but poor Windows compatibility
 2. argon2 - More secure, but higher performance overhead
 3. scrypt - Balanced approach
 
 Final decision: Use argon2, accept performance overhead" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 ```
 
 **Output Example:**
