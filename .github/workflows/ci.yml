@@ -204,9 +204,10 @@ jobs:
       - name: Verify package contents
         run: |
           cargo package --allow-dirty
-          PKG_FILE=$(ls target/package/intent-engine-*.tar.gz)
-          tar -xzf "$PKG_FILE" -C target/package
-          PKG_DIR=$(ls -d target/package/intent-engine-*/ | head -n 1)
+          cd target/package
+          PKG_FILE=$(ls -1 intent-engine-*.tar.gz | head -n 1)
+          tar -xzf "$PKG_FILE"
+          PKG_DIR=$(ls -1d intent-engine-*/ | head -n 1)
           cd "$PKG_DIR"
           cargo build --verbose
           cargo test --verbose
@@ -222,6 +223,7 @@ jobs:
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
+        continue-on-error: true  # Requires GitHub Advanced Security for private repos
 
   # Check for outdated dependencies
   outdated:
