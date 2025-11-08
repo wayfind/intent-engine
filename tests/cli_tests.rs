@@ -99,13 +99,22 @@ fn test_cli_task_done() {
         .assert()
         .success();
 
+    // Set task as current
+    let mut current_cmd = Command::cargo_bin("intent-engine").unwrap();
+    current_cmd
+        .current_dir(temp_dir.path())
+        .arg("current")
+        .arg("--set")
+        .arg("1")
+        .assert()
+        .success();
+
     // Complete the task
     let mut done_cmd = Command::cargo_bin("intent-engine").unwrap();
     done_cmd
         .current_dir(temp_dir.path())
         .arg("task")
-        .arg("done")
-        .arg("1");
+        .arg("done");
 
     done_cmd
         .assert()
@@ -141,13 +150,22 @@ fn test_cli_task_done_with_uncompleted_children() {
         .assert()
         .success();
 
+    // Set parent as current
+    let mut current_cmd = Command::cargo_bin("intent-engine").unwrap();
+    current_cmd
+        .current_dir(temp_dir.path())
+        .arg("current")
+        .arg("--set")
+        .arg("1")
+        .assert()
+        .success();
+
     // Try to complete parent (should fail)
     let mut done_cmd = Command::cargo_bin("intent-engine").unwrap();
     done_cmd
         .current_dir(temp_dir.path())
         .arg("task")
-        .arg("done")
-        .arg("1");
+        .arg("done");
 
     done_cmd
         .assert()

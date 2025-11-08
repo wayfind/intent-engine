@@ -301,7 +301,8 @@ async fn test_report_generation_performance() {
                 task_mgr.start_task(task.id, false).await.unwrap();
             }
             2 => {
-                task_mgr.done_task(task.id).await.unwrap();
+                task_mgr.start_task(task.id, false).await.unwrap();
+                task_mgr.done_task().await.unwrap();
             }
             _ => {}
         }
@@ -356,7 +357,7 @@ async fn test_concurrent_task_operations() {
                     .unwrap();
 
                 task_mgr.start_task(task.id, false).await.unwrap();
-                task_mgr.done_task(task.id).await.unwrap();
+                task_mgr.done_task().await.unwrap();
             }
         });
         handles.push(handle);
@@ -397,7 +398,7 @@ async fn test_stress_task_state_transitions() {
 
         // todo -> doing -> done
         task_mgr.start_task(task.id, false).await.unwrap();
-        task_mgr.done_task(task.id).await.unwrap();
+        task_mgr.done_task().await.unwrap();
     }
 
     let elapsed = start.elapsed();

@@ -218,7 +218,8 @@ mod tests {
         let doing = task_mgr.add_task("Doing task", None, None).await.unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
         let done = task_mgr.add_task("Done task", None, None).await.unwrap();
-        task_mgr.done_task(done.id).await.unwrap();
+        task_mgr.start_task(done.id, false).await.unwrap();
+        task_mgr.done_task().await.unwrap();
 
         let report = report_mgr
             .generate_report(None, None, None, None, true)

@@ -143,11 +143,11 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&task)?);
         }
 
-        TaskCommands::Done { id } => {
+        TaskCommands::Done => {
             let ctx = ProjectContext::load_or_init().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 
-            let task = task_mgr.done_task(id).await?;
+            let task = task_mgr.done_task().await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
         }
 

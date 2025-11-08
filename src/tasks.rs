@@ -277,9 +277,23 @@ impl<'a> TaskManager<'a> {
         }
     }
 
-    /// Complete a task (atomic: check children + update status + clear current if needed)
-    pub async fn done_task(&self, id: i64) -> Result<Task> {
+    /// Complete the current focused task (atomic: check children + update status + clear current)
+    /// This command only operates on the current_task_id.
+    /// Prerequisites: A task must be set as current
+    pub async fn done_task(&self) -> Result<Task> {
         let mut tx = self.pool.begin().await?;
+
+        // Get the current task ID
+        let current_task_id: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(&mut *tx)
+                .await?;
+
+        let id = current_task_id
+            .and_then(|s| s.parse::<i64>().ok())
+            .ok_or(IntentError::InvalidInput(
+                "No current task is set. Use 'current --set <ID>' to set a task first.".to_string(),
+            ))?;
 
         // Check if all children are done
         let uncompleted_children: i64 = sqlx::query_scalar(
@@ -308,19 +322,10 @@ impl<'a> TaskManager<'a> {
         .execute(&mut *tx)
         .await?;
 
-        // Check if this was the current task and clear it
-        let current_task_id: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
-                .fetch_optional(&mut *tx)
-                .await?;
-
-        if let Some(current) = current_task_id {
-            if current == id.to_string() {
-                sqlx::query("DELETE FROM workspace_state WHERE key = 'current_task_id'")
-                    .execute(&mut *tx)
-                    .await?;
-            }
-        }
+        // Clear the current task
+        sqlx::query("DELETE FROM workspace_state WHERE key = 'current_task_id'")
+            .execute(&mut *tx)
+            .await?;
 
         tx.commit().await?;
 
@@ -728,7 +733,7 @@ mod tests {
 
         let task = manager.add_task("Test task", None, None).await.unwrap();
         manager.start_task(task.id, false).await.unwrap();
-        let done = manager.done_task(task.id).await.unwrap();
+        let done = manager.done_task().await.unwrap();
 
         assert_eq!(done.status, "done");
         assert!(done.first_done_at.is_some());
@@ -754,7 +759,10 @@ mod tests {
             .await
             .unwrap();
 
-        let result = manager.done_task(parent.id).await;
+        // Set parent as current task
+        manager.start_task(parent.id, false).await.unwrap();
+
+        let result = manager.done_task().await;
         assert!(matches!(result, Err(IntentError::UncompletedChildren)));
     }
 
@@ -770,10 +778,12 @@ mod tests {
             .unwrap();
 
         // Complete child first
-        manager.done_task(child.id).await.unwrap();
+        manager.start_task(child.id, false).await.unwrap();
+        manager.done_task().await.unwrap();
 
         // Now parent can be completed
-        let result = manager.done_task(parent.id).await;
+        manager.start_task(parent.id, false).await.unwrap();
+        let result = manager.done_task().await;
         assert!(result.is_ok());
     }
 
