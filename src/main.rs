@@ -151,15 +151,26 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&task)?);
         }
 
-        TaskCommands::PickNext {
-            max_count,
-            capacity,
-        } => {
+        TaskCommands::PickNext { format } => {
             let ctx = ProjectContext::load_or_init().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 
-            let tasks = task_mgr.pick_next_tasks(max_count, capacity).await?;
-            println!("{}", serde_json::to_string_pretty(&tasks)?);
+            let response = task_mgr.pick_next().await?;
+
+            // Output based on format
+            match format.as_str() {
+                "json" => {
+                    println!("{}", serde_json::to_string_pretty(&response)?);
+                }
+                "text" | _ => {
+                    println!("{}", response.format_as_text());
+                }
+            }
+
+            // Exit with code 1 if no recommendation found
+            if response.suggestion_type == "NONE" {
+                std::process::exit(1);
+            }
         }
 
         TaskCommands::SpawnSubtask { name, spec_stdin } => {

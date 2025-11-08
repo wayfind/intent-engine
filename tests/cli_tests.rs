@@ -695,7 +695,7 @@ fn test_cli_pick_next_tasks() {
             .assert()
             .success();
 
-        // Set priority (higher priority for task 2)
+        // Set priority (lower number = higher priority)
         let mut update_cmd = Command::cargo_bin("intent-engine").unwrap();
         update_cmd
             .current_dir(temp_dir.path())
@@ -703,29 +703,26 @@ fn test_cli_pick_next_tasks() {
             .arg("update")
             .arg(i.to_string())
             .arg("--priority")
-            .arg(if i == 2 { "10" } else { "1" })
+            .arg(if i == 2 { "1" } else { "10" })
             .assert()
             .success();
     }
 
-    // Pick next tasks (should prioritize task 2)
+    // Pick next should recommend task 2 (priority 1)
     let mut pick_cmd = Command::cargo_bin("intent-engine").unwrap();
-    let output = pick_cmd
+    pick_cmd
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("pick-next")
-        .arg("--max-count")
-        .arg("2")
-        .arg("--capacity")
-        .arg("5")
-        .output()
-        .unwrap();
+        .arg("--format")
+        .arg("json");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // Should pick tasks and transition them to doing
-    assert!(stdout.contains("\"status\": \"doing\""));
-    // Task 2 should be first (highest priority)
-    assert!(stdout.contains("Task 2"));
+    pick_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"suggestion_type\": \"TOP_LEVEL_TASK\""))
+        .stdout(predicate::str::contains("Task 2"))
+        .stdout(predicate::str::contains("\"status\": \"todo\"")); // Status should remain todo
 }
 
 #[test]
@@ -825,4 +822,222 @@ fn test_cli_switch_task() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"current_task_id\": 2"));
+}
+
+#[test]
+fn test_cli_pick_next_json_format() {
+    let temp_dir = setup_test_env();
+
+    // Create a parent task
+    let mut add_cmd = Command::cargo_bin("intent-engine").unwrap();
+    add_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Parent task")
+        .assert()
+        .success();
+
+    // Start the parent task
+    let mut start_cmd = Command::cargo_bin("intent-engine").unwrap();
+    start_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("start")
+        .arg("1")
+        .assert()
+        .success();
+
+    // Create subtasks
+    let mut sub1_cmd = Command::cargo_bin("intent-engine").unwrap();
+    sub1_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Subtask 1")
+        .arg("--parent")
+        .arg("1")
+        .assert()
+        .success();
+
+    // Pick next with JSON format
+    let mut pick_cmd = Command::cargo_bin("intent-engine").unwrap();
+    pick_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("pick-next")
+        .arg("--format")
+        .arg("json");
+
+    pick_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"suggestion_type\": \"FOCUSED_SUB_TASK\""))
+        .stdout(predicate::str::contains("\"name\": \"Subtask 1\""));
+}
+
+#[test]
+fn test_cli_pick_next_text_format() {
+    let temp_dir = setup_test_env();
+
+    // Create a top-level task
+    let mut add_cmd = Command::cargo_bin("intent-engine").unwrap();
+    add_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Top level task")
+        .assert()
+        .success();
+
+    // Pick next with text format (default)
+    let mut pick_cmd = Command::cargo_bin("intent-engine").unwrap();
+    pick_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("pick-next");
+
+    pick_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Based on your current focus"))
+        .stdout(predicate::str::contains("Top level task"))
+        .stdout(predicate::str::contains("ie task start"));
+}
+
+#[test]
+fn test_cli_pick_next_no_tasks() {
+    let temp_dir = setup_test_env();
+
+    // Pick next when no tasks exist
+    let mut pick_cmd = Command::cargo_bin("intent-engine").unwrap();
+    pick_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("pick-next")
+        .arg("--format")
+        .arg("json");
+
+    pick_cmd
+        .assert()
+        .failure() // Should exit with code 1
+        .stdout(predicate::str::contains("\"suggestion_type\": \"NONE\""))
+        .stdout(predicate::str::contains("\"reason_code\": \"NO_TASKS_IN_PROJECT\""))
+        .stdout(predicate::str::contains("No tasks found in this project"));
+}
+
+#[test]
+fn test_cli_pick_next_all_completed() {
+    let temp_dir = setup_test_env();
+
+    // Create and complete a task
+    let mut add_cmd = Command::cargo_bin("intent-engine").unwrap();
+    add_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Task 1")
+        .assert()
+        .success();
+
+    let mut start_cmd = Command::cargo_bin("intent-engine").unwrap();
+    start_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("start")
+        .arg("1")
+        .assert()
+        .success();
+
+    let mut done_cmd = Command::cargo_bin("intent-engine").unwrap();
+    done_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("done")
+        .assert()
+        .success();
+
+    // Pick next when all tasks are completed
+    let mut pick_cmd = Command::cargo_bin("intent-engine").unwrap();
+    pick_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("pick-next")
+        .arg("--format")
+        .arg("json");
+
+    pick_cmd
+        .assert()
+        .failure() // Should exit with code 1
+        .stdout(predicate::str::contains("\"suggestion_type\": \"NONE\""))
+        .stdout(predicate::str::contains("\"reason_code\": \"ALL_TASKS_COMPLETED\""))
+        .stdout(predicate::str::contains("Project Complete"));
+}
+
+#[test]
+fn test_cli_pick_next_priority_ordering() {
+    let temp_dir = setup_test_env();
+
+    // Create multiple tasks with different priorities
+    let mut add1_cmd = Command::cargo_bin("intent-engine").unwrap();
+    add1_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Low priority task")
+        .assert()
+        .success();
+
+    let mut add2_cmd = Command::cargo_bin("intent-engine").unwrap();
+    add2_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("High priority task")
+        .assert()
+        .success();
+
+    // Set priorities
+    let mut update1_cmd = Command::cargo_bin("intent-engine").unwrap();
+    update1_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("update")
+        .arg("1")
+        .arg("--priority")
+        .arg("10")
+        .assert()
+        .success();
+
+    let mut update2_cmd = Command::cargo_bin("intent-engine").unwrap();
+    update2_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("update")
+        .arg("2")
+        .arg("--priority")
+        .arg("1")
+        .assert()
+        .success();
+
+    // Pick next should recommend high priority task (priority 1)
+    let mut pick_cmd = Command::cargo_bin("intent-engine").unwrap();
+    pick_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("pick-next")
+        .arg("--format")
+        .arg("json");
+
+    pick_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"name\": \"High priority task\""))
+        .stdout(predicate::str::contains("\"id\": 2"));
 }
