@@ -27,7 +27,45 @@ Intent-Engine 是一个极简的、项目专属的命令行数据库服务，专
 
 ## 安装
 
-### 方式 1: 下载预编译二进制（推荐）
+> 📖 **完整安装指南**: 查看 [INSTALLATION.md](INSTALLATION.md) 了解所有安装方式的详细说明、故障排除和维护者发布流程。
+
+### 方式 1: Cargo Install（推荐）🚀
+
+如果你已经安装了 Rust 和 Cargo，这是最简单的安装方式：
+
+```bash
+# 从 crates.io 安装最新版本
+cargo install intent-engine
+
+# 验证安装
+intent-engine --version
+```
+
+**没有 Rust？** 先安装 Rust：
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+### 方式 2: Homebrew（macOS/Linux）🍺
+
+```bash
+# 即将支持
+brew install wayfind/tap/intent-engine
+```
+
+### 方式 3: cargo-binstall（快速安装预编译二进制）⚡
+
+使用 [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) 直接安装预编译二进制，比从源码编译快得多：
+
+```bash
+# 安装 cargo-binstall（如果还没有）
+cargo install cargo-binstall
+
+# 安装 intent-engine（自动从 GitHub Releases 下载）
+cargo binstall intent-engine
+```
+
+### 方式 4: 下载预编译二进制
 
 从 [GitHub Releases](https://github.com/wayfind/intent-engine/releases) 下载适合你平台的二进制文件：
 
@@ -44,21 +82,22 @@ sudo mv intent-engine /usr/local/bin/
 intent-engine --version
 ```
 
-### 方式 2: 从源码构建
+### 方式 5: 从源码构建
 
 ```bash
 # 克隆仓库
 git clone https://github.com/wayfind/intent-engine.git
 cd intent-engine
 
-# 构建项目
-cargo build --release
+# 构建并安装
+cargo install --path .
 
-# 安装到系统路径
+# 或者手动构建
+cargo build --release
 sudo cp target/release/intent-engine /usr/local/bin/
 ```
 
-### 方式 3: 作为 MCP Server 集成到 Claude Code
+### 方式 6: 作为 MCP Server 集成到 Claude Code
 
 Intent-Engine 可以作为 MCP (Model Context Protocol) server 集成到 Claude Code，提供原生工具支持。
 
@@ -71,7 +110,7 @@ Intent-Engine 可以作为 MCP (Model Context Protocol) server 集成到 Claude 
 
 详细配置说明请参见 [MCP_SETUP.md](MCP_SETUP.md)。
 
-### 方式 4: 作为 Claude Code Skill
+### 方式 7: 作为 Claude Code Skill
 
 对于轻量级集成，可以将 Intent-Engine 配置为 Claude Code skill：
 
