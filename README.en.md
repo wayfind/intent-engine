@@ -69,7 +69,7 @@ Intent-Engine is a CLI tool + database system for recording, tracking, and revie
 - ✅ **Project-level**: Persisted to SQLite database, permanently saved across sessions
 - ✅ **Traceable**: Complete event stream records context of every decision
 - ✅ **Hierarchical**: Task tree structure, enforces completing all subtasks before parent task
-- ✅ **Atomic Operations**: Compound commands like `start`, `pick-next`, `spawn-subtask`, `switch` save 60-70% tokens
+- ✅ **Atomic Operations**: Commands like `start`, `pick-next`, `spawn-subtask`, `switch` save 50-70% tokens
 
 ---
 
@@ -157,8 +157,8 @@ intent-engine report --since 1d --summary-only
 - **Lazy Initialization**: Write commands auto-initialize project, no manual init needed
 - **Task Tree Management**: Support unlimited levels of parent-child task relationships
 - **Decision History**: Complete event stream recording (decision, blocker, milestone, etc.)
-- **Smart Selection**: `pick-next` automatically selects tasks based on priority and complexity
-- **Atomic Operations**: Compound commands like `start`, `switch`, `spawn-subtask` save 60-70% tokens
+- **Smart Recommendation**: `pick-next` recommends next task based on context
+- **Atomic Operations**: Commands like `start`, `switch`, `spawn-subtask` save 50-70% tokens
 - **🔍 FTS5 Search Engine**: Millisecond response under GB-scale tasks, unique snippet function highlights matches with `**`, extremely Agent-context-friendly
 - **JSON Output**: All commands output structured JSON, perfect for AI tool integration
 

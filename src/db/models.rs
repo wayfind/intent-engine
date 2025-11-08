@@ -131,3 +131,127 @@ pub struct TaskSearchResult {
     pub task: Task,
     pub match_snippet: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PickNextResponse {
+    pub suggestion_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<Task>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+impl PickNextResponse {
+    /// Create a response for focused subtask suggestion
+    pub fn focused_subtask(task: Task) -> Self {
+        Self {
+            suggestion_type: "FOCUSED_SUB_TASK".to_string(),
+            task: Some(task),
+            reason_code: None,
+            message: None,
+        }
+    }
+
+    /// Create a response for top-level task suggestion
+    pub fn top_level_task(task: Task) -> Self {
+        Self {
+            suggestion_type: "TOP_LEVEL_TASK".to_string(),
+            task: Some(task),
+            reason_code: None,
+            message: None,
+        }
+    }
+
+    /// Create a response for no tasks in project
+    pub fn no_tasks_in_project() -> Self {
+        Self {
+            suggestion_type: "NONE".to_string(),
+            task: None,
+            reason_code: Some("NO_TASKS_IN_PROJECT".to_string()),
+            message: Some(
+                "No tasks found in this project. Your intent backlog is empty.".to_string(),
+            ),
+        }
+    }
+
+    /// Create a response for all tasks completed
+    pub fn all_tasks_completed() -> Self {
+        Self {
+            suggestion_type: "NONE".to_string(),
+            task: None,
+            reason_code: Some("ALL_TASKS_COMPLETED".to_string()),
+            message: Some("Project Complete! All intents have been realized.".to_string()),
+        }
+    }
+
+    /// Create a response for no available todos
+    pub fn no_available_todos() -> Self {
+        Self {
+            suggestion_type: "NONE".to_string(),
+            task: None,
+            reason_code: Some("NO_AVAILABLE_TODOS".to_string()),
+            message: Some("No immediate next task found based on the current context.".to_string()),
+        }
+    }
+
+    /// Format response as human-readable text
+    pub fn format_as_text(&self) -> String {
+        match self.suggestion_type.as_str() {
+            "FOCUSED_SUB_TASK" | "TOP_LEVEL_TASK" => {
+                if let Some(task) = &self.task {
+                    format!(
+                        "Based on your current focus, the recommended next task is:\n\n\
+                        [ID: {}] [Priority: {}] [Status: {}]\n\
+                        Name: {}\n\n\
+                        To start working on it, run:\n  ie task start {}",
+                        task.id,
+                        task.priority.unwrap_or(0),
+                        task.status,
+                        task.name,
+                        task.id
+                    )
+                } else {
+                    "[ERROR] Invalid response: task is missing".to_string()
+                }
+            }
+            "NONE" => {
+                let reason_code = self.reason_code.as_deref().unwrap_or("UNKNOWN");
+                let message = self.message.as_deref().unwrap_or("No tasks found");
+
+                match reason_code {
+                    "NO_TASKS_IN_PROJECT" => {
+                        format!(
+                            "[INFO] {}\n\n\
+                            To get started, capture your first high-level intent:\n  \
+                            ie task add --name \"Setup initial project structure\" --priority 1",
+                            message
+                        )
+                    }
+                    "ALL_TASKS_COMPLETED" => {
+                        format!(
+                            "[SUCCESS] {}\n\n\
+                            You can review the accomplishments of the last 30 days with:\n  \
+                            ie report --since 30d",
+                            message
+                        )
+                    }
+                    "NO_AVAILABLE_TODOS" => {
+                        format!(
+                            "[INFO] {}\n\n\
+                            Possible reasons:\n\
+                            - All available 'todo' tasks are part of larger epics that have not been started yet.\n\
+                            - You are not currently focused on a task that has 'todo' sub-tasks.\n\n\
+                            To see all available top-level tasks you can start, run:\n  \
+                            ie task find --parent NULL --status todo",
+                            message
+                        )
+                    }
+                    _ => format!("[INFO] {}", message),
+                }
+            }
+            _ => "[ERROR] Unknown suggestion type".to_string(),
+        }
+    }
+}
