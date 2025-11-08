@@ -206,12 +206,13 @@ jobs:
           cargo package --allow-dirty
           echo "Listing target/package directory:"
           ls -la target/package/
-          PKG_FILE=$(find target/package -name "intent-engine-*.tar.gz" -type f | head -n 1)
+          PKG_FILE=$(find target/package -name "intent-engine-*.crate" -type f | head -n 1)
           if [ -z "$PKG_FILE" ]; then
             echo "Error: No package file found"
             exit 1
           fi
           echo "Found package: $PKG_FILE"
+          # .crate files are actually tar.gz files
           tar -xzf "$PKG_FILE" -C target/package/
           PKG_DIR=$(find target/package -maxdepth 1 -name "intent-engine-*" -type d | head -n 1)
           echo "Extracted to: $PKG_DIR"
