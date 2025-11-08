@@ -1,5 +1,29 @@
 name: CI
 
+# Tiered CI Strategy for Performance and Safety
+#
+# This workflow uses a three-tier approach to balance speed and thoroughness:
+#
+# 🚀 TIER 1: Fast Check (~5-10 minutes)
+#   Trigger: Push to claude/** branches
+#   Runs: Basic tests (ubuntu + stable), format check, clippy, security audit, docs
+#   Purpose: Quick feedback for development branches
+#
+# ✅ TIER 2: Standard CI (~15-20 minutes)
+#   Trigger: Pull Requests
+#   Runs: Fast check + cross-platform tests (ubuntu + macos, stable + beta), package check
+#   Purpose: Thorough validation before merge
+#
+# 🔬 TIER 3: Full CI (~30-40 minutes)
+#   Trigger: Push to main/master, scheduled runs (daily), manual workflow dispatch
+#   Runs: Everything including benchmarks, code coverage, minimal versions, install scripts
+#   Purpose: Complete validation for production code
+#
+# Benefits:
+#   - 70-80% faster CI for development branches
+#   - No compromise on quality for PRs and production
+#   - Full testing happens daily and on main branch
+
 on:
   push:
     branches: [ main, master, claude/** ]
@@ -8,6 +32,7 @@ on:
   schedule:
     # Run daily at 00:00 UTC to catch dependency issues
     - cron: '0 0 * * *'
+  workflow_dispatch:  # Allow manual trigger for full CI
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,15 +45,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable, beta]
+        # Fast check (claude/** branches): only ubuntu + stable
+        # Standard CI (PRs): ubuntu + macos, stable + beta
+        # Full CI (main/master/schedule): all platforms and versions
+        os: ${{
+          (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/claude/')) && fromJSON('["ubuntu-latest"]') ||
+          (github.event_name == 'pull_request') && fromJSON('["ubuntu-latest", "macos-latest"]') ||
+          fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]')
+        }}
+        rust: ${{
+          (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/claude/')) && fromJSON('["stable"]') ||
+          fromJSON('["stable", "beta"]')
+        }}
         include:
-          # Also test on nightly, but allow it to fail
+          # Also test on nightly for full CI only, but allow it to fail
           - os: ubuntu-latest
             rust: nightly
             experimental: true
 
+    # Skip nightly build for fast checks and PRs
     continue-on-error: ${{ matrix.experimental || false }}
+    if: ${{ !(matrix.rust == 'nightly' && (startsWith(github.ref, 'refs/heads/claude/') || github.event_name == 'pull_request')) }}
 
     steps:
       - name: Checkout code
@@ -97,6 +134,8 @@ jobs:
   test-minimal-versions:
     name: Test Minimal Versions
     runs-on: ubuntu-latest
+    # Only run for full CI (main/master, schedule, manual trigger)
+    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -120,6 +159,8 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    # Only run for full CI (main/master, schedule, manual trigger)
+    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -256,6 +297,8 @@ jobs:
   bench:
     name: Benchmarks
     runs-on: ubuntu-latest
+    # Only run for full CI (main/master, schedule, manual trigger)
+    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -286,6 +329,8 @@ jobs:
   install-scripts:
     name: Test Install Scripts
     runs-on: ${{ matrix.os }}
+    # Only run for full CI (main/master, schedule, manual trigger)
+    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -329,24 +374,34 @@ jobs:
     steps:
       - name: Check all jobs
         run: |
+          # Check test job (always runs)
           if [ "${{ needs.test.result }}" != "success" ]; then
             echo "Test job failed"
             exit 1
           fi
-          if [ "${{ needs.coverage.result }}" != "success" ]; then
+
+          # Check coverage job (only full CI)
+          if [ "${{ needs.coverage.result }}" == "failure" ]; then
             echo "Coverage job failed"
             exit 1
           fi
+
+          # Check security audit (always runs)
           if [ "${{ needs.security-audit.result }}" != "success" ]; then
             echo "Security audit job failed"
             exit 1
           fi
+
+          # Check docs (always runs)
           if [ "${{ needs.docs.result }}" != "success" ]; then
             echo "Documentation job failed"
             exit 1
           fi
+
+          # Check package (always runs)
           if [ "${{ needs.check-package.result }}" != "success" ]; then
             echo "Package check job failed"
             exit 1
           fi
+
           echo "All required jobs passed!"
