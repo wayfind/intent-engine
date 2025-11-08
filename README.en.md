@@ -132,9 +132,9 @@ intent-engine task start 1 --with-events
 # 3. Discover sub-problem during work? Create subtask and auto-switch
 intent-engine task spawn-subtask --name "Configure JWT secret key"
 
-# 4. Record key decisions
+# 4. Record key decision (subtask is now current task)
 echo "Chose HS256 algorithm, store secret in environment variables" | \
-  intent-engine event add --task-id 2 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
 # 5. Complete subtask
 intent-engine task done

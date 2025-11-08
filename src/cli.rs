@@ -147,7 +147,7 @@ pub enum TaskCommands {
     /// - Update the task status to done
     /// - Clear the current_task_id
     ///
-    /// Prerequisites: A task must be set as current (via `current --set <ID>`)
+    ///   Prerequisites: A task must be set as current (via `current --set <ID>`)
     Done,
 
     /// Intelligently recommend the next task to work on
@@ -191,9 +191,9 @@ pub enum TaskCommands {
 pub enum EventCommands {
     /// Add a new event
     Add {
-        /// Task ID
+        /// Task ID (optional, uses current task if not specified)
         #[arg(long)]
-        task_id: i64,
+        task_id: Option<i64>,
 
         /// Log type
         #[arg(long = "type")]

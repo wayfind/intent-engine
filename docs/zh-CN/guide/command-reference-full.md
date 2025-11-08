@@ -880,11 +880,11 @@ intent-engine task search "JWT" | jq '.[].match_snippet'
 
 **用法:**
 ```bash
-intent-engine event add --task-id <ID> --type <TYPE> --data-stdin
+intent-engine event add [--task-id <ID>] --type <TYPE> --data-stdin
 ```
 
 **参数:**
-- `--task-id <ID>` - 任务 ID（必需）
+- `--task-id <ID>` - 任务 ID（可选，如省略则使用当前任务）
 - `--type <TYPE>` - 事件类型（必需），建议值：
   - `decision` - 关键决策
   - `blocker` - 遇到的障碍
@@ -895,30 +895,30 @@ intent-engine event add --task-id <ID> --type <TYPE> --data-stdin
 
 **示例:**
 ```bash
-# 记录决策
+# 记录到当前任务（简洁工作流）
 echo "决定使用 bcrypt 而不是 MD5 进行密码加密" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
-# 记录遇到的障碍
+# 记录到指定任务（灵活工作流）
 echo "发现 bcrypt 库在 Windows 上编译失败，需要寻找替代方案" | \
   intent-engine event add --task-id 1 --type blocker --data-stdin
 
-# 记录里程碑
+# 记录里程碑到当前任务
 echo "完成核心加密逻辑，通过所有单元测试" | \
-  intent-engine event add --task-id 1 --type milestone --data-stdin
+  intent-engine event add --type milestone --data-stdin
 
-# 从文件记录
+# 从文件记录到指定任务
 cat discussion_notes.md | \
   intent-engine event add --task-id 1 --type discussion --data-stdin
 
-# 记录长文本
+# 记录长文本到当前任务
 echo "经过调研，比较了以下方案：
 1. bcrypt - 业界标准，但 Windows 兼容性差
 2. argon2 - 更安全，但性能开销大
 3. scrypt - 平衡方案
 
 最终决定：使用 argon2，接受性能开销" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 ```
 
 **输出示例:**

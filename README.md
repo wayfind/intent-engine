@@ -132,9 +132,9 @@ intent-engine task start 1 --with-events
 # 3. 在工作中发现子问题？创建子任务并自动切换
 intent-engine task spawn-subtask --name "配置 JWT 密钥"
 
-# 4. 记录关键决策
+# 4. 记录关键决策（子任务已是当前任务）
 echo "选择使用 HS256 算法，密钥存储在环境变量中" | \
-  intent-engine event add --task-id 2 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
 # 5. 完成子任务
 intent-engine task done
