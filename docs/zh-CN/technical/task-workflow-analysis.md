@@ -1401,10 +1401,10 @@ intent-engine task update <id> [--name] [--spec] [--status] [--parent-id]
 intent-engine task del <id>
 intent-engine task find [--status] [--parent-id]
 intent-engine task start <id>
-intent-engine task done <id>
+intent-engine task done  # 完成当前焦点任务（无需 ID 参数）
 
 # 工作区管理
-intent-engine workspace current [--set-task-id]
+intent-engine current [--set <ID>]
 
 # 事件管理
 intent-engine event add <task-id> <type> [--data]

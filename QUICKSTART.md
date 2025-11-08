@@ -137,7 +137,7 @@ echo "决定将 JWT 密钥存储在环境变量中
 
 ```bash
 # 完成子任务
-intent-engine task done 2
+intent-engine task done
 
 # 切换回父任务
 intent-engine task switch 1
@@ -151,7 +151,7 @@ intent-engine task switch 1
 
 ```bash
 # 完成父任务
-intent-engine task done 1
+intent-engine task done
 
 # 如果还有未完成的子任务，系统会报错：
 # Error: Cannot complete task 1: it has incomplete subtasks

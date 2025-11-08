@@ -137,11 +137,11 @@ echo "选择使用 HS256 算法，密钥存储在环境变量中" | \
   intent-engine event add --task-id 2 --type decision --data-stdin
 
 # 5. 完成子任务
-intent-engine task done 2
+intent-engine task done
 
 # 6. 切回父任务并完成
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done
 
 # 7. 生成工作报告
 intent-engine report --since 1d --summary-only

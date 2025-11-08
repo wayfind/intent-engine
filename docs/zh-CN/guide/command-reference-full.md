@@ -138,14 +138,14 @@ intent-engine task spawn-subtask --name "修复密码验证 bug"
 # 4. 记录关键决策
 echo "决定使用 bcrypt 替代 MD5" | intent-engine event add --task-id 2 --type decision --data-stdin
 
-# 5. 完成子任务
-intent-engine task done 2
+# 5. 完成子任务（子任务已是焦点，直接完成）
+intent-engine task done
 
 # 6. 切换回父任务
 intent-engine task switch 1
 
-# 7. 完成父任务
-intent-engine task done 1
+# 7. 完成父任务（父任务现在是焦点，直接完成）
+intent-engine task done
 
 # 8. 生成工作报告
 intent-engine report --since 1d --summary-only
@@ -434,38 +434,77 @@ intent-engine task start 1 --with-events | jq '.events_summary.recent_events'
 
 ---
 
-#### `task done` - 完成任务
+#### `task done` - 完成当前焦点任务
 
-原子操作：检查子任务是否全部完成，然后将任务标记为 "done"。
+原子性地完成当前焦点任务。此命令不接受 ID 参数，其操作目标永远是 `current_task_id` 所指向的任务。
 
 **用法:**
 ```bash
-intent-engine task done <ID>
+intent-engine task done
 ```
 
 **参数:**
-- `<ID>` - 任务 ID（必需）
+- 无参数（只对当前焦点任务生效）
+
+**前置条件:**
+- 必须有任务被设置为焦点（通过 `current --set <ID>` 或 `task start/switch` 命令）
+- 当前任务的所有子任务必须已完成
+
+**行为:**
+在一个事务中完成以下操作：
+1. 检查当前焦点任务的所有子任务是否为 done
+2. 将当前焦点任务的状态更新为 done
+3. 清空 `current_task_id`，使工作区返回"未聚焦"状态
+
+**工作流:**
+完成一个非焦点任务的标准流程：
+```bash
+intent-engine current --set <ID>  # 设置焦点
+intent-engine task done           # 完成焦点任务
+```
 
 **示例:**
 ```bash
-# 完成任务
-intent-engine task done 1
+# 1. 设置任务为焦点
+intent-engine current --set 1
 
-# 如果有未完成的子任务，会返回错误
-intent-engine task done 1
-# 错误: Cannot complete task 1: it has incomplete subtasks
+# 2. 完成任务
+intent-engine task done
+
+# 3. 如果有未完成的子任务，会返回错误
+intent-engine current --set 2
+intent-engine task done
+# 错误: UNCOMPLETED_CHILDREN
 ```
 
 **输出示例:**
 ```json
 {
-  "id": 1,
-  "name": "实现用户登录",
-  "status": "done",
-  "first_done_at": "2025-11-06T12:00:00Z",
-  "..."
+  "completed_task": {
+    "id": 1,
+    "name": "实现用户登录",
+    "status": "done",
+    "first_done_at": "2025-11-06T12:00:00Z"
+  },
+  "workspace_status": {
+    "current_task_id": null
+  },
+  "next_step_suggestion": {
+    "type": "PARENT_IS_READY",
+    "message": "All sub-tasks of parent #5 'User Authentication' are now complete. The parent task is ready for your attention.",
+    "parent_task_id": 5,
+    "parent_task_name": "User Authentication"
+  }
 }
 ```
+
+**Next Step Suggestion 类型:**
+
+- **PARENT_IS_READY**: 父任务的所有子任务都已完成，父任务已准备就绪
+- **SIBLING_TASKS_REMAIN**: 父任务还有其他未完成的子任务
+- **TOP_LEVEL_TASK_COMPLETED**: 完成了一个有子任务的顶级任务
+- **NO_PARENT_CONTEXT**: 完成了一个独立的任务（还有其他任务待完成）
+- **WORKSPACE_IS_CLEAR**: 所有任务都已完成，项目完成
 
 ---
 
@@ -606,14 +645,14 @@ echo "需要升级 tokio 到 1.35" | \
   intent-engine task spawn-subtask --name "升级依赖" --spec-stdin
 
 # 典型场景：递归问题分解
-intent-engine task start 1  # 开始：实现用户认证
-intent-engine task spawn-subtask --name "实现密码加密"  # 发现子问题
-intent-engine task spawn-subtask --name "选择加密算法"  # 又发现更细的子问题
-intent-engine task done 3  # 完成：选择加密算法
+intent-engine task start 1  # 开始：实现用户认证（自动成为焦点）
+intent-engine task spawn-subtask --name "实现密码加密"  # 发现子问题（自动切换为焦点）
+intent-engine task spawn-subtask --name "选择加密算法"  # 又发现更细的子问题（自动切换为焦点）
+intent-engine task done  # 完成：选择加密算法（当前焦点）
 intent-engine task switch 2  # 切回：实现密码加密
-intent-engine task done 2  # 完成：实现密码加密
+intent-engine task done  # 完成：实现密码加密（当前焦点）
 intent-engine task switch 1  # 切回：实现用户认证
-intent-engine task done 1  # 完成：实现用户认证
+intent-engine task done  # 完成：实现用户认证（当前焦点）
 ```
 
 **输出示例:**

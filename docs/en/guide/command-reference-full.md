@@ -139,13 +139,13 @@ intent-engine task spawn-subtask --name "Fix password validation bug"
 echo "Decided to use bcrypt instead of MD5" | intent-engine event add --task-id 2 --type decision --data-stdin
 
 # 5. Complete subtask
-intent-engine task done 2
+intent-engine task done
 
 # 6. Switch back to parent task
 intent-engine task switch 1
 
 # 7. Complete parent task
-intent-engine task done 1
+intent-engine task done
 
 # 8. Generate work report
 intent-engine report --since 1d --summary-only
@@ -440,7 +440,7 @@ Atomic operation: check if all subtasks are complete, then mark task as "done".
 
 **Usage:**
 ```bash
-intent-engine task done <ID>
+intent-engine task done
 ```
 
 **Parameters:**
@@ -449,10 +449,10 @@ intent-engine task done <ID>
 **Examples:**
 ```bash
 # Complete task
-intent-engine task done 1
+intent-engine task done
 
 # If there are incomplete subtasks, returns error
-intent-engine task done 1
+intent-engine task done
 # Error: Cannot complete task 1: it has incomplete subtasks
 ```
 
@@ -609,11 +609,11 @@ echo "Need to upgrade tokio to 1.35" | \
 intent-engine task start 1  # Start: implement user authentication
 intent-engine task spawn-subtask --name "Implement password encryption"  # Discover sub-problem
 intent-engine task spawn-subtask --name "Choose encryption algorithm"  # Discover even finer sub-problem
-intent-engine task done 3  # Complete: choose encryption algorithm
+intent-engine task done  # Complete: choose encryption algorithm
 intent-engine task switch 2  # Switch back: implement password encryption
-intent-engine task done 2  # Complete: implement password encryption
+intent-engine task done  # Complete: implement password encryption
 intent-engine task switch 1  # Switch back: implement user authentication
-intent-engine task done 1  # Complete: implement user authentication
+intent-engine task done  # Complete: implement user authentication
 ```
 
 **Output Example:**
@@ -665,7 +665,7 @@ intent-engine task start 1
 intent-engine task spawn-subtask --name "Subtask A"
 intent-engine task spawn-subtask --name "Subtask B"
 intent-engine task switch 2  # Switch back to subtask A
-intent-engine task done 2
+intent-engine task done
 intent-engine task switch 3  # Switch to subtask B
 
 # View context after switching
@@ -1028,11 +1028,11 @@ intent-engine task pick-next --max-count 3 --capacity 5
 # 4. Process one by one and record
 intent-engine task switch 1
 echo "Cause: Did not check for null return value" | intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done 1
+intent-engine task done
 
 intent-engine task switch 2
 echo "Decided to add index to user_id field" | intent-engine event add --task-id 2 --type decision --data-stdin
-intent-engine task done 2
+intent-engine task done
 
 # 5. Generate report
 intent-engine report --since 1d --summary-only
@@ -1055,16 +1055,16 @@ intent-engine task spawn-subtask --name "Configure payment keys and callback URL
 
 # 4. Complete deepest subtask
 echo "Configured Stripe API keys in backend" | intent-engine event add --task-id 3 --type milestone --data-stdin
-intent-engine task done 3
+intent-engine task done
 
 # 5. Switch back to parent task and continue
 intent-engine task switch 2
 echo "API integration complete, tests passing" | intent-engine event add --task-id 2 --type milestone --data-stdin
-intent-engine task done 2
+intent-engine task done
 
 # 6. Complete root task
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done
 
 # 7. View task hierarchy
 intent-engine task find --parent null  # Root tasks
@@ -1093,7 +1093,7 @@ echo "Completed database models" | intent-engine event add --task-id 2 --type mi
 
 intent-engine task switch 3
 # ... update docs ...
-intent-engine task done 3
+intent-engine task done
 
 # 4. View progress
 intent-engine report --status doing

@@ -40,7 +40,7 @@ echo "Decision/blocker/milestone..." | \
 
 ### Complete (Enforces Hierarchy)
 ```bash
-intent-engine task done <ID>  # Fails if subtasks incomplete
+intent-engine task done  # Fails if subtasks incomplete
 ```
 
 ### Get Summary (Token-Efficient)
@@ -66,11 +66,11 @@ echo "Chose Passport.js for OAuth strategies" | \
 intent-engine task spawn-subtask --name "Configure Google OAuth app"
 
 # 5. Complete child, switch back to parent
-intent-engine task done 2
+intent-engine task done
 intent-engine task switch 1
 
 # 6. Complete parent
-intent-engine task done 1
+intent-engine task done
 ```
 
 ## Batch Problem Handling

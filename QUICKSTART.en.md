@@ -137,7 +137,7 @@ Reasons:
 
 ```bash
 # Complete subtask
-intent-engine task done 2
+intent-engine task done
 
 # Switch back to parent task
 intent-engine task switch 1
@@ -151,7 +151,7 @@ intent-engine task switch 1
 
 ```bash
 # Complete parent task
-intent-engine task done 1
+intent-engine task done
 
 # If there are incomplete subtasks, system will error:
 # Error: Cannot complete task 1: it has incomplete subtasks

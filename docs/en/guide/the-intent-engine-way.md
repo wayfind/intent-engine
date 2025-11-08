@@ -208,7 +208,7 @@ intent-engine task done <child-task-id>
 
 # Finally complete root task
 intent-engine task switch 42
-intent-engine task done 42
+intent-engine task done
 ```
 
 ### Why
@@ -272,10 +272,10 @@ When all goals defined in `spec` have been achieved, and all subtasks (if any) a
 
 ### How
 
-Always use `intent-engine task done <ID>`.
+Always use `intent-engine task done`.
 
 ```bash
-intent-engine task done 42
+intent-engine task done
 ```
 
 If the task still has incomplete subtasks, system will return error:
@@ -385,7 +385,7 @@ Impact scope: 3 call sites" | \
 # ... modify code ...
 
 # 4.3 Complete task
-intent-engine task done 1
+intent-engine task done
 
 # 5. Handle second task (includes subtask)
 intent-engine task switch 3
@@ -404,7 +404,7 @@ intent-engine task done <subtask-id>
 # 5.3 Switch back and complete main task
 intent-engine task switch 3
 # ... fix code ...
-intent-engine task done 3
+intent-engine task done
 
 # 6. Generate work report
 intent-engine report --since 1d --summary-only
@@ -467,13 +467,13 @@ intent-engine task add --name "Implement token refresh"
 intent-engine task add --name "Implement OAuth2"
 intent-engine task start 1
 intent-engine task spawn-subtask --name "Configure Google OAuth"
-intent-engine task done 2
+intent-engine task done
 intent-engine task spawn-subtask --name "Configure GitHub OAuth"
-intent-engine task done 3
+intent-engine task done
 intent-engine task spawn-subtask --name "Implement token refresh"
-intent-engine task done 4
+intent-engine task done
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done
 ```
 
 ---

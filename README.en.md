@@ -137,11 +137,11 @@ echo "Chose HS256 algorithm, store secret in environment variables" | \
   intent-engine event add --task-id 2 --type decision --data-stdin
 
 # 5. Complete subtask
-intent-engine task done 2
+intent-engine task done
 
 # 6. Switch back to parent task and complete
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done
 
 # 7. Generate work report
 intent-engine report --since 1d --summary-only
