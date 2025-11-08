@@ -77,3 +77,50 @@ pub struct DateRange {
     pub from: DateTime<Utc>,
     pub to: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DoneTaskResponse {
+    pub completed_task: Task,
+    pub workspace_status: WorkspaceStatus,
+    pub next_step_suggestion: NextStepSuggestion,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceStatus {
+    pub current_task_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum NextStepSuggestion {
+    #[serde(rename = "PARENT_IS_READY")]
+    ParentIsReady {
+        message: String,
+        parent_task_id: i64,
+        parent_task_name: String,
+    },
+    #[serde(rename = "SIBLING_TASKS_REMAIN")]
+    SiblingTasksRemain {
+        message: String,
+        parent_task_id: i64,
+        parent_task_name: String,
+        remaining_siblings_count: i64,
+    },
+    #[serde(rename = "TOP_LEVEL_TASK_COMPLETED")]
+    TopLevelTaskCompleted {
+        message: String,
+        completed_task_id: i64,
+        completed_task_name: String,
+    },
+    #[serde(rename = "NO_PARENT_CONTEXT")]
+    NoParentContext {
+        message: String,
+        completed_task_id: i64,
+        completed_task_name: String,
+    },
+    #[serde(rename = "WORKSPACE_IS_CLEAR")]
+    WorkspaceIsClear {
+        message: String,
+        completed_task_id: i64,
+    },
+}
