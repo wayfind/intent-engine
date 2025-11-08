@@ -701,6 +701,112 @@ intent-engine task switch 5 | jq '.events_summary'
 
 ---
 
+#### `task search` - Full-Text Search Tasks 🆕
+
+Use FTS5 full-text search to find content in all tasks' name and spec fields, returning a relevance-sorted result list.
+
+**Usage:**
+```bash
+intent-engine task search <QUERY>
+```
+
+**Parameters:**
+- `<QUERY>` - Search query string (required), supports FTS5 advanced syntax
+
+**FTS5 Advanced Syntax:**
+- `authentication` - Simple keyword search
+- `"user login"` - Exact phrase search
+- `authentication AND bug` - Contains both words
+- `JWT OR OAuth` - Contains either word
+- `authentication NOT critical` - Contains authentication but not critical
+- `auth*` - Prefix matching (e.g., auth, authentication, authorize)
+
+**Features:**
+- Searches both name and spec fields
+- Returns results with highlighted snippets (using `**` markers)
+- Automatically sorted by relevance
+- Millisecond-level query performance (based on FTS5 index)
+
+**Examples:**
+```bash
+# Simple search
+intent-engine task search "authentication"
+
+# Search for tasks containing JWT
+intent-engine task search "JWT"
+
+# Advanced search: contains both keywords
+intent-engine task search "authentication AND bug"
+
+# Search for either keyword
+intent-engine task search "JWT OR OAuth"
+
+# Exclude specific keyword
+intent-engine task search "bug NOT critical"
+
+# Prefix matching
+intent-engine task search "auth*"
+
+# Exact phrase search
+intent-engine task search '"user login flow"'
+
+# Combine with jq to view results
+intent-engine task search "authentication" | jq '.[].task | {id, name, status}'
+
+# View match snippets
+intent-engine task search "JWT" | jq '.[].match_snippet'
+```
+
+**Output Example:**
+```json
+[
+  {
+    "id": 5,
+    "parent_id": 1,
+    "name": "Authentication bug fix",
+    "spec": "Fix the JWT token validation bug in the authentication middleware",
+    "status": "todo",
+    "complexity": 5,
+    "priority": 8,
+    "first_todo_at": "2025-11-06T10:00:00Z",
+    "first_doing_at": null,
+    "first_done_at": null,
+    "match_snippet": "...Fix the **JWT** token validation bug in the **authentication** middleware..."
+  },
+  {
+    "id": 12,
+    "parent_id": null,
+    "name": "Implement OAuth2 authentication",
+    "spec": "Add OAuth2 support for third-party authentication",
+    "status": "doing",
+    "priority": 10,
+    "first_todo_at": "2025-11-05T15:00:00Z",
+    "first_doing_at": "2025-11-06T09:00:00Z",
+    "first_done_at": null,
+    "match_snippet": "Implement OAuth2 **authentication**"
+  }
+]
+```
+
+**match_snippet Field Explanation:**
+- Text snippet extracted from the matching field (spec or name)
+- Uses `**keyword**` to mark highlighted matches
+- Uses `...` to indicate omitted content
+- Prioritizes spec matches; if spec doesn't match, shows name matches
+
+**Use Cases:**
+- Quickly find tasks containing specific keywords
+- Locate related tasks in large projects
+- Search for previous decisions and technical approaches
+- AI context lookup
+- Find related tasks during code review
+
+**Difference from `task find`:**
+- `task find`: Exact filtering (by status, parent), returns complete task list
+- `task search`: Full-text search (by content keywords), returns results with match snippets, sorted by relevance
+
+---
+
 ### Event Logging Commands
 
 #### `event add` - Add Event

@@ -740,6 +740,112 @@ intent-engine task switch 5 | jq '.events_summary'
 
 ---
 
+#### `task search` - 全文搜索任务 🆕
+
+使用 FTS5 全文搜索在所有任务的 name 和 spec 字段中查找内容，返回按相关性排序的结果列表。
+
+**用法:**
+```bash
+intent-engine task search <QUERY>
+```
+
+**参数:**
+- `<QUERY>` - 搜索查询字符串（必需），支持 FTS5 高级语法
+
+**FTS5 高级语法:**
+- `authentication` - 简单关键词搜索
+- `"user login"` - 精确短语搜索
+- `authentication AND bug` - 同时包含两个词
+- `JWT OR OAuth` - 包含任一词
+- `authentication NOT critical` - 包含 authentication 但不包含 critical
+- `auth*` - 前缀匹配（如 auth, authentication, authorize）
+
+**特性:**
+- 搜索 name 和 spec 两个字段
+- 返回带有高亮片段的结果（使用 `**` 标记关键词）
+- 按相关性自动排序
+- 毫秒级查询性能（基于 FTS5 索引）
+
+**示例:**
+```bash
+# 简单搜索
+intent-engine task search "authentication"
+
+# 搜索包含 JWT 的任务
+intent-engine task search "JWT"
+
+# 高级搜索：同时包含两个关键词
+intent-engine task search "authentication AND bug"
+
+# 搜索任一关键词
+intent-engine task search "JWT OR OAuth"
+
+# 排除特定关键词
+intent-engine task search "bug NOT critical"
+
+# 前缀匹配
+intent-engine task search "auth*"
+
+# 精确短语搜索
+intent-engine task search '"user login flow"'
+
+# 组合使用 jq 查看结果
+intent-engine task search "authentication" | jq '.[].task | {id, name, status}'
+
+# 查看匹配片段
+intent-engine task search "JWT" | jq '.[].match_snippet'
+```
+
+**输出示例:**
+```json
+[
+  {
+    "id": 5,
+    "parent_id": 1,
+    "name": "Authentication bug fix",
+    "spec": "Fix the JWT token validation bug in the authentication middleware",
+    "status": "todo",
+    "complexity": 5,
+    "priority": 8,
+    "first_todo_at": "2025-11-06T10:00:00Z",
+    "first_doing_at": null,
+    "first_done_at": null,
+    "match_snippet": "...Fix the **JWT** token validation bug in the **authentication** middleware..."
+  },
+  {
+    "id": 12,
+    "parent_id": null,
+    "name": "Implement OAuth2 authentication",
+    "spec": "Add OAuth2 support for third-party authentication",
+    "status": "doing",
+    "priority": 10,
+    "first_todo_at": "2025-11-05T15:00:00Z",
+    "first_doing_at": "2025-11-06T09:00:00Z",
+    "first_done_at": null,
+    "match_snippet": "Implement OAuth2 **authentication**"
+  }
+]
+```
+
+**match_snippet 字段说明:**
+- 从匹配字段（spec 或 name）中提取的文本片段
+- 使用 `**关键词**` 标记高亮匹配的词
+- 使用 `...` 表示省略的内容
+- 优先显示 spec 的匹配，如果 spec 没有匹配则显示 name 的匹配
+
+**使用场景:**
+- 快速查找包含特定关键词的任务
+- 在大型项目中定位相关任务
+- 搜索之前的决策和技术方案
+- AI 查找相关上下文时使用
+- 代码审查时查找相关任务
+
+**与 `task find` 的区别:**
+- `task find`: 精确过滤（按 status、parent），返回完整任务列表
+- `task search`: 全文搜索（按内容关键词），返回带匹配片段的结果，按相关性排序
+
+---
+
 ### 事件日志命令
 
 #### `event add` - 添加事件
