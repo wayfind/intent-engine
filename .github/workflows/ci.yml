@@ -204,8 +204,10 @@ jobs:
       - name: Verify package contents
         run: |
           cargo package --allow-dirty
-          tar -xzf target/package/intent-engine-*.tar.gz -C target/package
-          cd target/package/intent-engine-*/
+          PKG_FILE=$(ls target/package/intent-engine-*.tar.gz)
+          tar -xzf "$PKG_FILE" -C target/package
+          PKG_DIR=$(ls -d target/package/intent-engine-*/ | head -n 1)
+          cd "$PKG_DIR"
           cargo build --verbose
           cargo test --verbose
 
