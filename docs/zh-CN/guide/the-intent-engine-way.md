@@ -416,8 +416,8 @@ echo "问题原因：UserService.getUser() 未检查返回值是否为 null
 # 4.2 执行修复
 # ... 修改代码 ...
 
-# 4.3 完成任务
-intent-engine task done 1
+# 4.3 完成任务（任务1当前是焦点，直接完成）
+intent-engine task done
 
 # 5. 处理第二个任务（包含子任务）
 intent-engine task switch 3
@@ -428,15 +428,15 @@ echo "需要先使用 profiler 定位内存泄漏源" | \
 
 intent-engine task spawn-subtask --name "使用 Valgrind 分析内存使用"
 
-# 5.2 完成诊断
+# 5.2 完成诊断（子任务当前是焦点，直接完成）
 echo "发现问题：WebSocket 连接未正确关闭" | \
   intent-engine event add --task-id <subtask-id> --type milestone --data-stdin
-intent-engine task done <subtask-id>
+intent-engine task done
 
 # 5.3 切回并完成主任务
 intent-engine task switch 3
 # ... 修复代码 ...
-intent-engine task done 3
+intent-engine task done
 
 # 6. 生成工作报告
 intent-engine report --since 1d --summary-only
@@ -499,13 +499,13 @@ intent-engine task add --name "实现 token 刷新"
 intent-engine task add --name "实现 OAuth2"
 intent-engine task start 1
 intent-engine task spawn-subtask --name "配置 Google OAuth"
-intent-engine task done 2
+intent-engine task done  # spawn-subtask 后子任务自动成为焦点
 intent-engine task spawn-subtask --name "配置 GitHub OAuth"
-intent-engine task done 3
+intent-engine task done  # 完成当前焦点任务
 intent-engine task spawn-subtask --name "实现 token 刷新"
-intent-engine task done 4
-intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done  # 完成当前焦点任务
+intent-engine task switch 1  # 切回父任务
+intent-engine task done  # 完成父任务
 ```
 
 ---

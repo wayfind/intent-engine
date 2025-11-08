@@ -199,12 +199,12 @@ echo "Need to complete domain ownership verification before creating OAuth app" 
 
 intent-engine task spawn-subtask --name "Complete domain ownership verification"
 
-# Complete deepest subtask
-intent-engine task done <grandchild-task-id>
+# Complete deepest subtask (it's now focused after spawn-subtask)
+intent-engine task done
 
 # Switch back to parent task and continue
 intent-engine task switch <child-task-id>
-intent-engine task done <child-task-id>
+intent-engine task done
 
 # Finally complete root task
 intent-engine task switch 42
@@ -396,10 +396,10 @@ echo "Need to use profiler to locate memory leak source" | \
 
 intent-engine task spawn-subtask --name "Analyze memory usage with Valgrind"
 
-# 5.2 Complete diagnosis
+# 5.2 Complete diagnosis (subtask is now focused, complete it)
 echo "Problem found: WebSocket connections not properly closed" | \
   intent-engine event add --task-id <subtask-id> --type milestone --data-stdin
-intent-engine task done <subtask-id>
+intent-engine task done
 
 # 5.3 Switch back and complete main task
 intent-engine task switch 3

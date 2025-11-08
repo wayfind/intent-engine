@@ -147,7 +147,7 @@ pub enum TaskCommands {
     /// - Update the task status to done
     /// - Clear the current_task_id
     ///
-    /// Prerequisites: A task must be set as current (via `current --set <ID>`)
+    ///   Prerequisites: A task must be set as current (via `current --set <ID>`)
     Done,
 
     /// Intelligently pick tasks from todo and move to doing
