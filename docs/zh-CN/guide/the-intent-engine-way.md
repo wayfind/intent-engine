@@ -513,4 +513,4 @@ Intent-Engine 不仅仅是一个工具，它是一种协作哲学的实现。
 
 ---
 
-**下一步**: 阅读完整的命令参考 ([README.md](README.md)) 和技术分析 ([docs/task_workflow_analysis.md](docs/task_workflow_analysis.md))。
+**下一步**: 阅读完整的命令参考 ([README.md](../../../README.md)) 和技术分析 ([task-workflow-analysis.md](../../technical/task-workflow-analysis.md))。
