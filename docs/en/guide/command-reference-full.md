@@ -438,13 +438,15 @@ intent-engine task start 1 --with-events | jq '.events_summary.recent_events'
 
 Atomic operation: check if all subtasks are complete, then mark task as "done".
 
+This command does not accept any ID parameter. It operates on the current focused task (`current_task_id`) only.
+
 **Usage:**
 ```bash
 intent-engine task done
 ```
 
 **Parameters:**
-- `<ID>` - Task ID (required)
+- None (operates on current focused task)
 
 **Examples:**
 ```bash

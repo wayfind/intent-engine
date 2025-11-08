@@ -16,8 +16,8 @@ intent-engine task start 1 --with-events
 echo "Using Passport.js for OAuth strategy implementation" | \
   intent-engine event add --task-id 1 --type decision --data-stdin
 
-# Complete the task
-intent-engine task done 1
+# Complete the task (task 1 is currently focused)
+intent-engine task done
 ```
 
 ## Core Workflow
@@ -115,10 +115,12 @@ Event types: `decision`, `blocker`, `milestone`, `discussion`, `note`
 Only when all objectives achieved and all subtasks done:
 
 ```bash
-intent-engine task done <ID>
+intent-engine task done
 ```
 
-System enforces: parent can't complete until all children are done.
+**Important**: This command operates on the current focused task only. It does not accept an ID parameter.
+- If you need to complete a non-current task, first switch to it: `intent-engine task switch <ID>` or `intent-engine current --set <ID>`
+- System enforces: parent can't complete until all children are done.
 
 ### 8. Generate Reports (Token-Efficient)
 
@@ -166,12 +168,12 @@ intent-engine task spawn-subtask --name "Sub-problem A"
 # Discover nested sub-problem
 intent-engine task spawn-subtask --name "Sub-sub-problem"
 
-# Complete from deepest to shallowest
-intent-engine task done 3
-intent-engine task switch 2
-intent-engine task done 2
-intent-engine task switch 1
-intent-engine task done 1
+# Complete from deepest to shallowest (each spawn-subtask auto-focuses the subtask)
+intent-engine task done  # Completes current (sub-sub-problem)
+intent-engine task switch 2  # Switch to parent
+intent-engine task done  # Completes current (sub-problem A)
+intent-engine task switch 1  # Switch to root
+intent-engine task done  # Completes current (parent task)
 ```
 
 ### Pattern 3: Recover Context After Interruption
