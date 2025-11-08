@@ -204,10 +204,17 @@ jobs:
       - name: Verify package contents
         run: |
           cargo package --allow-dirty
-          cd target/package
-          PKG_FILE=$(ls -1 intent-engine-*.tar.gz | head -n 1)
-          tar -xzf "$PKG_FILE"
-          PKG_DIR=$(ls -1d intent-engine-*/ | head -n 1)
+          echo "Listing target/package directory:"
+          ls -la target/package/
+          PKG_FILE=$(find target/package -name "intent-engine-*.tar.gz" -type f | head -n 1)
+          if [ -z "$PKG_FILE" ]; then
+            echo "Error: No package file found"
+            exit 1
+          fi
+          echo "Found package: $PKG_FILE"
+          tar -xzf "$PKG_FILE" -C target/package/
+          PKG_DIR=$(find target/package -maxdepth 1 -name "intent-engine-*" -type d | head -n 1)
+          echo "Extracted to: $PKG_DIR"
           cd "$PKG_DIR"
           cargo build --verbose
           cargo test --verbose
