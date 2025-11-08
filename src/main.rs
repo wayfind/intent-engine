@@ -162,7 +162,8 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                 "json" => {
                     println!("{}", serde_json::to_string_pretty(&response)?);
                 }
-                "text" | _ => {
+                _ => {
+                    // Default to text format
                     println!("{}", response.format_as_text());
                 }
             }
