@@ -71,21 +71,10 @@ impl<'a> ReportManager<'a> {
             Vec::new()
         };
 
-        // Count tasks by status
-        let todo_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'todo'")
-                .fetch_one(self.pool)
-                .await?;
-
-        let doing_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
-                .fetch_one(self.pool)
-                .await?;
-
-        let done_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'done'")
-                .fetch_one(self.pool)
-                .await?;
+        // Count tasks by status from filtered results
+        let todo_count = tasks.iter().filter(|t| t.status == "todo").count() as i64;
+        let doing_count = tasks.iter().filter(|t| t.status == "doing").count() as i64;
+        let done_count = tasks.iter().filter(|t| t.status == "done").count() as i64;
 
         let total_tasks = tasks.len() as i64;
 
@@ -358,5 +347,30 @@ mod tests {
 
         assert_eq!(report.summary.total_tasks, 0);
         assert_eq!(report.summary.total_events, 0);
+    }
+
+    #[tokio::test]
+    async fn test_report_filter_consistency() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        // Create tasks with different statuses
+        task_mgr.add_task("Task A", None, None).await.unwrap();
+        task_mgr.add_task("Task B", None, None).await.unwrap();
+        let doing = task_mgr.add_task("Task C", None, None).await.unwrap();
+        task_mgr.start_task(doing.id, false).await.unwrap();
+
+        // Filter with non-existent spec should return consistent summary
+        let report = report_mgr
+            .generate_report(None, None, None, Some("JWT".to_string()), true)
+            .await
+            .unwrap();
+
+        // All counts should be 0 since no tasks match the filter
+        assert_eq!(report.summary.total_tasks, 0);
+        assert_eq!(report.summary.tasks_by_status.todo, 0);
+        assert_eq!(report.summary.tasks_by_status.doing, 0);
+        assert_eq!(report.summary.tasks_by_status.done, 0);
     }
 }
