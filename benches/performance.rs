@@ -1,8 +1,9 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use intent_engine::db::{create_pool, run_migrations};
 use intent_engine::events::EventManager;
 use intent_engine::report::ReportManager;
 use intent_engine::tasks::TaskManager;
+use std::hint::black_box;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
