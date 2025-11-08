@@ -69,7 +69,7 @@ Intent-Engine 是一个命令行工具 + 数据库系统，用于记录、追踪
 - ✅ **项目级**：持久化到 SQLite 数据库，跨会话永久保存
 - ✅ **可追溯**：完整的事件流记录每个决策的上下文
 - ✅ **层级化**：任务树结构，强制完成子任务才能完成父任务
-- ✅ **原子操作**：`start`、`pick-next`、`spawn-subtask`、`switch` 等复合命令节省 60-70% Token
+- ✅ **原子操作**：`start`、`pick-next`、`spawn-subtask`、`switch` 等命令节省 50-70% Token
 
 ---
 
@@ -157,8 +157,8 @@ intent-engine report --since 1d --summary-only
 - **惰性初始化**：写入命令自动初始化项目，无需手动 init
 - **任务树管理**：支持无限层级的父子任务关系
 - **决策历史**：完整的事件流记录（decision、blocker、milestone 等）
-- **智能选择**：`pick-next` 基于优先级和复杂度自动选择任务
-- **原子操作**：`start`、`switch`、`spawn-subtask` 等复合命令节省 60-70% Token
+- **智能推荐**：`pick-next` 基于上下文推荐下一个任务
+- **原子操作**：`start`、`switch`、`spawn-subtask` 等命令节省 50-70% Token
 - **🔍 FTS5 搜索引擎**：GB 级任务量下毫秒级响应，独特的 snippet 函数用 `**` 高亮匹配词，对 Agent 上下文极度友好
 - **JSON 输出**：所有命令输出结构化 JSON，完美集成 AI 工具
 
