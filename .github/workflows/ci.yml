@@ -19,7 +19,8 @@ name: CI
 #   - API breaking changes
 #   - Type errors
 #
-# 🔬 COMPREHENSIVE CI (~30-40 minutes) - Runs daily at 00:00 UTC
+# 🔬 COMPREHENSIVE CI (~30-40 minutes) - Runs daily at 3:00 AM Los Angeles time (10:00 UTC)
+#   Only runs if there are new commits in the last 24 hours
 #   Checks:
 #   - Full build and tests
 #   - Cross-platform compatibility
@@ -45,8 +46,9 @@ on:
   pull_request:
     branches: [ main, master ]
   schedule:
-    # Run daily at 00:00 UTC to catch dependency issues
-    - cron: '0 0 * * *'
+    # Run daily at 3:00 AM Los Angeles time (10:00 UTC)
+    # Only runs if there are new commits in the last 24 hours
+    - cron: '0 10 * * *'
   workflow_dispatch:  # Allow manual trigger for full CI
 
 env:
@@ -54,6 +56,31 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  # Check for new commits in last 24 hours (only for scheduled runs)
+  check-new-commits:
+    name: Check for New Commits
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    outputs:
+      has_new_commits: ${{ steps.check.outputs.has_new_commits }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Fetch all history to check commits
+
+      - name: Check for commits in last 24 hours
+        id: check
+        run: |
+          # Check if there are any commits in the last 24 hours
+          if [ -n "$(git log --since='24 hours ago' --format='%H')" ]; then
+            echo "✅ Found new commits in the last 24 hours"
+            echo "has_new_commits=true" >> $GITHUB_OUTPUT
+          else
+            echo "⏭️  No new commits in the last 24 hours, skipping comprehensive CI"
+            echo "has_new_commits=false" >> $GITHUB_OUTPUT
+          fi
+
   # Fast check job - runs on every push/PR (<2 minutes)
   fast-check:
     name: Fast Check (fmt + clippy + check)
@@ -92,7 +119,11 @@ jobs:
   test-comprehensive:
     name: Comprehensive Tests
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    needs: [check-new-commits]
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true'))
 
     steps:
       - name: Checkout code
@@ -126,7 +157,11 @@ jobs:
   test-cross-platform:
     name: Test (${{ matrix.os }} / ${{ matrix.rust }})
     runs-on: ${{ matrix.os }}
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    needs: [check-new-commits]
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true'))
     strategy:
       fail-fast: false
       matrix:
@@ -178,11 +213,13 @@ jobs:
   test-full:
     name: Test (${{ matrix.os }} / ${{ matrix.rust }})
     runs-on: ${{ matrix.os }}
+    needs: [check-new-commits]
     if: |
-      github.ref == 'refs/heads/main' ||
-      github.ref == 'refs/heads/master' ||
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch'
+      always() &&
+      (github.ref == 'refs/heads/main' ||
+       github.ref == 'refs/heads/master' ||
+       github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true'))
     strategy:
       fail-fast: false
       matrix:
@@ -237,7 +274,11 @@ jobs:
   test-minimal-versions:
     name: Test Minimal Versions
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    needs: [check-new-commits]
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -261,7 +302,11 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    needs: [check-new-commits]
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -291,7 +336,11 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    needs: [check-new-commits]
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -315,7 +364,11 @@ jobs:
   docs:
     name: Documentation
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    needs: [check-new-commits]
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -335,7 +388,11 @@ jobs:
   check-package:
     name: Check Package
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    needs: [check-new-commits]
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -432,7 +489,11 @@ jobs:
   install-scripts:
     name: Test Install Scripts
     runs-on: ${{ matrix.os }}
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    needs: [check-new-commits]
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true'))
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -483,20 +544,26 @@ jobs:
     needs:
       - test-comprehensive
       - test-cross-platform
+      - test-full
+      - test-minimal-versions
       - docs
       - check-package
       - security-audit
       - coverage
+      - install-scripts
     runs-on: ubuntu-latest
     if: |
       always() &&
       github.event_name == 'schedule' &&
       (needs.test-comprehensive.result == 'failure' ||
        needs.test-cross-platform.result == 'failure' ||
+       needs.test-full.result == 'failure' ||
+       needs.test-minimal-versions.result == 'failure' ||
        needs.docs.result == 'failure' ||
        needs.check-package.result == 'failure' ||
        needs.security-audit.result == 'failure' ||
-       needs.coverage.result == 'failure')
+       needs.coverage.result == 'failure' ||
+       needs.install-scripts.result == 'failure')
     steps:
       - name: Create issue
         uses: actions/github-script@v7
@@ -505,10 +572,13 @@ jobs:
             const failedJobs = [];
             if ('${{ needs.test-comprehensive.result }}' === 'failure') failedJobs.push('Comprehensive Tests');
             if ('${{ needs.test-cross-platform.result }}' === 'failure') failedJobs.push('Cross-platform Tests');
+            if ('${{ needs.test-full.result }}' === 'failure') failedJobs.push('Full Tests');
+            if ('${{ needs.test-minimal-versions.result }}' === 'failure') failedJobs.push('Minimal Versions Test');
             if ('${{ needs.docs.result }}' === 'failure') failedJobs.push('Documentation');
             if ('${{ needs.check-package.result }}' === 'failure') failedJobs.push('Package Check');
             if ('${{ needs.security-audit.result }}' === 'failure') failedJobs.push('Security Audit');
             if ('${{ needs.coverage.result }}' === 'failure') failedJobs.push('Code Coverage');
+            if ('${{ needs.install-scripts.result }}' === 'failure') failedJobs.push('Install Scripts');
 
             const date = new Date().toISOString().split('T')[0];
             const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
