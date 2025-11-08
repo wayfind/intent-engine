@@ -45,27 +45,49 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Fast check (claude/** branches): only ubuntu + stable
-        # Standard CI (PRs): ubuntu + macos, stable + beta
-        # Full CI (main/master/schedule): all platforms and versions
-        os: ${{
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/claude/')) && fromJSON('["ubuntu-latest"]') ||
-          (github.event_name == 'pull_request') && fromJSON('["ubuntu-latest", "macos-latest"]') ||
-          fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]')
-        }}
-        rust: ${{
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/claude/')) && fromJSON('["stable"]') ||
-          fromJSON('["stable", "beta"]')
-        }}
         include:
-          # Also test on nightly for full CI only, but allow it to fail
+          # Fast check (claude/** branches): only ubuntu + stable
+          - os: ubuntu-latest
+            rust: stable
+            tier: fast
+
+          # Standard CI (PRs): add macos + beta
+          - os: macos-latest
+            rust: stable
+            tier: standard
+          - os: ubuntu-latest
+            rust: beta
+            tier: standard
+          - os: macos-latest
+            rust: beta
+            tier: standard
+
+          # Full CI (main/master/schedule): add windows + nightly
+          - os: windows-latest
+            rust: stable
+            tier: full
+          - os: windows-latest
+            rust: beta
+            tier: full
           - os: ubuntu-latest
             rust: nightly
+            tier: full
             experimental: true
 
-    # Skip nightly build for fast checks and PRs
     continue-on-error: ${{ matrix.experimental || false }}
-    if: ${{ !(matrix.rust == 'nightly' && (startsWith(github.ref, 'refs/heads/claude/') || github.event_name == 'pull_request')) }}
+
+    # Conditional execution based on tier
+    if: |
+      (matrix.tier == 'fast') ||
+      (matrix.tier == 'standard' && github.event_name == 'pull_request') ||
+      (matrix.tier == 'standard' && github.ref == 'refs/heads/main') ||
+      (matrix.tier == 'standard' && github.ref == 'refs/heads/master') ||
+      (matrix.tier == 'standard' && github.event_name == 'schedule') ||
+      (matrix.tier == 'standard' && github.event_name == 'workflow_dispatch') ||
+      (matrix.tier == 'full' && github.ref == 'refs/heads/main') ||
+      (matrix.tier == 'full' && github.ref == 'refs/heads/master') ||
+      (matrix.tier == 'full' && github.event_name == 'schedule') ||
+      (matrix.tier == 'full' && github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Checkout code
