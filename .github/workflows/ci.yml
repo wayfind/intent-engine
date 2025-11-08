@@ -39,64 +39,18 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Fast check (claude/** branches): only ubuntu + stable
-          - os: ubuntu-latest
-            rust: stable
-            tier: fast
-
-          # Standard CI (PRs): add macos + beta
-          - os: macos-latest
-            rust: stable
-            tier: standard
-          - os: ubuntu-latest
-            rust: beta
-            tier: standard
-          - os: macos-latest
-            rust: beta
-            tier: standard
-
-          # Full CI (main/master/schedule): add windows + nightly
-          - os: windows-latest
-            rust: stable
-            tier: full
-          - os: windows-latest
-            rust: beta
-            tier: full
-          - os: ubuntu-latest
-            rust: nightly
-            tier: full
-            experimental: true
-
-    continue-on-error: ${{ matrix.experimental || false }}
-
-    # Conditional execution based on tier
-    if: |
-      (matrix.tier == 'fast') ||
-      (matrix.tier == 'standard' && github.event_name == 'pull_request') ||
-      (matrix.tier == 'standard' && github.ref == 'refs/heads/main') ||
-      (matrix.tier == 'standard' && github.ref == 'refs/heads/master') ||
-      (matrix.tier == 'standard' && github.event_name == 'schedule') ||
-      (matrix.tier == 'standard' && github.event_name == 'workflow_dispatch') ||
-      (matrix.tier == 'full' && github.ref == 'refs/heads/main') ||
-      (matrix.tier == 'full' && github.ref == 'refs/heads/master') ||
-      (matrix.tier == 'full' && github.event_name == 'schedule') ||
-      (matrix.tier == 'full' && github.event_name == 'workflow_dispatch')
+  # Fast check job - always runs for all triggers
+  test-fast:
+    name: Test (ubuntu-latest / stable)
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
 
       - name: Cache cargo registry
@@ -124,11 +78,9 @@ jobs:
             ${{ runner.os }}-cargo-build-target-
 
       - name: Check formatting
-        if: matrix.rust == 'stable'
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        if: matrix.rust == 'stable' || matrix.rust == 'beta'
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build
@@ -142,6 +94,122 @@ jobs:
 
       - name: Run doctor command
         run: cargo run --release -- doctor
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-results-ubuntu-latest-stable
+          path: |
+            target/debug/deps/*.log
+            target/release/deps/*.log
+
+  # Standard CI - runs on PRs and production
+  test-standard:
+    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
+    runs-on: ${{ matrix.os }}
+    if: |
+      github.event_name == 'pull_request' ||
+      github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/master' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            rust: stable
+          - os: ubuntu-latest
+            rust: beta
+          - os: macos-latest
+            rust: beta
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release
+        run: cargo build --release --verbose
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.rust }}
+          path: |
+            target/debug/deps/*.log
+            target/release/deps/*.log
+
+  # Full CI - runs on production branches, schedule, and manual trigger
+  test-full:
+    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
+    runs-on: ${{ matrix.os }}
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/master' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rust: stable
+          - os: windows-latest
+            rust: beta
+          - os: ubuntu-latest
+            rust: nightly
+            experimental: true
+
+    continue-on-error: ${{ matrix.experimental || false }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release
+        run: cargo build --release --verbose
 
       - name: Upload test results
         if: failure()
@@ -386,7 +454,9 @@ jobs:
   ci-success:
     name: CI Success
     needs:
-      - test
+      - test-fast
+      - test-standard
+      - test-full
       - coverage
       - security-audit
       - docs
@@ -396,9 +466,21 @@ jobs:
     steps:
       - name: Check all jobs
         run: |
-          # Check test job (always runs)
-          if [ "${{ needs.test.result }}" != "success" ]; then
-            echo "Test job failed"
+          # Check test-fast (always runs)
+          if [ "${{ needs.test-fast.result }}" != "success" ]; then
+            echo "Fast test job failed"
+            exit 1
+          fi
+
+          # Check test-standard (conditional)
+          if [ "${{ needs.test-standard.result }}" == "failure" ]; then
+            echo "Standard test job failed"
+            exit 1
+          fi
+
+          # Check test-full (conditional)
+          if [ "${{ needs.test-full.result }}" == "failure" ]; then
+            echo "Full test job failed"
             exit 1
           fi
 

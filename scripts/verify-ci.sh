@@ -25,39 +25,48 @@ fi
 echo -e "${GREEN}✅ 找到CI配置文件${NC}"
 echo ""
 
-# 1. 验证测试矩阵配置
-echo -e "${YELLOW}📊 检查测试矩阵配置...${NC}"
+# 1. 验证测试Job配置
+echo -e "${YELLOW}📊 检查测试Job配置...${NC}"
 
-# 检查tier字段
-tier_count=$(grep -c "tier:" .github/workflows/ci.yml || true)
-if [ "$tier_count" -ge 7 ]; then
-    echo -e "${GREEN}  ✅ 测试矩阵配置正确（找到 $tier_count 个tier定义）${NC}"
+# 检查test-fast job
+if grep -q "test-fast:" .github/workflows/ci.yml; then
+    echo -e "${GREEN}  ✅ test-fast job存在（快速检查）${NC}"
+    fast_job=1
 else
-    echo -e "${RED}  ❌ 测试矩阵配置可能有问题（期望至少7个tier，实际 $tier_count 个）${NC}"
+    echo -e "${RED}  ❌ 缺少test-fast job${NC}"
+    fast_job=0
 fi
 
-# 检查fast tier
-fast_tier=$(grep -c "tier: fast" .github/workflows/ci.yml || true)
-if [ "$fast_tier" -ge 1 ]; then
-    echo -e "${GREEN}  ✅ 快速检查配置存在${NC}"
+# 检查test-standard job
+if grep -q "test-standard:" .github/workflows/ci.yml; then
+    echo -e "${GREEN}  ✅ test-standard job存在（标准CI）${NC}"
+    standard_job=1
 else
-    echo -e "${RED}  ❌ 缺少快速检查配置${NC}"
+    echo -e "${RED}  ❌ 缺少test-standard job${NC}"
+    standard_job=0
 fi
 
-# 检查standard tier
-standard_tier=$(grep -c "tier: standard" .github/workflows/ci.yml || true)
-if [ "$standard_tier" -ge 3 ]; then
-    echo -e "${GREEN}  ✅ 标准CI配置存在（$standard_tier 个配置）${NC}"
+# 检查test-full job
+if grep -q "test-full:" .github/workflows/ci.yml; then
+    echo -e "${GREEN}  ✅ test-full job存在（完整CI）${NC}"
+    full_job=1
 else
-    echo -e "${RED}  ❌ 标准CI配置不足（期望3个，实际 $standard_tier 个）${NC}"
+    echo -e "${RED}  ❌ 缺少test-full job${NC}"
+    full_job=0
 fi
 
-# 检查full tier
-full_tier=$(grep -c "tier: full" .github/workflows/ci.yml || true)
-if [ "$full_tier" -ge 3 ]; then
-    echo -e "${GREEN}  ✅ 完整CI配置存在（$full_tier 个配置）${NC}"
+# 检查test-standard的条件
+if grep -A 6 "test-standard:" .github/workflows/ci.yml | grep -q "pull_request"; then
+    echo -e "${GREEN}  ✅ test-standard在PR时运行${NC}"
 else
-    echo -e "${RED}  ❌ 完整CI配置不足（期望3个，实际 $full_tier 个）${NC}"
+    echo -e "${YELLOW}  ⚠️  test-standard的PR条件可能缺失${NC}"
+fi
+
+# 检查test-full的条件
+if grep -A 6 "test-full:" .github/workflows/ci.yml | grep -q "refs/heads/main"; then
+    echo -e "${GREEN}  ✅ test-full仅在main/master分支运行${NC}"
+else
+    echo -e "${YELLOW}  ⚠️  test-full的分支条件可能缺失${NC}"
 fi
 
 echo ""
@@ -188,10 +197,10 @@ total_checks=15
 passed_checks=0
 
 # 重新检查关键配置
-[ "$tier_count" -ge 7 ] && ((passed_checks++))
-[ "$fast_tier" -ge 1 ] && ((passed_checks++))
-[ "$standard_tier" -ge 3 ] && ((passed_checks++))
-[ "$full_tier" -ge 3 ] && ((passed_checks++))
+[ "$fast_job" -eq 1 ] && ((passed_checks++))
+[ "$standard_job" -eq 1 ] && ((passed_checks++))
+[ "$full_job" -eq 1 ] && ((passed_checks++))
+grep -A 6 "test-standard:" .github/workflows/ci.yml | grep -q "pull_request" && ((passed_checks++))
 
 grep -A 5 "coverage:" .github/workflows/ci.yml | grep -q "if:.*main.*master" && ((passed_checks++))
 grep -A 5 "bench:" .github/workflows/ci.yml | grep -q "if:.*main.*master" && ((passed_checks++))
