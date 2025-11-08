@@ -256,10 +256,11 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
                 id
             } else {
                 // Fall back to current_task_id
-                let current_task_id: Option<String> =
-                    sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
-                        .fetch_optional(&ctx.pool)
-                        .await?;
+                let current_task_id: Option<String> = sqlx::query_scalar(
+                    "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
+                )
+                .fetch_optional(&ctx.pool)
+                .await?;
 
                 current_task_id
                     .and_then(|s| s.parse::<i64>().ok())
@@ -268,7 +269,9 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
                     ))?
             };
 
-            let event = event_mgr.add_event(target_task_id, &log_type, &data).await?;
+            let event = event_mgr
+                .add_event(target_task_id, &log_type, &data)
+                .await?;
             println!("{}", serde_json::to_string_pretty(&event)?);
         }
 
