@@ -361,19 +361,18 @@ impl<'a> TaskManager<'a> {
                 .fetch_optional(&mut *tx)
                 .await?;
 
-        let id = current_task_id
-            .and_then(|s| s.parse::<i64>().ok())
-            .ok_or(IntentError::InvalidInput(
+        let id = current_task_id.and_then(|s| s.parse::<i64>().ok()).ok_or(
+            IntentError::InvalidInput(
                 "No current task is set. Use 'current --set <ID>' to set a task first.".to_string(),
-            ))?;
+            ),
+        )?;
 
         // Get the task info before completing it
-        let task_info: (String, Option<i64>) = sqlx::query_as(
-            "SELECT name, parent_id FROM tasks WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_one(&mut *tx)
-        .await?;
+        let task_info: (String, Option<i64>) =
+            sqlx::query_as("SELECT name, parent_id FROM tasks WHERE id = ?")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
         let (task_name, parent_id) = task_info;
 
         // Check if all children are done
@@ -421,11 +420,10 @@ impl<'a> TaskManager<'a> {
 
             if remaining_siblings == 0 {
                 // All siblings are done - parent is ready
-                let parent_name: String =
-                    sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
-                        .bind(parent_task_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
+                let parent_name: String = sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
+                    .bind(parent_task_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
 
                 NextStepSuggestion::ParentIsReady {
                     message: format!(
@@ -437,11 +435,10 @@ impl<'a> TaskManager<'a> {
                 }
             } else {
                 // Siblings remain
-                let parent_name: String =
-                    sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
-                        .bind(parent_task_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
+                let parent_name: String = sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
+                    .bind(parent_task_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
 
                 NextStepSuggestion::SiblingTasksRemain {
                     message: format!(
@@ -1413,8 +1410,16 @@ mod tests {
         let results = manager.search_tasks("authentication").await.unwrap();
 
         assert_eq!(results.len(), 2);
-        assert!(results[0].task.name.to_lowercase().contains("authentication"));
-        assert!(results[1].task.name.to_lowercase().contains("authentication"));
+        assert!(results[0]
+            .task
+            .name
+            .to_lowercase()
+            .contains("authentication"));
+        assert!(results[1]
+            .task
+            .name
+            .to_lowercase()
+            .contains("authentication"));
 
         // Check that match_snippet is present
         assert!(!results[0].match_snippet.is_empty());
@@ -1474,10 +1479,18 @@ mod tests {
             .unwrap();
 
         // Search with AND operator
-        let results = manager.search_tasks("authentication AND bug").await.unwrap();
+        let results = manager
+            .search_tasks("authentication AND bug")
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 1);
-        assert!(results[0].task.spec.as_ref().unwrap().contains("authentication"));
+        assert!(results[0]
+            .task
+            .spec
+            .as_ref()
+            .unwrap()
+            .contains("authentication"));
         assert!(results[0].task.spec.as_ref().unwrap().contains("bug"));
     }
 
