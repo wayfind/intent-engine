@@ -477,14 +477,14 @@ jobs:
             exit 1
           fi
 
-          # Check coverage job (only full CI)
+          # Check coverage job (conditional - only on schedule/manual)
           if [ "${{ needs.coverage.result }}" == "failure" ]; then
             echo "Coverage job failed"
             exit 1
           fi
 
-          # Check security audit (always runs)
-          if [ "${{ needs.security-audit.result }}" != "success" ]; then
+          # Check security audit (conditional - only on schedule/manual)
+          if [ "${{ needs.security-audit.result }}" == "failure" ]; then
             echo "Security audit job failed"
             exit 1
           fi
