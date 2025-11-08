@@ -39,42 +39,18 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        # Fast check (claude/** branches): only ubuntu + stable
-        # Standard CI (PRs): ubuntu + macos, stable + beta
-        # Full CI (main/master/schedule): all platforms and versions
-        os: ${{
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/claude/')) && fromJSON('["ubuntu-latest"]') ||
-          (github.event_name == 'pull_request') && fromJSON('["ubuntu-latest", "macos-latest"]') ||
-          fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]')
-        }}
-        rust: ${{
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/claude/')) && fromJSON('["stable"]') ||
-          fromJSON('["stable", "beta"]')
-        }}
-        include:
-          # Also test on nightly for full CI only, but allow it to fail
-          - os: ubuntu-latest
-            rust: nightly
-            experimental: true
-
-    # Skip nightly build for fast checks and PRs
-    continue-on-error: ${{ matrix.experimental || false }}
-    if: ${{ !(matrix.rust == 'nightly' && (startsWith(github.ref, 'refs/heads/claude/') || github.event_name == 'pull_request')) }}
+  # Fast check job - always runs for all triggers
+  test-fast:
+    name: Test (ubuntu-latest / stable)
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
 
       - name: Cache cargo registry
@@ -102,11 +78,9 @@ jobs:
             ${{ runner.os }}-cargo-build-target-
 
       - name: Check formatting
-        if: matrix.rust == 'stable'
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        if: matrix.rust == 'stable' || matrix.rust == 'beta'
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build
@@ -120,6 +94,122 @@ jobs:
 
       - name: Run doctor command
         run: cargo run --release -- doctor
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-results-ubuntu-latest-stable
+          path: |
+            target/debug/deps/*.log
+            target/release/deps/*.log
+
+  # Standard CI - runs on PRs and production
+  test-standard:
+    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
+    runs-on: ${{ matrix.os }}
+    if: |
+      github.event_name == 'pull_request' ||
+      github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/master' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            rust: stable
+          - os: ubuntu-latest
+            rust: beta
+          - os: macos-latest
+            rust: beta
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release
+        run: cargo build --release --verbose
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.rust }}
+          path: |
+            target/debug/deps/*.log
+            target/release/deps/*.log
+
+  # Full CI - runs on production branches, schedule, and manual trigger
+  test-full:
+    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
+    runs-on: ${{ matrix.os }}
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/master' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rust: stable
+          - os: windows-latest
+            rust: beta
+          - os: ubuntu-latest
+            rust: nightly
+            experimental: true
+
+    continue-on-error: ${{ matrix.experimental || false }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release
+        run: cargo build --release --verbose
 
       - name: Upload test results
         if: failure()
@@ -364,7 +454,9 @@ jobs:
   ci-success:
     name: CI Success
     needs:
-      - test
+      - test-fast
+      - test-standard
+      - test-full
       - coverage
       - security-audit
       - docs
@@ -374,9 +466,21 @@ jobs:
     steps:
       - name: Check all jobs
         run: |
-          # Check test job (always runs)
-          if [ "${{ needs.test.result }}" != "success" ]; then
-            echo "Test job failed"
+          # Check test-fast (always runs)
+          if [ "${{ needs.test-fast.result }}" != "success" ]; then
+            echo "Fast test job failed"
+            exit 1
+          fi
+
+          # Check test-standard (conditional)
+          if [ "${{ needs.test-standard.result }}" == "failure" ]; then
+            echo "Standard test job failed"
+            exit 1
+          fi
+
+          # Check test-full (conditional)
+          if [ "${{ needs.test-full.result }}" == "failure" ]; then
+            echo "Full test job failed"
             exit 1
           fi
 
