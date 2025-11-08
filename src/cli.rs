@@ -189,9 +189,9 @@ pub enum TaskCommands {
 pub enum EventCommands {
     /// Add a new event
     Add {
-        /// Task ID
+        /// Task ID (optional, uses current task if not specified)
         #[arg(long)]
-        task_id: i64,
+        task_id: Option<i64>,
 
         /// Log type
         #[arg(long = "type")]

@@ -250,7 +250,28 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
                 ));
             };
 
-            let event = event_mgr.add_event(task_id, &log_type, &data).await?;
+            // Determine the target task ID
+            let target_task_id = if let Some(id) = task_id {
+                // Use the provided task_id
+                id
+            } else {
+                // Fall back to current_task_id
+                let current_task_id: Option<String> = sqlx::query_scalar(
+                    "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
+                )
+                .fetch_optional(&ctx.pool)
+                .await?;
+
+                current_task_id
+                    .and_then(|s| s.parse::<i64>().ok())
+                    .ok_or_else(|| IntentError::InvalidInput(
+                        "No current task is set and --task-id was not provided. Use 'current --set <ID>' to set a task first.".to_string(),
+                    ))?
+            };
+
+            let event = event_mgr
+                .add_event(target_task_id, &log_type, &data)
+                .await?;
             println!("{}", serde_json::to_string_pretty(&event)?);
         }
 

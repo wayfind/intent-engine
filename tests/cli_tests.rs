@@ -826,3 +826,78 @@ fn test_cli_switch_task() {
         .success()
         .stdout(predicate::str::contains("\"current_task_id\": 2"));
 }
+
+#[test]
+fn test_cli_event_add_uses_current_task() {
+    let temp_dir = setup_test_env();
+
+    // Add and start a task
+    let mut add_cmd = Command::cargo_bin("intent-engine").unwrap();
+    add_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Test task")
+        .assert()
+        .success();
+
+    let mut start_cmd = Command::cargo_bin("intent-engine").unwrap();
+    start_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("start")
+        .arg("1")
+        .assert()
+        .success();
+
+    // Add event without --task-id (should use current task)
+    let mut event_cmd = Command::cargo_bin("intent-engine").unwrap();
+    event_cmd
+        .current_dir(temp_dir.path())
+        .arg("event")
+        .arg("add")
+        .arg("--type")
+        .arg("decision")
+        .arg("--data-stdin")
+        .write_stdin("Event for current task");
+
+    event_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"task_id\": 1"))
+        .stdout(predicate::str::contains("\"log_type\": \"decision\""))
+        .stdout(predicate::str::contains("Event for current task"));
+}
+
+#[test]
+fn test_cli_event_add_without_current_task_fails() {
+    let temp_dir = setup_test_env();
+
+    // Add a task but don't set it as current
+    let mut add_cmd = Command::cargo_bin("intent-engine").unwrap();
+    add_cmd
+        .current_dir(temp_dir.path())
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Test task")
+        .assert()
+        .success();
+
+    // Try to add event without --task-id and no current task (should fail)
+    let mut event_cmd = Command::cargo_bin("intent-engine").unwrap();
+    event_cmd
+        .current_dir(temp_dir.path())
+        .arg("event")
+        .arg("add")
+        .arg("--type")
+        .arg("decision")
+        .arg("--data-stdin")
+        .write_stdin("Event data");
+
+    event_cmd
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("No current task is set"));
+}
