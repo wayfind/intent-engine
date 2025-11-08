@@ -1,28 +1,24 @@
 name: CI
 
-# Tiered CI Strategy for Performance and Safety
+# Simplified CI Strategy for Fast Feedback
 #
-# This workflow uses a three-tier approach to balance speed and thoroughness:
+# This workflow uses a two-tier approach to balance speed and thoroughness:
 #
-# 🚀 TIER 1: Fast Check (~5-10 minutes)
-#   Trigger: Push to claude/** branches
-#   Runs: Basic tests (ubuntu + stable), format check, clippy, security audit, docs
-#   Purpose: Quick feedback for development branches
+# 🚀 TIER 1: Fast CI (~5-10 minutes) - Default for all branches and PRs
+#   Trigger: Push to any branch, Pull Requests
+#   Runs: Basic tests, format check, clippy, docs, package check
+#   Purpose: Quick feedback for development
 #
-# ✅ TIER 2: Standard CI (~15-20 minutes)
-#   Trigger: Pull Requests
-#   Runs: Fast check + cross-platform tests (ubuntu + macos, stable + beta), package check
-#   Purpose: Thorough validation before merge
-#
-# 🔬 TIER 3: Full CI (~30-40 minutes)
-#   Trigger: Push to main/master, scheduled runs (daily), manual workflow dispatch
-#   Runs: Everything including benchmarks, code coverage, minimal versions, install scripts
-#   Purpose: Complete validation for production code
+# 🔬 TIER 2: Full CI (~30-40 minutes) - Only when needed
+#   Trigger: Manual workflow dispatch, scheduled runs (daily)
+#   Runs: Everything including benchmarks, code coverage, minimal versions,
+#         security audit, install scripts
+#   Purpose: Deep validation for production code
 #
 # Benefits:
-#   - 70-80% faster CI for development branches
-#   - No compromise on quality for PRs and production
-#   - Full testing happens daily and on main branch
+#   - 80-90% faster CI for normal development
+#   - Expensive checks only run when explicitly needed
+#   - Daily scheduled runs catch issues automatically
 
 on:
   push:
@@ -220,12 +216,11 @@ jobs:
             target/debug/deps/*.log
             target/release/deps/*.log
 
-  # Test with minimal dependency versions
+  # Test with minimal dependency versions - Only on manual trigger or schedule
   test-minimal-versions:
     name: Test Minimal Versions
     runs-on: ubuntu-latest
-    # Only run for full CI (main/master, schedule, manual trigger)
-    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -245,12 +240,11 @@ jobs:
       - name: Test with minimal versions
         run: cargo +stable test --verbose
 
-  # Code coverage
+  # Code coverage - Only on manual trigger or schedule
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
-    # Only run for full CI (main/master, schedule, manual trigger)
-    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -276,10 +270,11 @@ jobs:
           name: code-coverage-report
           path: cobertura.xml
 
-  # Security audit
+  # Security audit - Only on manual trigger or schedule
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -383,12 +378,11 @@ jobs:
         run: cargo outdated --exit-code 1
         continue-on-error: true
 
-  # Run benchmarks (but don't fail if they're slow)
+  # Run benchmarks - Only on manual trigger or schedule
   bench:
     name: Benchmarks
     runs-on: ubuntu-latest
-    # Only run for full CI (main/master, schedule, manual trigger)
-    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -415,12 +409,11 @@ jobs:
           name: benchmark-results
           path: target/criterion/
 
-  # Check installation scripts
+  # Check installation scripts - Only on manual trigger or schedule
   install-scripts:
     name: Test Install Scripts
     runs-on: ${{ matrix.os }}
-    # Only run for full CI (main/master, schedule, manual trigger)
-    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
