@@ -159,7 +159,7 @@ intent-engine report --since 1d --summary-only
 - **决策历史**：完整的事件流记录（decision、blocker、milestone 等）
 - **智能选择**：`pick-next` 基于优先级和复杂度自动选择任务
 - **原子操作**：`start`、`switch`、`spawn-subtask` 等复合命令节省 60-70% Token
-- **全文搜索**：基于 SQLite FTS5 的高效搜索
+- **🔍 FTS5 搜索引擎**：GB 级任务量下毫秒级响应，独特的 snippet 函数用 `**` 高亮匹配词，对 Agent 上下文极度友好
 - **JSON 输出**：所有命令输出结构化 JSON，完美集成 AI 工具
 
 ---

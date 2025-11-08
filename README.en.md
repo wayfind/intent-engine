@@ -159,7 +159,7 @@ intent-engine report --since 1d --summary-only
 - **Decision History**: Complete event stream recording (decision, blocker, milestone, etc.)
 - **Smart Selection**: `pick-next` automatically selects tasks based on priority and complexity
 - **Atomic Operations**: Compound commands like `start`, `switch`, `spawn-subtask` save 60-70% tokens
-- **Full-text Search**: Efficient search based on SQLite FTS5
+- **🔍 FTS5 Search Engine**: Millisecond response under GB-scale tasks, unique snippet function highlights matches with `**`, extremely Agent-context-friendly
 - **JSON Output**: All commands output structured JSON, perfect for AI tool integration
 
 ---
