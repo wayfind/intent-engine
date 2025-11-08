@@ -720,7 +720,9 @@ fn test_cli_pick_next_tasks() {
     pick_cmd
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"suggestion_type\": \"TOP_LEVEL_TASK\""))
+        .stdout(predicate::str::contains(
+            "\"suggestion_type\": \"TOP_LEVEL_TASK\"",
+        ))
         .stdout(predicate::str::contains("Task 2"))
         .stdout(predicate::str::contains("\"status\": \"todo\"")); // Status should remain todo
 }
@@ -874,7 +876,9 @@ fn test_cli_pick_next_json_format() {
     pick_cmd
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"suggestion_type\": \"FOCUSED_SUB_TASK\""))
+        .stdout(predicate::str::contains(
+            "\"suggestion_type\": \"FOCUSED_SUB_TASK\"",
+        ))
         .stdout(predicate::str::contains("\"name\": \"Subtask 1\""));
 }
 
@@ -925,7 +929,9 @@ fn test_cli_pick_next_no_tasks() {
         .assert()
         .failure() // Should exit with code 1
         .stdout(predicate::str::contains("\"suggestion_type\": \"NONE\""))
-        .stdout(predicate::str::contains("\"reason_code\": \"NO_TASKS_IN_PROJECT\""))
+        .stdout(predicate::str::contains(
+            "\"reason_code\": \"NO_TASKS_IN_PROJECT\"",
+        ))
         .stdout(predicate::str::contains("No tasks found in this project"));
 }
 
@@ -974,7 +980,9 @@ fn test_cli_pick_next_all_completed() {
         .assert()
         .failure() // Should exit with code 1
         .stdout(predicate::str::contains("\"suggestion_type\": \"NONE\""))
-        .stdout(predicate::str::contains("\"reason_code\": \"ALL_TASKS_COMPLETED\""))
+        .stdout(predicate::str::contains(
+            "\"reason_code\": \"ALL_TASKS_COMPLETED\"",
+        ))
         .stdout(predicate::str::contains("Project Complete"));
 }
 

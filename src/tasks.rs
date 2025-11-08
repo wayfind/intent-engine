@@ -714,11 +714,10 @@ impl<'a> TaskManager<'a> {
     /// This command does NOT modify task status.
     pub async fn pick_next(&self) -> Result<PickNextResponse> {
         // Step 1: Check if there's a current focused task
-        let current_task_id: Option<String> = sqlx::query_scalar(
-            "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-        )
-        .fetch_optional(self.pool)
-        .await?;
+        let current_task_id: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(self.pool)
+                .await?;
 
         if let Some(current_id_str) = current_task_id {
             if let Ok(current_id) = current_id_str.parse::<i64>() {
@@ -772,11 +771,10 @@ impl<'a> TaskManager<'a> {
         }
 
         // Check if all tasks are completed
-        let todo_or_doing_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM tasks WHERE status IN ('todo', 'doing')",
-        )
-        .fetch_one(self.pool)
-        .await?;
+        let todo_or_doing_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status IN ('todo', 'doing')")
+                .fetch_one(self.pool)
+                .await?;
 
         if todo_or_doing_count == 0 {
             return Ok(PickNextResponse::all_tasks_completed());
@@ -1622,10 +1620,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         // Create parent task and set as current
-        let parent = manager
-            .add_task("Parent task", None, None)
-            .await
-            .unwrap();
+        let parent = manager.add_task("Parent task", None, None).await.unwrap();
         manager.start_task(parent.id, false).await.unwrap();
 
         // Create subtasks with different priorities
@@ -1694,10 +1689,7 @@ mod tests {
         let response = manager.pick_next().await.unwrap();
 
         assert_eq!(response.suggestion_type, "NONE");
-        assert_eq!(
-            response.reason_code.as_deref(),
-            Some("NO_TASKS_IN_PROJECT")
-        );
+        assert_eq!(response.reason_code.as_deref(), Some("NO_TASKS_IN_PROJECT"));
         assert!(response.message.is_some());
     }
 
@@ -1715,10 +1707,7 @@ mod tests {
         let response = manager.pick_next().await.unwrap();
 
         assert_eq!(response.suggestion_type, "NONE");
-        assert_eq!(
-            response.reason_code.as_deref(),
-            Some("ALL_TASKS_COMPLETED")
-        );
+        assert_eq!(response.reason_code.as_deref(), Some("ALL_TASKS_COMPLETED"));
         assert!(response.message.is_some());
     }
 
@@ -1728,10 +1717,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         // Create a parent task that's in "doing" status
-        let parent = manager
-            .add_task("Parent task", None, None)
-            .await
-            .unwrap();
+        let parent = manager.add_task("Parent task", None, None).await.unwrap();
         manager.start_task(parent.id, false).await.unwrap();
 
         // Create a subtask also in "doing" status (no "todo" subtasks)
@@ -1755,10 +1741,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         // Create parent and set as current
-        let parent = manager
-            .add_task("Parent", None, None)
-            .await
-            .unwrap();
+        let parent = manager.add_task("Parent", None, None).await.unwrap();
         manager.start_task(parent.id, false).await.unwrap();
 
         // Create multiple subtasks with various priorities
@@ -1803,10 +1786,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         // Create parent without subtasks and set as current
-        let parent = manager
-            .add_task("Parent", None, None)
-            .await
-            .unwrap();
+        let parent = manager.add_task("Parent", None, None).await.unwrap();
         manager.start_task(parent.id, false).await.unwrap();
 
         // Create another top-level task

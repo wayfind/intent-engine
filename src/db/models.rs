@@ -170,7 +170,9 @@ impl PickNextResponse {
             suggestion_type: "NONE".to_string(),
             task: None,
             reason_code: Some("NO_TASKS_IN_PROJECT".to_string()),
-            message: Some("No tasks found in this project. Your intent backlog is empty.".to_string()),
+            message: Some(
+                "No tasks found in this project. Your intent backlog is empty.".to_string(),
+            ),
         }
     }
 
