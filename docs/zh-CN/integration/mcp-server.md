@@ -150,6 +150,6 @@ To remove Intent-Engine MCP server:
 
 ## See Also
 
-- [The Intent-Engine Way](THE_INTENT_ENGINE_WAY.md) - Collaboration philosophy
-- [README.md](README.md) - Full command reference
-- [Task Workflow Analysis](docs/task_workflow_analysis.md) - Technical details
+- [The Intent-Engine Way](../guide/the-intent-engine-way.md) - Collaboration philosophy
+- [README.md](../../../README.md) - Full command reference
+- [Task Workflow Analysis](../technical/task-workflow-analysis.md) - Technical details

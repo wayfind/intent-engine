@@ -150,4 +150,4 @@ Intent-Engine is AI's **strategic memory**. Context window = short-term. Events 
 
 ---
 
-**Full docs**: THE_INTENT_ENGINE_WAY.md, README.md
+**Full docs**: [the-intent-engine-way.md](the-intent-engine-way.md), [README.md](../../../README.md)
