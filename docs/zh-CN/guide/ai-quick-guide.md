@@ -34,6 +34,11 @@ intent-engine task pick-next --max-count 3  # ATOMIC: query + sort + batch trans
 
 ### Record Critical Moments
 ```bash
+# To current task (concise)
+echo "Decision/blocker/milestone..." | \
+  intent-engine event add --type decision --data-stdin
+
+# To specific task (flexible)
 echo "Decision/blocker/milestone..." | \
   intent-engine event add --task-id <ID> --type decision --data-stdin
 ```
@@ -58,9 +63,9 @@ echo "Multi-line markdown spec..." | \
 # 2. Start & load context (returns spec + event history)
 intent-engine task start 1 --with-events
 
-# 3. Execute + record key decisions
+# 3. Execute + record key decisions (to current task)
 echo "Chose Passport.js for OAuth strategies" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
 # 4. Hit sub-problem? Create & auto-switch
 intent-engine task spawn-subtask --name "Configure Google OAuth app"
@@ -98,6 +103,70 @@ intent-engine task pick-next --max-count 3
 - `milestone` - Completed phase X
 - `discussion` - Captured conversation
 - `note` - General observation
+
+## 高级模式：替代中间文件
+
+AI 工作时常创建临时文件（scratchpad.md, plan.md 等）。Intent-Engine 提供了更优雅的替代方案。
+
+### 核心映射
+
+| 传统文件 | Intent-Engine 方式 | 优势 |
+|---------|-------------------|------|
+| `requirements.md` | Task Spec (`--spec-stdin`) | 与任务强绑定，start 时自动加载 |
+| `scratchpad.md` | Event (`type: note`) | 带时间戳，永远关联到具体任务 |
+| `plan.md` | Subtasks | 可追踪状态的动态计划 |
+| `error_log.txt` | Event (`type: blocker`) | 明确标记为障碍，方便复盘 |
+| `design_v2.md` | Task Spec (新任务) | 方案与执行合二为一 |
+
+### 实例：调试分析
+
+```bash
+# ❌ 旧方式：创建 debug_analysis.md
+cat > debug_analysis_task5.md <<EOF
+通过浏览器控制台发现：
+1. 按钮点击没有触发网络请求
+2. Console 报错: TypeError...
+EOF
+
+# ✅ 新方式：直接存入事件流
+echo "通过浏览器控制台发现：
+1. 按钮点击没有触发网络请求
+2. Console 报错: TypeError...
+3. 初步判断是事件绑定失效" | \
+  intent-engine event add --type note --data-stdin  # 使用当前任务
+```
+
+### 实例：技术方案
+
+```bash
+# ❌ 旧方式：创建 design_v2.md 等待确认
+cat > design_v2.md <<EOF
+V2 重构方案：使用 React Hooks 替代 Class Components
+EOF
+
+# ✅ 新方式：创建子任务，方案即规格
+cat design_v2.md | \
+  intent-engine task spawn-subtask --name "执行 V2 重构" --spec-stdin
+# 自动切换到新任务，方案已加载
+```
+
+### 质变收益
+
+1. **Token 效率**:
+   - 旧：读取整个 scratchpad.md（包含无关信息）
+   - 新：精准读取 `event list --task-id 5 --limit 10`
+
+2. **查询能力**:
+   - 旧："我上次怎么解决的？" → 手动翻文件
+   - 新：`task search "TypeError" --status done` → 瞬间定位
+
+3. **工作区整洁**:
+   - 旧：项目根目录被 `temp_xxx.md` 淹没
+   - 新：所有思维碎片收纳在 `.intent-engine/project.db`
+
+4. **自动关联**:
+   - 旧：文件名标记任务 ID（`bug_5_analysis.md`）
+   - 新：数据库外键自动关联，无需人工维护
 
 ## Token Optimization
 

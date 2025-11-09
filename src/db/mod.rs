@@ -175,3 +175,176 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_create_pool_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+
+        let pool = create_pool(&db_path).await.unwrap();
+
+        // Verify we can execute a query
+        let result: i64 = sqlx::query_scalar("SELECT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        assert_eq!(result, 1);
+    }
+
+    #[tokio::test]
+    async fn test_run_migrations_creates_tables() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+
+        run_migrations(&pool).await.unwrap();
+
+        // Verify tables were created
+        let tables: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+
+        assert!(tables.contains(&"tasks".to_string()));
+        assert!(tables.contains(&"events".to_string()));
+        assert!(tables.contains(&"workspace_state".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_run_migrations_creates_fts_tables() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+
+        run_migrations(&pool).await.unwrap();
+
+        // Verify FTS tables were created
+        let tables: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_fts'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert!(tables.contains(&"tasks_fts".to_string()));
+        assert!(tables.contains(&"events_fts".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_run_migrations_creates_triggers() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+
+        run_migrations(&pool).await.unwrap();
+
+        // Verify triggers were created
+        let triggers: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='trigger'")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+
+        assert!(triggers.contains(&"tasks_ai".to_string()));
+        assert!(triggers.contains(&"tasks_ad".to_string()));
+        assert!(triggers.contains(&"tasks_au".to_string()));
+        assert!(triggers.contains(&"events_ai".to_string()));
+        assert!(triggers.contains(&"events_ad".to_string()));
+        assert!(triggers.contains(&"events_au".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_run_migrations_idempotent() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+
+        // Run migrations twice
+        run_migrations(&pool).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Should not fail - migrations are idempotent
+        let tables: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='table'")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+
+        assert!(tables.len() >= 3);
+    }
+
+    #[tokio::test]
+    async fn test_fts_triggers_work() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Insert a task
+        sqlx::query("INSERT INTO tasks (name, spec, status) VALUES (?, ?, ?)")
+            .bind("Test task")
+            .bind("Test spec")
+            .bind("todo")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Verify FTS was updated
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'Test'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_workspace_state_table_structure() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Insert and retrieve workspace state
+        sqlx::query("INSERT INTO workspace_state (key, value) VALUES (?, ?)")
+            .bind("test_key")
+            .bind("test_value")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let value: String = sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = ?")
+            .bind("test_key")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        assert_eq!(value, "test_value");
+    }
+
+    #[tokio::test]
+    async fn test_task_status_constraint() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Try to insert task with invalid status
+        let result = sqlx::query("INSERT INTO tasks (name, status) VALUES (?, ?)")
+            .bind("Test")
+            .bind("invalid_status")
+            .execute(&pool)
+            .await;
+
+        // Should fail due to CHECK constraint
+        assert!(result.is_err());
+    }
+}

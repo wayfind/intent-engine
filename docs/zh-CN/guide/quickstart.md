@@ -108,13 +108,13 @@ intent-engine task spawn-subtask --name "配置 JWT 密钥存储"
 ## 第 5 步：记录关键决策（30 秒）
 
 ```bash
-# 记录你的决策过程
+# 记录你的决策过程（记录到当前任务）
 echo "决定将 JWT 密钥存储在环境变量中
 原因：
 1. 避免密钥硬编码到代码中
 2. 便于不同环境使用不同密钥
 3. 符合 12-Factor App 原则" | \
-  intent-engine event add --task-id 2 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
 # 输出示例：
 # {

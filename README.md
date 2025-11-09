@@ -1,5 +1,10 @@
 # Intent-Engine
+**为人机协作，编织清晰的思路**
 
+>
+> 将您和 AI 伙伴短暂的、易失的协作瞬间，沉淀为项目可追溯、可恢复的永恒智慧
+>
+ 
 **中文 | [English](README.en.md)**
 
 [![CI](https://github.com/wayfind/intent-engine/workflows/CI/badge.svg)](https://github.com/wayfind/intent-engine/actions/workflows/ci.yml)
@@ -8,9 +13,7 @@
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
 [![Documentation](https://docs.rs/intent-engine/badge.svg)](https://docs.rs/intent-engine)
 
-**Intent-Engine 是一个极简的、项目专属的战略意图追踪系统，专为人机协作设计。**
-
-它不是又一个待办事项列表，而是连接人类战略思维与 AI 执行能力的桥梁——帮助回答"我们要去哪里"和"为什么要去那里"这两个关键问题。
+**🚀 快速操作**: [手动触发构建](https://github.com/wayfind/intent-engine/actions/workflows/manual-build.yml) | [生成代码覆盖率](https://github.com/wayfind/intent-engine/actions/workflows/codecov.yml) | [查看覆盖率](https://codecov.io/gh/wayfind/intent-engine)
 
 ---
 
@@ -69,7 +72,7 @@ Intent-Engine 是一个命令行工具 + 数据库系统，用于记录、追踪
 - ✅ **项目级**：持久化到 SQLite 数据库，跨会话永久保存
 - ✅ **可追溯**：完整的事件流记录每个决策的上下文
 - ✅ **层级化**：任务树结构，强制完成子任务才能完成父任务
-- ✅ **原子操作**：`start`、`pick-next`、`spawn-subtask`、`switch` 等复合命令节省 60-70% Token
+- ✅ **原子操作**：`start`、`pick-next`、`spawn-subtask`、`switch` 等命令节省 50-70% Token
 
 ---
 
@@ -132,9 +135,9 @@ intent-engine task start 1 --with-events
 # 3. 在工作中发现子问题？创建子任务并自动切换
 intent-engine task spawn-subtask --name "配置 JWT 密钥"
 
-# 4. 记录关键决策
+# 4. 记录关键决策（子任务已是当前任务）
 echo "选择使用 HS256 算法，密钥存储在环境变量中" | \
-  intent-engine event add --task-id 2 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
 # 5. 完成子任务
 intent-engine task done
@@ -157,8 +160,8 @@ intent-engine report --since 1d --summary-only
 - **惰性初始化**：写入命令自动初始化项目，无需手动 init
 - **任务树管理**：支持无限层级的父子任务关系
 - **决策历史**：完整的事件流记录（decision、blocker、milestone 等）
-- **智能选择**：`pick-next` 基于优先级和复杂度自动选择任务
-- **原子操作**：`start`、`switch`、`spawn-subtask` 等复合命令节省 60-70% Token
+- **智能推荐**：`pick-next` 基于上下文推荐下一个任务
+- **原子操作**：`start`、`switch`、`spawn-subtask` 等命令节省 50-70% Token
 - **🔍 FTS5 搜索引擎**：GB 级任务量下毫秒级响应，独特的 snippet 函数用 `**` 高亮匹配词，对 Agent 上下文极度友好
 - **JSON 输出**：所有命令输出结构化 JSON，完美集成 AI 工具
 

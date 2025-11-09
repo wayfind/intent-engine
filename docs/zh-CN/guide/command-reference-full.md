@@ -16,7 +16,7 @@ Intent-Engine 是一个极简的、项目专属的命令行数据库服务，专
 - **惰性初始化**: 写入命令自动初始化项目，无需手动 init
 - **任务管理**: 支持任务的增删改查、层级关系、状态跟踪
   - **优先级和复杂度**: 支持任务评估和排序 🆕
-  - **智能选择**: `pick-next` 自动选择最优任务顺序 🆕
+  - **智能推荐**: `pick-next` 基于上下文推荐下一个任务 🆕
   - **子任务管理**: `spawn-subtask` 原子创建并切换 🆕
   - **任务切换**: `switch` 在多任务间灵活切换 🆕
 - **事件日志**: 记录任务相关的决策、讨论和里程碑
@@ -103,7 +103,7 @@ Intent-Engine 可以作为 MCP (Model Context Protocol) server 集成到 Claude 
 
 ```bash
 # 自动安装 MCP server
-./install-mcp-server.sh
+./scripts/install/install-mcp-server.sh
 
 # 重启 Claude Code
 ```
@@ -539,74 +539,100 @@ intent-engine task del 1  # 同时删除任务 1 及其所有子任务
 
 ---
 
-#### `task pick-next` - 智能选择下一批任务 🆕
+#### `task pick-next` - 智能推荐下一个任务 🆕
 
-从 todo 列表中智能选择任务并自动转换为 doing 状态。支持容量管理和优先级排序。
+基于上下文感知的优先级模型，智能推荐当前最应该处理的单个任务。该命令是非交互式的，不会修改任务状态。
+
+**核心哲学**: 深度优先地完成当前正在进行的主题，然后再开启新的主题。
 
 **用法:**
 ```bash
-intent-engine task pick-next [OPTIONS]
+intent-engine task pick-next [--format <FORMAT>]
 ```
 
 **参数:**
-- `--max-count <N>` - 最多选择 N 个任务（默认：5）
-- `--capacity <N>` - doing 列表最大容量（默认：5）
+- `--format <FORMAT>` - 输出格式（默认：`text`）
+  - `text`: 人类友好的引导格式
+  - `json`: 结构化的 JSON 格式，适合 AI Agent
 
-**算法:**
-1. 查询当前 doing 任务数量
-2. 计算可用容量：`capacity - current_doing_count`
-3. 从 todo 中选择任务，排序规则：
-   - 优先级降序（priority DESC）
-   - 复杂度升序（complexity ASC，先做简单的）
-4. 原子转换为 doing 状态
+**智能推荐逻辑:**
+1. **第一优先级**: 当前焦点任务的子任务（深度优先）
+   - 查找 `current_task_id` 的所有 `status=todo` 的子任务
+   - 按 `priority ASC`（数字越小优先级越高）、`id ASC` 排序
+2. **第二优先级**: 顶级任务（广度优先）
+   - 查找所有 `parent_id IS NULL` 且 `status=todo` 的任务
+   - 按 `priority ASC`、`id ASC` 排序
+3. **无推荐**: 返回适当的空状态响应，退出码为 1
 
 **示例:**
+
 ```bash
-# 使用默认参数：最多选 5 个，容量限制 5
+# Text 格式（默认）- 人类友好
 intent-engine task pick-next
 
-# 一次只选 3 个任务
-intent-engine task pick-next --max-count 3
+# 输出示例：
+# Based on your current focus, the recommended next task is:
+#
+# [ID: 43] [Priority: 1] [Status: todo]
+# Name: Design database schema for user identities
+#
+# To start working on it, run:
+#   ie task start 43
 
-# 允许 doing 列表最多 10 个任务
-intent-engine task pick-next --max-count 5 --capacity 10
-
-# AI 工作流：评估任务后批量开始
-# 先设置优先级和复杂度
-intent-engine task update 1 --priority 10 --complexity 3
-intent-engine task update 2 --priority 8 --complexity 7
-intent-engine task update 3 --priority 5 --complexity 2
-
-# 然后智能选择（会优先选择：任务1 > 任务3 > 任务2）
-intent-engine task pick-next --max-count 3
+# JSON 格式 - AI Agent 友好
+intent-engine task pick-next --format json
 ```
 
-**输出示例:**
+**JSON 输出示例（有推荐）:**
 ```json
-[
-  {
-    "id": 1,
-    "name": "修复登录 bug",
-    "status": "doing",
-    "priority": 10,
-    "complexity": 3,
-    "first_doing_at": "2025-11-06T10:30:00Z"
-  },
-  {
-    "id": 3,
-    "name": "更新文档",
-    "status": "doing",
-    "priority": 5,
-    "complexity": 2,
-    "first_doing_at": "2025-11-06T10:30:01Z"
+{
+  "suggestion_type": "FOCUSED_SUB_TASK",
+  "task": {
+    "id": 43,
+    "parent_id": 4,
+    "name": "Design database schema for user identities",
+    "spec": "详细规范内容...",
+    "status": "todo",
+    "priority": 1,
+    "complexity": null,
+    "first_todo_at": "2025-11-08T10:30:00Z",
+    "first_doing_at": null,
+    "first_done_at": null
   }
-]
+}
 ```
+
+**JSON 输出示例（空状态 - 项目为空）:**
+```json
+{
+  "suggestion_type": "NONE",
+  "reason_code": "NO_TASKS_IN_PROJECT",
+  "message": "No tasks found in this project. Your intent backlog is empty."
+}
+```
+
+**JSON 输出示例（空状态 - 全部完成）:**
+```json
+{
+  "suggestion_type": "NONE",
+  "reason_code": "ALL_TASKS_COMPLETED",
+  "message": "Project Complete! All intents have been realized."
+}
+```
+
+**建议类型:**
+- `FOCUSED_SUB_TASK` - 推荐当前焦点任务的子任务
+- `TOP_LEVEL_TASK` - 推荐顶级任务
+- `NONE` - 无推荐（配合 reason_code 说明原因）
+
+**退出码:**
+- `0` - 成功找到推荐任务
+- `1` - 无推荐（空状态）
 
 **使用场景:**
-- AI 发现多个问题后，批量创建 todo 任务，然后智能选择处理顺序
-- 团队协作时控制 WIP（Work In Progress）限制
-- 按优先级和复杂度自动规划工作
+- AI Agent 在每次工作开始时获取下一个应该处理的任务
+- 人类用户查看系统推荐的下一步工作
+- 自动化脚本基于推荐任务进行决策
 
 ---
 
@@ -854,11 +880,11 @@ intent-engine task search "JWT" | jq '.[].match_snippet'
 
 **用法:**
 ```bash
-intent-engine event add --task-id <ID> --type <TYPE> --data-stdin
+intent-engine event add [--task-id <ID>] --type <TYPE> --data-stdin
 ```
 
 **参数:**
-- `--task-id <ID>` - 任务 ID（必需）
+- `--task-id <ID>` - 任务 ID（可选，如省略则使用当前任务）
 - `--type <TYPE>` - 事件类型（必需），建议值：
   - `decision` - 关键决策
   - `blocker` - 遇到的障碍
@@ -869,30 +895,30 @@ intent-engine event add --task-id <ID> --type <TYPE> --data-stdin
 
 **示例:**
 ```bash
-# 记录决策
+# 记录到当前任务（简洁工作流）
 echo "决定使用 bcrypt 而不是 MD5 进行密码加密" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
-# 记录遇到的障碍
+# 记录到指定任务（灵活工作流）
 echo "发现 bcrypt 库在 Windows 上编译失败，需要寻找替代方案" | \
   intent-engine event add --task-id 1 --type blocker --data-stdin
 
-# 记录里程碑
+# 记录里程碑到当前任务
 echo "完成核心加密逻辑，通过所有单元测试" | \
-  intent-engine event add --task-id 1 --type milestone --data-stdin
+  intent-engine event add --type milestone --data-stdin
 
-# 从文件记录
+# 从文件记录到指定任务
 cat discussion_notes.md | \
   intent-engine event add --task-id 1 --type discussion --data-stdin
 
-# 记录长文本
+# 记录长文本到当前任务
 echo "经过调研，比较了以下方案：
 1. bcrypt - 业界标准，但 Windows 兼容性差
 2. argon2 - 更安全，但性能开销大
 3. scrypt - 平衡方案
 
 最终决定：使用 argon2，接受性能开销" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 ```
 
 **输出示例:**
@@ -1159,27 +1185,31 @@ intent-engine task add --name "更新过期依赖"
 intent-engine task add --name "修复内存泄漏"
 intent-engine task add --name "添加错误日志"
 
-# 2. AI 评估每个任务的复杂度和优先级
-intent-engine task update 1 --complexity 3 --priority 10  # 空指针：简单但紧急
-intent-engine task update 2 --complexity 7 --priority 8   # 数据库：复杂且重要
-intent-engine task update 3 --complexity 5 --priority 5   # 依赖：中等
-intent-engine task update 4 --complexity 9 --priority 10  # 内存：复杂但紧急
-intent-engine task update 5 --complexity 2 --priority 3   # 日志：简单不紧急
+# 2. AI 评估每个任务的优先级（数字越小越优先）
+intent-engine task update 1 --priority 1   # 空指针：最紧急
+intent-engine task update 2 --priority 2   # 数据库：第二优先
+intent-engine task update 3 --priority 5   # 依赖：中等
+intent-engine task update 4 --priority 1   # 内存：最紧急
+intent-engine task update 5 --priority 10  # 日志：不紧急
 
-# 3. 智能选择前 3 个任务开始处理（按优先级 DESC，复杂度 ASC）
-intent-engine task pick-next --max-count 3 --capacity 5
-# 结果：会选择任务 1（P10/C3）、4（P10/C9）、2（P8/C7）
+# 3. 获取智能推荐
+intent-engine task pick-next --format json
+# 结果：会推荐任务 1（priority=1，ID 最小）
 
-# 4. 逐个处理并记录
-intent-engine task switch 1
+# 4. 开始处理推荐的任务
+intent-engine task start 1
 echo "原因：未检查 null 返回值" | intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done  # 完成当前焦点任务
+intent-engine task done
 
-intent-engine task switch 2
-echo "决定添加索引到 user_id 字段" | intent-engine event add --task-id 2 --type decision --data-stdin
-intent-engine task done  # 完成当前焦点任务
+# 5. 继续获取下一个推荐
+intent-engine task pick-next --format json
+# 结果：推荐任务 4（priority=1，ID 第二小）
 
-# 5. 生成报告
+intent-engine task start 4
+echo "决定使用智能指针避免内存泄漏" | intent-engine event add --task-id 4 --type decision --data-stdin
+intent-engine task done
+
+# 6. 生成报告
 intent-engine report --since 1d --summary-only
 ```
 
@@ -1224,11 +1254,12 @@ intent-engine task add --name "前端：实现登录页面"
 intent-engine task add --name "后端：实现 API 接口"
 intent-engine task add --name "文档：更新 API 文档"
 
-# 2. 全部开始（并行工作）
-intent-engine task pick-next --max-count 3
+# 2. 获取推荐并开始第一个任务
+intent-engine task pick-next --format json
+# 推荐：任务 1
+intent-engine task start 1
 
 # 3. 在任务间切换
-intent-engine task switch 1
 # ... 做一些前端工作 ...
 echo "完成 UI 布局" | intent-engine event add --task-id 1 --type milestone --data-stdin
 
@@ -1238,7 +1269,7 @@ echo "完成数据库模型" | intent-engine event add --task-id 2 --type milest
 
 intent-engine task switch 3
 # ... 更新文档 ...
-intent-engine task done 3
+intent-engine task done
 
 # 4. 查看进度
 intent-engine report --status doing
@@ -1314,9 +1345,10 @@ veobd/
 
 #### 批量问题处理工作流 🆕
 1. **发现问题**: 批量创建 todo 任务
-2. **评估任务**: 使用 `task update` 设置 complexity 和 priority
-3. **智能开始**: 使用 `task pick-next` 按优先级自动选择
-4. **逐个处理**: 使用 `task switch` 在任务间切换
+2. **评估任务**: 使用 `task update` 设置 priority（数字越小优先级越高）
+3. **智能推荐**: 使用 `task pick-next` 获取下一个应该处理的任务
+4. **开始任务**: 使用 `task start` 开始推荐的任务
+5. **重复**: 完成后再次调用 `pick-next` 获取下一个推荐
 
 ### Token 优化策略 🆕
 
@@ -1324,7 +1356,7 @@ veobd/
 
 | 传统工作流 | Token 消耗 | 优化工作流 | Token 消耗 | 节省 |
 |-----------|-----------|-----------|-----------|------|
-| find + update + set current | 3 次调用 | `pick-next` | 1 次调用 | **67%** |
+| find + get | 2 次调用 | `pick-next --format json` | 1 次调用 | **50%** |
 | add + start + set current | 3 次调用 | `spawn-subtask` | 1 次调用 | **67%** |
 | update + set current + get | 3 次调用 | `switch` | 1 次调用 | **67%** |
 
@@ -1338,9 +1370,9 @@ Intent-Engine 任务驱动原生任务的创建。
 ### 最佳实践
 
 #### 工作开始时
-1. 使用 `task start --with-events` 获取目标和历史上下文
-2. 如果发现多个问题，创建 todo 任务并设置优先级/复杂度
-3. 使用 `task pick-next` 自动选择最优任务顺序
+1. 使用 `task pick-next --format json` 获取推荐任务
+2. 使用 `task start <ID> --with-events` 开始推荐的任务
+3. 如果发现多个新问题，创建 todo 任务并设置优先级（数字越小越优先）
 
 #### 工作过程中
 1. 发现子问题时使用 `spawn-subtask`，保持层级清晰
@@ -1348,13 +1380,14 @@ Intent-Engine 任务驱动原生任务的创建。
 3. 使用 `task switch` 在多个任务间灵活切换
 
 #### 工作结束时
-1. 使用 `report --summary-only` 生成高效总结（节省 Token）
-2. 使用 `report --since 1d` 查看当天工作进展
+1. 使用 `task done` 完成当前任务
+2. 使用 `task pick-next` 获取下一个推荐任务
+3. 使用 `report --summary-only` 生成高效总结（节省 Token）
 
 #### 恢复工作时
 1. 使用 `current` 查看当前正在处理的任务
-2. 使用 `task get <ID> --with-events` 获取完整上下文
-3. 使用 `event list` 刷新记忆
+2. 使用 `task pick-next` 获取推荐的下一个任务
+3. 使用 `task get <ID> --with-events` 获取完整上下文
 
 ## 技术栈
 

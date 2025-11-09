@@ -1,0 +1,21 @@
+# Rust formatting configuration
+# This ensures consistent formatting across all contributors and CI
+#
+# NOTE: Only using stable rustfmt features.
+# For unstable features, use `rustfmt +nightly` or wait for them to stabilize.
+
+edition = "2021"
+
+# Line width
+max_width = 100
+
+# Chain formatting
+chain_width = 60
+
+# Match formatting - ensures trailing commas in match arms
+match_block_trailing_comma = true
+
+# Misc stable features
+use_try_shorthand = true
+use_field_init_shorthand = true
+force_explicit_abi = true

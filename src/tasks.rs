@@ -1,6 +1,6 @@
 use crate::db::models::{
-    DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, Task, TaskSearchResult,
-    TaskWithEvents, WorkspaceStatus,
+    DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, PickNextResponse, Task,
+    TaskSearchResult, TaskWithEvents, WorkspaceStatus,
 };
 use crate::error::{IntentError, Result};
 use chrono::Utc;
@@ -166,14 +166,14 @@ impl<'a> TaskManager<'a> {
             match s {
                 "todo" if task.first_todo_at.is_none() => {
                     updates.push(format!("first_todo_at = '{}'", now.to_rfc3339()));
-                }
+                },
                 "doing" if task.first_doing_at.is_none() => {
                     updates.push(format!("first_doing_at = '{}'", now.to_rfc3339()));
-                }
+                },
                 "done" if task.first_done_at.is_none() => {
                     updates.push(format!("first_done_at = '{}'", now.to_rfc3339()));
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -703,11 +703,92 @@ impl<'a> TaskManager<'a> {
         let updated_tasks = q.fetch_all(self.pool).await?;
         Ok(updated_tasks)
     }
+
+    /// Intelligently recommend the next task to work on based on context-aware priority model.
+    ///
+    /// Priority logic:
+    /// 1. First priority: Subtasks of the current focused task (depth-first)
+    /// 2. Second priority: Top-level tasks (breadth-first)
+    /// 3. No recommendation: Return appropriate empty state
+    ///
+    /// This command does NOT modify task status.
+    pub async fn pick_next(&self) -> Result<PickNextResponse> {
+        // Step 1: Check if there's a current focused task
+        let current_task_id: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(self.pool)
+                .await?;
+
+        if let Some(current_id_str) = current_task_id {
+            if let Ok(current_id) = current_id_str.parse::<i64>() {
+                // First priority: Get todo subtasks of current focused task
+                let subtasks = sqlx::query_as::<_, Task>(
+                    r#"
+                    SELECT id, parent_id, name, spec, status, complexity, priority,
+                           first_todo_at, first_doing_at, first_done_at
+                    FROM tasks
+                    WHERE parent_id = ? AND status = 'todo'
+                    ORDER BY COALESCE(priority, 999999) ASC, id ASC
+                    LIMIT 1
+                    "#,
+                )
+                .bind(current_id)
+                .fetch_optional(self.pool)
+                .await?;
+
+                if let Some(task) = subtasks {
+                    return Ok(PickNextResponse::focused_subtask(task));
+                }
+            }
+        }
+
+        // Step 2: Second priority - get top-level todo tasks
+        let top_level_task = sqlx::query_as::<_, Task>(
+            r#"
+            SELECT id, parent_id, name, spec, status, complexity, priority,
+                   first_todo_at, first_doing_at, first_done_at
+            FROM tasks
+            WHERE parent_id IS NULL AND status = 'todo'
+            ORDER BY COALESCE(priority, 999999) ASC, id ASC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(self.pool)
+        .await?;
+
+        if let Some(task) = top_level_task {
+            return Ok(PickNextResponse::top_level_task(task));
+        }
+
+        // Step 3: No recommendation - determine why
+        // Check if there are any tasks at all
+        let total_tasks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tasks")
+            .fetch_one(self.pool)
+            .await?;
+
+        if total_tasks == 0 {
+            return Ok(PickNextResponse::no_tasks_in_project());
+        }
+
+        // Check if all tasks are completed
+        let todo_or_doing_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status IN ('todo', 'doing')")
+                .fetch_one(self.pool)
+                .await?;
+
+        if todo_or_doing_count == 0 {
+            return Ok(PickNextResponse::all_tasks_completed());
+        }
+
+        // Otherwise, there are tasks but none available based on current context
+        Ok(PickNextResponse::no_available_todos())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::EventManager;
     use crate::test_utils::test_helpers::TestContext;
 
     #[tokio::test]
@@ -917,7 +998,7 @@ mod tests {
 
         // Should be WORKSPACE_IS_CLEAR since it's the only task
         match response.next_step_suggestion {
-            NextStepSuggestion::WorkspaceIsClear { .. } => {}
+            NextStepSuggestion::WorkspaceIsClear { .. } => {},
             _ => panic!("Expected WorkspaceIsClear suggestion"),
         }
 
@@ -968,7 +1049,7 @@ mod tests {
         match child_response.next_step_suggestion {
             NextStepSuggestion::ParentIsReady { parent_task_id, .. } => {
                 assert_eq!(parent_task_id, parent.id);
-            }
+            },
             _ => panic!("Expected ParentIsReady suggestion"),
         }
 
@@ -979,7 +1060,7 @@ mod tests {
 
         // Parent completion should indicate top-level task completed (since it had children)
         match parent_response.next_step_suggestion {
-            NextStepSuggestion::TopLevelTaskCompleted { .. } => {}
+            NextStepSuggestion::TopLevelTaskCompleted { .. } => {},
             _ => panic!("Expected TopLevelTaskCompleted suggestion"),
         }
     }
@@ -1300,7 +1381,7 @@ mod tests {
             } => {
                 assert_eq!(parent_task_id, parent.id);
                 assert_eq!(remaining_siblings_count, 2); // child2 and child3
-            }
+            },
             _ => panic!("Expected SiblingTasksRemain suggestion"),
         }
 
@@ -1315,7 +1396,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(remaining_siblings_count, 1); // only child3
-            }
+            },
             _ => panic!("Expected SiblingTasksRemain suggestion"),
         }
     }
@@ -1349,7 +1430,7 @@ mod tests {
             } => {
                 assert_eq!(completed_task_id, parent.id);
                 assert_eq!(completed_task_name, "Epic Task");
-            }
+            },
             _ => panic!("Expected TopLevelTaskCompleted suggestion"),
         }
     }
@@ -1382,7 +1463,7 @@ mod tests {
             } => {
                 assert_eq!(completed_task_id, task1.id);
                 assert_eq!(completed_task_name, "Standalone Task 1");
-            }
+            },
             _ => panic!("Expected NoParentContext suggestion"),
         }
     }
@@ -1532,5 +1613,296 @@ mod tests {
         assert_eq!(results.len(), 1);
         // Check that snippet contains highlighted keyword (marked with **)
         assert!(results[0].match_snippet.contains("**authentication**"));
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_focused_subtask() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create parent task and set as current
+        let parent = manager.add_task("Parent task", None, None).await.unwrap();
+        manager.start_task(parent.id, false).await.unwrap();
+
+        // Create subtasks with different priorities
+        let subtask1 = manager
+            .add_task("Subtask 1", None, Some(parent.id))
+            .await
+            .unwrap();
+        let subtask2 = manager
+            .add_task("Subtask 2", None, Some(parent.id))
+            .await
+            .unwrap();
+
+        // Set priorities: subtask1 = 2, subtask2 = 1 (lower number = higher priority)
+        manager
+            .update_task(subtask1.id, None, None, None, None, None, Some(2))
+            .await
+            .unwrap();
+        manager
+            .update_task(subtask2.id, None, None, None, None, None, Some(1))
+            .await
+            .unwrap();
+
+        // Pick next should recommend subtask2 (priority 1)
+        let response = manager.pick_next().await.unwrap();
+
+        assert_eq!(response.suggestion_type, "FOCUSED_SUB_TASK");
+        assert!(response.task.is_some());
+        assert_eq!(response.task.as_ref().unwrap().id, subtask2.id);
+        assert_eq!(response.task.as_ref().unwrap().name, "Subtask 2");
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_top_level_task() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create top-level tasks with different priorities
+        let task1 = manager.add_task("Task 1", None, None).await.unwrap();
+        let task2 = manager.add_task("Task 2", None, None).await.unwrap();
+
+        // Set priorities: task1 = 5, task2 = 3 (lower number = higher priority)
+        manager
+            .update_task(task1.id, None, None, None, None, None, Some(5))
+            .await
+            .unwrap();
+        manager
+            .update_task(task2.id, None, None, None, None, None, Some(3))
+            .await
+            .unwrap();
+
+        // Pick next should recommend task2 (priority 3)
+        let response = manager.pick_next().await.unwrap();
+
+        assert_eq!(response.suggestion_type, "TOP_LEVEL_TASK");
+        assert!(response.task.is_some());
+        assert_eq!(response.task.as_ref().unwrap().id, task2.id);
+        assert_eq!(response.task.as_ref().unwrap().name, "Task 2");
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_no_tasks() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // No tasks created
+        let response = manager.pick_next().await.unwrap();
+
+        assert_eq!(response.suggestion_type, "NONE");
+        assert_eq!(response.reason_code.as_deref(), Some("NO_TASKS_IN_PROJECT"));
+        assert!(response.message.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_all_completed() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create task and mark as done
+        let task = manager.add_task("Task 1", None, None).await.unwrap();
+        manager.start_task(task.id, false).await.unwrap();
+        manager.done_task().await.unwrap();
+
+        // Pick next should indicate all tasks completed
+        let response = manager.pick_next().await.unwrap();
+
+        assert_eq!(response.suggestion_type, "NONE");
+        assert_eq!(response.reason_code.as_deref(), Some("ALL_TASKS_COMPLETED"));
+        assert!(response.message.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_no_available_todos() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create a parent task that's in "doing" status
+        let parent = manager.add_task("Parent task", None, None).await.unwrap();
+        manager.start_task(parent.id, false).await.unwrap();
+
+        // Create a subtask also in "doing" status (no "todo" subtasks)
+        let subtask = manager
+            .add_task("Subtask", None, Some(parent.id))
+            .await
+            .unwrap();
+        manager.switch_to_task(subtask.id).await.unwrap();
+
+        // Pick next should indicate no available todos
+        let response = manager.pick_next().await.unwrap();
+
+        assert_eq!(response.suggestion_type, "NONE");
+        assert_eq!(response.reason_code.as_deref(), Some("NO_AVAILABLE_TODOS"));
+        assert!(response.message.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_priority_ordering() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create parent and set as current
+        let parent = manager.add_task("Parent", None, None).await.unwrap();
+        manager.start_task(parent.id, false).await.unwrap();
+
+        // Create multiple subtasks with various priorities
+        let sub1 = manager
+            .add_task("Priority 10", None, Some(parent.id))
+            .await
+            .unwrap();
+        manager
+            .update_task(sub1.id, None, None, None, None, None, Some(10))
+            .await
+            .unwrap();
+
+        let sub2 = manager
+            .add_task("Priority 1", None, Some(parent.id))
+            .await
+            .unwrap();
+        manager
+            .update_task(sub2.id, None, None, None, None, None, Some(1))
+            .await
+            .unwrap();
+
+        let sub3 = manager
+            .add_task("Priority 5", None, Some(parent.id))
+            .await
+            .unwrap();
+        manager
+            .update_task(sub3.id, None, None, None, None, None, Some(5))
+            .await
+            .unwrap();
+
+        // Pick next should recommend the task with priority 1 (lowest number)
+        let response = manager.pick_next().await.unwrap();
+
+        assert_eq!(response.suggestion_type, "FOCUSED_SUB_TASK");
+        assert_eq!(response.task.as_ref().unwrap().id, sub2.id);
+        assert_eq!(response.task.as_ref().unwrap().name, "Priority 1");
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_falls_back_to_top_level_when_no_subtasks() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create parent without subtasks and set as current
+        let parent = manager.add_task("Parent", None, None).await.unwrap();
+        manager.start_task(parent.id, false).await.unwrap();
+
+        // Create another top-level task
+        let top_level = manager
+            .add_task("Top level task", None, None)
+            .await
+            .unwrap();
+
+        // Pick next should fall back to top-level task since parent has no todo subtasks
+        let response = manager.pick_next().await.unwrap();
+
+        assert_eq!(response.suggestion_type, "TOP_LEVEL_TASK");
+        assert_eq!(response.task.as_ref().unwrap().id, top_level.id);
+    }
+
+    // ===== Missing coverage tests =====
+
+    #[tokio::test]
+    async fn test_get_task_with_events() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test", None, None).await.unwrap();
+
+        // Add some events
+        event_mgr
+            .add_event(task.id, "progress", "Event 1")
+            .await
+            .unwrap();
+        event_mgr
+            .add_event(task.id, "decision", "Event 2")
+            .await
+            .unwrap();
+
+        let result = task_mgr.get_task_with_events(task.id).await.unwrap();
+
+        assert_eq!(result.task.id, task.id);
+        assert!(result.events_summary.is_some());
+
+        let summary = result.events_summary.unwrap();
+        assert_eq!(summary.total_count, 2);
+        assert_eq!(summary.recent_events.len(), 2);
+        assert_eq!(summary.recent_events[0].log_type, "decision"); // Most recent first
+        assert_eq!(summary.recent_events[1].log_type, "progress");
+    }
+
+    #[tokio::test]
+    async fn test_get_task_with_events_nonexistent() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        let result = task_mgr.get_task_with_events(999).await;
+        assert!(matches!(result, Err(IntentError::TaskNotFound(999))));
+    }
+
+    #[tokio::test]
+    async fn test_get_task_with_many_events() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test", None, None).await.unwrap();
+
+        // Add 20 events
+        for i in 0..20 {
+            event_mgr
+                .add_event(task.id, "test", &format!("Event {}", i))
+                .await
+                .unwrap();
+        }
+
+        let result = task_mgr.get_task_with_events(task.id).await.unwrap();
+        let summary = result.events_summary.unwrap();
+
+        assert_eq!(summary.total_count, 20);
+        assert_eq!(summary.recent_events.len(), 10); // Limited to 10
+    }
+
+    #[tokio::test]
+    async fn test_get_task_with_no_events() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test", None, None).await.unwrap();
+
+        let result = task_mgr.get_task_with_events(task.id).await.unwrap();
+        let summary = result.events_summary.unwrap();
+
+        assert_eq!(summary.total_count, 0);
+        assert_eq!(summary.recent_events.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_tasks_zero_capacity() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        task_mgr.add_task("Task 1", None, None).await.unwrap();
+
+        // capacity_limit = 0 means no capacity available
+        let results = task_mgr.pick_next_tasks(10, 0).await.unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_tasks_capacity_exceeds_available() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        task_mgr.add_task("Task 1", None, None).await.unwrap();
+        task_mgr.add_task("Task 2", None, None).await.unwrap();
+
+        // Request 10 tasks but only 2 available, capacity = 100
+        let results = task_mgr.pick_next_tasks(10, 100).await.unwrap();
+        assert_eq!(results.len(), 2); // Only returns available tasks
     }
 }

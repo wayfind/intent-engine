@@ -22,7 +22,7 @@ cargo build --release
 sudo cp target/release/intent-engine /usr/local/bin/
 
 # Install MCP server
-./install-mcp-server.sh
+./scripts/install/install-mcp-server.sh
 ```
 
 ### Method 2: Manual Setup

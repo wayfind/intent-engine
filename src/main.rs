@@ -57,7 +57,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let task = task_mgr.add_task(&name, spec.as_deref(), parent).await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
         TaskCommands::Get { id, with_events } => {
             let ctx = ProjectContext::load().await?;
@@ -70,7 +70,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                 let task = task_mgr.get_task(id).await?;
                 println!("{}", serde_json::to_string_pretty(&task)?);
             }
-        }
+        },
 
         TaskCommands::Update {
             id,
@@ -103,7 +103,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                 )
                 .await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
         TaskCommands::Del { id } => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -117,7 +117,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                     "message": format!("Task {} deleted", id)
                 }))?
             );
-        }
+        },
 
         TaskCommands::Find { status, parent } => {
             let ctx = ProjectContext::load().await?;
@@ -133,7 +133,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let tasks = task_mgr.find_tasks(status.as_deref(), parent_opt).await?;
             println!("{}", serde_json::to_string_pretty(&tasks)?);
-        }
+        },
 
         TaskCommands::Start { id, with_events } => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -141,7 +141,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let task = task_mgr.start_task(id, with_events).await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
         TaskCommands::Done => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -149,18 +149,30 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let task = task_mgr.done_task().await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
-        TaskCommands::PickNext {
-            max_count,
-            capacity,
-        } => {
+        TaskCommands::PickNext { format } => {
             let ctx = ProjectContext::load_or_init().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 
-            let tasks = task_mgr.pick_next_tasks(max_count, capacity).await?;
-            println!("{}", serde_json::to_string_pretty(&tasks)?);
-        }
+            let response = task_mgr.pick_next().await?;
+
+            // Output based on format
+            match format.as_str() {
+                "json" => {
+                    println!("{}", serde_json::to_string_pretty(&response)?);
+                },
+                _ => {
+                    // Default to text format
+                    println!("{}", response.format_as_text());
+                },
+            }
+
+            // Exit with code 1 if no recommendation found
+            if response.suggestion_type == "NONE" {
+                std::process::exit(1);
+            }
+        },
 
         TaskCommands::SpawnSubtask { name, spec_stdin } => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -174,7 +186,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let subtask = task_mgr.spawn_subtask(&name, spec.as_deref()).await?;
             println!("{}", serde_json::to_string_pretty(&subtask)?);
-        }
+        },
 
         TaskCommands::Switch { id } => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -182,7 +194,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let task = task_mgr.switch_to_task(id).await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
         TaskCommands::Search { query } => {
             let ctx = ProjectContext::load().await?;
@@ -190,7 +202,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let results = task_mgr.search_tasks(&query).await?;
             println!("{}", serde_json::to_string_pretty(&results)?);
-        }
+        },
     }
 
     Ok(())
@@ -250,9 +262,30 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
                 ));
             };
 
-            let event = event_mgr.add_event(task_id, &log_type, &data).await?;
+            // Determine the target task ID
+            let target_task_id = if let Some(id) = task_id {
+                // Use the provided task_id
+                id
+            } else {
+                // Fall back to current_task_id
+                let current_task_id: Option<String> = sqlx::query_scalar(
+                    "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
+                )
+                .fetch_optional(&ctx.pool)
+                .await?;
+
+                current_task_id
+                    .and_then(|s| s.parse::<i64>().ok())
+                    .ok_or_else(|| IntentError::InvalidInput(
+                        "No current task is set and --task-id was not provided. Use 'current --set <ID>' to set a task first.".to_string(),
+                    ))?
+            };
+
+            let event = event_mgr
+                .add_event(target_task_id, &log_type, &data)
+                .await?;
             println!("{}", serde_json::to_string_pretty(&event)?);
-        }
+        },
 
         EventCommands::List { task_id, limit } => {
             let ctx = ProjectContext::load().await?;
@@ -260,7 +293,7 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
 
             let events = event_mgr.list_events(task_id, limit).await?;
             println!("{}", serde_json::to_string_pretty(&events)?);
-        }
+        },
     }
 
     Ok(())
@@ -297,7 +330,7 @@ async fn handle_doctor_command() -> Result<()> {
                 "status": "✓ PASS",
                 "details": format!("SQLite version: {}", version)
             }));
-        }
+        },
         Ok(None) | Err(_) => {
             all_passed = false;
             checks.push(json!({
@@ -305,7 +338,7 @@ async fn handle_doctor_command() -> Result<()> {
                 "status": "✗ FAIL",
                 "details": "Unable to query SQLite version"
             }));
-        }
+        },
     }
 
     // Check database initialization
@@ -323,7 +356,7 @@ async fn handle_doctor_command() -> Result<()> {
                         "status": "✓ PASS",
                         "details": format!("Connected to database, {} tasks found", count)
                     }));
-                }
+                },
                 Err(e) => {
                     all_passed = false;
                     checks.push(json!({
@@ -331,9 +364,9 @@ async fn handle_doctor_command() -> Result<()> {
                         "status": "✗ FAIL",
                         "details": format!("Database query failed: {}", e)
                     }));
-                }
+                },
             }
-        }
+        },
         Err(e) => {
             all_passed = false;
             checks.push(json!({
@@ -341,7 +374,7 @@ async fn handle_doctor_command() -> Result<()> {
                 "status": "✗ FAIL",
                 "details": format!("Failed to initialize database: {}", e)
             }));
-        }
+        },
     }
 
     // Check intent-engine version

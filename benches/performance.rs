@@ -171,14 +171,14 @@ fn bench_report_summary(c: &mut Criterion) {
                         .unwrap();
 
                     match i % 3 {
-                        0 => {} // keep as todo
+                        0 => {}, // keep as todo
                         1 => {
                             task_mgr.start_task(task.id, false).await.unwrap();
-                        }
+                        },
                         _ => {
                             task_mgr.start_task(task.id, false).await.unwrap();
                             task_mgr.done_task().await.unwrap();
-                        }
+                        },
                     }
                 }
 

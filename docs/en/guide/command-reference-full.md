@@ -16,7 +16,7 @@ Intent-Engine is a minimalist, project-specific command-line database service de
 - **Lazy Initialization**: Write commands automatically initialize project, no manual init required
 - **Task Management**: Support for task CRUD, hierarchical relationships, status tracking
   - **Priority and Complexity**: Support for task evaluation and sorting 🆕
-  - **Smart Selection**: `pick-next` automatically selects optimal task order 🆕
+  - **Smart Recommendation**: `pick-next` recommends next task based on context 🆕
   - **Subtask Management**: `spawn-subtask` atomically creates and switches 🆕
   - **Task Switching**: `switch` flexibly switches between multiple tasks 🆕
 - **Event Logging**: Records task-related decisions, discussions, and milestones
@@ -103,7 +103,7 @@ Intent-Engine can be integrated into Claude Code as an MCP (Model Context Protoc
 
 ```bash
 # Auto-install MCP server
-./install-mcp-server.sh
+./scripts/install/install-mcp-server.sh
 
 # Restart Claude Code
 ```
@@ -502,74 +502,100 @@ intent-engine task del 1  # Deletes task 1 and all its subtasks
 
 ---
 
-#### `task pick-next` - Smart Select Next Batch of Tasks 🆕
+#### `task pick-next` - Intelligently Recommend Next Task 🆕
 
-Smart selection of tasks from todo list and automatic conversion to doing status. Supports capacity management and priority sorting.
+Based on a context-aware priority model, intelligently recommends the single most appropriate task to work on next. This command is non-interactive and does not modify task status.
+
+**Core Philosophy**: Complete the current ongoing topic depth-first, then start a new topic.
 
 **Usage:**
 ```bash
-intent-engine task pick-next [OPTIONS]
+intent-engine task pick-next [--format <FORMAT>]
 ```
 
 **Parameters:**
-- `--max-count <N>` - Maximum number of tasks to select (default: 5)
-- `--capacity <N>` - Maximum capacity for doing list (default: 5)
+- `--format <FORMAT>` - Output format (default: `text`)
+  - `text`: Human-friendly guidance format
+  - `json`: Structured JSON format for AI Agents
 
-**Algorithm:**
-1. Query current doing task count
-2. Calculate available capacity: `capacity - current_doing_count`
-3. Select tasks from todo, sorting by:
-   - Priority descending (priority DESC)
-   - Complexity ascending (complexity ASC, do simple ones first)
-4. Atomically convert to doing status
+**Smart Recommendation Logic:**
+1. **First Priority**: Subtasks of current focused task (depth-first)
+   - Find all `status=todo` subtasks of `current_task_id`
+   - Sort by `priority ASC` (lower number = higher priority), then `id ASC`
+2. **Second Priority**: Top-level tasks (breadth-first)
+   - Find all `parent_id IS NULL` and `status=todo` tasks
+   - Sort by `priority ASC`, then `id ASC`
+3. **No Recommendation**: Return appropriate empty state response with exit code 1
 
 **Examples:**
+
 ```bash
-# Use default parameters: select max 5, capacity limit 5
+# Text format (default) - Human-friendly
 intent-engine task pick-next
 
-# Select only 3 tasks at once
-intent-engine task pick-next --max-count 3
+# Output example:
+# Based on your current focus, the recommended next task is:
+#
+# [ID: 43] [Priority: 1] [Status: todo]
+# Name: Design database schema for user identities
+#
+# To start working on it, run:
+#   ie task start 43
 
-# Allow doing list to have max 10 tasks
-intent-engine task pick-next --max-count 5 --capacity 10
-
-# AI workflow: batch start after evaluating tasks
-# First set priority and complexity
-intent-engine task update 1 --priority 10 --complexity 3
-intent-engine task update 2 --priority 8 --complexity 7
-intent-engine task update 3 --priority 5 --complexity 2
-
-# Then smart select (will prioritize: task 1 > task 3 > task 2)
-intent-engine task pick-next --max-count 3
+# JSON format - AI Agent friendly
+intent-engine task pick-next --format json
 ```
 
-**Output Example:**
+**JSON Output Example (with recommendation):**
 ```json
-[
-  {
-    "id": 1,
-    "name": "Fix login bug",
-    "status": "doing",
-    "priority": 10,
-    "complexity": 3,
-    "first_doing_at": "2025-11-06T10:30:00Z"
-  },
-  {
-    "id": 3,
-    "name": "Update documentation",
-    "status": "doing",
-    "priority": 5,
-    "complexity": 2,
-    "first_doing_at": "2025-11-06T10:30:01Z"
+{
+  "suggestion_type": "FOCUSED_SUB_TASK",
+  "task": {
+    "id": 43,
+    "parent_id": 4,
+    "name": "Design database schema for user identities",
+    "spec": "Detailed specification content...",
+    "status": "todo",
+    "priority": 1,
+    "complexity": null,
+    "first_todo_at": "2025-11-08T10:30:00Z",
+    "first_doing_at": null,
+    "first_done_at": null
   }
-]
+}
 ```
+
+**JSON Output Example (empty state - no tasks):**
+```json
+{
+  "suggestion_type": "NONE",
+  "reason_code": "NO_TASKS_IN_PROJECT",
+  "message": "No tasks found in this project. Your intent backlog is empty."
+}
+```
+
+**JSON Output Example (empty state - all completed):**
+```json
+{
+  "suggestion_type": "NONE",
+  "reason_code": "ALL_TASKS_COMPLETED",
+  "message": "Project Complete! All intents have been realized."
+}
+```
+
+**Suggestion Types:**
+- `FOCUSED_SUB_TASK` - Recommends subtask of current focused task
+- `TOP_LEVEL_TASK` - Recommends top-level task
+- `NONE` - No recommendation (with reason_code explaining why)
+
+**Exit Codes:**
+- `0` - Successfully found recommended task
+- `1` - No recommendation (empty state)
 
 **Use Cases:**
-- After AI discovers multiple issues, batch create todo tasks, then smart select processing order
-- Control WIP (Work In Progress) limits during team collaboration
-- Automatically plan work by priority and complexity
+- AI Agents get next task to work on at the start of each session
+- Human users check system-recommended next steps
+- Automation scripts make decisions based on recommended tasks
 
 ---
 
@@ -817,11 +843,11 @@ Record event for task (decisions, blockers, milestones, etc.).
 
 **Usage:**
 ```bash
-intent-engine event add --task-id <ID> --type <TYPE> --data-stdin
+intent-engine event add [--task-id <ID>] --type <TYPE> --data-stdin
 ```
 
 **Parameters:**
-- `--task-id <ID>` - Task ID (required)
+- `--task-id <ID>` - Task ID (optional, uses current task if omitted)
 - `--type <TYPE>` - Event type (required), suggested values:
   - `decision` - Key decision
   - `blocker` - Encountered obstacle
@@ -832,30 +858,30 @@ intent-engine event add --task-id <ID> --type <TYPE> --data-stdin
 
 **Examples:**
 ```bash
-# Record decision
+# Record to current task (concise workflow)
 echo "Decided to use bcrypt instead of MD5 for password encryption" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
-# Record encountered obstacle
+# Record to specific task (flexible workflow)
 echo "Found bcrypt library fails to compile on Windows, need alternative" | \
   intent-engine event add --task-id 1 --type blocker --data-stdin
 
-# Record milestone
+# Record milestone to current task
 echo "Completed core encryption logic, all unit tests passing" | \
-  intent-engine event add --task-id 1 --type milestone --data-stdin
+  intent-engine event add --type milestone --data-stdin
 
-# Record from file
+# Record from file to specific task
 cat discussion_notes.md | \
   intent-engine event add --task-id 1 --type discussion --data-stdin
 
-# Record long text
+# Record long text to current task
 echo "After research, compared the following options:
 1. bcrypt - Industry standard, but poor Windows compatibility
 2. argon2 - More secure, but higher performance overhead
 3. scrypt - Balanced approach
 
 Final decision: Use argon2, accept performance overhead" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 ```
 
 **Output Example:**
@@ -1122,27 +1148,31 @@ intent-engine task add --name "Update outdated dependencies"
 intent-engine task add --name "Fix memory leak"
 intent-engine task add --name "Add error logging"
 
-# 2. AI evaluates complexity and priority for each task
-intent-engine task update 1 --complexity 3 --priority 10  # Null pointer: simple but urgent
-intent-engine task update 2 --complexity 7 --priority 8   # Database: complex and important
-intent-engine task update 3 --complexity 5 --priority 5   # Dependencies: medium
-intent-engine task update 4 --complexity 9 --priority 10  # Memory: complex but urgent
-intent-engine task update 5 --complexity 2 --priority 3   # Logging: simple not urgent
+# 2. AI evaluates priority for each task (lower number = higher priority)
+intent-engine task update 1 --priority 1   # Null pointer: most urgent
+intent-engine task update 2 --priority 2   # Database: second priority
+intent-engine task update 3 --priority 5   # Dependencies: medium
+intent-engine task update 4 --priority 1   # Memory: most urgent
+intent-engine task update 5 --priority 10  # Logging: not urgent
 
-# 3. Smart select top 3 tasks to start processing (by priority DESC, complexity ASC)
-intent-engine task pick-next --max-count 3 --capacity 5
-# Result: Will select task 1 (P10/C3), 4 (P10/C9), 2 (P8/C7)
+# 3. Get smart recommendation
+intent-engine task pick-next --format json
+# Result: Recommends task 1 (priority=1, smallest ID)
 
-# 4. Process one by one and record
-intent-engine task switch 1
+# 4. Start processing recommended task
+intent-engine task start 1
 echo "Cause: Did not check for null return value" | intent-engine event add --task-id 1 --type note --data-stdin
 intent-engine task done  # Complete current focused task
 
-intent-engine task switch 2
-echo "Decided to add index to user_id field" | intent-engine event add --task-id 2 --type decision --data-stdin
-intent-engine task done  # Complete current focused task
+# 5. Get next recommendation
+intent-engine task pick-next --format json
+# Result: Recommends task 4 (priority=1, second smallest ID)
 
-# 5. Generate report
+intent-engine task start 4
+echo "Decision: Use smart pointers to avoid memory leak" | intent-engine event add --task-id 4 --type decision --data-stdin
+intent-engine task done
+
+# 6. Generate report
 intent-engine report --since 1d --summary-only
 ```
 
@@ -1187,11 +1217,12 @@ intent-engine task add --name "Frontend: Implement login page"
 intent-engine task add --name "Backend: Implement API endpoints"
 intent-engine task add --name "Docs: Update API documentation"
 
-# 2. Start all (parallel work)
-intent-engine task pick-next --max-count 3
+# 2. Get recommendation and start first task
+intent-engine task pick-next --format json
+# Recommends: task 1
+intent-engine task start 1
 
 # 3. Switch between tasks
-intent-engine task switch 1
 # ... do some frontend work ...
 echo "Completed UI layout" | intent-engine event add --task-id 1 --type milestone --data-stdin
 
@@ -1277,9 +1308,10 @@ veobd/
 
 #### Batch Problem Processing Workflow 🆕
 1. **Discover problems**: Batch create todo tasks
-2. **Evaluate tasks**: Use `task update` to set complexity and priority
-3. **Smart start**: Use `task pick-next` to automatically select by priority
-4. **Process one by one**: Use `task switch` to switch between tasks
+2. **Evaluate tasks**: Use `task update` to set priority (lower number = higher priority)
+3. **Smart recommendation**: Use `task pick-next` to get next task to work on
+4. **Start task**: Use `task start` to begin recommended task
+5. **Repeat**: After completion, call `pick-next` again for next recommendation
 
 ### Token Optimization Strategy 🆕
 
@@ -1287,7 +1319,7 @@ Using new atomic operation commands can significantly reduce token consumption:
 
 | Traditional Workflow | Token Cost | Optimized Workflow | Token Cost | Savings |
 |---------------------|------------|-------------------|------------|---------|
-| find + update + set current | 3 calls | `pick-next` | 1 call | **67%** |
+| find + get | 2 calls | `pick-next --format json` | 1 call | **50%** |
 | add + start + set current | 3 calls | `spawn-subtask` | 1 call | **67%** |
 | update + set current + get | 3 calls | `switch` | 1 call | **67%** |
 

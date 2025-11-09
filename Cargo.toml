@@ -1,6 +1,6 @@
 [package]
 name = "intent-engine"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 authors = ["Intent Engine Contributors"]
 description = "A command-line database service for tracking strategic intent, tasks, and events"
@@ -11,6 +11,7 @@ documentation = "https://docs.rs/intent-engine"
 readme = "README.md"
 keywords = ["cli", "task-management", "intent", "database", "workflow"]
 categories = ["command-line-utilities", "database"]
+default-run = "intent-engine"
 
 # cargo-binstall configuration
 # Helps cargo-binstall automatically download the right binary for your platform
@@ -50,6 +51,15 @@ tempfile = "3.8"
 assert_cmd = "2.0"
 predicates = "3.0"
 criterion = { version = "0.7", features = ["async_tokio"] }
+rand = "0.8"
+
+[[bin]]
+name = "intent-engine"
+path = "src/main.rs"
+
+[[bin]]
+name = "intent-engine-mcp-server"
+path = "src/bin/mcp-server.rs"
 
 [[bench]]
 name = "performance"

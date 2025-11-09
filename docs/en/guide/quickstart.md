@@ -108,13 +108,13 @@ intent-engine task spawn-subtask --name "Configure JWT secret storage"
 ## Step 5: Record Key Decisions (30 seconds)
 
 ```bash
-# Record your decision process
+# Record your decision process (to current task)
 echo "Decided to store JWT secret in environment variables
 Reasons:
 1. Avoid hardcoding secrets in code
 2. Easy to use different secrets in different environments
 3. Complies with 12-Factor App principles" | \
-  intent-engine event add --task-id 2 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
 # Example output:
 # {
