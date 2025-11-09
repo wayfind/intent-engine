@@ -206,12 +206,11 @@ mod tests {
         run_migrations(&pool).await.unwrap();
 
         // Verify tables were created
-        let tables: Vec<String> = sqlx::query_scalar(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap();
+        let tables: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
 
         assert!(tables.contains(&"tasks".to_string()));
         assert!(tables.contains(&"events".to_string()));
@@ -228,7 +227,7 @@ mod tests {
 
         // Verify FTS tables were created
         let tables: Vec<String> = sqlx::query_scalar(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_fts'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_fts'",
         )
         .fetch_all(&pool)
         .await
@@ -247,12 +246,11 @@ mod tests {
         run_migrations(&pool).await.unwrap();
 
         // Verify triggers were created
-        let triggers: Vec<String> = sqlx::query_scalar(
-            "SELECT name FROM sqlite_master WHERE type='trigger'"
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap();
+        let triggers: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='trigger'")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
 
         assert!(triggers.contains(&"tasks_ai".to_string()));
         assert!(triggers.contains(&"tasks_ad".to_string()));
@@ -273,12 +271,11 @@ mod tests {
         run_migrations(&pool).await.unwrap();
 
         // Should not fail - migrations are idempotent
-        let tables: Vec<String> = sqlx::query_scalar(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap();
+        let tables: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='table'")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
 
         assert!(tables.len() >= 3);
     }
@@ -291,23 +288,20 @@ mod tests {
         run_migrations(&pool).await.unwrap();
 
         // Insert a task
-        sqlx::query(
-            "INSERT INTO tasks (name, spec, status) VALUES (?, ?, ?)"
-        )
-        .bind("Test task")
-        .bind("Test spec")
-        .bind("todo")
-        .execute(&pool)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO tasks (name, spec, status) VALUES (?, ?, ?)")
+            .bind("Test task")
+            .bind("Test spec")
+            .bind("todo")
+            .execute(&pool)
+            .await
+            .unwrap();
 
         // Verify FTS was updated
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'Test'"
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'Test'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
 
         assert_eq!(count, 1);
     }
@@ -327,13 +321,11 @@ mod tests {
             .await
             .unwrap();
 
-        let value: String = sqlx::query_scalar(
-            "SELECT value FROM workspace_state WHERE key = ?"
-        )
-        .bind("test_key")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let value: String = sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = ?")
+            .bind("test_key")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
         assert_eq!(value, "test_value");
     }
@@ -346,13 +338,11 @@ mod tests {
         run_migrations(&pool).await.unwrap();
 
         // Try to insert task with invalid status
-        let result = sqlx::query(
-            "INSERT INTO tasks (name, status) VALUES (?, ?)"
-        )
-        .bind("Test")
-        .bind("invalid_status")
-        .execute(&pool)
-        .await;
+        let result = sqlx::query("INSERT INTO tasks (name, status) VALUES (?, ?)")
+            .bind("Test")
+            .bind("invalid_status")
+            .execute(&pool)
+            .await;
 
         // Should fail due to CHECK constraint
         assert!(result.is_err());

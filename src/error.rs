@@ -103,7 +103,10 @@ mod tests {
     #[test]
     fn test_not_a_project_error() {
         let error = IntentError::NotAProject;
-        assert_eq!(error.to_string(), "Current directory is not an Intent-Engine project");
+        assert_eq!(
+            error.to_string(),
+            "Current directory is not an Intent-Engine project"
+        );
         assert_eq!(error.to_error_code(), "NOT_A_PROJECT");
     }
 
@@ -145,16 +148,15 @@ mod tests {
     fn test_database_error_code() {
         // We can't easily create a real sqlx::Error, so we test through the pattern match
         let error = IntentError::TaskNotFound(1);
-        match error {
-            IntentError::DatabaseError(_) => unreachable!(),
-            _ => assert!(true),
+        if let IntentError::DatabaseError(_) = error {
+            unreachable!()
         }
     }
 
     #[test]
     fn test_internal_error_fallback() {
         // Test the _ => "INTERNAL_ERROR" case by testing IoError
-        let io_error = std::io::Error::new(std::io::ErrorKind::Other, "test");
+        let io_error = std::io::Error::other("test");
         let error: IntentError = io_error.into();
         assert_eq!(error.to_error_code(), "INTERNAL_ERROR");
     }
