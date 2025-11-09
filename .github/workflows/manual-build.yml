@@ -1,0 +1,413 @@
+name: Manual Build
+
+# 🎯 手动构建工作流
+#
+# 提供灵活的手动触发选项，用于：
+# - 调试特定平台的构建问题
+# - 运行特定的测试套件
+# - 验证发布前的构建
+# - 测试特定的Rust版本
+#
+# 使用方法：
+# 1. 在GitHub仓库页面点击 "Actions" 标签
+# 2. 选择 "Manual Build" workflow
+# 3. 点击 "Run workflow" 按钮
+# 4. 选择你需要的选项
+# 5. 点击绿色的 "Run workflow" 按钮
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '构建类型'
+        required: true
+        type: choice
+        default: 'quick-check'
+        options:
+          - quick-check        # 快速检查（格式+clippy+编译）
+          - full-test          # 完整测试（所有测试套件）
+          - cross-platform     # 跨平台构建
+          - release-build      # Release构建
+          - bench             # 性能基准测试
+          - coverage          # 代码覆盖率
+          - security-audit    # 安全审计
+          - all               # 运行所有检查
+
+      rust_version:
+        description: 'Rust版本'
+        required: true
+        type: choice
+        default: 'stable'
+        options:
+          - stable
+          - beta
+          - nightly
+          - '1.75'  # 最小支持版本
+
+      platform:
+        description: '目标平台 (仅用于cross-platform构建)'
+        required: false
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - linux-x64
+          - linux-arm64
+          - macos-x64
+          - macos-arm64
+          - windows-x64
+
+      verbose:
+        description: '详细输出'
+        required: false
+        type: boolean
+        default: false
+
+      skip_cache:
+        description: '跳过缓存'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: ${{ inputs.verbose && 'full' || '1' }}
+
+jobs:
+  # 显示构建配置
+  show-config:
+    name: 📋 Build Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Display build configuration
+        run: |
+          echo "## 🔧 Build Configuration"
+          echo ""
+          echo "- **Build Type**: ${{ inputs.build_type }}"
+          echo "- **Rust Version**: ${{ inputs.rust_version }}"
+          echo "- **Platform**: ${{ inputs.platform }}"
+          echo "- **Verbose**: ${{ inputs.verbose }}"
+          echo "- **Skip Cache**: ${{ inputs.skip_cache }}"
+          echo "- **Triggered by**: ${{ github.actor }}"
+          echo "- **Branch**: ${{ github.ref_name }}"
+          echo "- **Commit**: ${{ github.sha }}"
+
+  # 快速检查
+  quick-check:
+    name: ⚡ Quick Check
+    runs-on: ubuntu-latest
+    if: |
+      inputs.build_type == 'quick-check' ||
+      inputs.build_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.rust_version }}
+          components: rustfmt, clippy
+
+      - name: Cache cargo (if enabled)
+        if: ${{ !inputs.skip_cache }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ inputs.rust_version }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Check compilation
+        run: cargo check --all-targets --all-features ${{ inputs.verbose && '--verbose' || '' }}
+
+  # 完整测试
+  full-test:
+    name: 🧪 Full Test Suite
+    runs-on: ubuntu-latest
+    if: |
+      inputs.build_type == 'full-test' ||
+      inputs.build_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.rust_version }}
+
+      - name: Cache cargo (if enabled)
+        if: ${{ !inputs.skip_cache }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-test-${{ inputs.rust_version }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run all tests
+        run: cargo test --all-features ${{ inputs.verbose && '--verbose' || '' }}
+
+      - name: Run ignored tests
+        run: cargo test --all-features -- --ignored ${{ inputs.verbose && '--verbose' || '' }}
+
+      - name: Run doc tests
+        run: cargo test --doc ${{ inputs.verbose && '--verbose' || '' }}
+
+  # 跨平台构建
+  cross-platform:
+    name: 🌍 Cross Platform Build
+    if: |
+      inputs.build_type == 'cross-platform' ||
+      inputs.build_type == 'all'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: linux-x64
+            enabled: ${{ inputs.platform == 'all' || inputs.platform == 'linux-x64' }}
+
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            name: linux-arm64
+            enabled: ${{ inputs.platform == 'all' || inputs.platform == 'linux-arm64' }}
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: macos-x64
+            enabled: ${{ inputs.platform == 'all' || inputs.platform == 'macos-x64' }}
+
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: macos-arm64
+            enabled: ${{ inputs.platform == 'all' || inputs.platform == 'macos-arm64' }}
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x64
+            enabled: ${{ inputs.platform == 'all' || inputs.platform == 'windows-x64' }}
+
+    runs-on: ${{ matrix.os }}
+    if: matrix.enabled
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.rust_version }}
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo (if enabled)
+        if: ${{ !inputs.skip_cache }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ matrix.os }}-cargo-${{ matrix.target }}-${{ inputs.rust_version }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build for ${{ matrix.name }}
+        run: cargo build --release --target ${{ matrix.target }} ${{ inputs.verbose && '--verbose' || '' }}
+
+      - name: Run tests (native only)
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-apple-darwin' || matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo test --release --target ${{ matrix.target }}
+
+  # Release构建
+  release-build:
+    name: 📦 Release Build
+    runs-on: ubuntu-latest
+    if: |
+      inputs.build_type == 'release-build' ||
+      inputs.build_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.rust_version }}
+
+      - name: Cache cargo (if enabled)
+        if: ${{ !inputs.skip_cache }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-release-${{ inputs.rust_version }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release
+        run: cargo build --release --all-features ${{ inputs.verbose && '--verbose' || '' }}
+
+      - name: Verify binaries
+        run: |
+          echo "## 📦 Binary Information"
+          echo ""
+          ls -lh target/release/intent-engine*
+          echo ""
+          echo "### intent-engine binary:"
+          file target/release/intent-engine
+          ./target/release/intent-engine --version
+          echo ""
+          echo "### intent-engine-mcp-server binary:"
+          file target/release/intent-engine-mcp-server
+          echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/release/intent-engine-mcp-server | jq -r '.result.tools | length' | xargs -I {} echo "MCP server has {} tools"
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: intent-engine-${{ inputs.rust_version }}-linux-x64
+          path: |
+            target/release/intent-engine
+            target/release/intent-engine-mcp-server
+          retention-days: 7
+
+  # 性能基准测试
+  benchmark:
+    name: 📊 Benchmarks
+    runs-on: ubuntu-latest
+    if: |
+      inputs.build_type == 'bench' ||
+      inputs.build_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.rust_version }}
+
+      - name: Cache cargo (if enabled)
+        if: ${{ !inputs.skip_cache }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-bench-${{ inputs.rust_version }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run benchmarks
+        run: cargo bench ${{ inputs.verbose && '--verbose' || '' }}
+
+  # 代码覆盖率
+  coverage:
+    name: 📈 Code Coverage
+    runs-on: ubuntu-latest
+    if: |
+      inputs.build_type == 'coverage' ||
+      inputs.build_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.rust_version }}
+
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Generate coverage
+        run: cargo tarpaulin --out Xml --all-features ${{ inputs.verbose && '--verbose' || '' }}
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./cobertura.xml
+          flags: manual-build
+          fail_ci_if_error: false
+
+  # 安全审计
+  security-audit:
+    name: 🔒 Security Audit
+    runs-on: ubuntu-latest
+    if: |
+      inputs.build_type == 'security-audit' ||
+      inputs.build_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+      - name: Check for vulnerabilities
+        run: |
+          if cargo audit --json | jq -e '.vulnerabilities.list | length > 0'; then
+            echo "⚠️ Security vulnerabilities found!"
+            cargo audit
+            exit 1
+          else
+            echo "✅ No security vulnerabilities found"
+          fi
+
+  # 构建摘要
+  summary:
+    name: 📝 Build Summary
+    runs-on: ubuntu-latest
+    needs: [show-config, quick-check, full-test, cross-platform, release-build, benchmark, coverage, security-audit]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🎉 Manual Build Complete"
+          echo ""
+          echo "### Configuration"
+          echo "- Build Type: ${{ inputs.build_type }}"
+          echo "- Rust Version: ${{ inputs.rust_version }}"
+          echo "- Platform: ${{ inputs.platform }}"
+          echo ""
+          echo "### Results"
+          echo "- Quick Check: ${{ needs.quick-check.result }}"
+          echo "- Full Test: ${{ needs.full-test.result }}"
+          echo "- Cross Platform: ${{ needs.cross-platform.result }}"
+          echo "- Release Build: ${{ needs.release-build.result }}"
+          echo "- Benchmarks: ${{ needs.benchmark.result }}"
+          echo "- Coverage: ${{ needs.coverage.result }}"
+          echo "- Security Audit: ${{ needs.security-audit.result }}"
+          echo ""
+          echo "**Triggered by**: @${{ github.actor }}"
+          echo "**Branch**: ${{ github.ref_name }}"
