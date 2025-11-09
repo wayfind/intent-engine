@@ -39,12 +39,12 @@ cargo build --release
 cargo install --path .
 
 # Configure MCP server (automatically detects Rust version)
-./install-mcp-server.sh
+./scripts/install/install-mcp-server.sh
 ```
 
 ### For Existing Users (Migrating from Python)
 
-The installation script (`install-mcp-server.sh`) has been updated to:
+The installation script (`scripts/install/install-mcp-server.sh`) has been updated to:
 
 1. **Prefer Rust binary** if available:
    - `~/.cargo/bin/intent-engine-mcp-server` (installed)
@@ -60,7 +60,7 @@ To migrate, simply rebuild and reinstall:
 ```bash
 cargo build --release --bin intent-engine-mcp-server
 cargo install --path . --bin intent-engine-mcp-server
-./install-mcp-server.sh  # Will automatically use Rust version
+./scripts/install/install-mcp-server.sh  # Will automatically use Rust version
 ```
 
 ## Testing
@@ -131,7 +131,7 @@ cat ~/.config/claude-code/mcp_servers.json
 If it shows `"command": "python3"`, re-run the installer:
 
 ```bash
-./install-mcp-server.sh
+./scripts/install/install-mcp-server.sh
 ```
 
 ### Performance Issues

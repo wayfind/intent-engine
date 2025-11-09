@@ -508,8 +508,8 @@ jobs:
 
       - name: Test install.sh
         run: |
-          chmod +x install.sh
-          ./install.sh
+          chmod +x scripts/install/install.sh
+          ./scripts/install/install.sh
         shell: bash
 
       - name: Verify installation

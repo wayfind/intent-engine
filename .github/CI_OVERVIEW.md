@@ -60,7 +60,7 @@
 - 允许失败（不阻塞 CI）
 
 #### 10. **安装脚本测试**
-- 在 Linux 和 macOS 上测试 `install.sh`
+- 在 Linux 和 macOS 上测试 `scripts/install/install.sh`
 - 验证一键安装流程
 - 确保安装后 `doctor` 命令可用
 
