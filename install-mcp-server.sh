@@ -29,10 +29,38 @@ fi
 
 MCP_CONFIG="$CONFIG_DIR/mcp_servers.json"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MCP_SERVER="$SCRIPT_DIR/mcp-server.py"
+
+# Determine MCP server location - prefer Rust binary, fallback to Python
+if [ -f "$HOME/.cargo/bin/intent-engine-mcp-server" ]; then
+    MCP_SERVER="$HOME/.cargo/bin/intent-engine-mcp-server"
+    MCP_COMMAND="$MCP_SERVER"
+    MCP_ARGS="[]"
+    SERVER_TYPE="Rust (native binary)"
+elif [ -f "$SCRIPT_DIR/target/release/intent-engine-mcp-server" ]; then
+    MCP_SERVER="$SCRIPT_DIR/target/release/intent-engine-mcp-server"
+    MCP_COMMAND="$MCP_SERVER"
+    MCP_ARGS="[]"
+    SERVER_TYPE="Rust (local build)"
+elif [ -f "$SCRIPT_DIR/mcp-server.py" ]; then
+    MCP_SERVER="$SCRIPT_DIR/mcp-server.py"
+    MCP_COMMAND="python3"
+    MCP_ARGS='["'"$MCP_SERVER"'"]'
+    SERVER_TYPE="Python (legacy wrapper)"
+    echo "Warning: Using legacy Python wrapper. Consider building the Rust version for better performance:"
+    echo "  cargo build --release --bin intent-engine-mcp-server"
+    echo "  cargo install --path . --bin intent-engine-mcp-server"
+    echo
+else
+    echo "Error: No MCP server found!"
+    echo "Please build the Rust MCP server first:"
+    echo "  cargo build --release --bin intent-engine-mcp-server"
+    echo "  cargo install --path . --bin intent-engine-mcp-server"
+    exit 1
+fi
 
 echo "Configuration will be written to: $MCP_CONFIG"
-echo "MCP server script location: $MCP_SERVER"
+echo "MCP server location: $MCP_SERVER"
+echo "MCP server type: $SERVER_TYPE"
 echo
 
 # Check if intent-engine is installed
@@ -40,7 +68,7 @@ if ! command -v intent-engine &> /dev/null; then
     echo "Warning: 'intent-engine' command not found in PATH"
     echo "Please build and install intent-engine first:"
     echo "  cargo build --release"
-    echo "  sudo cp target/release/intent-engine /usr/local/bin/"
+    echo "  cargo install --path ."
     echo
     read -p "Continue anyway? (y/N) " -n 1 -r
     echo
@@ -48,16 +76,6 @@ if ! command -v intent-engine &> /dev/null; then
         exit 1
     fi
 fi
-
-# Check if Python 3 is installed
-if ! command -v python3 &> /dev/null; then
-    echo "Error: Python 3 is required but not found"
-    echo "Please install Python 3 and try again"
-    exit 1
-fi
-
-echo "Python 3 version: $(python3 --version)"
-echo
 
 # Create config directory if it doesn't exist
 mkdir -p "$CONFIG_DIR"
@@ -95,8 +113,8 @@ if 'mcpServers' not in config:
     config['mcpServers'] = {}
 
 config['mcpServers']['intent-engine'] = {
-    'command': 'python3',
-    'args': ['$MCP_SERVER'],
+    'command': '$MCP_COMMAND',
+    'args': $MCP_ARGS,
     'description': 'Strategic intent and task workflow management for human-AI collaboration'
 }
 
@@ -107,7 +125,8 @@ print('Configuration updated successfully')
 "
 else
     echo "Creating new MCP configuration..."
-    cat > "$MCP_CONFIG" << EOF
+    if [ "$MCP_COMMAND" = "python3" ]; then
+        cat > "$MCP_CONFIG" << EOF
 {
   "mcpServers": {
     "intent-engine": {
@@ -118,6 +137,19 @@ else
   }
 }
 EOF
+    else
+        cat > "$MCP_CONFIG" << EOF
+{
+  "mcpServers": {
+    "intent-engine": {
+      "command": "$MCP_SERVER",
+      "args": [],
+      "description": "Strategic intent and task workflow management for human-AI collaboration"
+    }
+  }
+}
+EOF
+    fi
     echo "Configuration created successfully"
 fi
 
