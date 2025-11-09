@@ -215,7 +215,7 @@ impl PickNextResponse {
                 } else {
                     "[ERROR] Invalid response: task is missing".to_string()
                 }
-            }
+            },
             "NONE" => {
                 let reason_code = self.reason_code.as_deref().unwrap_or("UNKNOWN");
                 let message = self.message.as_deref().unwrap_or("No tasks found");
@@ -228,7 +228,7 @@ impl PickNextResponse {
                             ie task add --name \"Setup initial project structure\" --priority 1",
                             message
                         )
-                    }
+                    },
                     "ALL_TASKS_COMPLETED" => {
                         format!(
                             "[SUCCESS] {}\n\n\
@@ -236,7 +236,7 @@ impl PickNextResponse {
                             ie report --since 30d",
                             message
                         )
-                    }
+                    },
                     "NO_AVAILABLE_TODOS" => {
                         format!(
                             "[INFO] {}\n\n\
@@ -247,10 +247,10 @@ impl PickNextResponse {
                             ie task find --parent NULL --status todo",
                             message
                         )
-                    }
+                    },
                     _ => format!("[INFO] {}", message),
                 }
-            }
+            },
             _ => "[ERROR] Unknown suggestion type".to_string(),
         }
     }

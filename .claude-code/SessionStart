@@ -1,0 +1,9 @@
+#!/bin/bash
+# Claude Code Session Start Hook
+# This script runs automatically when Claude Code starts a new session
+# It ensures git pre-commit hooks are always installed
+
+# Auto-install formatting hooks
+if [ -f "./scripts/auto-setup-hooks.sh" ]; then
+    ./scripts/auto-setup-hooks.sh
+fi

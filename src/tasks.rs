@@ -166,14 +166,14 @@ impl<'a> TaskManager<'a> {
             match s {
                 "todo" if task.first_todo_at.is_none() => {
                     updates.push(format!("first_todo_at = '{}'", now.to_rfc3339()));
-                }
+                },
                 "doing" if task.first_doing_at.is_none() => {
                     updates.push(format!("first_doing_at = '{}'", now.to_rfc3339()));
-                }
+                },
                 "done" if task.first_done_at.is_none() => {
                     updates.push(format!("first_done_at = '{}'", now.to_rfc3339()));
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -998,7 +998,7 @@ mod tests {
 
         // Should be WORKSPACE_IS_CLEAR since it's the only task
         match response.next_step_suggestion {
-            NextStepSuggestion::WorkspaceIsClear { .. } => {}
+            NextStepSuggestion::WorkspaceIsClear { .. } => {},
             _ => panic!("Expected WorkspaceIsClear suggestion"),
         }
 
@@ -1049,7 +1049,7 @@ mod tests {
         match child_response.next_step_suggestion {
             NextStepSuggestion::ParentIsReady { parent_task_id, .. } => {
                 assert_eq!(parent_task_id, parent.id);
-            }
+            },
             _ => panic!("Expected ParentIsReady suggestion"),
         }
 
@@ -1060,7 +1060,7 @@ mod tests {
 
         // Parent completion should indicate top-level task completed (since it had children)
         match parent_response.next_step_suggestion {
-            NextStepSuggestion::TopLevelTaskCompleted { .. } => {}
+            NextStepSuggestion::TopLevelTaskCompleted { .. } => {},
             _ => panic!("Expected TopLevelTaskCompleted suggestion"),
         }
     }
@@ -1381,7 +1381,7 @@ mod tests {
             } => {
                 assert_eq!(parent_task_id, parent.id);
                 assert_eq!(remaining_siblings_count, 2); // child2 and child3
-            }
+            },
             _ => panic!("Expected SiblingTasksRemain suggestion"),
         }
 
@@ -1396,7 +1396,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(remaining_siblings_count, 1); // only child3
-            }
+            },
             _ => panic!("Expected SiblingTasksRemain suggestion"),
         }
     }
@@ -1430,7 +1430,7 @@ mod tests {
             } => {
                 assert_eq!(completed_task_id, parent.id);
                 assert_eq!(completed_task_name, "Epic Task");
-            }
+            },
             _ => panic!("Expected TopLevelTaskCompleted suggestion"),
         }
     }
@@ -1463,7 +1463,7 @@ mod tests {
             } => {
                 assert_eq!(completed_task_id, task1.id);
                 assert_eq!(completed_task_name, "Standalone Task 1");
-            }
+            },
             _ => panic!("Expected NoParentContext suggestion"),
         }
     }

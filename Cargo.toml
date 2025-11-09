@@ -11,6 +11,7 @@ documentation = "https://docs.rs/intent-engine"
 readme = "README.md"
 keywords = ["cli", "task-management", "intent", "database", "workflow"]
 categories = ["command-line-utilities", "database"]
+default-run = "intent-engine"
 
 # cargo-binstall configuration
 # Helps cargo-binstall automatically download the right binary for your platform

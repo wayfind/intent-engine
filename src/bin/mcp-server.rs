@@ -1,4 +1,3 @@
-#!/usr/bin/env cargo
 //! Intent-Engine MCP Server (Rust Implementation)
 //!
 //! This is a native Rust implementation of the MCP (Model Context Protocol) server

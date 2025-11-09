@@ -13,6 +13,8 @@
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
 [![Documentation](https://docs.rs/intent-engine/badge.svg)](https://docs.rs/intent-engine)
 
+**🚀 快速操作**: [手动触发构建](https://github.com/wayfind/intent-engine/actions/workflows/manual-build.yml) | [生成代码覆盖率](https://github.com/wayfind/intent-engine/actions/workflows/codecov.yml) | [查看覆盖率](https://codecov.io/gh/wayfind/intent-engine)
+
 ---
 
 ## 🎯 这是什么？

@@ -50,6 +50,17 @@ on:
     # Only runs if there are new commits in the last 24 hours
     - cron: '0 10 * * *'
   workflow_dispatch:  # Allow manual trigger for full CI
+    inputs:
+      run_comprehensive:
+        description: '运行完整的综合测试'
+        required: false
+        type: boolean
+        default: true
+      skip_cache:
+        description: '跳过缓存（用于调试）'
+        required: false
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -100,6 +111,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo
+        if: ${{ !inputs.skip_cache }}
         uses: actions/cache@v4
         with:
           path: |
@@ -154,7 +166,7 @@ jobs:
         run: cargo build --release --verbose
 
       - name: Run doctor command
-        run: cargo run --release -- doctor
+        run: cargo run --release --bin intent-engine -- doctor
 
   # Cross-platform tests - only runs on schedule or manual trigger
   test-cross-platform:
