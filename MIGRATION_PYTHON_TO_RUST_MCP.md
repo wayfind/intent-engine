@@ -7,7 +7,7 @@ The Intent-Engine MCP (Model Context Protocol) server has been **migrated from P
 ## Key Changes
 
 ### Before (Python Implementation)
-- **File**: `mcp-server.py` (now deprecated as `mcp-server.py.deprecated`)
+- **File**: `mcp-server.py` (removed in favor of Rust implementation)
 - **Implementation**: Wrapper script that calls `intent-engine` CLI via subprocess
 - **Dependencies**: Python 3, subprocess overhead
 - **Performance**: Lower (subprocess creation + JSON parsing overhead)
@@ -44,16 +44,13 @@ cargo install --path .
 
 ### For Existing Users (Migrating from Python)
 
-The installation script (`scripts/install/install-mcp-server.sh`) has been updated to:
+The installation script (`scripts/install/install-mcp-server.sh`) automatically detects and configures the Rust MCP server:
 
-1. **Prefer Rust binary** if available:
+1. **Searches for Rust binary** in the following locations:
    - `~/.cargo/bin/intent-engine-mcp-server` (installed)
    - `./target/release/intent-engine-mcp-server` (local build)
 
-2. **Fallback to Python** if Rust binary not found:
-   - `./mcp-server.py` (deprecated, shows warning)
-
-3. **Auto-configure** the correct command in MCP config
+2. **Auto-configures** the correct command in MCP config
 
 To migrate, simply rebuild and reinstall:
 
@@ -73,11 +70,11 @@ The Rust MCP server has been tested with:
 - ✅ `event_add` - Adds events to tasks
 - ✅ All other MCP tools defined in `mcp-server.json`
 
-## Deprecation Timeline
+## Migration Status
 
-- **Current**: Python version kept as fallback (`mcp-server.py.deprecated`)
-- **Recommended**: Use Rust version for all new installations
-- **Future**: Python version may be removed in a future release
+- **Completed**: Python version has been removed
+- **Current**: Rust version is the only supported implementation
+- **Requirement**: No Python dependency required
 
 ## Technical Details
 
