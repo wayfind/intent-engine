@@ -91,6 +91,19 @@ async fn run_server() -> io::Result<()> {
 }
 
 async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
+    // Validate JSON-RPC version
+    if request.jsonrpc != "2.0" {
+        return JsonRpcResponse {
+            jsonrpc: "2.0".to_string(),
+            id: request.id,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32600,
+                message: format!("Invalid JSON-RPC version: {}", request.jsonrpc),
+            }),
+        };
+    }
+
     let result = match request.method.as_str() {
         "tools/list" => handle_tools_list(),
         "tools/call" => handle_tool_call(request.params).await,
