@@ -788,6 +788,7 @@ impl<'a> TaskManager<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::EventManager;
     use crate::test_utils::test_helpers::TestContext;
 
     #[tokio::test]
@@ -1800,5 +1801,108 @@ mod tests {
 
         assert_eq!(response.suggestion_type, "TOP_LEVEL_TASK");
         assert_eq!(response.task.as_ref().unwrap().id, top_level.id);
+    }
+
+    // ===== Missing coverage tests =====
+
+    #[tokio::test]
+    async fn test_get_task_with_events() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test", None, None).await.unwrap();
+
+        // Add some events
+        event_mgr
+            .add_event(task.id, "progress", "Event 1")
+            .await
+            .unwrap();
+        event_mgr
+            .add_event(task.id, "decision", "Event 2")
+            .await
+            .unwrap();
+
+        let result = task_mgr.get_task_with_events(task.id).await.unwrap();
+
+        assert_eq!(result.task.id, task.id);
+        assert!(result.events_summary.is_some());
+
+        let summary = result.events_summary.unwrap();
+        assert_eq!(summary.total_count, 2);
+        assert_eq!(summary.recent_events.len(), 2);
+        assert_eq!(summary.recent_events[0].log_type, "decision"); // Most recent first
+        assert_eq!(summary.recent_events[1].log_type, "progress");
+    }
+
+    #[tokio::test]
+    async fn test_get_task_with_events_nonexistent() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        let result = task_mgr.get_task_with_events(999).await;
+        assert!(matches!(result, Err(IntentError::TaskNotFound(999))));
+    }
+
+    #[tokio::test]
+    async fn test_get_task_with_many_events() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test", None, None).await.unwrap();
+
+        // Add 20 events
+        for i in 0..20 {
+            event_mgr
+                .add_event(task.id, "test", &format!("Event {}", i))
+                .await
+                .unwrap();
+        }
+
+        let result = task_mgr.get_task_with_events(task.id).await.unwrap();
+        let summary = result.events_summary.unwrap();
+
+        assert_eq!(summary.total_count, 20);
+        assert_eq!(summary.recent_events.len(), 10); // Limited to 10
+    }
+
+    #[tokio::test]
+    async fn test_get_task_with_no_events() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test", None, None).await.unwrap();
+
+        let result = task_mgr.get_task_with_events(task.id).await.unwrap();
+        let summary = result.events_summary.unwrap();
+
+        assert_eq!(summary.total_count, 0);
+        assert_eq!(summary.recent_events.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_tasks_zero_capacity() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        task_mgr.add_task("Task 1", None, None).await.unwrap();
+
+        // capacity_limit = 0 means no capacity available
+        let results = task_mgr.pick_next_tasks(10, 0).await.unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_tasks_capacity_exceeds_available() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        task_mgr.add_task("Task 1", None, None).await.unwrap();
+        task_mgr.add_task("Task 2", None, None).await.unwrap();
+
+        // Request 10 tasks but only 2 available, capacity = 100
+        let results = task_mgr.pick_next_tasks(10, 100).await.unwrap();
+        assert_eq!(results.len(), 2); // Only returns available tasks
     }
 }
