@@ -136,10 +136,10 @@ fn test_spec_data_model_matches_schema() {
         "Spec should have Data Model section"
     );
 
-    // Core Task fields
+    // Core Task fields (based on actual database schema)
     let task_fields = vec![
         "id:", "name:", "spec:", "status:", "complexity:", "priority:",
-        "parent_id:", "created_at:", "updated_at:",
+        "parent_id:", "first_todo_at:", "first_doing_at:", "first_done_at:",
     ];
 
     for field in task_fields {
@@ -150,8 +150,8 @@ fn test_spec_data_model_matches_schema() {
         );
     }
 
-    // Core Event fields
-    let event_fields = vec!["id:", "task_id:", "event_type:", "data:", "created_at:"];
+    // Core Event fields (based on actual database schema)
+    let event_fields = vec!["id:", "task_id:", "timestamp:", "log_type:", "discussion_data:"];
 
     for field in event_fields {
         assert!(
