@@ -34,6 +34,11 @@ intent-engine task pick-next --max-count 3  # ATOMIC: query + sort + batch trans
 
 ### Record Critical Moments
 ```bash
+# To current task (concise)
+echo "Decision/blocker/milestone..." | \
+  intent-engine event add --type decision --data-stdin
+
+# To specific task (flexible)
 echo "Decision/blocker/milestone..." | \
   intent-engine event add --task-id <ID> --type decision --data-stdin
 ```
@@ -58,14 +63,14 @@ echo "Multi-line markdown spec..." | \
 # 2. Start & load context (returns spec + event history)
 intent-engine task start 1 --with-events
 
-# 3. Execute + record key decisions
+# 3. Execute + record key decisions (to current task)
 echo "Chose Passport.js for OAuth strategies" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  intent-engine event add --type decision --data-stdin
 
 # 4. Hit sub-problem? Create & auto-switch
 intent-engine task spawn-subtask --name "Configure Google OAuth app"
 
-# 5. Complete child, switch back to parent
+# 5. Complete child (current task), switch back to parent
 intent-engine task done
 intent-engine task switch 1
 
@@ -98,6 +103,70 @@ intent-engine task pick-next --max-count 3
 - `milestone` - Completed phase X
 - `discussion` - Captured conversation
 - `note` - General observation
+
+## Advanced Pattern: Replace Intermediate Files
+
+AI workflows often create temporary files (scratchpad.md, plan.md, etc.). Intent-Engine offers a superior alternative.
+
+### Core Mapping
+
+| Traditional File | Intent-Engine Way | Advantage |
+|-----------------|-------------------|-----------|
+| `requirements.md` | Task Spec (`--spec-stdin`) | Bound to task, auto-loaded on start |
+| `scratchpad.md` | Event (`type: note`) | Timestamped, always linked to task |
+| `plan.md` | Subtasks | Trackable status, dynamic plan |
+| `error_log.txt` | Event (`type: blocker`) | Explicitly marked, easy to review |
+| `design_v2.md` | Task Spec (new task) | Design + execution unified |
+
+### Example: Debug Analysis
+
+```bash
+# ❌ Old way: Create debug_analysis.md
+cat > debug_analysis_task5.md <<EOF
+Browser console findings:
+1. Button click doesn't trigger network request
+2. Console error: TypeError...
+EOF
+
+# ✅ New way: Store directly in event stream
+echo "Browser console findings:
+1. Button click doesn't trigger network request
+2. Console error: TypeError...
+3. Initial diagnosis: event binding failed" | \
+  intent-engine event add --type note --data-stdin  # Uses current task
+```
+
+### Example: Technical Proposal
+
+```bash
+# ❌ Old way: Create design_v2.md awaiting approval
+cat > design_v2.md <<EOF
+V2 Refactor: Replace Class Components with React Hooks
+EOF
+
+# ✅ New way: Create subtask, spec is the proposal
+cat design_v2.md | \
+  intent-engine task spawn-subtask --name "Execute V2 refactor" --spec-stdin
+# Auto-switches to new task, spec already loaded
+```
+
+### Transformative Benefits
+
+1. **Token Efficiency**:
+   - Old: Read entire scratchpad.md (includes irrelevant info)
+   - New: Precise `event list --task-id 5 --limit 10`
+
+2. **Query Power**:
+   - Old: "How did I solve this before?" → manual file hunting
+   - New: `task search "TypeError" --status done` → instant location
+
+3. **Clean Workspace**:
+   - Old: Project root flooded with `temp_xxx.md`
+   - New: All thought fragments in `.intent-engine/project.db`
+
+4. **Auto-Linking**:
+   - Old: Manually tag task ID in filename (`bug_5_analysis.md`)
+   - New: Database foreign keys auto-link, zero maintenance
 
 ## Token Optimization
 
