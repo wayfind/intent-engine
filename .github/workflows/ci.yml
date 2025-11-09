@@ -60,7 +60,7 @@ jobs:
   check-new-commits:
     name: Check for New Commits
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     outputs:
       has_new_commits: ${{ steps.check.outputs.has_new_commits }}
     steps:
@@ -72,8 +72,12 @@ jobs:
       - name: Check for commits in last 24 hours
         id: check
         run: |
-          # Check if there are any commits in the last 24 hours
-          if [ -n "$(git log --since='24 hours ago' --format='%H')" ]; then
+          # For manual triggers, always run comprehensive CI
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "🚀 Manual trigger - running comprehensive CI"
+            echo "has_new_commits=true" >> $GITHUB_OUTPUT
+          # For scheduled runs, check for new commits
+          elif [ -n "$(git log --since='24 hours ago' --format='%H')" ]; then
             echo "✅ Found new commits in the last 24 hours"
             echo "has_new_commits=true" >> $GITHUB_OUTPUT
           else
