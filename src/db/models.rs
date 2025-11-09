@@ -132,6 +132,52 @@ pub struct TaskSearchResult {
     pub match_snippet: String,
 }
 
+/// Response for task switch command - includes previous and current task info
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwitchTaskResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_task: Option<PreviousTaskInfo>,
+    pub current_task: CurrentTaskInfo,
+}
+
+/// Simplified task info for previous task (only id and status)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviousTaskInfo {
+    pub id: i64,
+    pub status: String,
+}
+
+/// Current task info for switch response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrentTaskInfo {
+    pub id: i64,
+    pub name: String,
+    pub status: String,
+}
+
+/// Response for spawn-subtask command - includes subtask and parent info
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpawnSubtaskResponse {
+    pub subtask: SubtaskInfo,
+    pub parent_task: ParentTaskInfo,
+}
+
+/// Subtask info for spawn response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubtaskInfo {
+    pub id: i64,
+    pub name: String,
+    pub parent_id: i64,
+    pub status: String,
+}
+
+/// Parent task info for spawn response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParentTaskInfo {
+    pub id: i64,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PickNextResponse {
     pub suggestion_type: String,

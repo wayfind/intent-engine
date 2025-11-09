@@ -763,8 +763,11 @@ fn test_cli_spawn_subtask() {
     spawn_cmd
         .assert()
         .success()
+        .stdout(predicate::str::contains("\"subtask\""))
+        .stdout(predicate::str::contains("\"parent_task\""))
         .stdout(predicate::str::contains("\"name\": \"Child task\""))
         .stdout(predicate::str::contains("\"parent_id\": 1"))
+        .stdout(predicate::str::contains("\"name\": \"Parent task\""))
         .stdout(predicate::str::contains("\"status\": \"doing\""));
 
     // Verify current task was set to the child
@@ -802,7 +805,7 @@ fn test_cli_switch_task() {
         .assert()
         .success();
 
-    // Switch to task 2
+    // Switch to task 2 - should have current_task but no previous_task
     let mut switch_cmd = Command::cargo_bin("intent-engine").unwrap();
     switch_cmd
         .current_dir(temp_dir.path())
@@ -813,7 +816,9 @@ fn test_cli_switch_task() {
     switch_cmd
         .assert()
         .success()
+        .stdout(predicate::str::contains("\"current_task\""))
         .stdout(predicate::str::contains("\"id\": 2"))
+        .stdout(predicate::str::contains("\"name\": \"Task 2\""))
         .stdout(predicate::str::contains("\"status\": \"doing\""));
 
     // Verify current task was set
