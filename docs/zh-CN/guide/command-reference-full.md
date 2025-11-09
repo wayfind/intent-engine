@@ -103,7 +103,7 @@ Intent-Engine 可以作为 MCP (Model Context Protocol) server 集成到 Claude 
 
 ```bash
 # 自动安装 MCP server
-./install-mcp-server.sh
+./scripts/install/install-mcp-server.sh
 
 # 重启 Claude Code
 ```
