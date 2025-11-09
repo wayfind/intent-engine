@@ -162,7 +162,7 @@ jobs:
         run: cargo build --release --verbose
 
       - name: Run doctor command
-        run: cargo run --release -- doctor
+        run: cargo run --release --bin intent-engine -- doctor
 
   # Cross-platform tests - only runs on schedule or manual trigger
   test-cross-platform:
