@@ -1,0 +1,215 @@
+name: Code Coverage (Codecov)
+
+# 专门用于生成代码覆盖率并上传到Codecov
+# 可以手动触发或在PR时自动运行
+
+on:
+  # 手动触发 - 最简单的方式
+  workflow_dispatch:
+    inputs:
+      upload_to_codecov:
+        description: '上传到Codecov'
+        required: false
+        type: boolean
+        default: true
+      verbose:
+        description: '详细输出'
+        required: false
+        type: boolean
+        default: false
+
+  # PR时自动运行
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'benches/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+  # Push到main时运行
+  push:
+    branches: [ main, master ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  coverage:
+    name: 📈 Generate Coverage Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v5
+
+      - name: 🦀 Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: 📦 Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
+
+      - name: 🔧 Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: 🧪 Generate coverage data
+        run: |
+          if [ "${{ inputs.verbose }}" = "true" ]; then
+            cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info --verbose
+          else
+            cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+          fi
+
+      - name: 📊 Display coverage summary
+        run: |
+          echo "## 📈 Code Coverage Summary"
+          echo ""
+          cargo llvm-cov report --summary-only
+          echo ""
+          echo "Full report uploaded to Codecov (if enabled)"
+
+      - name: ☁️ Upload to Codecov
+        if: |
+          (github.event_name == 'workflow_dispatch' && inputs.upload_to_codecov) ||
+          github.event_name == 'push' ||
+          github.event_name == 'pull_request'
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: ${{ inputs.verbose || false }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: 📤 Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            lcov.info
+            target/llvm-cov/html/
+          retention-days: 30
+
+      - name: ✅ Coverage complete
+        run: |
+          echo "## ✅ Coverage Report Complete"
+          echo ""
+          echo "- **LCOV file**: lcov.info"
+          echo "- **HTML report**: target/llvm-cov/html/"
+          echo "- **Uploaded to Codecov**: ${{ (github.event_name == 'workflow_dispatch' && inputs.upload_to_codecov) || github.event_name == 'push' || github.event_name == 'pull_request' }}"
+          echo ""
+          echo "View on Codecov: https://codecov.io/gh/${{ github.repository }}"
+
+  # 可选: 生成详细的HTML报告
+  coverage-html:
+    name: 📄 Generate HTML Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v5
+
+      - name: 🦀 Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: 📦 Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-coverage-html-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-html-
+
+      - name: 🔧 Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: 📊 Generate HTML coverage report
+        run: cargo llvm-cov --all-features --workspace --html
+
+      - name: 📤 Upload HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-report
+          path: target/llvm-cov/html/
+          retention-days: 30
+
+      - name: 🔗 Coverage report ready
+        run: |
+          echo "## 📄 HTML Coverage Report Generated"
+          echo ""
+          echo "Download the artifact 'coverage-html-report' to view locally."
+          echo "Open index.html in your browser."
+
+  # 生成摘要评论(仅PR)
+  coverage-comment:
+    name: 💬 Post Coverage Comment
+    runs-on: ubuntu-latest
+    needs: coverage
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v5
+
+      - name: 🦀 Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: 🔧 Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: 📊 Generate coverage summary
+        run: |
+          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+          # Extract coverage percentage
+          COVERAGE=$(cargo llvm-cov report --summary-only | grep -oP 'TOTAL\s+\K[\d.]+(?=%)')
+
+          echo "coverage_percent=$COVERAGE" >> $GITHUB_ENV
+
+      - name: 💬 Create coverage comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const coverage = process.env.coverage_percent;
+            const emoji = coverage >= 80 ? '🎉' : coverage >= 60 ? '✅' : '⚠️';
+
+            const comment = `## ${emoji} Code Coverage Report
+
+            **Total Coverage**: ${coverage}%
+
+            ${coverage >= 80 ? '🎉 Excellent coverage!' : coverage >= 60 ? '✅ Good coverage' : '⚠️ Coverage could be improved'}
+
+            [View detailed report on Codecov](https://codecov.io/gh/${{ github.repository }}/pull/${{ github.event.pull_request.number }})
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
