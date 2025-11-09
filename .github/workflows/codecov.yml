@@ -74,13 +74,14 @@ jobs:
             cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
           fi
 
-      - name: 📊 Display coverage summary
-        run: |
           echo "## 📈 Code Coverage Summary"
           echo ""
-          cargo llvm-cov report --summary-only
+          echo "✅ Coverage report generated successfully"
+          echo "📄 Report saved to: lcov.info"
           echo ""
-          echo "Full report uploaded to Codecov (if enabled)"
+          if [ -f "lcov.info" ]; then
+            echo "📊 Coverage file size: $(ls -lh lcov.info | awk '{print $5}')"
+          fi
 
       - name: ☁️ Upload to Codecov
         if: |
@@ -184,10 +185,14 @@ jobs:
 
       - name: 📊 Generate coverage summary
         run: |
-          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+          # Generate coverage with text output to extract percentage
+          SUMMARY=$(cargo llvm-cov --all-features --workspace 2>&1 | tee coverage_summary.txt)
 
-          # Extract coverage percentage
-          COVERAGE=$(cargo llvm-cov report --summary-only | grep -oP 'TOTAL\s+\K[\d.]+(?=%)')
+          # Generate lcov file
+          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info --no-clean
+
+          # Extract coverage percentage from summary
+          COVERAGE=$(cat coverage_summary.txt | grep -oP 'TOTAL.*?\K[\d.]+(?=%)' || echo "0")
 
           echo "coverage_percent=$COVERAGE" >> $GITHUB_ENV
 
