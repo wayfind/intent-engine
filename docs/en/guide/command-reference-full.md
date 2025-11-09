@@ -1162,7 +1162,7 @@ intent-engine task pick-next --format json
 # 4. Start processing recommended task
 intent-engine task start 1
 echo "Cause: Did not check for null return value" | intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done
+intent-engine task done  # Complete current focused task
 
 # 5. Get next recommendation
 intent-engine task pick-next --format json
@@ -1304,7 +1304,7 @@ veobd/
 1. **Start task**: Use `task start <ID> --with-events` to get context
 2. **Discover sub-problem**: Use `task spawn-subtask --name "sub-problem"` to create and switch
 3. **Record key information**: Use `event add` to record decisions, blockers and milestones
-4. **Complete task**: Use `task done <ID>` to mark complete (automatically checks subtasks)
+4. **Complete task**: Use `task done` to mark complete (automatically checks subtasks)
 
 #### Batch Problem Processing Workflow 🆕
 1. **Discover problems**: Batch create todo tasks

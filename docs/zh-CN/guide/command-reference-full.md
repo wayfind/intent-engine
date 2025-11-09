@@ -730,7 +730,7 @@ intent-engine task start 1
 intent-engine task spawn-subtask --name "子任务 A"
 intent-engine task spawn-subtask --name "子任务 B"
 intent-engine task switch 2  # 切回子任务 A
-intent-engine task done 2
+intent-engine task done  # 完成当前焦点任务（子任务 A）
 intent-engine task switch 3  # 切到子任务 B
 
 # 查看切换后的上下文
@@ -1228,18 +1228,18 @@ intent-engine task spawn-subtask --name "集成第三方支付 API"
 intent-engine task spawn-subtask --name "配置支付密钥和回调地址"
 # 当前任务自动切换到任务 3
 
-# 4. 完成最深层的子任务
+# 4. 完成最深层的子任务（子任务 3 当前是焦点）
 echo "已在后台配置 Stripe API 密钥" | intent-engine event add --task-id 3 --type milestone --data-stdin
-intent-engine task done 3
+intent-engine task done
 
 # 5. 切回父任务继续
 intent-engine task switch 2
 echo "API 集成完成，测试通过" | intent-engine event add --task-id 2 --type milestone --data-stdin
-intent-engine task done 2
+intent-engine task done
 
 # 6. 完成根任务
 intent-engine task switch 1
-intent-engine task done 1
+intent-engine task done
 
 # 7. 查看任务层级
 intent-engine task find --parent null  # 根任务
@@ -1341,7 +1341,7 @@ veobd/
 1. **开始任务**: 使用 `task start <ID> --with-events` 获取上下文
 2. **发现子问题**: 使用 `task spawn-subtask --name "子问题"` 创建并切换
 3. **记录关键信息**: 使用 `event add` 记录决策、障碍和里程碑
-4. **完成任务**: 使用 `task done <ID>` 标记完成（自动检查子任务）
+4. **完成任务**: 使用 `task done` 标记完成（自动检查子任务）
 
 #### 批量问题处理工作流 🆕
 1. **发现问题**: 批量创建 todo 任务
