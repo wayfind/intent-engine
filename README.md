@@ -1,4 +1,9 @@
 # Intent-Engine
+**为人机协作，编织清晰的思路**
+
+> 它将您和 AI 伙伴短暂的、易失的协作瞬间，沉淀为项目可追溯、可恢复的永恒智慧
+> 
+> 它不是又一个待办事项列表，而是连接人类战略思维与 AI 执行能力的桥梁——帮助回答"我们要去哪里"和"为什么要去那里"这两个关键问题。
 
 **中文 | [English](README.en.md)**
 
@@ -7,10 +12,6 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
 [![Documentation](https://docs.rs/intent-engine/badge.svg)](https://docs.rs/intent-engine)
-
-**Intent-Engine 是一个极简的、项目专属的战略意图追踪系统，专为人机协作设计。**
-
-它不是又一个待办事项列表，而是连接人类战略思维与 AI 执行能力的桥梁——帮助回答"我们要去哪里"和"为什么要去那里"这两个关键问题。
 
 ---
 
