@@ -169,8 +169,11 @@ intent-engine report --since 1d --summary-only
 
 ## 📚 文档导航
 
-### 🚀 新用户入门
+### 🎯 核心文档
+- [**INTERFACE_SPEC.md**](docs/INTERFACE_SPEC.md) - **接口规范** (权威定义)
 - [**QUICKSTART.md**](QUICKSTART.md) - 5 分钟快速上手
+
+### 🚀 新用户入门
 - [**The Intent-Engine Way**](docs/zh-CN/guide/the-intent-engine-way.md) - 设计哲学和协作模式（强烈推荐）
 - [**Installation Guide**](docs/zh-CN/guide/installation.md) - 详细安装指南和故障排除
 
@@ -184,6 +187,7 @@ intent-engine report --since 1d --summary-only
 - [**Task Workflow Analysis**](docs/zh-CN/technical/task-workflow-analysis.md) - Token 优化策略详解
 - [**Performance Report**](docs/zh-CN/technical/performance.md) - 性能基准测试
 - [**Security Testing**](docs/zh-CN/technical/security.md) - 安全性测试报告
+- [**MCP Tools Sync**](docs/zh-CN/technical/mcp-tools-sync.md) - MCP 工具同步系统
 
 ### 👥 贡献者
 - [**Contributing Guide**](docs/zh-CN/contributing/contributing.md) - 如何贡献代码
