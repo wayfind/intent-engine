@@ -2,7 +2,7 @@
 
 **Version**: 0.1.9
 **Last Updated**: 2024-11-09
-**Status**: Stable
+**Status**: Experimental (Pre-1.0)
 
 ---
 
@@ -27,23 +27,30 @@ Task
 ├── id: Integer (auto-increment)
 ├── name: String (required)
 ├── spec: String (markdown, optional)
-├── status: Enum { todo, doing, done }
-├── complexity: Enum { trivial, simple, moderate, complex, epic }
-├── priority: Enum { low, medium, high, urgent }
-├── parent_id: Integer (optional)
-├── created_at: Timestamp
-└── updated_at: Timestamp
+├── status: String { "todo", "doing", "done" }
+├── complexity: Integer (optional, nullable)
+├── priority: Integer (optional, nullable, 1=highest)
+├── parent_id: Integer (optional, nullable)
+├── first_todo_at: Timestamp (when first set to todo)
+├── first_doing_at: Timestamp (when first set to doing)
+└── first_done_at: Timestamp (when first set to done)
 
 Event
 ├── id: Integer (auto-increment)
 ├── task_id: Integer (required)
-├── event_type: Enum { decision, blocker, milestone, note }
-├── data: String (markdown)
-└── created_at: Timestamp
+├── timestamp: Timestamp
+├── log_type: String { "decision", "blocker", "milestone", "note" }
+└── discussion_data: String (markdown)
 
 Workspace State
 └── current_task_id: Integer (nullable)
 ```
+
+**Key Design Principles**:
+- **Focus-Driven**: Most commands operate on `current_task_id` (the "focused" task)
+- **Priority Model**: Lower number = higher priority (1 is highest, optional field)
+- **Lifecycle Timestamps**: Track first occurrence of each status for analysis
+- **Atomic Operations**: Commands like `start`, `switch`, `done` combine multiple steps
 
 ### 1.2 Status Transitions
 
@@ -53,10 +60,10 @@ todo → doing → done
   └──────┘
 ```
 
-**Rules**:
-- `start`: `todo` → `doing`
-- `done`: `doing` → `done` (only if all children are `done`)
-- `switch`: `doing` → `todo` + new task → `doing`
+**Transition Rules**:
+- `start <ID>`: Set task to `doing` + set as current
+- `switch <ID>`: (Previous doing → todo) + Set new task to `doing` + set as current
+- `done`: Current task → `done` + clear current (requires all children done)
 
 ---
 
@@ -71,19 +78,14 @@ todo → doing → done
 ```bash
 intent-engine task add \
   --name <NAME> \
-  [--spec <SPEC> | --spec-stdin] \
-  [--parent-id <PARENT_ID>] \
-  [--complexity <COMPLEXITY>] \
-  [--priority <PRIORITY>]
+  [--spec-stdin] \
+  [--parent <PARENT_ID>]
 ```
 
 **Parameters**:
-- `name` (required): Task name
-- `spec` (optional): Detailed specification in markdown
-- `spec-stdin` (optional): Read spec from stdin
-- `parent-id` (optional): Parent task ID for subtasks
-- `complexity` (optional): trivial | simple | moderate | complex | epic
-- `priority` (optional): low | medium | high | urgent
+- `--name <NAME>` (required): Task name
+- `--spec-stdin` (optional): Read spec from stdin
+- `--parent <PARENT_ID>` (optional): Parent task ID for subtasks
 
 **Output**: JSON
 ```json
@@ -91,7 +93,8 @@ intent-engine task add \
   "id": 42,
   "name": "Implement authentication",
   "status": "todo",
-  "created_at": "2024-11-09T10:00:00Z"
+  "parent_id": null,
+  "first_todo_at": "2024-11-09T10:00:00Z"
 }
 ```
 
@@ -111,11 +114,11 @@ intent-engine task start <TASK_ID> [--with-events]
 ```
 
 **Parameters**:
-- `task_id` (required): Task ID to start
-- `with-events` (optional): Include event history in output
+- `<TASK_ID>` (required): Task ID to start
+- `--with-events` (optional): Include event history in output
 
-**Behavior** (atomic):
-1. Set task status to `doing`
+**Atomic Behavior**:
+1. Set task status to `doing` (and set `first_doing_at` if first time)
 2. Set as current task in workspace
 3. Return full task context
 
@@ -126,39 +129,55 @@ intent-engine task start <TASK_ID> [--with-events]
     "id": 42,
     "name": "Implement authentication",
     "status": "doing",
-    "spec": "..."
+    "spec": "...",
+    "first_doing_at": "2024-11-09T10:05:00Z"
   },
-  "events": [...]  // if --with-events
+  "events_summary": {
+    "total_count": 3,
+    "recent_events": [...]
+  }
 }
 ```
 
 ---
 
 #### `task done`
-**Purpose**: Complete current task
+**Purpose**: Complete the current focused task
 
 **Signature**:
 ```bash
 intent-engine task done
 ```
 
-**Behavior** (atomic):
-1. Verify all subtasks are `done`
-2. Set current task status to `done`
-3. Clear current task in workspace
+**No Parameters** - This command is **strictly focus-driven** and operates only on `current_task_id`.
 
-**Validation**:
-- Fails if current task has incomplete subtasks
-- Fails if no current task
+**Prerequisites**:
+- A task must be set as current (via `task start` or `current --set`)
+- All subtasks must have status `done`
+
+**Atomic Behavior**:
+1. Verify all subtasks are `done` (fails if not)
+2. Set current task status to `done` (and set `first_done_at` if first time)
+3. Clear `current_task_id` in workspace
 
 **Output**: JSON
 ```json
 {
-  "id": 42,
-  "status": "done",
-  "completed_at": "2024-11-09T11:00:00Z"
+  "completed_task": {
+    "id": 42,
+    "name": "Implement authentication",
+    "status": "done",
+    "first_done_at": "2024-11-09T11:00:00Z"
+  },
+  "workspace_status": {
+    "current_task_id": null
+  }
 }
 ```
+
+**Error Cases**:
+- No current task: `"error": "No current task set"`
+- Incomplete subtasks: `"error": "Cannot complete task: has incomplete subtasks"`
 
 ---
 
@@ -169,49 +188,169 @@ intent-engine task done
 ```bash
 intent-engine task spawn-subtask \
   --name <NAME> \
-  [--spec <SPEC> | --spec-stdin]
+  [--spec-stdin]
 ```
 
-**Behavior** (atomic):
-1. Create subtask with `parent_id` = current task
-2. Switch to new subtask (set as current)
+**Parameters**:
+- `--name <NAME>` (required): Subtask name
+- `--spec-stdin` (optional): Read spec from stdin
 
-**Requirements**:
-- Must have a current task
-- Current task becomes parent
+**Prerequisites**:
+- Must have a current task set
+
+**Atomic Behavior**:
+1. Create subtask with `parent_id` = current task ID
+2. Switch to new subtask (set as current, mark as `doing`)
+
+**Output**: JSON
+```json
+{
+  "subtask": {
+    "id": 43,
+    "name": "Configure JWT secret",
+    "parent_id": 42,
+    "status": "doing"
+  },
+  "parent_task": {
+    "id": 42,
+    "name": "Implement authentication"
+  }
+}
+```
+
+---
+
+#### `task switch`
+**Purpose**: Switch focus to a different task
+
+**Signature**:
+```bash
+intent-engine task switch <TASK_ID>
+```
+
+**Parameters**:
+- `<TASK_ID>` (required): Task ID to switch to
+
+**Atomic Behavior**:
+1. If there's a current task in `doing` status, set it back to `todo`
+2. Set new task status to `doing` (and set `first_doing_at` if first time)
+3. Update `current_task_id` to new task
+
+**Output**: JSON
+```json
+{
+  "previous_task": {
+    "id": 42,
+    "status": "todo"
+  },
+  "current_task": {
+    "id": 43,
+    "name": "Configure JWT secret",
+    "status": "doing"
+  }
+}
+```
 
 ---
 
 #### `task pick-next`
-**Purpose**: Intelligently recommend next tasks
+**Purpose**: Intelligently recommend the next task to work on
 
 **Signature**:
 ```bash
-intent-engine task pick-next \
-  [--limit <N>] \
-  [--complexity <COMPLEXITY>] \
-  [--priority <PRIORITY>]
+intent-engine task pick-next [--format <FORMAT>]
 ```
 
-**Algorithm**:
-1. Filter tasks with `status = todo`
-2. Apply complexity/priority filters
-3. Sort by: priority DESC, complexity ASC
-4. Return top N tasks
+**Parameters**:
+- `--format <FORMAT>` (optional): Output format (`text` or `json`, default: `text`)
+
+**Algorithm** (Context-Aware, Depth-First):
+
+**Priority 1**: Subtasks of current focused task
+```
+IF current_task_id IS SET:
+  SELECT * FROM tasks
+  WHERE parent_id = current_task_id
+    AND status = 'todo'
+  ORDER BY priority ASC NULLS LAST, id ASC
+  LIMIT 1
+```
+
+**Priority 2**: Top-level tasks (if no focused subtasks)
+```
+IF Priority 1 returns empty:
+  SELECT * FROM tasks
+  WHERE parent_id IS NULL
+    AND status = 'todo'
+  ORDER BY priority ASC NULLS LAST, id ASC
+  LIMIT 1
+```
+
+**Output** (text format):
+```
+📋 Recommended next task:
+  #43: Configure JWT secret (priority: 1)
+  Parent: #42 Implement authentication
+
+🎯 Reason: Subtask of current focused task
+💡 To start: intent-engine task start 43
+```
+
+**Output** (json format):
+```json
+{
+  "recommended_task": {
+    "id": 43,
+    "name": "Configure JWT secret",
+    "priority": 1,
+    "parent_id": 42
+  },
+  "reason": "subtask_of_current",
+  "context": {
+    "current_task_id": 42,
+    "strategy": "depth_first"
+  }
+}
+```
+
+**Empty State Response**:
+```json
+{
+  "recommended_task": null,
+  "reason": "no_todo_tasks",
+  "suggestion": "All tasks are done! Use 'task add' to create new tasks."
+}
+```
 
 ---
 
 #### `task find`
-**Purpose**: Search tasks with filters
+**Purpose**: Filter tasks by structured metadata
 
 **Signature**:
 ```bash
 intent-engine task find \
   [--status <STATUS>] \
-  [--complexity <COMPLEXITY>] \
-  [--priority <PRIORITY>] \
-  [--parent-id <PARENT_ID>] \
-  [--name-pattern <PATTERN>]
+  [--parent <PARENT_ID>]
+```
+
+**Parameters**:
+- `--status <STATUS>` (optional): Filter by status (`todo`, `doing`, `done`)
+- `--parent <PARENT_ID>` (optional): Filter by parent ID (use `"null"` for root tasks)
+
+**Design Note**: `task find` handles **structured filtering only**. For text search, use `task search`.
+
+**Output**: JSON (array of tasks)
+```json
+[
+  {
+    "id": 42,
+    "name": "Implement authentication",
+    "status": "doing",
+    "parent_id": null
+  },
+  ...
+]
 ```
 
 ---
@@ -226,28 +365,92 @@ intent-engine task search <QUERY> \
   [--snippet]
 ```
 
-**Features**:
-- Search in task name + spec
-- Supports FTS5 syntax (AND, OR, NEAR, etc.)
-- `--snippet`: Return highlighted matches with `**`
+**Parameters**:
+- `<QUERY>` (required): FTS5 search query
+- `--limit <N>` (optional): Maximum results to return
+- `--snippet` (optional): Return highlighted matches with `**`
+
+**Search Scope**: Searches in both `name` and `spec` fields.
+
+**FTS5 Syntax Support**:
+- AND: `auth AND jwt`
+- OR: `auth OR oauth`
+- NEAR: `auth NEAR/5 token`
+- Phrases: `"user authentication"`
+
+**Output** (with `--snippet`):
+```json
+[
+  {
+    "task_id": 42,
+    "name": "Implement **authentication**",
+    "spec_snippet": "Use **JWT** with refresh tokens...",
+    "rank": 0.95
+  }
+]
+```
+
+---
+
+#### `task get`
+**Purpose**: Get task by ID
+
+**Signature**:
+```bash
+intent-engine task get <TASK_ID>
+```
+
+**Output**: JSON (single task with full details)
+
+---
+
+#### `task update`
+**Purpose**: Update task properties
+
+**Signature**:
+```bash
+intent-engine task update <TASK_ID> \
+  [--name <NAME>] \
+  [--status <STATUS>] \
+  [--spec-stdin]
+```
 
 ---
 
 ### 2.2 Event Commands
 
 #### `event add`
-**Purpose**: Record event for current task
+**Purpose**: Record event for a task
 
 **Signature**:
 ```bash
 intent-engine event add \
   --type <TYPE> \
-  [--data <DATA> | --data-stdin]
+  [--task-id <TASK_ID>] \
+  [--data-stdin]
 ```
 
 **Parameters**:
-- `type` (required): decision | blocker | milestone | note
-- `data`: Event description in markdown
+- `--type <TYPE>` (required): Event type (`decision`, `blocker`, `milestone`, `note`)
+- `--task-id <TASK_ID>` (optional): Task ID to attach event to
+  - **If omitted**: Uses current focused task
+  - **If current task not set**: Returns error
+- `--data-stdin` (optional): Read event data from stdin
+
+**Design Note**: This command supports **flexible event recording**:
+- **During active work**: Omit `--task-id` to record events for current task
+- **Cross-task insights**: Use `--task-id` to record events for any task (e.g., project retrospectives)
+
+**Output**: JSON
+```json
+{
+  "id": 123,
+  "task_id": 42,
+  "log_type": "decision",
+  "discussion_data": "Chose HS256 algorithm...",
+  "timestamp": "2024-11-09T10:30:00Z"
+}
+```
 
 ---
 
@@ -258,6 +461,8 @@ intent-engine event add \
 ```bash
 intent-engine event list <TASK_ID>
 ```
+
+**Output**: JSON (array of events)
 
 ---
 
@@ -275,16 +480,37 @@ intent-engine report \
 ```
 
 **Parameters**:
-- `since`: Duration (e.g., "7d", "2h", "30m")
-- `status`: Filter by status
-- `summary-only`: Return summary statistics only
+- `--since <DURATION>`: Time duration (e.g., `"7d"`, `"2h"`, `"30m"`)
+- `--status <STATUS>`: Filter by status
+- `--summary-only`: Return summary statistics only
+
+**Output**: JSON
+```json
+{
+  "summary": {
+    "total_tasks": 50,
+    "tasks_by_status": {
+      "todo": 20,
+      "doing": 5,
+      "done": 25
+    },
+    "total_events": 150,
+    "date_range": {
+      "from": "2024-11-02T00:00:00Z",
+      "to": "2024-11-09T11:00:00Z"
+    }
+  },
+  "tasks": [...],
+  "events": [...]
+}
+```
 
 ---
 
 ### 2.4 Workspace Commands
 
 #### `current`
-**Purpose**: Get/set current task
+**Purpose**: Get or set current task
 
 **Signature**:
 ```bash
@@ -293,6 +519,18 @@ intent-engine current
 
 # Set current task
 intent-engine current --set <TASK_ID>
+```
+
+**Output** (get):
+```json
+{
+  "current_task_id": 42,
+  "task": {
+    "id": 42,
+    "name": "Implement authentication",
+    "status": "doing"
+  }
+}
 ```
 
 ---
@@ -377,7 +615,7 @@ use intent_engine::{
 
 ```rust
 use intent_engine::project::ProjectContext;
-use intent_engine::tasks::{TaskManager, TaskStatus};
+use intent_engine::tasks::TaskManager;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -392,15 +630,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Implement authentication",
         Some("Use JWT..."),
         None,  // no parent
-        None,  // default complexity
-        None,  // default priority
     ).await?;
 
-    // Start task
+    // Start task (sets as current and doing)
     let started = task_mgr.start_task(task.id, true).await?;
 
-    // Complete task
-    task_mgr.complete_task(task.id).await?;
+    // Complete current task (focus-driven)
+    // Note: complete_task operates on current_task_id from workspace
+    task_mgr.complete_current_task().await?;
 
     Ok(())
 }
@@ -418,33 +655,44 @@ Full API documentation available at: https://docs.rs/intent-engine
 
 All CLI commands output structured JSON by default.
 
-**Standard Fields**:
+**Standard Success Format**:
 ```json
 {
-  "success": true,
-  "data": { ... },
-  "timestamp": "2024-11-09T10:00:00Z"
+  // Command-specific data
+  "id": 42,
+  "name": "Task name",
+  ...
 }
 ```
 
 **Error Format**:
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid task ID"
-  }
+  "error": "Descriptive error message",
+  "code": "ERROR_CODE"  // Optional
 }
 ```
 
-### 5.2 Format Flag
+### 5.2 Special Output Structures
 
-Future versions may support `--format` flag:
-- `json` (default)
-- `yaml`
-- `table`
-- `markdown`
+#### SearchResult (from `task search --snippet`)
+```json
+{
+  "task_id": 42,
+  "name": "Text with **highlighted** matches",
+  "spec_snippet": "Snippet with **highlighted** terms...",
+  "rank": 0.95
+}
+```
+
+#### PickNextResult (from `task pick-next`)
+```json
+{
+  "recommended_task": { ... },
+  "reason": "subtask_of_current" | "top_level_task" | "no_todo_tasks",
+  "context": { ... }
+}
+```
 
 ---
 
@@ -460,19 +708,32 @@ Intent-Engine follows [SemVer 2.0](https://semver.org/):
 
 ### 6.2 Stability Guarantees
 
-| Version | CLI Interface | MCP Interface | Rust API |
-|---------|--------------|---------------|----------|
-| 0.1.x   | Experimental | Experimental  | Experimental |
-| 1.0.x   | Stable       | Stable        | Stable |
+| Version | CLI Interface | MCP Interface | Rust API | Status |
+|---------|--------------|---------------|----------|--------|
+| 0.1.x   | Experimental | Experimental  | Experimental | Current |
+| 1.0.x   | Stable       | Stable        | Stable | Future |
 
 **Current Status (0.1.9)**: All interfaces are **experimental** and may change.
 
-### 6.3 Deprecation Policy
+**Experimental means**:
+- Interface may change without major version bump
+- Breaking changes documented in CHANGELOG
+- No long-term compatibility guarantee
+
+### 6.3 Deprecation Policy (Post-1.0)
 
 For stable versions (≥1.0):
 1. Deprecated features marked in documentation
 2. Warning messages shown for 2 minor versions
 3. Removal only in next major version
+
+Example:
+```
+1.0.0: Feature X works normally
+1.1.0: Feature X marked deprecated (warning shown)
+1.2.0: Feature X still works (warning shown)
+2.0.0: Feature X removed
+```
 
 ---
 
@@ -487,13 +748,15 @@ cargo test --test cli_spec_test
 # Verify MCP tools match spec
 cargo test --test mcp_tools_sync_test
 
-# Verify Rust API matches spec
-cargo test --doc
+# Verify interface spec is up-to-date
+cargo test --test interface_spec_test
 ```
 
-### 7.2 Contract Testing
+### 7.2 Automated Sync
 
-Future: Add contract tests to ensure interface stability across versions.
+- **Version sync**: `scripts/sync-mcp-tools.sh` ensures version consistency
+- **Tool list validation**: Tests verify JSON schema matches code implementation
+- **CI enforcement**: All tests run on every PR
 
 ---
 
@@ -505,9 +768,9 @@ All breaking changes documented in `CHANGELOG.md` with migration guide.
 
 ### 8.2 Version Matrix
 
-| Intent-Engine Version | CLI Version | MCP Schema Version | Min Rust API |
-|----------------------|-------------|-------------------|--------------|
-| 0.1.9                | 0.1.9       | 0.1.9             | 0.1.9        |
+| Intent-Engine | CLI Version | MCP Schema | Min Rust API |
+|--------------|-------------|------------|--------------|
+| 0.1.9        | 0.1.9       | 0.1.9      | 0.1.9        |
 
 ---
 
@@ -526,15 +789,17 @@ All breaking changes documented in `CHANGELOG.md` with migration guide.
 This specification is maintained as the **single source of truth** for Intent-Engine interfaces.
 
 **Update Process**:
-1. Update this spec first for any interface changes
-2. Update implementation to match spec
-3. Update `mcp-server.json` if MCP tools changed
-4. Run `./scripts/sync-mcp-tools.sh`
-5. Run tests: `cargo test --test mcp_tools_sync_test`
+1. **Spec First**: Update this document for any interface changes
+2. **Implementation**: Update code to match spec
+3. **MCP Sync**: Update `mcp-server.json` if tools changed
+4. **Auto-sync**: Run `./scripts/sync-mcp-tools.sh` for version
+5. **Validate**: Run tests (`cargo test --test mcp_tools_sync_test --test interface_spec_test`)
+6. **Document**: Update CHANGELOG.md
 
 **Automated Sync**:
-- Version number synced by `scripts/sync-mcp-tools.sh`
+- Version synced by `scripts/sync-mcp-tools.sh`
 - Tool list validated by `tests/mcp_tools_sync_test.rs`
+- Spec consistency verified by `tests/interface_spec_test.rs`
 
 ---
 
