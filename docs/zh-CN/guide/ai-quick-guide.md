@@ -45,7 +45,7 @@ echo "Decision/blocker/milestone..." | \
 
 ### Complete (Enforces Hierarchy)
 ```bash
-intent-engine task done  # Completes current task; fails if subtasks incomplete
+intent-engine task done  # Completes current focused task, fails if subtasks incomplete
 ```
 
 ### Get Summary (Token-Efficient)
@@ -70,7 +70,7 @@ echo "Chose Passport.js for OAuth strategies" | \
 # 4. Hit sub-problem? Create & auto-switch
 intent-engine task spawn-subtask --name "Configure Google OAuth app"
 
-# 5. Complete child (current task), switch back to parent
+# 5. Complete child (child is now focused after spawn-subtask), switch back to parent
 intent-engine task done
 intent-engine task switch 1
 

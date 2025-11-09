@@ -147,18 +147,20 @@ pub enum TaskCommands {
     /// - Update the task status to done
     /// - Clear the current_task_id
     ///
-    /// Prerequisites: A task must be set as current (via `current --set <ID>`)
+    ///   Prerequisites: A task must be set as current (via `current --set <ID>`)
     Done,
 
-    /// Intelligently pick tasks from todo and move to doing
+    /// Intelligently recommend the next task to work on
+    ///
+    /// This command uses a context-aware priority model to recommend a single task:
+    /// 1. First priority: Subtasks of the current focused task (depth-first)
+    /// 2. Second priority: Top-level tasks (breadth-first)
+    ///
+    /// The command is non-interactive and does not modify task status.
     PickNext {
-        /// Maximum number of tasks to pick
-        #[arg(long, default_value = "5")]
-        max_count: usize,
-
-        /// Maximum total tasks allowed in doing status
-        #[arg(long, default_value = "5")]
-        capacity: usize,
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Create a subtask under current task and switch to it
