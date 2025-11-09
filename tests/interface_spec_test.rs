@@ -14,8 +14,8 @@ fn test_spec_version_matches_cargo() {
         .expect("Failed to extract version from Cargo.toml");
 
     // Read INTERFACE_SPEC.md
-    let spec = fs::read_to_string("docs/INTERFACE_SPEC.md")
-        .expect("Failed to read INTERFACE_SPEC.md");
+    let spec =
+        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
 
     // Extract version from spec (first occurrence of "**Version**: X.Y.Z")
     let spec_version = spec
@@ -36,7 +36,8 @@ fn test_spec_version_matches_cargo() {
 fn test_spec_lists_all_mcp_tools() {
     // Read mcp-server.json
     let mcp_json = fs::read_to_string("mcp-server.json").expect("Failed to read mcp-server.json");
-    let mcp_config: Value = serde_json::from_str(&mcp_json).expect("Failed to parse mcp-server.json");
+    let mcp_config: Value =
+        serde_json::from_str(&mcp_json).expect("Failed to parse mcp-server.json");
 
     // Extract tool names
     let tools: Vec<String> = mcp_config["tools"]
@@ -52,8 +53,8 @@ fn test_spec_lists_all_mcp_tools() {
         .collect();
 
     // Read INTERFACE_SPEC.md
-    let spec = fs::read_to_string("docs/INTERFACE_SPEC.md")
-        .expect("Failed to read INTERFACE_SPEC.md");
+    let spec =
+        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
 
     // Check that each tool is documented in the spec
     for tool in &tools {
@@ -69,8 +70,8 @@ fn test_spec_lists_all_mcp_tools() {
 
 #[test]
 fn test_spec_documents_cli_commands() {
-    let spec = fs::read_to_string("docs/INTERFACE_SPEC.md")
-        .expect("Failed to read INTERFACE_SPEC.md");
+    let spec =
+        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
 
     // Core CLI commands that must be documented
     let required_commands = vec![
@@ -102,7 +103,15 @@ fn test_spec_documents_cli_commands() {
 fn test_cli_help_matches_spec() {
     // Test that `task add --help` contains key parameters
     let output = Command::new("cargo")
-        .args(&["run", "--bin", "intent-engine", "--", "task", "add", "--help"])
+        .args(&[
+            "run",
+            "--bin",
+            "intent-engine",
+            "--",
+            "task",
+            "add",
+            "--help",
+        ])
         .output()
         .expect("Failed to run task add --help");
 
@@ -127,8 +136,8 @@ fn test_cli_help_matches_spec() {
 
 #[test]
 fn test_spec_data_model_matches_schema() {
-    let spec = fs::read_to_string("docs/INTERFACE_SPEC.md")
-        .expect("Failed to read INTERFACE_SPEC.md");
+    let spec =
+        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
 
     // Check that data model section exists and contains key fields
     assert!(
@@ -138,8 +147,16 @@ fn test_spec_data_model_matches_schema() {
 
     // Core Task fields (based on actual database schema)
     let task_fields = vec![
-        "id:", "name:", "spec:", "status:", "complexity:", "priority:",
-        "parent_id:", "first_todo_at:", "first_doing_at:", "first_done_at:",
+        "id:",
+        "name:",
+        "spec:",
+        "status:",
+        "complexity:",
+        "priority:",
+        "parent_id:",
+        "first_todo_at:",
+        "first_doing_at:",
+        "first_done_at:",
     ];
 
     for field in task_fields {
@@ -151,7 +168,13 @@ fn test_spec_data_model_matches_schema() {
     }
 
     // Core Event fields (based on actual database schema)
-    let event_fields = vec!["id:", "task_id:", "timestamp:", "log_type:", "discussion_data:"];
+    let event_fields = vec![
+        "id:",
+        "task_id:",
+        "timestamp:",
+        "log_type:",
+        "discussion_data:",
+    ];
 
     for field in event_fields {
         assert!(
@@ -166,8 +189,8 @@ fn test_spec_data_model_matches_schema() {
 
 #[test]
 fn test_spec_has_version_guarantees() {
-    let spec = fs::read_to_string("docs/INTERFACE_SPEC.md")
-        .expect("Failed to read INTERFACE_SPEC.md");
+    let spec =
+        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
 
     // Check that spec includes stability guarantees
     assert!(

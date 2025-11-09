@@ -1,7 +1,7 @@
 use crate::db::models::{
-    CurrentTaskInfo, DoneTaskResponse, Event, EventsSummary, NextStepSuggestion,
-    ParentTaskInfo, PickNextResponse, PreviousTaskInfo, SpawnSubtaskResponse, SubtaskInfo,
-    SwitchTaskResponse, Task, TaskSearchResult, TaskWithEvents, WorkspaceStatus,
+    CurrentTaskInfo, DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, ParentTaskInfo,
+    PickNextResponse, PreviousTaskInfo, SpawnSubtaskResponse, SubtaskInfo, SwitchTaskResponse,
+    Task, TaskSearchResult, TaskWithEvents, WorkspaceStatus,
 };
 use crate::error::{IntentError, Result};
 use chrono::Utc;
@@ -635,7 +635,11 @@ impl<'a> TaskManager<'a> {
     /// Create a subtask under the current task and switch to it (atomic operation)
     /// Returns error if there is no current task
     /// Returns response with subtask info and parent task info
-    pub async fn spawn_subtask(&self, name: &str, spec: Option<&str>) -> Result<SpawnSubtaskResponse> {
+    pub async fn spawn_subtask(
+        &self,
+        name: &str,
+        spec: Option<&str>,
+    ) -> Result<SpawnSubtaskResponse> {
         // Get current task
         let current_task_id: Option<String> =
             sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
@@ -647,11 +651,10 @@ impl<'a> TaskManager<'a> {
         )?;
 
         // Get parent task info
-        let parent_name: String =
-            sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
-                .bind(parent_id)
-                .fetch_one(self.pool)
-                .await?;
+        let parent_name: String = sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
+            .bind(parent_id)
+            .fetch_one(self.pool)
+            .await?;
 
         // Create the subtask
         let subtask = self.add_task(name, spec, Some(parent_id)).await?;
@@ -1803,11 +1806,13 @@ mod tests {
             .unwrap();
 
         // Set subtask as current
-        sqlx::query("INSERT OR REPLACE INTO workspace_state (key, value) VALUES ('current_task_id', ?)")
-            .bind(subtask.id.to_string())
-            .execute(ctx.pool())
-            .await
-            .unwrap();
+        sqlx::query(
+            "INSERT OR REPLACE INTO workspace_state (key, value) VALUES ('current_task_id', ?)",
+        )
+        .bind(subtask.id.to_string())
+        .execute(ctx.pool())
+        .await
+        .unwrap();
 
         // Set parent to doing (not todo)
         sqlx::query("UPDATE tasks SET status = 'doing' WHERE id = ?")

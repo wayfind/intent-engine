@@ -17,7 +17,8 @@ fn test_mcp_version_matches_cargo_toml() {
 
     // Read mcp-server.json version
     let mcp_json = fs::read_to_string("mcp-server.json").expect("Failed to read mcp-server.json");
-    let mcp_config: Value = serde_json::from_str(&mcp_json).expect("Failed to parse mcp-server.json");
+    let mcp_config: Value =
+        serde_json::from_str(&mcp_json).expect("Failed to parse mcp-server.json");
     let mcp_version = mcp_config["version"]
         .as_str()
         .expect("Failed to extract version from mcp-server.json");
@@ -33,7 +34,8 @@ fn test_mcp_version_matches_cargo_toml() {
 fn test_mcp_tools_match_handlers() {
     // Read mcp-server.json
     let mcp_json = fs::read_to_string("mcp-server.json").expect("Failed to read mcp-server.json");
-    let mcp_config: Value = serde_json::from_str(&mcp_json).expect("Failed to parse mcp-server.json");
+    let mcp_config: Value =
+        serde_json::from_str(&mcp_json).expect("Failed to parse mcp-server.json");
 
     // Extract tool names from mcp-server.json
     let json_tools: HashSet<String> = mcp_config["tools"]
@@ -91,7 +93,8 @@ fn test_mcp_tools_match_handlers() {
 #[test]
 fn test_mcp_tools_have_required_fields() {
     let mcp_json = fs::read_to_string("mcp-server.json").expect("Failed to read mcp-server.json");
-    let mcp_config: Value = serde_json::from_str(&mcp_json).expect("Failed to parse mcp-server.json");
+    let mcp_config: Value =
+        serde_json::from_str(&mcp_json).expect("Failed to parse mcp-server.json");
 
     let tools = mcp_config["tools"]
         .as_array()
