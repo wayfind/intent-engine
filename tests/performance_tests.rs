@@ -296,15 +296,15 @@ async fn test_report_generation_performance() {
 
         // Update status for some tasks
         match i % 4 {
-            0 => {} // keep as todo
+            0 => {}, // keep as todo
             1 => {
                 task_mgr.start_task(task.id, false).await.unwrap();
-            }
+            },
             2 => {
                 task_mgr.start_task(task.id, false).await.unwrap();
                 task_mgr.done_task().await.unwrap();
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 

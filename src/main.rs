@@ -57,7 +57,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let task = task_mgr.add_task(&name, spec.as_deref(), parent).await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
         TaskCommands::Get { id, with_events } => {
             let ctx = ProjectContext::load().await?;
@@ -70,7 +70,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                 let task = task_mgr.get_task(id).await?;
                 println!("{}", serde_json::to_string_pretty(&task)?);
             }
-        }
+        },
 
         TaskCommands::Update {
             id,
@@ -103,7 +103,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                 )
                 .await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
         TaskCommands::Del { id } => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -117,7 +117,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                     "message": format!("Task {} deleted", id)
                 }))?
             );
-        }
+        },
 
         TaskCommands::Find { status, parent } => {
             let ctx = ProjectContext::load().await?;
@@ -133,7 +133,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let tasks = task_mgr.find_tasks(status.as_deref(), parent_opt).await?;
             println!("{}", serde_json::to_string_pretty(&tasks)?);
-        }
+        },
 
         TaskCommands::Start { id, with_events } => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -141,7 +141,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let task = task_mgr.start_task(id, with_events).await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
         TaskCommands::Done => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -149,7 +149,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let task = task_mgr.done_task().await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
         TaskCommands::PickNext { format } => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -161,18 +161,18 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             match format.as_str() {
                 "json" => {
                     println!("{}", serde_json::to_string_pretty(&response)?);
-                }
+                },
                 _ => {
                     // Default to text format
                     println!("{}", response.format_as_text());
-                }
+                },
             }
 
             // Exit with code 1 if no recommendation found
             if response.suggestion_type == "NONE" {
                 std::process::exit(1);
             }
-        }
+        },
 
         TaskCommands::SpawnSubtask { name, spec_stdin } => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -186,7 +186,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let subtask = task_mgr.spawn_subtask(&name, spec.as_deref()).await?;
             println!("{}", serde_json::to_string_pretty(&subtask)?);
-        }
+        },
 
         TaskCommands::Switch { id } => {
             let ctx = ProjectContext::load_or_init().await?;
@@ -194,7 +194,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let task = task_mgr.switch_to_task(id).await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
-        }
+        },
 
         TaskCommands::Search { query } => {
             let ctx = ProjectContext::load().await?;
@@ -202,7 +202,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let results = task_mgr.search_tasks(&query).await?;
             println!("{}", serde_json::to_string_pretty(&results)?);
-        }
+        },
     }
 
     Ok(())
@@ -285,7 +285,7 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
                 .add_event(target_task_id, &log_type, &data)
                 .await?;
             println!("{}", serde_json::to_string_pretty(&event)?);
-        }
+        },
 
         EventCommands::List { task_id, limit } => {
             let ctx = ProjectContext::load().await?;
@@ -293,7 +293,7 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
 
             let events = event_mgr.list_events(task_id, limit).await?;
             println!("{}", serde_json::to_string_pretty(&events)?);
-        }
+        },
     }
 
     Ok(())
@@ -330,7 +330,7 @@ async fn handle_doctor_command() -> Result<()> {
                 "status": "✓ PASS",
                 "details": format!("SQLite version: {}", version)
             }));
-        }
+        },
         Ok(None) | Err(_) => {
             all_passed = false;
             checks.push(json!({
@@ -338,7 +338,7 @@ async fn handle_doctor_command() -> Result<()> {
                 "status": "✗ FAIL",
                 "details": "Unable to query SQLite version"
             }));
-        }
+        },
     }
 
     // Check database initialization
@@ -356,7 +356,7 @@ async fn handle_doctor_command() -> Result<()> {
                         "status": "✓ PASS",
                         "details": format!("Connected to database, {} tasks found", count)
                     }));
-                }
+                },
                 Err(e) => {
                     all_passed = false;
                     checks.push(json!({
@@ -364,9 +364,9 @@ async fn handle_doctor_command() -> Result<()> {
                         "status": "✗ FAIL",
                         "details": format!("Database query failed: {}", e)
                     }));
-                }
+                },
             }
-        }
+        },
         Err(e) => {
             all_passed = false;
             checks.push(json!({
@@ -374,7 +374,7 @@ async fn handle_doctor_command() -> Result<()> {
                 "status": "✗ FAIL",
                 "details": format!("Failed to initialize database: {}", e)
             }));
-        }
+        },
     }
 
     // Check intent-engine version

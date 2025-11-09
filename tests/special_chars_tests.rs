@@ -236,11 +236,11 @@ async fn test_null_bytes_rejected() {
         Ok(task) => {
             // If it succeeded, nulls should be handled somehow
             assert!(!task.name.is_empty());
-        }
+        },
         Err(_) => {
             // Or it should fail gracefully
             // This is acceptable behavior
-        }
+        },
     }
 }
 
