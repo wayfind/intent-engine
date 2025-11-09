@@ -166,8 +166,11 @@ intent-engine report --since 1d --summary-only
 
 ## 📚 Documentation Navigation
 
-### 🚀 Getting Started
+### 🎯 Core Documents
+- [**INTERFACE_SPEC.md**](docs/INTERFACE_SPEC.md) - **Interface Specification** (Authoritative)
 - [**QUICKSTART.md**](QUICKSTART.en.md) - 5-minute quick start
+
+### 🚀 Getting Started
 - [**The Intent-Engine Way**](docs/en/guide/the-intent-engine-way.md) - Design philosophy and collaboration patterns (highly recommended)
 - [**Installation Guide**](docs/en/guide/installation.md) - Detailed installation guide and troubleshooting
 
@@ -181,6 +184,7 @@ intent-engine report --since 1d --summary-only
 - [**Task Workflow Analysis**](docs/en/technical/task-workflow-analysis.md) - Token optimization strategy explained
 - [**Performance Report**](docs/en/technical/performance.md) - Performance benchmarks
 - [**Security Testing**](docs/en/technical/security.md) - Security test reports
+- [**MCP Tools Sync**](docs/en/technical/mcp-tools-sync.md) - MCP tools synchronization system
 
 ### 👥 Contributors
 - [**Contributing Guide**](docs/en/contributing/contributing.md) - How to contribute code
