@@ -6,6 +6,7 @@ use std::path::PathBuf;
 const INTENT_DIR: &str = ".intent-engine";
 const DB_FILE: &str = "project.db";
 
+#[derive(Debug)]
 pub struct ProjectContext {
     pub root: PathBuf,
     pub db_path: PathBuf,
@@ -76,5 +77,29 @@ impl ProjectContext {
             Err(IntentError::NotAProject) => Self::initialize_project().await,
             Err(e) => Err(e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Note: Tests that modify the current directory are intentionally limited
+    // because they can interfere with other tests running in parallel.
+    // These functionalities are thoroughly tested by integration tests.
+
+    #[test]
+    fn test_constants() {
+        assert_eq!(INTENT_DIR, ".intent-engine");
+        assert_eq!(DB_FILE, "project.db");
+    }
+
+    #[test]
+    fn test_project_context_debug() {
+        // Just verify that ProjectContext implements Debug
+        // We can't easily create one without side effects in a unit test
+        let _type_check = |ctx: ProjectContext| {
+            let _ = format!("{:?}", ctx);
+        };
     }
 }
