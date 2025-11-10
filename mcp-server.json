@@ -1,6 +1,6 @@
 {
   "name": "intent-engine",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Intent-Engine MCP Server - Manage strategic intent and task workflow for human-AI collaboration",
   "tools": [
     {
@@ -22,7 +22,9 @@
             "description": "Parent task ID for creating subtasks (optional)"
           }
         },
-        "required": ["name"]
+        "required": [
+          "name"
+        ]
       }
     },
     {
@@ -41,7 +43,9 @@
             "default": true
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -78,7 +82,9 @@
             "description": "Subtask specification (optional)"
           }
         },
-        "required": ["name"]
+        "required": [
+          "name"
+        ]
       }
     },
     {
@@ -92,7 +98,9 @@
             "description": "Task ID to switch to"
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -106,7 +114,9 @@
             "description": "Task ID to complete"
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -129,7 +139,11 @@
           },
           "status": {
             "type": "string",
-            "enum": ["todo", "doing", "done"],
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
             "description": "New status (optional, prefer atomic commands)"
           },
           "complexity": {
@@ -147,7 +161,9 @@
             "description": "New parent task ID (optional)"
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -158,7 +174,11 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["todo", "doing", "done"],
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
             "description": "Filter by status (optional)"
           },
           "parent": {
@@ -184,7 +204,9 @@
             "default": false
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -199,7 +221,13 @@
           },
           "event_type": {
             "type": "string",
-            "enum": ["decision", "blocker", "milestone", "discussion", "note"],
+            "enum": [
+              "decision",
+              "blocker",
+              "milestone",
+              "discussion",
+              "note"
+            ],
             "description": "Event type"
           },
           "data": {
@@ -207,7 +235,11 @@
             "description": "Event content in markdown format"
           }
         },
-        "required": ["task_id", "event_type", "data"]
+        "required": [
+          "task_id",
+          "event_type",
+          "data"
+        ]
       }
     },
     {
@@ -225,7 +257,9 @@
             "description": "Limit number of events (optional)"
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -244,12 +278,22 @@
         "properties": {
           "since": {
             "type": "string",
-            "enum": ["1h", "6h", "1d", "7d", "30d"],
+            "enum": [
+              "1h",
+              "6h",
+              "1d",
+              "7d",
+              "30d"
+            ],
             "description": "Time range (optional)"
           },
           "status": {
             "type": "string",
-            "enum": ["todo", "doing", "done"],
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
             "description": "Filter by status (optional)"
           },
           "filter_name": {
