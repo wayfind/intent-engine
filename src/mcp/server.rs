@@ -7,11 +7,11 @@
 //! Unlike the Python wrapper (mcp-server.py), this implementation directly uses
 //! the Rust library functions, avoiding subprocess overhead and improving performance.
 
-use intent_engine::events::EventManager;
-use intent_engine::project::ProjectContext;
-use intent_engine::report::ReportManager;
-use intent_engine::tasks::TaskManager;
-use intent_engine::workspace::WorkspaceManager;
+use crate::events::EventManager;
+use crate::project::ProjectContext;
+use crate::report::ReportManager;
+use crate::tasks::TaskManager;
+use crate::workspace::WorkspaceManager;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
@@ -49,12 +49,10 @@ struct ToolCallParams {
 /// MCP Tool Schema
 const MCP_TOOLS: &str = include_str!("../../mcp-server.json");
 
-#[tokio::main]
-async fn main() {
-    if let Err(e) = run_server().await {
-        eprintln!("Fatal error: {}", e);
-        std::process::exit(1);
-    }
+/// Run the MCP server
+/// This is the main entry point for MCP server mode
+pub async fn run() -> io::Result<()> {
+    run_server().await
 }
 
 async fn run_server() -> io::Result<()> {

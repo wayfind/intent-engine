@@ -62,10 +62,6 @@ rand = "0.9"
 name = "intent-engine"
 path = "src/main.rs"
 
-[[bin]]
-name = "intent-engine-mcp-server"
-path = "src/bin/mcp-server.rs"
-
 [[bench]]
 name = "performance"
 harness = false

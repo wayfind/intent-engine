@@ -43,8 +43,9 @@ pub fn setup_windows_console() -> Result<(), String> {
 
         // Set console OUTPUT code page to UTF-8 (65001)
         // This ensures that our UTF-8 output is correctly interpreted
-        SetConsoleOutputCP(65001)
-            .map_err(|e| format!("Failed to set console output code page to UTF-8: {}", e))?;
+        if SetConsoleOutputCP(65001).is_err() {
+            return Err("Failed to set console output code page to UTF-8".to_string());
+        }
 
         // Get the standard output handle
         let handle = match GetStdHandle(STD_OUTPUT_HANDLE) {

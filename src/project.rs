@@ -28,17 +28,66 @@ pub struct ProjectContext {
 
 impl ProjectContext {
     /// Find the project root by searching upwards for .intent-engine directory
+    ///
+    /// Search strategy (in priority order):
+    /// 1. Check INTENT_ENGINE_PROJECT_DIR environment variable
+    /// 2. Search upwards from current directory for .intent-engine/
+    /// 3. Check user's home directory for .intent-engine/
     pub fn find_project_root() -> Option<PathBuf> {
-        let mut current = std::env::current_dir().ok()?;
-
-        loop {
-            let intent_dir = current.join(INTENT_DIR);
+        // Strategy 1: Check environment variable (highest priority)
+        if let Ok(env_path) = std::env::var("INTENT_ENGINE_PROJECT_DIR") {
+            let path = PathBuf::from(env_path);
+            let intent_dir = path.join(INTENT_DIR);
             if intent_dir.exists() && intent_dir.is_dir() {
-                return Some(current);
+                eprintln!(
+                    "✓ Using project from INTENT_ENGINE_PROJECT_DIR: {}",
+                    path.display()
+                );
+                return Some(path);
+            } else {
+                eprintln!(
+                    "⚠ INTENT_ENGINE_PROJECT_DIR set but no .intent-engine found: {}",
+                    path.display()
+                );
             }
+        }
 
-            if !current.pop() {
-                break;
+        // Strategy 2: Search upwards from current directory (original behavior)
+        if let Ok(mut current) = std::env::current_dir() {
+            let start_dir = current.clone();
+            loop {
+                let intent_dir = current.join(INTENT_DIR);
+                if intent_dir.exists() && intent_dir.is_dir() {
+                    if current != start_dir {
+                        eprintln!("✓ Found project: {}", current.display());
+                    }
+                    return Some(current);
+                }
+
+                if !current.pop() {
+                    break;
+                }
+            }
+        }
+
+        // Strategy 3: Check user's home directory (fallback)
+        if let Ok(home) = std::env::var("HOME") {
+            let home_path = PathBuf::from(home);
+            let intent_dir = home_path.join(INTENT_DIR);
+            if intent_dir.exists() && intent_dir.is_dir() {
+                eprintln!("✓ Using home project: {}", home_path.display());
+                return Some(home_path);
+            }
+        }
+
+        // Windows: also check USERPROFILE
+        #[cfg(target_os = "windows")]
+        if let Ok(userprofile) = std::env::var("USERPROFILE") {
+            let home_path = PathBuf::from(userprofile);
+            let intent_dir = home_path.join(INTENT_DIR);
+            if intent_dir.exists() && intent_dir.is_dir() {
+                eprintln!("✓ Using home project: {}", home_path.display());
+                return Some(home_path);
             }
         }
 

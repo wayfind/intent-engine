@@ -1,5 +1,11 @@
 # Migration from Python to Rust MCP Server
 
+> **⚠️ NOTE (2024-11+)**: This document describes the historical migration from Python to a standalone Rust MCP server binary (`intent-engine-mcp-server`). **The architecture has since evolved to a unified binary approach**:
+> - The MCP server is now integrated as a subcommand: `intent-engine mcp-server`
+> - No separate `intent-engine-mcp-server` binary exists
+> - Configuration uses `args: ["mcp-server"]` and environment variable `INTENT_ENGINE_PROJECT_DIR`
+> - See [README.md](README.md) and [docs/*/integration/mcp-server.md](docs/zh-CN/integration/mcp-server.md) for current setup
+
 ## Summary
 
 The Intent-Engine MCP (Model Context Protocol) server has been **migrated from Python to Rust** for improved performance, reduced dependencies, and better integration with the core library.

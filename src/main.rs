@@ -44,6 +44,11 @@ async fn run() -> Result<()> {
         } => handle_report_command(since, status, filter_name, filter_spec, summary_only).await?,
         Commands::Event(event_cmd) => handle_event_command(event_cmd).await?,
         Commands::Doctor => handle_doctor_command().await?,
+        Commands::McpServer => {
+            // Run MCP server - this never returns unless there's an error
+            // io::Error is automatically converted to IntentError::IoError via #[from]
+            intent_engine::mcp::run().await?;
+        },
     }
 
     Ok(())

@@ -55,6 +55,10 @@ pub enum Commands {
 
     /// Check system health and dependencies
     Doctor,
+
+    /// Start MCP server for AI assistants (JSON-RPC stdio)
+    #[command(name = "mcp-server")]
+    McpServer,
 }
 
 #[derive(Subcommand)]
