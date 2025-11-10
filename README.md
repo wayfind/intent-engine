@@ -148,7 +148,7 @@ intent-engine task done
 intent-engine report --since 1d --summary-only
 ```
 
-> 💡 **更详细的教程**：参见 [QUICKSTART.md](QUICKSTART.md)
+> 💡 **更详细的教程**：参见 [QUICKSTART.md](docs/zh-CN/guide/quickstart.md)
 
 ---
 
