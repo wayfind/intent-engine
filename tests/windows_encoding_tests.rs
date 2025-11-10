@@ -111,12 +111,7 @@ fn test_mixed_languages() {
     let output = Command::cargo_bin("intent-engine")
         .unwrap()
         .current_dir(temp_dir.path())
-        .args([
-            "task",
-            "add",
-            "--name",
-            "Implement 用户认证 with JWT",
-        ])
+        .args(["task", "add", "--name", "Implement 用户认证 with JWT"])
         .output()
         .unwrap();
 

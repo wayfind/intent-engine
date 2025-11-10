@@ -15,10 +15,7 @@ async fn main() {
     // This ensures Chinese and other non-ASCII characters display correctly
     #[cfg(windows)]
     if let Err(e) = intent_engine::windows_console::setup_windows_console() {
-        eprintln!(
-            "Warning: Failed to setup Windows console UTF-8: {}",
-            e
-        );
+        eprintln!("Warning: Failed to setup Windows console UTF-8: {}", e);
         eprintln!(
             "Chinese characters may not display correctly. Consider running 'chcp 65001' first."
         );
