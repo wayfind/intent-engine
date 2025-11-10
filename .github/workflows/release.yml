@@ -150,10 +150,49 @@ jobs:
 
           ## 📚 Documentation
 
-          - [README](https://github.com/${{ github.repository }})
-          - [Quick Start](https://github.com/${{ github.repository }}/blob/main/QUICKSTART.md)
-          - [Interface Spec](https://github.com/${{ github.repository }}/blob/main/docs/INTERFACE_SPEC.md)
-          EOF
+      - name: Delete existing release if it exists
+        run: |
+          set +e  # Don't exit on error
+
+          echo "Checking for existing release for tag: ${{ github.ref_name }}"
+
+          # Try to get release info
+          RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "HTTP Status: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            RELEASE_ID=$(echo "$BODY" | jq -r '.id')
+            echo "Found existing release with ID: $RELEASE_ID"
+
+            # Delete the release
+            DELETE_RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID")
+
+            DELETE_CODE=$(echo "$DELETE_RESPONSE" | tail -n1)
+
+            if [ "$DELETE_CODE" = "204" ]; then
+              echo "✅ Release deleted successfully"
+              sleep 3  # Wait for GitHub to process
+            else
+              echo "⚠️ Failed to delete release. HTTP code: $DELETE_CODE"
+              echo "Response: $(echo "$DELETE_RESPONSE" | sed '$d')"
+            fi
+          elif [ "$HTTP_CODE" = "404" ]; then
+            echo "✅ No existing release found (fresh tag)"
+          else
+            echo "⚠️ Unexpected HTTP code when checking release: $HTTP_CODE"
+            echo "Response: $BODY"
+          fi
+
+          set -e  # Re-enable exit on error
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
