@@ -669,6 +669,7 @@ intent-engine current --set <TASK_ID>
 | `task_find` | Filter tasks | `task find` |
 | `task_search` | Search tasks (FTS5) | `task search` |
 | `task_get` | Get task by ID | `task get` |
+| `task_context` | Get task family tree | N/A |
 | `task_delete` | Delete task | `task delete` |
 | `event_add` | Record event | `event add` |
 | `event_list` | List events | `event list` |
