@@ -5,6 +5,7 @@ pub mod events;
 pub mod project;
 pub mod report;
 pub mod tasks;
+pub mod windows_console;
 pub mod workspace;
 
 #[cfg(test)]
