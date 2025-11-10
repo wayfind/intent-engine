@@ -7,17 +7,45 @@
 
 ## 🔧 Important: Code Formatting
 
-**CRITICAL**: This project uses `cargo fmt` for code formatting enforcement.
+**CRITICAL**: This project enforces code formatting with `cargo fmt`.
 
-- **Git Hooks**: Pre-commit hooks are automatically installed by `.claude-code/SessionStart`
-- **Before Committing**: Always run `cargo fmt --all` or rely on git hooks
-- **CI Requirement**: All PRs must pass `cargo fmt --all -- --check`
-- **Manual Setup**: If hooks aren't installed, run `./scripts/setup-git-hooks.sh`
+### Automatic Setup (No Action Needed)
 
-The SessionStart hook should have already installed git hooks for you. Verify with:
+Git hooks are **automatically installed** on your first `cargo build`. The pre-commit hook will:
+- Run `cargo fmt --all` before every commit
+- Auto-add formatted files to your commit
+- Prevent unformatted code from being committed
+
+### Verification
+
+Check that hooks are installed:
 ```bash
 ls -la .git/hooks/pre-commit  # Should exist and be executable
 ```
+
+### Manual Override
+
+If you need to bypass the hook (not recommended):
+```bash
+git commit --no-verify
+```
+
+To manually install hooks:
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+To disable automatic installation:
+```bash
+export SKIP_GIT_HOOKS_SETUP=1
+cargo build
+```
+
+### How It Works
+
+1. **First build**: `build.rs` detects no hooks → installs them automatically
+2. **Every commit**: Pre-commit hook → runs `cargo fmt` → adds changes → continues commit
+3. **CI validation**: Runs `cargo fmt --all -- --check` to ensure compliance
 
 ---
 
