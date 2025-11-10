@@ -103,7 +103,7 @@ fn test_spec_documents_cli_commands() {
 fn test_cli_help_matches_spec() {
     // Test that `task add --help` contains key parameters
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--bin",
             "intent-engine",
