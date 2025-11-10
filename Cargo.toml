@@ -45,6 +45,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 tokio = { version = "1.35", features = ["full"] }
 anyhow = "1.0"
+encoding_rs = "0.8"
 
 # Windows console support
 [target.'cfg(windows)'.dependencies]
