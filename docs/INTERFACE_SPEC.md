@@ -1,8 +1,29 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.1.10
+**Version**: 0.1
 **Last Updated**: 2024-11-09
 **Status**: Experimental (Pre-1.0)
+
+---
+
+> **🚨 CRITICAL: Version Update Policy**
+>
+> This document defines the **interface contract version** (major.minor format).
+>
+> **WHEN TO UPDATE THE VERSION:**
+> - ✅ **Breaking changes** → Increment major (0.1 → 1.0)
+> - ✅ **New features/tools** → Increment minor (0.1 → 0.2)
+> - ❌ **Bug fixes only** → Do NOT update (keep 0.1)
+>
+> **THIS VERSION IS THE SOURCE OF TRUTH**
+> - All other files (CLAUDE.md, mcp-server.json) follow this version
+> - Cargo.toml may have additional patch version (e.g., 0.1.12)
+> - When you update this version, you MUST update Cargo.toml's minor version
+>
+> **FOR AI ASSISTANTS:**
+> If you modify this file and change the interface (add/remove/modify CLI commands,
+> MCP tools, or data models), you MUST increment the version number above and
+> remind the user to run the version sync workflow.
 
 ---
 

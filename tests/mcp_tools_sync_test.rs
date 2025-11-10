@@ -15,6 +15,13 @@ fn test_mcp_version_matches_cargo_toml() {
         .and_then(|line| line.split('"').nth(1))
         .expect("Failed to extract version from Cargo.toml");
 
+    // Extract major.minor from Cargo.toml (e.g., "0.1.12" -> "0.1")
+    let cargo_minor = cargo_version
+        .split('.')
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(".");
+
     // Read mcp-server.json version
     let mcp_json = fs::read_to_string("mcp-server.json").expect("Failed to read mcp-server.json");
     let mcp_config: Value =
@@ -24,9 +31,9 @@ fn test_mcp_version_matches_cargo_toml() {
         .expect("Failed to extract version from mcp-server.json");
 
     assert_eq!(
-        cargo_version, mcp_version,
-        "Version mismatch!\n  Cargo.toml: {}\n  mcp-server.json: {}\n\nRun: ./scripts/sync-mcp-tools.sh",
-        cargo_version, mcp_version
+        cargo_minor, mcp_version,
+        "\nMCP version mismatch!\n  Cargo.toml (major.minor): {}\n  mcp-server.json: {}\n\nmcp-server.json should use interface version (major.minor), not full version.\nRun: ./scripts/sync-mcp-tools.sh",
+        cargo_minor, mcp_version
     );
 }
 

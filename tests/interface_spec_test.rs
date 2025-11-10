@@ -17,7 +17,7 @@ fn test_spec_version_matches_cargo() {
     let spec =
         fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
 
-    // Extract version from spec (first occurrence of "**Version**: X.Y.Z")
+    // Extract version from spec (first occurrence of "**Version**: X.Y")
     let spec_version = spec
         .lines()
         .find(|line| line.starts_with("**Version**:"))
@@ -25,10 +25,17 @@ fn test_spec_version_matches_cargo() {
         .map(|v| v.trim())
         .expect("Failed to extract version from INTERFACE_SPEC.md");
 
+    // Extract major.minor from Cargo.toml version (e.g., "0.1.12" -> "0.1")
+    let cargo_minor = cargo_version
+        .split('.')
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(".");
+
     assert_eq!(
-        cargo_version, spec_version,
-        "\nVersion mismatch!\n  Cargo.toml: {}\n  INTERFACE_SPEC.md: {}\n\nPlease update INTERFACE_SPEC.md",
-        cargo_version, spec_version
+        cargo_minor, spec_version,
+        "\nInterface version mismatch!\n  Cargo.toml (major.minor): {}\n  INTERFACE_SPEC.md: {}\n\nINTERFACE_SPEC.md should reflect interface contract version (major.minor), not patch version.\nOnly update when interface changes (breaking or feature changes).",
+        cargo_minor, spec_version
     );
 }
 
