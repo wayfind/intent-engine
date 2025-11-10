@@ -1,0 +1,59 @@
+name: Stale Issues & PRs
+
+# Manages stale issues and pull requests
+# Marks items as stale after 60 days of inactivity
+# Closes them after 7 more days if still inactive
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Issues
+          stale-issue-message: |
+            This issue has been automatically marked as stale because it has not had recent activity.
+            It will be closed in 7 days if no further activity occurs.
+
+            If this issue is still relevant, please comment to keep it open.
+            Thank you for your contributions!
+          close-issue-message: |
+            This issue was automatically closed due to inactivity.
+
+            If you believe this is still relevant, please feel free to reopen it or create a new issue.
+          days-before-issue-stale: 60
+          days-before-issue-close: 7
+          stale-issue-label: 'stale'
+          exempt-issue-labels: 'pinned,security,roadmap'
+
+          # Pull Requests
+          stale-pr-message: |
+            This pull request has been automatically marked as stale because it has not had recent activity.
+            It will be closed in 7 days if no further activity occurs.
+
+            If you're still working on this, please comment or push new commits to keep it open.
+            Thank you for your contributions!
+          close-pr-message: |
+            This pull request was automatically closed due to inactivity.
+
+            If you'd like to continue this work, please feel free to reopen it or create a new PR.
+          days-before-pr-stale: 30
+          days-before-pr-close: 7
+          stale-pr-label: 'stale'
+          exempt-pr-labels: 'pinned,in-progress'
+
+          # General settings
+          operations-per-run: 100
+          remove-stale-when-updated: true
+          ascending: true
