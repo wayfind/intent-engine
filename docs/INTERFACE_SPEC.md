@@ -86,6 +86,97 @@ todo → doing → done
 - `switch <ID>`: (Previous doing → todo) + Set new task to `doing` + set as current
 - `done`: Current task → `done` + clear current (requires all children done)
 
+### 1.3 Project Initialization and Smart Root Inference
+
+**Philosophy**: Intent-Engine's initialization is designed to be completely transparent and frictionless. Users should focus on expressing intent (e.g., `task add`) rather than performing setup work (e.g., `init`). There is no public `init` command.
+
+**Smart Lazy Initialization**: The system automatically initializes on the first write operation, intelligently inferring the project root directory rather than blindly using the current working directory (CWD).
+
+#### Trigger Conditions
+
+Initialization logic is triggered when **all** of the following conditions are met:
+1. A write-type CLI command is executed (e.g., `task add`, `task spawn-subtask`)
+2. No `.intent-engine` folder exists in CWD or any parent directory
+
+If `.intent-engine` already exists, it is used directly without re-initialization. If a read-only command is executed and no `.intent-engine` is found, an error is returned.
+
+#### Root Directory Inference Algorithm
+
+The system follows this algorithm to determine where to initialize:
+
+**Step 1: Define Project Root Markers (Priority Order)**
+
+The system uses a hardcoded priority list of common project markers:
+
+1. `.git` (Git - highest priority)
+2. `.hg` (Mercurial)
+3. `package.json` (Node.js)
+4. `Cargo.toml` (Rust)
+5. `pyproject.toml` (Python PEP 518)
+6. `go.mod` (Go Modules)
+7. `pom.xml` (Maven - Java)
+8. `build.gradle` (Gradle - Java/Kotlin)
+
+**Step 2: Recursive Upward Search**
+
+Starting from CWD, traverse upward to the filesystem root (`/`), checking each directory for markers in priority order.
+
+**Step 3: First Match Determines Root**
+
+The first directory containing any marker becomes the project root. Search terminates immediately upon finding a marker.
+
+**Step 4: Initialize in Determined Root**
+
+Create `.intent-engine/project.db` in the determined project root directory.
+
+**Step 5: Fallback Mechanism**
+
+If no markers are found after reaching filesystem root:
+- Use CWD as the project root (fallback)
+- Print a warning to stderr:
+  ```
+  Warning: Could not determine a project root based on common markers (e.g., .git, package.json).
+           Initialized Intent-Engine in the current directory '/path/to/cwd'.
+           For predictable behavior, it's recommended to initialize from a directory containing a root marker.
+  ```
+
+#### Example Scenarios
+
+**Scenario 1: Git Repository**
+```
+Structure: /home/user/my-app/.git
+           /home/user/my-app/src/components/
+
+Command: cd /home/user/my-app/src/components && ie task add --name "Fix button"
+
+Result: .intent-engine created at /home/user/my-app/ (where .git is located)
+```
+
+**Scenario 2: No Markers (Fallback)**
+```
+Structure: /home/user/scripts/ (no markers)
+
+Command: cd /home/user/scripts && ie task add --name "Refactor script"
+
+Result: .intent-engine created at /home/user/scripts/ (CWD fallback)
+        Warning printed to stderr
+```
+
+**Scenario 3: Multiple Markers (Priority)**
+```
+Structure: /home/user/project/.git
+           /home/user/project/nested/Cargo.toml
+
+Command: cd /home/user/project/nested/deep && ie task add --name "Test"
+
+Result: .intent-engine created at /home/user/project/ (.git has higher priority)
+```
+
+#### Error Handling
+
+- **Permission Errors**: If directory/file creation fails due to permissions, the command fails with a clear filesystem-related error message
+- **Read-Only Commands**: If a read command is executed without an existing `.intent-engine`, return `NOT_A_PROJECT` error
+
 ---
 
 ## 2. CLI Interface
