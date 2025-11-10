@@ -37,7 +37,7 @@ pub fn setup_windows_console() -> Result<(), String> {
     unsafe {
         // Set console output code page to UTF-8 (65001)
         // This ensures that our UTF-8 output is correctly interpreted
-        if !SetConsoleOutputCP(65001).as_bool() {
+        if SetConsoleOutputCP(65001).is_err() {
             return Err("Failed to set console output code page to UTF-8".to_string());
         }
 
