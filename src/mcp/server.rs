@@ -67,7 +67,14 @@ async fn run_server() -> io::Result<()> {
         }
 
         let response = match serde_json::from_str::<JsonRpcRequest>(&line) {
-            Ok(request) => handle_request(request).await,
+            Ok(request) => {
+                // Handle notifications (no id = no response needed)
+                if request.id.is_none() {
+                    handle_notification(&request).await;
+                    continue; // Skip sending response for notifications
+                }
+                handle_request(request).await
+            },
             Err(e) => JsonRpcResponse {
                 jsonrpc: "2.0".to_string(),
                 id: None,
@@ -87,6 +94,21 @@ async fn run_server() -> io::Result<()> {
     Ok(())
 }
 
+async fn handle_notification(request: &JsonRpcRequest) {
+    // Handle MCP notifications (no response required)
+    match request.method.as_str() {
+        "initialized" => {
+            eprintln!("✓ MCP client initialized");
+        },
+        "notifications/cancelled" => {
+            eprintln!("⚠ Request cancelled");
+        },
+        _ => {
+            eprintln!("⚠ Unknown notification: {}", request.method);
+        },
+    }
+}
+
 async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
     // Validate JSON-RPC version
     if request.jsonrpc != "2.0" {
@@ -102,9 +124,11 @@ async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
     }
 
     let result = match request.method.as_str() {
+        "initialize" => handle_initialize(request.params),
+        "ping" => Ok(json!({})), // Ping response for connection keep-alive
         "tools/list" => handle_tools_list(),
         "tools/call" => handle_tool_call(request.params).await,
-        _ => Err(format!("Unknown method: {}", request.method)),
+        _ => Err(format!("Method not found: {}", request.method)),
     };
 
     match result {
@@ -124,6 +148,23 @@ async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
             }),
         },
     }
+}
+
+fn handle_initialize(_params: Option<Value>) -> Result<Value, String> {
+    // MCP initialize handshake
+    // Return server capabilities and info per MCP specification
+    Ok(json!({
+        "protocolVersion": "2024-11-05",
+        "capabilities": {
+            "tools": {
+                "listChanged": false  // Static tool list, no dynamic changes
+            }
+        },
+        "serverInfo": {
+            "name": "intent-engine",
+            "version": env!("CARGO_PKG_VERSION")
+        }
+    }))
 }
 
 fn handle_tools_list() -> Result<Value, String> {
@@ -148,7 +189,9 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
         "task_done" => handle_task_done(params.arguments).await,
         "task_update" => handle_task_update(params.arguments).await,
         "task_find" => handle_task_find(params.arguments).await,
+        "task_search" => handle_task_search(params.arguments).await,
         "task_get" => handle_task_get(params.arguments).await,
+        "task_delete" => handle_task_delete(params.arguments).await,
         "event_add" => handle_event_add(params.arguments).await,
         "event_list" => handle_event_list(params.arguments).await,
         "current_task_get" => handle_current_task_get(params.arguments).await,
@@ -353,6 +396,25 @@ async fn handle_task_find(args: Value) -> Result<Value, String> {
     serde_json::to_value(&tasks).map_err(|e| format!("Serialization error: {}", e))
 }
 
+async fn handle_task_search(args: Value) -> Result<Value, String> {
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing required parameter: query")?;
+
+    let ctx = ProjectContext::load()
+        .await
+        .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+    let task_mgr = TaskManager::new(&ctx.pool);
+    let results = task_mgr
+        .search_tasks(query)
+        .await
+        .map_err(|e| format!("Failed to search tasks: {}", e))?;
+
+    serde_json::to_value(&results).map_err(|e| format!("Serialization error: {}", e))
+}
+
 async fn handle_task_get(args: Value) -> Result<Value, String> {
     let task_id = args
         .get("task_id")
@@ -383,6 +445,25 @@ async fn handle_task_get(args: Value) -> Result<Value, String> {
             .map_err(|e| format!("Failed to get task: {}", e))?;
         serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
     }
+}
+
+async fn handle_task_delete(args: Value) -> Result<Value, String> {
+    let task_id = args
+        .get("task_id")
+        .and_then(|v| v.as_i64())
+        .ok_or("Missing required parameter: task_id")?;
+
+    let ctx = ProjectContext::load()
+        .await
+        .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+    let task_mgr = TaskManager::new(&ctx.pool);
+    task_mgr
+        .delete_task(task_id)
+        .await
+        .map_err(|e| format!("Failed to delete task: {}", e))?;
+
+    Ok(json!({"success": true, "deleted_task_id": task_id}))
 }
 
 async fn handle_event_add(args: Value) -> Result<Value, String> {

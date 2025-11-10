@@ -299,6 +299,43 @@
       }
     },
     {
+      "name": "task_search",
+      "description": "Search tasks by content using FTS5 full-text search. Returns tasks with match snippets highlighting keywords with **. Supports advanced FTS5 syntax like 'bug AND NOT critical', phrase searches with quotes. This is the RECOMMENDED way to find tasks by content - much more powerful than task_find.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query. Supports FTS5 syntax: 'keyword' for simple search, 'term1 AND term2' for boolean, 'term1 OR term2', 'NOT term', '\"exact phrase\"' for phrases. Searches in both task names and specifications."
+          },
+          "snippet": {
+            "type": "boolean",
+            "description": "Return match snippets with ** highlighting (default: true)",
+            "default": true
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "task_get",
+      "description": "Core Duty: Retrieves the full details of a SINGLE, KNOWN task by its ID.\nTactical Guide: Use this after `find` or `search` to get the complete `spec` before starting work.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "The exact ID of the task to retrieve."
+          }
+        },
+        "required": [
+          "task_id"
+        ]
+      }
+    },
+    {
       "name": "task_update",
       "description": "Core Duty: A general-purpose tool to modify attributes of an existing task.\n\nTactical Guide: Use this for minor corrections:\n- Fixing a typo in a name\n- Updating priority\n- Refining the spec\n\nFor major status changes, STRONGLY prefer using the atomic commands:\n- ❌ task_update({task_id: 42, status: 'doing'})\n- ✅ task_start({task_id: 42})\n\nWhy? Atomic commands ensure consistency (e.g., task_start also sets current_task_id, task_done verifies subtasks).\n\nFor long specs, suggest CLI: echo 'new spec...' | intent-engine task update 42 --spec-stdin",
       "inputSchema": {
@@ -332,6 +369,22 @@
           "parent_id": {
             "type": "integer",
             "description": "New parent task ID to reorganize hierarchy (optional). Use with caution."
+          }
+        },
+        "required": [
+          "task_id"
+        ]
+      }
+    },
+    {
+      "name": "task_delete",
+      "description": "Delete a task. WARNING: This is a destructive operation. Only use when you're certain the task should be removed permanently. Cannot delete tasks with subtasks.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "Task ID to delete"
           }
         },
         "required": [
