@@ -135,22 +135,24 @@ if [ "$2" == "--auto" ] || [ "$2" == "-y" ]; then
     git add Cargo.toml Cargo.lock CLAUDE.md docs/INTERFACE_SPEC.md
     git commit -m "chore: bump version to $NEW_VERSION"
 
-    # Delete existing tag if it exists
+    # Handle existing tags
     TAG="v$NEW_VERSION"
+
+    # Delete local tag if exists
     if git rev-parse "$TAG" >/dev/null 2>&1; then
         warn "Tag $TAG already exists locally, deleting..."
         git tag -d "$TAG"
     fi
-
-    # Try to delete remote tag (ignore error if it doesn't exist)
-    git push origin ":refs/tags/$TAG" 2>/dev/null && info "Deleted remote tag $TAG" || true
 
     # Create new tag
     git tag -a "$TAG" -m "Release $TAG"
 
     info "Pushing to remote..."
     git push origin main
-    git push origin "$TAG"
+
+    # Push tag with force to overwrite if exists remotely
+    info "Pushing tag $TAG (will overwrite if exists)..."
+    git push -f origin "$TAG"
 
     success "Release v$NEW_VERSION created and pushed!"
     echo ""
