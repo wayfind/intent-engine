@@ -318,3 +318,251 @@ fn test_missing_required_parameter() {
         .unwrap()
         .contains("Missing required parameter"));
 }
+
+#[test]
+fn test_task_context_returns_family_tree() {
+    let temp_dir = tempdir().unwrap();
+    let project_path = temp_dir.path();
+    std::env::set_current_dir(project_path).unwrap();
+
+    // Initialize project and create task hierarchy
+    let _ = Command::new("intent-engine")
+        .args(["task", "add", "--name", "Root task"])
+        .output()
+        .unwrap();
+
+    let _ = Command::new("intent-engine")
+        .args(["task", "add", "--name", "Child task", "--parent", "1"])
+        .output()
+        .unwrap();
+
+    let _ = Command::new("intent-engine")
+        .args(["task", "add", "--name", "Grandchild task", "--parent", "2"])
+        .output()
+        .unwrap();
+
+    // Request context for the child task (ID: 2)
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "tools/call",
+        "params": {
+            "name": "task_context",
+            "arguments": {
+                "task_id": 2
+            }
+        }
+    });
+
+    let mut child = Command::new("intent-engine")
+        .arg("mcp-server")
+        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let stdin = child.stdin.as_mut().unwrap();
+    stdin.write_all(request.to_string().as_bytes()).unwrap();
+    stdin.write_all(b"\n").unwrap();
+    drop(child.stdin.take());
+
+    let output = child.wait_with_output().unwrap();
+    let response_str = String::from_utf8_lossy(&output.stdout);
+    let response: Value =
+        serde_json::from_str(response_str.lines().next().unwrap_or("{}")).unwrap();
+
+    // Verify response structure
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 7);
+    assert!(response["result"]["content"].is_array());
+
+    let content_text = response["result"]["content"][0]["text"].as_str().unwrap();
+    let context: Value = serde_json::from_str(content_text).unwrap();
+
+    // Verify the task itself
+    assert_eq!(context["task"]["id"], 2);
+    assert_eq!(context["task"]["name"], "Child task");
+
+    // Verify ancestors (should have parent: Root task)
+    assert!(context["ancestors"].is_array());
+    let ancestors = context["ancestors"].as_array().unwrap();
+    assert_eq!(ancestors.len(), 1);
+    assert_eq!(ancestors[0]["id"], 1);
+    assert_eq!(ancestors[0]["name"], "Root task");
+
+    // Verify children (should have grandchild)
+    assert!(context["children"].is_array());
+    let children = context["children"].as_array().unwrap();
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0]["id"], 3);
+    assert_eq!(children[0]["name"], "Grandchild task");
+
+    // Verify siblings (should have none)
+    assert!(context["siblings"].is_array());
+    let siblings = context["siblings"].as_array().unwrap();
+    assert_eq!(siblings.len(), 0);
+}
+
+#[test]
+fn test_task_context_uses_current_task_when_no_id_provided() {
+    let temp_dir = tempdir().unwrap();
+    let project_path = temp_dir.path();
+    std::env::set_current_dir(project_path).unwrap();
+
+    // Initialize project and create a task
+    let _ = Command::new("intent-engine")
+        .args(["task", "add", "--name", "Test task"])
+        .output()
+        .unwrap();
+
+    // Start the task (sets it as current)
+    let _ = Command::new("intent-engine")
+        .args(["task", "start", "1"])
+        .output()
+        .unwrap();
+
+    // Request context without providing task_id (should use current)
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "tools/call",
+        "params": {
+            "name": "task_context",
+            "arguments": {}
+        }
+    });
+
+    let mut child = Command::new("intent-engine")
+        .arg("mcp-server")
+        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let stdin = child.stdin.as_mut().unwrap();
+    stdin.write_all(request.to_string().as_bytes()).unwrap();
+    stdin.write_all(b"\n").unwrap();
+    drop(child.stdin.take());
+
+    let output = child.wait_with_output().unwrap();
+    let response_str = String::from_utf8_lossy(&output.stdout);
+    let response: Value =
+        serde_json::from_str(response_str.lines().next().unwrap_or("{}")).unwrap();
+
+    // Verify response
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert!(response["result"]["content"].is_array());
+
+    let content_text = response["result"]["content"][0]["text"].as_str().unwrap();
+    let context: Value = serde_json::from_str(content_text).unwrap();
+
+    // Should return context for task ID 1
+    assert_eq!(context["task"]["id"], 1);
+    assert_eq!(context["task"]["name"], "Test task");
+}
+
+#[test]
+fn test_task_context_error_when_no_current_task_and_no_id() {
+    let temp_dir = tempdir().unwrap();
+    let project_path = temp_dir.path();
+    std::env::set_current_dir(project_path).unwrap();
+
+    // Initialize project but don't create or start any tasks
+    let _ = Command::new("intent-engine")
+        .args(["task", "add", "--name", "Test task"])
+        .output()
+        .unwrap();
+
+    // Request context without task_id and without current task
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "tools/call",
+        "params": {
+            "name": "task_context",
+            "arguments": {}
+        }
+    });
+
+    let mut child = Command::new("intent-engine")
+        .arg("mcp-server")
+        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let stdin = child.stdin.as_mut().unwrap();
+    stdin.write_all(request.to_string().as_bytes()).unwrap();
+    stdin.write_all(b"\n").unwrap();
+    drop(child.stdin.take());
+
+    let output = child.wait_with_output().unwrap();
+    let response_str = String::from_utf8_lossy(&output.stdout);
+    let response: Value =
+        serde_json::from_str(response_str.lines().next().unwrap_or("{}")).unwrap();
+
+    // Should return error
+    assert!(response["error"].is_object());
+    assert!(response["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("No current task is set"));
+}
+
+#[test]
+fn test_task_context_nonexistent_task() {
+    let temp_dir = tempdir().unwrap();
+    let project_path = temp_dir.path();
+    std::env::set_current_dir(project_path).unwrap();
+
+    // Initialize project
+    let _ = Command::new("intent-engine")
+        .args(["task", "add", "--name", "Test task"])
+        .output()
+        .unwrap();
+
+    // Request context for nonexistent task
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {
+            "name": "task_context",
+            "arguments": {
+                "task_id": 99999
+            }
+        }
+    });
+
+    let mut child = Command::new("intent-engine")
+        .arg("mcp-server")
+        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let stdin = child.stdin.as_mut().unwrap();
+    stdin.write_all(request.to_string().as_bytes()).unwrap();
+    stdin.write_all(b"\n").unwrap();
+    drop(child.stdin.take());
+
+    let output = child.wait_with_output().unwrap();
+    let response_str = String::from_utf8_lossy(&output.stdout);
+    let response: Value =
+        serde_json::from_str(response_str.lines().next().unwrap_or("{}")).unwrap();
+
+    // Should return error
+    assert!(response["error"].is_object());
+    assert!(response["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Failed to get task context"));
+}

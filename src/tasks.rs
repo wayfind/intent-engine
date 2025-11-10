@@ -2072,4 +2072,308 @@ mod tests {
         let results = task_mgr.pick_next_tasks(10, 100).await.unwrap();
         assert_eq!(results.len(), 2); // Only returns available tasks
     }
+
+    // ========== task_context tests ==========
+
+    #[tokio::test]
+    async fn test_get_task_context_root_task_no_relations() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create a single root task with no relations
+        let task = task_mgr.add_task("Root task", None, None).await.unwrap();
+
+        let context = task_mgr.get_task_context(task.id).await.unwrap();
+
+        // Verify task itself
+        assert_eq!(context.task.id, task.id);
+        assert_eq!(context.task.name, "Root task");
+
+        // No ancestors (root task)
+        assert_eq!(context.ancestors.len(), 0);
+
+        // No siblings
+        assert_eq!(context.siblings.len(), 0);
+
+        // No children
+        assert_eq!(context.children.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_task_context_with_siblings() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create multiple root tasks (siblings)
+        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
+        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+        let task3 = task_mgr.add_task("Task 3", None, None).await.unwrap();
+
+        let context = task_mgr.get_task_context(task2.id).await.unwrap();
+
+        // Verify task itself
+        assert_eq!(context.task.id, task2.id);
+
+        // No ancestors (root task)
+        assert_eq!(context.ancestors.len(), 0);
+
+        // Should have 2 siblings
+        assert_eq!(context.siblings.len(), 2);
+        let sibling_ids: Vec<i64> = context.siblings.iter().map(|t| t.id).collect();
+        assert!(sibling_ids.contains(&task1.id));
+        assert!(sibling_ids.contains(&task3.id));
+        assert!(!sibling_ids.contains(&task2.id)); // Should not include itself
+
+        // No children
+        assert_eq!(context.children.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_task_context_with_parent() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create parent-child relationship
+        let parent = task_mgr.add_task("Parent task", None, None).await.unwrap();
+        let child = task_mgr
+            .add_task("Child task", None, Some(parent.id))
+            .await
+            .unwrap();
+
+        let context = task_mgr.get_task_context(child.id).await.unwrap();
+
+        // Verify task itself
+        assert_eq!(context.task.id, child.id);
+        assert_eq!(context.task.parent_id, Some(parent.id));
+
+        // Should have 1 ancestor (the parent)
+        assert_eq!(context.ancestors.len(), 1);
+        assert_eq!(context.ancestors[0].id, parent.id);
+        assert_eq!(context.ancestors[0].name, "Parent task");
+
+        // No siblings
+        assert_eq!(context.siblings.len(), 0);
+
+        // No children
+        assert_eq!(context.children.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_task_context_with_children() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create parent with multiple children
+        let parent = task_mgr.add_task("Parent task", None, None).await.unwrap();
+        let child1 = task_mgr
+            .add_task("Child 1", None, Some(parent.id))
+            .await
+            .unwrap();
+        let child2 = task_mgr
+            .add_task("Child 2", None, Some(parent.id))
+            .await
+            .unwrap();
+        let child3 = task_mgr
+            .add_task("Child 3", None, Some(parent.id))
+            .await
+            .unwrap();
+
+        let context = task_mgr.get_task_context(parent.id).await.unwrap();
+
+        // Verify task itself
+        assert_eq!(context.task.id, parent.id);
+
+        // No ancestors (root task)
+        assert_eq!(context.ancestors.len(), 0);
+
+        // No siblings
+        assert_eq!(context.siblings.len(), 0);
+
+        // Should have 3 children
+        assert_eq!(context.children.len(), 3);
+        let child_ids: Vec<i64> = context.children.iter().map(|t| t.id).collect();
+        assert!(child_ids.contains(&child1.id));
+        assert!(child_ids.contains(&child2.id));
+        assert!(child_ids.contains(&child3.id));
+    }
+
+    #[tokio::test]
+    async fn test_get_task_context_multi_level_hierarchy() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create 3-level hierarchy: grandparent -> parent -> child
+        let grandparent = task_mgr.add_task("Grandparent", None, None).await.unwrap();
+        let parent = task_mgr
+            .add_task("Parent", None, Some(grandparent.id))
+            .await
+            .unwrap();
+        let child = task_mgr
+            .add_task("Child", None, Some(parent.id))
+            .await
+            .unwrap();
+
+        let context = task_mgr.get_task_context(child.id).await.unwrap();
+
+        // Verify task itself
+        assert_eq!(context.task.id, child.id);
+
+        // Should have 2 ancestors (parent and grandparent, ordered from immediate to root)
+        assert_eq!(context.ancestors.len(), 2);
+        assert_eq!(context.ancestors[0].id, parent.id);
+        assert_eq!(context.ancestors[0].name, "Parent");
+        assert_eq!(context.ancestors[1].id, grandparent.id);
+        assert_eq!(context.ancestors[1].name, "Grandparent");
+
+        // No siblings
+        assert_eq!(context.siblings.len(), 0);
+
+        // No children
+        assert_eq!(context.children.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_task_context_complex_family_tree() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create complex structure:
+        // Root
+        //  ├─ Child1
+        //  │   ├─ Grandchild1
+        //  │   └─ Grandchild2 (target)
+        //  └─ Child2
+
+        let root = task_mgr.add_task("Root", None, None).await.unwrap();
+        let child1 = task_mgr
+            .add_task("Child1", None, Some(root.id))
+            .await
+            .unwrap();
+        let child2 = task_mgr
+            .add_task("Child2", None, Some(root.id))
+            .await
+            .unwrap();
+        let grandchild1 = task_mgr
+            .add_task("Grandchild1", None, Some(child1.id))
+            .await
+            .unwrap();
+        let grandchild2 = task_mgr
+            .add_task("Grandchild2", None, Some(child1.id))
+            .await
+            .unwrap();
+
+        // Get context for grandchild2
+        let context = task_mgr.get_task_context(grandchild2.id).await.unwrap();
+
+        // Verify task itself
+        assert_eq!(context.task.id, grandchild2.id);
+
+        // Should have 2 ancestors: child1 and root
+        assert_eq!(context.ancestors.len(), 2);
+        assert_eq!(context.ancestors[0].id, child1.id);
+        assert_eq!(context.ancestors[1].id, root.id);
+
+        // Should have 1 sibling: grandchild1
+        assert_eq!(context.siblings.len(), 1);
+        assert_eq!(context.siblings[0].id, grandchild1.id);
+
+        // No children
+        assert_eq!(context.children.len(), 0);
+
+        // Now get context for child1 to verify it sees both grandchildren
+        let context_child1 = task_mgr.get_task_context(child1.id).await.unwrap();
+        assert_eq!(context_child1.ancestors.len(), 1);
+        assert_eq!(context_child1.ancestors[0].id, root.id);
+        assert_eq!(context_child1.siblings.len(), 1);
+        assert_eq!(context_child1.siblings[0].id, child2.id);
+        assert_eq!(context_child1.children.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_task_context_respects_priority_ordering() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create parent with children having different priorities
+        let parent = task_mgr.add_task("Parent", None, None).await.unwrap();
+
+        // Add children with priorities (lower number = higher priority)
+        let child_low = task_mgr
+            .add_task("Low priority", None, Some(parent.id))
+            .await
+            .unwrap();
+        let _ = task_mgr
+            .update_task(child_low.id, None, None, None, None, None, Some(10))
+            .await
+            .unwrap();
+
+        let child_high = task_mgr
+            .add_task("High priority", None, Some(parent.id))
+            .await
+            .unwrap();
+        let _ = task_mgr
+            .update_task(child_high.id, None, None, None, None, None, Some(1))
+            .await
+            .unwrap();
+
+        let child_medium = task_mgr
+            .add_task("Medium priority", None, Some(parent.id))
+            .await
+            .unwrap();
+        let _ = task_mgr
+            .update_task(child_medium.id, None, None, None, None, None, Some(5))
+            .await
+            .unwrap();
+
+        let context = task_mgr.get_task_context(parent.id).await.unwrap();
+
+        // Children should be ordered by priority (1, 5, 10)
+        assert_eq!(context.children.len(), 3);
+        assert_eq!(context.children[0].priority, Some(1));
+        assert_eq!(context.children[1].priority, Some(5));
+        assert_eq!(context.children[2].priority, Some(10));
+    }
+
+    #[tokio::test]
+    async fn test_get_task_context_nonexistent_task() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        let result = task_mgr.get_task_context(99999).await;
+        assert!(result.is_err());
+        assert!(matches!(result, Err(IntentError::TaskNotFound(99999))));
+    }
+
+    #[tokio::test]
+    async fn test_get_task_context_handles_null_priority() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create siblings with mixed null and set priorities
+        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
+        let _ = task_mgr
+            .update_task(task1.id, None, None, None, None, None, Some(1))
+            .await
+            .unwrap();
+
+        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+        // task2 has NULL priority
+
+        let task3 = task_mgr.add_task("Task 3", None, None).await.unwrap();
+        let _ = task_mgr
+            .update_task(task3.id, None, None, None, None, None, Some(5))
+            .await
+            .unwrap();
+
+        let context = task_mgr.get_task_context(task2.id).await.unwrap();
+
+        // Should have 2 siblings, ordered by priority (non-null first, then null)
+        assert_eq!(context.siblings.len(), 2);
+        // Task with priority 1 should come first
+        assert_eq!(context.siblings[0].id, task1.id);
+        assert_eq!(context.siblings[0].priority, Some(1));
+        // Task with priority 5 should come second
+        assert_eq!(context.siblings[1].id, task3.id);
+        assert_eq!(context.siblings[1].priority, Some(5));
+    }
 }
