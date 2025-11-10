@@ -62,7 +62,7 @@ fn test_mcp_tools_match_handlers() {
         fs::read_to_string("src/mcp/server.rs").expect("Failed to read mcp/server.rs");
 
     // Extract tool names from handle_tool_call match statement
-    // Exclude MCP protocol methods (tools/list, tools/call)
+    // Exclude MCP protocol methods (initialize, tools/list, tools/call)
     let code_tools: HashSet<String> = mcp_server_rs
         .lines()
         .filter(|line| line.trim().starts_with('"') && line.contains("=> handle_"))
@@ -73,7 +73,10 @@ fn test_mcp_tools_match_handlers() {
                 .expect("Failed to extract tool name")
                 .to_string()
         })
-        .filter(|name| !name.starts_with("tools/")) // Exclude protocol methods
+        .filter(|name| {
+            // Exclude protocol methods
+            !name.starts_with("tools/") && name != "initialize"
+        })
         .collect();
 
     // Check for tools in JSON but not in code
