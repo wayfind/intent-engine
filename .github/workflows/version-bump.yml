@@ -127,22 +127,24 @@ jobs:
           git add Cargo.toml Cargo.lock CLAUDE.md docs/INTERFACE_SPEC.md
           git commit -m "chore: bump version to ${{ steps.bump.outputs.version }}"
 
-          # Delete existing tag if it exists (local and remote)
+          # Handle existing tags
           TAG="v${{ steps.bump.outputs.version }}"
+
+          # Delete local tag if exists
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "⚠️  Tag $TAG already exists locally, deleting..."
             git tag -d "$TAG"
           fi
 
-          # Try to delete remote tag (ignore error if it doesn't exist)
-          git push origin ":refs/tags/$TAG" 2>/dev/null || echo "Remote tag $TAG doesn't exist or already deleted"
-
           # Create new tag
           git tag -a "$TAG" -m "Release $TAG"
 
-          # Push commit and tag
+          # Push commit
           git push origin main
-          git push origin "$TAG"
+
+          # Push tag with force to overwrite if exists remotely
+          echo "Pushing tag $TAG (will overwrite if exists)..."
+          git push -f origin "$TAG"
 
           echo "✅ Version bumped and tagged: $TAG"
           echo "🚀 Release workflow will be triggered automatically"
