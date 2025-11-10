@@ -189,6 +189,27 @@
       }
     },
     {
+      "name": "task_search",
+      "description": "Search tasks by content using FTS5 full-text search. Returns tasks with match snippets highlighting keywords with **. Supports advanced FTS5 syntax like 'bug AND NOT critical', phrase searches with quotes. This is the RECOMMENDED way to find tasks by content - much more powerful than task_find.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query. Supports FTS5 syntax: 'keyword' for simple search, 'term1 AND term2' for boolean, 'term1 OR term2', 'NOT term', '\"exact phrase\"' for phrases. Searches in both task names and specifications."
+          },
+          "snippet": {
+            "type": "boolean",
+            "description": "Return match snippets with ** highlighting (default: true)",
+            "default": true
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
       "name": "task_get",
       "description": "Get detailed information about a specific task.",
       "inputSchema": {
@@ -202,6 +223,22 @@
             "type": "boolean",
             "description": "Include events summary",
             "default": false
+          }
+        },
+        "required": [
+          "task_id"
+        ]
+      }
+    },
+    {
+      "name": "task_delete",
+      "description": "Delete a task. WARNING: This is a destructive operation. Only use when you're certain the task should be removed permanently. Cannot delete tasks with subtasks.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "description": "Task ID to delete"
           }
         },
         "required": [
