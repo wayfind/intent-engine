@@ -2,19 +2,20 @@
 //!
 //! This module provides utilities for handling console encoding on Windows.
 //! It automatically configures the console to use UTF-8 encoding for proper
-//! display of Chinese and other non-ASCII characters.
+//! display and input of Chinese and other non-ASCII characters.
 
 #[cfg(windows)]
 use windows::Win32::System::Console::{
-    GetConsoleMode, GetStdHandle, SetConsoleMode, SetConsoleOutputCP, CONSOLE_MODE,
+    GetConsoleMode, GetStdHandle, SetConsoleCP, SetConsoleMode, SetConsoleOutputCP, CONSOLE_MODE,
     ENABLE_VIRTUAL_TERMINAL_PROCESSING, STD_OUTPUT_HANDLE,
 };
 
-/// Setup Windows console for UTF-8 output
+/// Setup Windows console for UTF-8 input and output
 ///
 /// This function:
-/// 1. Sets the console output code page to UTF-8 (65001)
-/// 2. Enables virtual terminal processing for ANSI escape sequences
+/// 1. Sets the console input code page to UTF-8 (65001)
+/// 2. Sets the console output code page to UTF-8 (65001)
+/// 3. Enables virtual terminal processing for ANSI escape sequences
 ///
 /// # Returns
 ///
@@ -35,7 +36,13 @@ use windows::Win32::System::Console::{
 #[cfg(windows)]
 pub fn setup_windows_console() -> Result<(), String> {
     unsafe {
-        // Set console output code page to UTF-8 (65001)
+        // Set console INPUT code page to UTF-8 (65001)
+        // This is CRITICAL for reading UTF-8 from stdin (pipes, redirects)
+        if !SetConsoleCP(65001).as_bool() {
+            return Err("Failed to set console input code page to UTF-8".to_string());
+        }
+
+        // Set console OUTPUT code page to UTF-8 (65001)
         // This ensures that our UTF-8 output is correctly interpreted
         if !SetConsoleOutputCP(65001).as_bool() {
             return Err("Failed to set console output code page to UTF-8".to_string());
@@ -70,11 +77,11 @@ pub fn setup_windows_console() -> Result<(), String> {
     Ok(())
 }
 
-/// Check if the current console is using UTF-8 encoding
+/// Check if the current console output is using UTF-8 encoding
 ///
 /// # Returns
 ///
-/// Returns `true` if the console is using UTF-8 (code page 65001),
+/// Returns `true` if the console output is using UTF-8 (code page 65001),
 /// `false` otherwise.
 ///
 /// # Platform-specific
@@ -95,11 +102,36 @@ pub fn is_console_utf8() -> bool {
     true
 }
 
-/// Detect the current console code page
+/// Check if the current console input is using UTF-8 encoding
 ///
 /// # Returns
 ///
-/// Returns the current code page number (e.g., 936 for GBK, 65001 for UTF-8)
+/// Returns `true` if the console input is using UTF-8 (code page 65001),
+/// `false` otherwise.
+///
+/// # Platform-specific
+///
+/// On non-Windows platforms, this always returns `true`.
+#[cfg(windows)]
+pub fn is_console_input_utf8() -> bool {
+    use windows::Win32::System::Console::GetConsoleCP;
+
+    unsafe {
+        let cp = GetConsoleCP();
+        cp == 65001 // UTF-8 code page
+    }
+}
+
+#[cfg(not(windows))]
+pub fn is_console_input_utf8() -> bool {
+    true
+}
+
+/// Detect the current console output code page
+///
+/// # Returns
+///
+/// Returns the current output code page number (e.g., 936 for GBK, 65001 for UTF-8)
 ///
 /// # Platform-specific
 ///
@@ -113,6 +145,27 @@ pub fn get_console_code_page() -> u32 {
 
 #[cfg(not(windows))]
 pub fn get_console_code_page() -> u32 {
+    65001 // UTF-8
+}
+
+/// Detect the current console input code page
+///
+/// # Returns
+///
+/// Returns the current input code page number (e.g., 936 for GBK, 65001 for UTF-8)
+///
+/// # Platform-specific
+///
+/// On non-Windows platforms, this returns 65001 (UTF-8).
+#[cfg(windows)]
+pub fn get_console_input_code_page() -> u32 {
+    use windows::Win32::System::Console::GetConsoleCP;
+
+    unsafe { GetConsoleCP() }
+}
+
+#[cfg(not(windows))]
+pub fn get_console_input_code_page() -> u32 {
     65001 // UTF-8
 }
 
