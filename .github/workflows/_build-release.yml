@@ -1,0 +1,99 @@
+name: Build Release Binary
+
+# Reusable workflow for building release binaries for a specific target
+# Used by release.yml to build cross-platform binaries
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: 'Runner OS'
+        required: true
+        type: string
+      target:
+        description: 'Rust target triple'
+        required: true
+        type: string
+      artifact-name:
+        description: 'Name of the binary artifact'
+        required: true
+        type: string
+      asset-name:
+        description: 'Name for the release asset'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ inputs.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: inputs.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Configure linker for ARM64
+        if: inputs.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          mkdir -p .cargo
+          cat >> .cargo/config.toml << EOF
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
+          shared-key: release-${{ inputs.target }}
+          cache-all-crates: true
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ inputs.target }}
+
+      - name: Strip binary (Linux x86_64 / macOS)
+        if: inputs.os != 'windows-latest' && inputs.target != 'aarch64-unknown-linux-gnu'
+        run: strip target/${{ inputs.target }}/release/${{ inputs.artifact-name }}
+
+      - name: Strip binary (Linux ARM64)
+        if: inputs.target == 'aarch64-unknown-linux-gnu'
+        run: aarch64-linux-gnu-strip target/${{ inputs.target }}/release/${{ inputs.artifact-name }}
+
+      - name: Create tarball (Unix)
+        if: inputs.os != 'windows-latest'
+        run: |
+          cd target/${{ inputs.target }}/release
+          tar czf ${{ inputs.asset-name }}.tar.gz ${{ inputs.artifact-name }}
+          mv ${{ inputs.asset-name }}.tar.gz ${{ github.workspace }}
+
+      - name: Create zip (Windows)
+        if: inputs.os == 'windows-latest'
+        run: |
+          cd target/${{ inputs.target }}/release
+          Compress-Archive -Path ${{ inputs.artifact-name }} -DestinationPath ${{ github.workspace }}/${{ inputs.asset-name }}.zip
+
+      - name: Upload artifact (Unix)
+        if: inputs.os != 'windows-latest'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ inputs.asset-name }}
+          path: ${{ inputs.asset-name }}.tar.gz
+          retention-days: 7
+
+      - name: Upload artifact (Windows)
+        if: inputs.os == 'windows-latest'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ inputs.asset-name }}
+          path: ${{ inputs.asset-name }}.zip
+          retention-days: 7

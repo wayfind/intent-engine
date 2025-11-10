@@ -1,168 +1,189 @@
 name: Release
 
+# Builds and publishes release binaries when a version tag is pushed
+# Triggers: git tag -a v0.1.10 -m "Release v0.1.10" && git push origin v0.1.10
+
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v0.1.10)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Linux x86_64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact_name: intent-engine
-            asset_name: intent-engine-linux-x86_64
+  # Build binaries for all platforms in parallel
+  build-linux-x64:
+    uses: ./.github/workflows/_build-release.yml
+    with:
+      os: ubuntu-latest
+      target: x86_64-unknown-linux-gnu
+      artifact-name: intent-engine
+      asset-name: intent-engine-linux-x86_64
 
-          # Linux ARM64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: intent-engine
-            asset_name: intent-engine-linux-aarch64
+  build-linux-arm64:
+    uses: ./.github/workflows/_build-release.yml
+    with:
+      os: ubuntu-latest
+      target: aarch64-unknown-linux-gnu
+      artifact-name: intent-engine
+      asset-name: intent-engine-linux-aarch64
 
-          # macOS x86_64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: intent-engine
-            asset_name: intent-engine-macos-x86_64
+  build-macos-x64:
+    uses: ./.github/workflows/_build-release.yml
+    with:
+      os: macos-latest
+      target: x86_64-apple-darwin
+      artifact-name: intent-engine
+      asset-name: intent-engine-macos-x86_64
 
-          # macOS ARM64 (Apple Silicon)
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: intent-engine
-            asset_name: intent-engine-macos-aarch64
+  build-macos-arm64:
+    uses: ./.github/workflows/_build-release.yml
+    with:
+      os: macos-latest
+      target: aarch64-apple-darwin
+      artifact-name: intent-engine
+      asset-name: intent-engine-macos-aarch64
 
-          # Windows x86_64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: intent-engine.exe
-            asset_name: intent-engine-windows-x86_64.exe
+  build-windows-x64:
+    uses: ./.github/workflows/_build-release.yml
+    with:
+      os: windows-latest
+      target: x86_64-pc-windows-msvc
+      artifact-name: intent-engine.exe
+      asset-name: intent-engine-windows-x86_64.exe
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-
-      - name: Configure linker for ARM64
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          mkdir -p .cargo
-          cat >> .cargo/config.toml << EOF
-          [target.aarch64-unknown-linux-gnu]
-          linker = "aarch64-linux-gnu-gcc"
-          EOF
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache target directory
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Strip binary (Linux x86_64 / macOS)
-        if: matrix.os != 'windows-latest' && matrix.target != 'aarch64-unknown-linux-gnu'
-        run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-
-      - name: Strip binary (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: aarch64-linux-gnu-strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-
-      - name: Create tarball (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
-          mv ${{ matrix.asset_name }}.tar.gz ${{ github.workspace }}
-
-      - name: Create zip (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          cd target/${{ matrix.target }}/release
-          Compress-Archive -Path ${{ matrix.artifact_name }} -DestinationPath ${{ github.workspace }}/${{ matrix.asset_name }}.zip
-
-      - name: Upload artifact (Unix)
-        if: matrix.os != 'windows-latest'
-        uses: actions/upload-artifact@v5
-        with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_name }}.tar.gz
-
-      - name: Upload artifact (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v5
-        with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_name }}.zip
-
+  # Create GitHub Release
   release:
-    name: Create Release
-    needs: build
+    name: Create GitHub Release
+    needs:
+      - build-linux-x64
+      - build-linux-arm64
+      - build-macos-x64
+      - build-macos-arm64
+      - build-windows-x64
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Delete existing release if it exists
+      - name: Display artifact structure
+        run: |
+          echo "Artifact directory structure:"
+          ls -lR artifacts/
+
+      - name: Get release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Release tag: $TAG"
+
+      - name: Delete existing release (if exists)
         continue-on-error: true
         run: |
-          gh release delete ${{ github.ref_name }} --yes
+          gh release delete ${{ steps.tag.outputs.tag }} --yes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create Release
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${{ steps.tag.outputs.tag }}"
+          echo "Generating release notes for $VERSION"
+
+          # Get version from Cargo.toml
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+
+          # Generate changelog if CHANGELOG.md exists
+          if [ -f "CHANGELOG.md" ]; then
+            CHANGELOG=$(sed -n "/^## \[$CARGO_VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$ d')
+          fi
+
+          # Create release notes file
+          cat > release_notes.md << 'EOF'
+          ## 🚀 What's Changed
+
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for full details.
+
+          ## 📦 Installation
+
+          ### Using cargo-binstall (Recommended)
+          ```bash
+          cargo binstall intent-engine
+          ```
+
+          ### Download Pre-built Binary
+          Download the appropriate binary for your platform below.
+
+          ### Build from Source
+          ```bash
+          cargo install --git https://github.com/${{ github.repository }} --tag $VERSION
+          ```
+
+          ## 🔍 Verification
+
+          After installation, verify with:
+          ```bash
+          intent-engine --version
+          intent-engine doctor
+          ```
+
+          ## 📚 Documentation
+
+          - [README](https://github.com/${{ github.repository }})
+          - [Quick Start](https://github.com/${{ github.repository }}/blob/main/QUICKSTART.md)
+          - [Interface Spec](https://github.com/${{ github.repository }}/blob/main/docs/INTERFACE_SPEC.md)
+          EOF
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body_path: release_notes.md
           files: artifacts/**/*
-          generate_release_notes: true
           draft: false
           prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish-crates-io:
+      - name: Release summary
+        run: |
+          echo "## 🎉 Release Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ steps.tag.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Binaries**: 5 platforms" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.tag.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+
+  # Publish to crates.io
+  publish-crates:
     name: Publish to crates.io
     needs: release
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -170,8 +191,32 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Login to crates.io
-        run: cargo login ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Verify version matches tag
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "❌ Version mismatch!"
+            echo "Tag version: $TAG_VERSION"
+            echo "Cargo.toml version: $CARGO_VERSION"
+            exit 1
+          fi
+
+          echo "✅ Version verified: $CARGO_VERSION"
+
+      - name: Dry run publish
+        run: cargo publish --dry-run --allow-dirty
 
       - name: Publish to crates.io
         run: cargo publish --allow-dirty
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish summary
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "## 📦 Published to crates.io" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "**Package**: https://crates.io/crates/intent-engine" >> $GITHUB_STEP_SUMMARY

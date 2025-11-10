@@ -1,0 +1,152 @@
+name: Version Bump
+
+# Workflow to automatically bump version and create release
+# Usage:
+#   - Manual trigger: Choose version bump type (patch/minor/major)
+#   - Automatically creates PR with version changes
+#   - After PR merge, creates git tag to trigger release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch  # 0.1.9 -> 0.1.10
+          - minor  # 0.1.9 -> 0.2.0
+          - major  # 0.1.9 -> 1.0.0
+        default: 'patch'
+      create_tag:
+        description: 'Create git tag after version bump (triggers release)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bump-version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-edit
+        run: cargo install cargo-edit
+
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Bump version in Cargo.toml
+        id: bump
+        run: |
+          cargo set-version --bump ${{ inputs.bump_type }}
+          NEW_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update version in CLAUDE.md
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.version }}"
+          sed -i "s/^\*\*Version\*\*: .*/\*\*Version\*\*: $NEW_VERSION/" CLAUDE.md
+          sed -i "s/^\*\*Spec Version\*\*: .*/\*\*Spec Version\*\*: $NEW_VERSION/" CLAUDE.md
+
+      - name: Update version in INTERFACE_SPEC.md
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.version }}"
+          if [ -f docs/INTERFACE_SPEC.md ]; then
+            sed -i "s/^Version: .*/Version: $NEW_VERSION/" docs/INTERFACE_SPEC.md
+          fi
+
+      - name: Update Cargo.lock
+        run: cargo update -p intent-engine
+
+      - name: Create Pull Request
+        if: inputs.create_tag == false
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore: bump version to ${{ steps.bump.outputs.version }}
+
+            - Update Cargo.toml version
+            - Update CLAUDE.md version
+            - Update INTERFACE_SPEC.md version
+            - Update Cargo.lock
+          branch: release/v${{ steps.bump.outputs.version }}
+          delete-branch: true
+          title: "chore: Release v${{ steps.bump.outputs.version }}"
+          body: |
+            ## 🚀 Release v${{ steps.bump.outputs.version }}
+
+            This PR bumps the version from **v${{ steps.current.outputs.version }}** to **v${{ steps.bump.outputs.version }}**.
+
+            ### Changes
+            - ✅ Updated `Cargo.toml` version
+            - ✅ Updated `CLAUDE.md` version
+            - ✅ Updated `INTERFACE_SPEC.md` version
+            - ✅ Updated `Cargo.lock`
+
+            ### Next Steps
+            1. Review the changes
+            2. Merge this PR
+            3. Manually create tag `v${{ steps.bump.outputs.version }}` to trigger release build
+
+            Or re-run this workflow with "Create git tag" option to automatically create the tag.
+
+            ---
+            <sub>Bump type: **${{ inputs.bump_type }}**</sub>
+          labels: |
+            release
+            automated
+
+      - name: Commit and tag (direct to main)
+        if: inputs.create_tag == true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add Cargo.toml Cargo.lock CLAUDE.md docs/INTERFACE_SPEC.md
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.version }}"
+
+          git tag -a "v${{ steps.bump.outputs.version }}" -m "Release v${{ steps.bump.outputs.version }}"
+
+          git push origin main
+          git push origin "v${{ steps.bump.outputs.version }}"
+
+          echo "✅ Version bumped and tagged: v${{ steps.bump.outputs.version }}"
+          echo "🚀 Release workflow will be triggered automatically"
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Version Bump Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous version**: ${{ steps.current.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **New version**: ${{ steps.bump.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump type**: ${{ inputs.bump_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Create tag**: ${{ inputs.create_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.create_tag }}" == "true" ]; then
+            echo "✅ Tag created: \`v${{ steps.bump.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "🚀 Release workflow will start shortly" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "📝 Pull request created for review" >> $GITHUB_STEP_SUMMARY
+          fi
