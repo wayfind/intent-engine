@@ -55,8 +55,71 @@ else
     exit 1
 fi
 
+# Create wrapper script to ensure correct working directory
+# This solves the issue where Claude Code may start the MCP server from a different directory
+WRAPPER_SCRIPT="$HOME/.cargo/bin/intent-engine-mcp-server-wrapper.sh"
+echo "Creating wrapper script: $WRAPPER_SCRIPT"
+
+cat > "$WRAPPER_SCRIPT" << 'WRAPPER_EOF'
+#!/usr/bin/env bash
+# Intent-Engine MCP Server Wrapper
+# Ensures the server runs in the correct working directory
+
+# Detect the Intent-Engine project directory
+# Priority: 1) Environment variable 2) Current directory 3) Auto-detect
+if [ -n "$INTENT_ENGINE_PROJECT_DIR" ]; then
+    PROJECT_DIR="$INTENT_ENGINE_PROJECT_DIR"
+elif [ -d "$PWD/.intent-engine" ]; then
+    PROJECT_DIR="$PWD"
+else
+    # Try to find .intent-engine directory by walking up from current directory
+    SEARCH_DIR="$PWD"
+    while [ "$SEARCH_DIR" != "/" ]; do
+        if [ -d "$SEARCH_DIR/.intent-engine" ]; then
+            PROJECT_DIR="$SEARCH_DIR"
+            break
+        fi
+        SEARCH_DIR="$(dirname "$SEARCH_DIR")"
+    done
+fi
+
+# If still not found, try common locations
+if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR/.intent-engine" ]; then
+    # Try home directory
+    if [ -d "$HOME/.intent-engine" ]; then
+        PROJECT_DIR="$HOME"
+    # Try a specific project location if set during installation
+    elif [ -d "INSTALL_PROJECT_DIR/.intent-engine" ]; then
+        PROJECT_DIR="INSTALL_PROJECT_DIR"
+    else
+        echo '{"jsonrpc":"2.0","id":null,"error":{"code":-32000,"message":"Intent-Engine project not found. Please set INTENT_ENGINE_PROJECT_DIR environment variable or run from a project directory."}}' >&2
+        exit 1
+    fi
+fi
+
+# Change to project directory
+cd "$PROJECT_DIR" || {
+    echo '{"jsonrpc":"2.0","id":null,"error":{"code":-32000,"message":"Failed to change to project directory: '"$PROJECT_DIR"'"}}' >&2
+    exit 1
+}
+
+# Run the actual MCP server
+exec "ACTUAL_MCP_SERVER" "$@"
+WRAPPER_EOF
+
+# Replace placeholder with actual paths
+sed -i "s|INSTALL_PROJECT_DIR|$PROJECT_ROOT|g" "$WRAPPER_SCRIPT"
+sed -i "s|ACTUAL_MCP_SERVER|$MCP_SERVER|g" "$WRAPPER_SCRIPT"
+
+chmod +x "$WRAPPER_SCRIPT"
+echo "Wrapper script created successfully"
+echo
+
+# Use wrapper script instead of direct binary
+MCP_SERVER="$WRAPPER_SCRIPT"
+
 echo "Configuration will be written to: $MCP_CONFIG"
-echo "MCP server location: $MCP_SERVER"
+echo "MCP server location: $MCP_SERVER (wrapper script)"
 echo "MCP server type: $SERVER_TYPE"
 echo
 
