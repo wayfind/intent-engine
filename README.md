@@ -2,7 +2,7 @@
 **为人机协作，编织清晰的思路**
 
 >
-> 将您和 AI 伙伴短暂的、易失的协作瞬间，沉淀为项目可追溯、可恢复的永恒智慧
+> 将您和 AI 伙伴短暂、易失的协作瞬间，沉淀为项目可追溯、可恢复的永恒智慧
 >
  
 **中文 | [English](README.en.md)**
@@ -12,8 +12,6 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
 [![Documentation](https://docs.rs/intent-engine/badge.svg)](https://docs.rs/intent-engine)
-
-**🚀 快速操作**: [手动触发构建](https://github.com/wayfind/intent-engine/actions/workflows/manual-build.yml) | [生成代码覆盖率](https://github.com/wayfind/intent-engine/actions/workflows/codecov.yml) | [查看覆盖率](https://codecov.io/gh/wayfind/intent-engine)
 
 ---
 
@@ -286,22 +284,5 @@ cargo tarpaulin
 
 ---
 
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-- [贡献指南](docs/zh-CN/contributing/contributing.md)
-- [行为准则](CODE_OF_CONDUCT.md)（即将添加）
-
----
-
-## 🔗 相关链接
-
-- [GitHub Repository](https://github.com/wayfind/intent-engine)
-- [Crates.io](https://crates.io/crates/intent-engine)
-- [Documentation](https://docs.rs/intent-engine)
-- [Issue Tracker](https://github.com/wayfind/intent-engine/issues)
-
----
 
 **下一步**：阅读 [The Intent-Engine Way](docs/zh-CN/guide/the-intent-engine-way.md) 深入理解设计哲学，或直接查看 [QUICKSTART.md](QUICKSTART.md) 开始使用。
