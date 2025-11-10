@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Smart Lazy Initialization**: Automatic project root detection and initialization
+  - Intelligently infers project root by detecting common markers (.git, Cargo.toml, package.json, etc.)
+  - Supports 8 project types: Git, Mercurial, Node.js, Rust, Python, Go, Maven, Gradle
+  - Transparent initialization on first write operation - no manual `init` command needed
+  - Works seamlessly from any subdirectory within a project
+  - Priority-based marker detection (.git has highest priority)
+  - Fallback to current directory with warning if no markers found
+  - Comprehensive test coverage with 22 integration tests
+  - **Monorepo support**: Each sub-project gets isolated `.intent-engine` directory
+  - **Edge cases handled**: Symlinks, Git submodules, concurrent initialization, partial states
+- **Enhanced Documentation**:
+  - Complete implementation design document (`docs/en/technical/smart-initialization.md`)
+  - Edge cases analysis document with 50+ scenarios (`docs/en/technical/smart-initialization-edge-cases.md`)
+  - Updated INTERFACE_SPEC.md with Section 1.3: Project Initialization and Smart Root Inference
+  - Implementation summary report with detailed statistics and examples
+  - Updated quickstart guides (English and Chinese) with smart initialization explanation
+
+### Changed
+- Project initialization now automatically detects root directory instead of using CWD
+- `.intent-engine` directory is created at project root rather than current directory
+- Initialization behavior is now consistent across different project structures
+
+### Fixed
+- Fixed clippy warnings in `src/project.rs` (unused imports, const checks)
+- Fixed deprecated rand API warnings in performance tests
+- Fixed Windows console API compatibility with updated `windows` crate
+  - Updated `SetConsoleOutputCP` to use Result-based interface
+
+### Technical
+- Total test coverage: 240 tests (all passing)
+- New integration tests: +22 smart initialization tests
+- Platform support: Linux, macOS, Windows (with platform-specific symlink handling)
+- Performance: ~1-3ms overhead for root detection (negligible)
+- Zero breaking changes - fully backward compatible
+
 ## [0.1.7] - 2025-11-08
 
 ### Added

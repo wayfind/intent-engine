@@ -96,6 +96,7 @@ async fn run_dataset_test(total_tasks: usize) {
     println!("\n🎲 Phase 2: Randomly starting and completing tasks...");
     let start = Instant::now();
 
+    #[allow(deprecated)]
     let mut rng = rand::thread_rng();
     let mut started_count = 0;
     let mut completed_count = 0;
@@ -103,6 +104,7 @@ async fn run_dataset_test(total_tasks: usize) {
     // Start 30% of tasks
     let tasks_to_start = total_tasks * 30 / 100;
     for _ in 0..tasks_to_start {
+        #[allow(deprecated)]
         let random_idx = rng.gen_range(0..task_ids.len());
         let task_id = task_ids[random_idx];
 
@@ -116,6 +118,7 @@ async fn run_dataset_test(total_tasks: usize) {
     // Complete 50% of started tasks
     let tasks_to_complete = started_count / 2;
     for _ in 0..tasks_to_complete {
+        #[allow(deprecated)]
         let random_idx = rng.gen_range(0..task_ids.len());
         let task_id = task_ids[random_idx];
 
@@ -167,6 +170,7 @@ async fn run_dataset_test(total_tasks: usize) {
     let events_count = 1000;
 
     for _ in 0..events_count {
+        #[allow(deprecated)]
         let random_idx = rng.gen_range(0..task_ids.len());
         let task_id = task_ids[random_idx];
 

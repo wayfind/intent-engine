@@ -315,9 +315,50 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
 }
 
 fn read_stdin() -> Result<String> {
-    let mut buffer = String::new();
-    io::stdin().read_to_string(&mut buffer)?;
-    Ok(buffer.trim().to_string())
+    // On Windows, PowerShell 5.x may send GBK-encoded data through pipes
+    // even though we set console encoding. We need to handle this gracefully.
+
+    #[cfg(windows)]
+    {
+        use encoding_rs::GBK;
+
+        // Try reading as UTF-8 first
+        let mut buffer = String::new();
+        match io::stdin().read_to_string(&mut buffer) {
+            Ok(_) => return Ok(buffer.trim().to_string()),
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => {
+                // UTF-8 decode failed, try GBK on Windows
+                eprintln!("Warning: Input is not valid UTF-8, attempting GBK decoding...");
+
+                // Read as raw bytes
+                let mut bytes = Vec::new();
+                io::stdin().read_to_end(&mut bytes)?;
+
+                // Try to decode as GBK
+                let (decoded, _encoding, had_errors) = GBK.decode(&bytes);
+
+                if had_errors {
+                    return Err(IntentError::InvalidInput(format!(
+                        "Input contains invalid characters. {}\n\n{}\n{}\n{}",
+                        "On Windows PowerShell, pipe encoding may not be UTF-8.",
+                        "To fix this, run one of the following before your command:",
+                        "  [Console]::InputEncoding = [System.Text.Encoding]::UTF8",
+                        "  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8"
+                    )));
+                }
+
+                return Ok(decoded.trim().to_string());
+            },
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let mut buffer = String::new();
+        io::stdin().read_to_string(&mut buffer)?;
+        Ok(buffer.trim().to_string())
+    }
 }
 
 async fn handle_doctor_command() -> Result<()> {
