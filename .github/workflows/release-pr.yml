@@ -57,7 +57,7 @@ jobs:
         run: cargo publish --dry-run --allow-dirty
 
       - name: Comment on PR
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |
             const version = require('fs').readFileSync('Cargo.toml', 'utf8')
