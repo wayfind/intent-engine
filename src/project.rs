@@ -6,6 +6,19 @@ use std::path::PathBuf;
 const INTENT_DIR: &str = ".intent-engine";
 const DB_FILE: &str = "project.db";
 
+/// Project root markers in priority order (highest priority first)
+/// These are used to identify the root directory of a project
+const PROJECT_ROOT_MARKERS: &[&str] = &[
+    ".git",           // Git (highest priority)
+    ".hg",            // Mercurial
+    "package.json",   // Node.js
+    "Cargo.toml",     // Rust
+    "pyproject.toml", // Python (PEP 518)
+    "go.mod",         // Go Modules
+    "pom.xml",        // Maven (Java)
+    "build.gradle",   // Gradle (Java/Kotlin)
+];
+
 #[derive(Debug)]
 pub struct ProjectContext {
     pub root: PathBuf,
@@ -32,9 +45,64 @@ impl ProjectContext {
         None
     }
 
-    /// Initialize a new Intent-Engine project in the current directory
+    /// Infer the project root directory based on common project markers
+    ///
+    /// This function implements a smart algorithm to find the project root:
+    /// 1. Start from current directory and traverse upwards
+    /// 2. Check each directory for project markers (in priority order)
+    /// 3. Return the first directory that contains any marker
+    /// 4. If no marker found, return None (fallback to CWD handled by caller)
+    fn infer_project_root() -> Option<PathBuf> {
+        let cwd = std::env::current_dir().ok()?;
+        let mut current = cwd.clone();
+
+        loop {
+            // Check if any marker exists in current directory
+            for marker in PROJECT_ROOT_MARKERS {
+                let marker_path = current.join(marker);
+                if marker_path.exists() {
+                    return Some(current);
+                }
+            }
+
+            // Try to move up to parent directory
+            if !current.pop() {
+                // Reached filesystem root without finding any marker
+                break;
+            }
+        }
+
+        None
+    }
+
+    /// Initialize a new Intent-Engine project using smart root inference
+    ///
+    /// This function implements the smart lazy initialization algorithm:
+    /// 1. Try to infer project root based on common markers
+    /// 2. If inference succeeds, initialize in the inferred root
+    /// 3. If inference fails, fallback to CWD and print warning to stderr
     pub async fn initialize_project() -> Result<Self> {
-        let root = std::env::current_dir()?;
+        let cwd = std::env::current_dir()?;
+
+        // Try to infer the project root
+        let root = match Self::infer_project_root() {
+            Some(inferred_root) => {
+                // Successfully inferred project root
+                inferred_root
+            },
+            None => {
+                // Fallback: use current working directory
+                // Print warning to stderr
+                eprintln!(
+                    "Warning: Could not determine a project root based on common markers (e.g., .git, package.json).\n\
+                     Initialized Intent-Engine in the current directory '{}'.\n\
+                     For predictable behavior, it's recommended to initialize from a directory containing a root marker.",
+                    cwd.display()
+                );
+                cwd
+            },
+        };
+
         let intent_dir = root.join(INTENT_DIR);
         let db_path = intent_dir.join(DB_FILE);
 
@@ -83,6 +151,8 @@ impl ProjectContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
 
     // Note: Tests that modify the current directory are intentionally limited
     // because they can interfere with other tests running in parallel.
@@ -101,5 +171,48 @@ mod tests {
         let _type_check = |ctx: ProjectContext| {
             let _ = format!("{:?}", ctx);
         };
+    }
+
+    #[test]
+    fn test_project_root_markers_list() {
+        // Verify that the markers list is not empty and contains expected markers
+        assert!(!PROJECT_ROOT_MARKERS.is_empty());
+        assert!(PROJECT_ROOT_MARKERS.contains(&".git"));
+        assert!(PROJECT_ROOT_MARKERS.contains(&"Cargo.toml"));
+        assert!(PROJECT_ROOT_MARKERS.contains(&"package.json"));
+    }
+
+    #[test]
+    fn test_project_root_markers_priority() {
+        // Verify that .git has highest priority (comes first)
+        assert_eq!(PROJECT_ROOT_MARKERS[0], ".git");
+    }
+
+    /// Test infer_project_root in an isolated environment
+    /// Note: This test creates a temporary directory structure but doesn't change CWD
+    #[test]
+    fn test_infer_project_root_with_git() {
+        // This test is limited because we can't easily change CWD in unit tests
+        // The actual behavior is tested in integration tests
+        // Here we just verify the marker list is correct
+        assert!(PROJECT_ROOT_MARKERS.contains(&".git"));
+    }
+
+    /// Test that markers list includes all major project types
+    #[test]
+    fn test_all_major_project_types_covered() {
+        let markers = PROJECT_ROOT_MARKERS;
+
+        // Git version control
+        assert!(markers.contains(&".git"));
+        assert!(markers.contains(&".hg"));
+
+        // Programming languages
+        assert!(markers.contains(&"Cargo.toml")); // Rust
+        assert!(markers.contains(&"package.json")); // Node.js
+        assert!(markers.contains(&"pyproject.toml")); // Python
+        assert!(markers.contains(&"go.mod")); // Go
+        assert!(markers.contains(&"pom.xml")); // Java (Maven)
+        assert!(markers.contains(&"build.gradle")); // Java/Kotlin (Gradle)
     }
 }

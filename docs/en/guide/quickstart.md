@@ -53,9 +53,12 @@ echo "Implement JWT authentication
 ```
 
 **What happened?**
-- ✅ Intent-Engine automatically created `.intent-engine/project.db` in current directory (or parent)
+- ✅ Intent-Engine automatically detected your project root (by finding `.git`, `Cargo.toml`, `package.json`, etc.)
+- ✅ Created `.intent-engine/project.db` at the project root (not just current directory)
 - ✅ Task saved to SQLite database
 - ✅ Specification (spec) fully recorded
+
+> 💡 **Smart Initialization**: Intent-Engine intelligently finds your project root by looking for common markers like `.git`, `Cargo.toml`, `package.json`, etc. This means you can run commands from any subdirectory, and the database will always be at the project root. No manual initialization required!
 
 ---
 

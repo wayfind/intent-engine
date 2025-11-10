@@ -53,9 +53,12 @@ echo "实现 JWT 认证功能
 ```
 
 **发生了什么？**
-- ✅ Intent-Engine 自动在当前目录（或父目录）创建了 `.intent-engine/project.db`
+- ✅ Intent-Engine 自动检测了项目根目录（通过查找 `.git`、`Cargo.toml`、`package.json` 等标记）
+- ✅ 在项目根目录创建了 `.intent-engine/project.db`（而不仅仅是当前目录）
 - ✅ 任务被保存到 SQLite 数据库
 - ✅ 规格说明（spec）被完整记录
+
+> 💡 **智能初始化**: Intent-Engine 会智能地查找项目根目录，通过检测常见的项目标记如 `.git`、`Cargo.toml`、`package.json` 等。这意味着你可以从任何子目录运行命令，数据库总是会被创建在项目根目录。无需手动初始化！
 
 ---
 
