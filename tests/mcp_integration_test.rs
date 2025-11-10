@@ -15,7 +15,7 @@ fn mcp_request(request: &Value) -> Value {
     // Initialize project
     std::env::set_current_dir(project_path).unwrap();
     let _ = Command::new("intent-engine")
-        .args(&["task", "add", "--name", "test"])
+        .args(["task", "add", "--name", "test"])
         .output();
 
     // Send request to MCP server
@@ -189,7 +189,7 @@ fn test_task_search_with_fts5_query() {
     std::env::set_current_dir(project_path).unwrap();
 
     let init_output = Command::new("intent-engine")
-        .args(&["task", "add", "--name", "__init_test__"])
+        .args(["task", "add", "--name", "__init_test__"])
         .output()
         .unwrap();
 
@@ -206,7 +206,7 @@ fn test_task_search_with_fts5_query() {
 
     // Create test tasks
     let output1 = Command::new("intent-engine")
-        .args(&["task", "add", "--name", "Fix authentication bug"])
+        .args(["task", "add", "--name", "Fix authentication bug"])
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .output()
         .unwrap();
@@ -217,7 +217,7 @@ fn test_task_search_with_fts5_query() {
     );
 
     let output2 = Command::new("intent-engine")
-        .args(&["task", "add", "--name", "Add payment feature"])
+        .args(["task", "add", "--name", "Add payment feature"])
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .output()
         .unwrap();
