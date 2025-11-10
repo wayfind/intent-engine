@@ -67,7 +67,14 @@ async fn run_server() -> io::Result<()> {
         }
 
         let response = match serde_json::from_str::<JsonRpcRequest>(&line) {
-            Ok(request) => handle_request(request).await,
+            Ok(request) => {
+                // Handle notifications (no id = no response needed)
+                if request.id.is_none() {
+                    handle_notification(&request).await;
+                    continue; // Skip sending response for notifications
+                }
+                handle_request(request).await
+            },
             Err(e) => JsonRpcResponse {
                 jsonrpc: "2.0".to_string(),
                 id: None,
@@ -87,6 +94,21 @@ async fn run_server() -> io::Result<()> {
     Ok(())
 }
 
+async fn handle_notification(request: &JsonRpcRequest) {
+    // Handle MCP notifications (no response required)
+    match request.method.as_str() {
+        "initialized" => {
+            eprintln!("✓ MCP client initialized");
+        },
+        "notifications/cancelled" => {
+            eprintln!("⚠ Request cancelled");
+        },
+        _ => {
+            eprintln!("⚠ Unknown notification: {}", request.method);
+        },
+    }
+}
+
 async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
     // Validate JSON-RPC version
     if request.jsonrpc != "2.0" {
@@ -103,9 +125,10 @@ async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
 
     let result = match request.method.as_str() {
         "initialize" => handle_initialize(request.params),
+        "ping" => Ok(json!({})), // Ping response for connection keep-alive
         "tools/list" => handle_tools_list(),
         "tools/call" => handle_tool_call(request.params).await,
-        _ => Err(format!("Unknown method: {}", request.method)),
+        _ => Err(format!("Method not found: {}", request.method)),
     };
 
     match result {
@@ -129,11 +152,13 @@ async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
 
 fn handle_initialize(_params: Option<Value>) -> Result<Value, String> {
     // MCP initialize handshake
-    // Return server capabilities and info
+    // Return server capabilities and info per MCP specification
     Ok(json!({
         "protocolVersion": "2024-11-05",
         "capabilities": {
-            "tools": {}
+            "tools": {
+                "listChanged": false  // Static tool list, no dynamic changes
+            }
         },
         "serverInfo": {
             "name": "intent-engine",
