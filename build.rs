@@ -6,10 +6,6 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    // Tell cargo to rerun this script only if build.rs itself changes
-    // This prevents unnecessary reruns on every build
-    println!("cargo:rerun-if-changed=build.rs");
-
     // Only run setup in development builds, not in CI or release builds
     let is_ci = env::var("CI").is_ok()
         || env::var("GITHUB_ACTIONS").is_ok()
@@ -27,13 +23,21 @@ fn main() {
         return;
     }
 
-    // Check if hooks are already installed to avoid repeated messages
+    // Use a marker file to track if hooks have been installed by build.rs
+    // This prevents showing the installation message on every build
+    let marker_file = Path::new("target/.git-hooks-installed");
+    if marker_file.exists() {
+        // Hooks already installed by a previous build
+        return;
+    }
+
+    // Check if hooks are already installed (maybe manually or by SessionStart)
     let hook_path = Path::new(".git/hooks/pre-commit");
     if hook_path.exists() {
-        // Check if it contains our cargo fmt hook
         if let Ok(content) = std::fs::read_to_string(hook_path) {
             if content.contains("cargo fmt") {
-                // Hook already installed, skip
+                // Hook exists, create marker file and skip
+                let _ = std::fs::write(marker_file, "");
                 return;
             }
         }
@@ -42,16 +46,18 @@ fn main() {
     // Install git hooks using the existing script
     let setup_script = Path::new("scripts/auto-setup-hooks.sh");
     if setup_script.exists() {
-        println!("cargo:warning=🔧 Installing git pre-commit hooks for auto-formatting...");
+        println!("cargo:warning=🔧 Setting up git pre-commit hooks for auto-formatting...");
 
         let status = Command::new("bash").arg(setup_script).status().ok();
 
         match status {
             Some(exit_status) if exit_status.success() => {
-                println!("cargo:warning=✅ Git hooks installed successfully!");
+                // Create marker file to avoid repeating this message
+                let _ = std::fs::write(marker_file, "");
+                println!("cargo:warning=✅ Git hooks configured! Commits will be auto-formatted.");
             },
             Some(_) => {
-                println!("cargo:warning=⚠️  Failed to install git hooks. You may need to run ./scripts/setup-git-hooks.sh manually.");
+                println!("cargo:warning=⚠️  Failed to install git hooks. Run ./scripts/setup-git-hooks.sh manually.");
             },
             None => {
                 println!("cargo:warning=⚠️  Could not run hooks setup script. Bash may not be available.");
