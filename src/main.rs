@@ -11,6 +11,19 @@ use std::io::{self, Read};
 
 #[tokio::main]
 async fn main() {
+    // Setup Windows console for UTF-8 output
+    // This ensures Chinese and other non-ASCII characters display correctly
+    #[cfg(windows)]
+    if let Err(e) = intent_engine::windows_console::setup_windows_console() {
+        eprintln!(
+            "Warning: Failed to setup Windows console UTF-8: {}",
+            e
+        );
+        eprintln!(
+            "Chinese characters may not display correctly. Consider running 'chcp 65001' first."
+        );
+    }
+
     if let Err(e) = run().await {
         let error_response = e.to_error_response();
         eprintln!("{}", serde_json::to_string_pretty(&error_response).unwrap());
