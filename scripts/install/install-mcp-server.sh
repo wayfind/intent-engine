@@ -30,31 +30,28 @@ fi
 MCP_CONFIG="$CONFIG_DIR/mcp_servers.json"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Determine MCP server location - prefer Rust binary, fallback to Python
+# Determine MCP server location - only Rust binary supported
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 if [ -f "$HOME/.cargo/bin/intent-engine-mcp-server" ]; then
     MCP_SERVER="$HOME/.cargo/bin/intent-engine-mcp-server"
-    MCP_COMMAND="$MCP_SERVER"
-    MCP_ARGS="[]"
-    SERVER_TYPE="Rust (native binary)"
-elif [ -f "$SCRIPT_DIR/target/release/intent-engine-mcp-server" ]; then
-    MCP_SERVER="$SCRIPT_DIR/target/release/intent-engine-mcp-server"
-    MCP_COMMAND="$MCP_SERVER"
-    MCP_ARGS="[]"
-    SERVER_TYPE="Rust (local build)"
-elif [ -f "$SCRIPT_DIR/mcp-server.py" ]; then
-    MCP_SERVER="$SCRIPT_DIR/mcp-server.py"
-    MCP_COMMAND="python3"
-    MCP_ARGS='["'"$MCP_SERVER"'"]'
-    SERVER_TYPE="Python (legacy wrapper)"
-    echo "Warning: Using legacy Python wrapper. Consider building the Rust version for better performance:"
+    SERVER_TYPE="Rust native (installed via cargo install)"
+elif [ -f "/usr/local/bin/intent-engine-mcp-server" ]; then
+    MCP_SERVER="/usr/local/bin/intent-engine-mcp-server"
+    SERVER_TYPE="Rust native (system-wide)"
+elif [ -f "$PROJECT_ROOT/target/release/intent-engine-mcp-server" ]; then
+    MCP_SERVER="$PROJECT_ROOT/target/release/intent-engine-mcp-server"
+    SERVER_TYPE="Rust native (local build)"
+else
+    echo "Error: Rust MCP server binary not found!"
+    echo
+    echo "Please build and install the MCP server first:"
+    echo "  cd $PROJECT_ROOT"
     echo "  cargo build --release --bin intent-engine-mcp-server"
     echo "  cargo install --path . --bin intent-engine-mcp-server"
     echo
-else
-    echo "Error: No MCP server found!"
-    echo "Please build the Rust MCP server first:"
-    echo "  cargo build --release --bin intent-engine-mcp-server"
-    echo "  cargo install --path . --bin intent-engine-mcp-server"
+    echo "Or download a pre-built binary from:"
+    echo "  https://github.com/wayfind/intent-engine/releases"
     exit 1
 fi
 
@@ -63,18 +60,13 @@ echo "MCP server location: $MCP_SERVER"
 echo "MCP server type: $SERVER_TYPE"
 echo
 
-# Check if intent-engine is installed
+# Optional: Check if intent-engine CLI is also installed
 if ! command -v intent-engine &> /dev/null; then
-    echo "Warning: 'intent-engine' command not found in PATH"
-    echo "Please build and install intent-engine first:"
-    echo "  cargo build --release"
+    echo "Note: 'intent-engine' CLI command not found in PATH"
+    echo "The MCP server will still work, but you may also want to install the CLI:"
+    echo "  cd $PROJECT_ROOT"
     echo "  cargo install --path ."
     echo
-    read -p "Continue anyway? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
 fi
 
 # Create config directory if it doesn't exist
@@ -101,44 +93,47 @@ if [ -f "$MCP_CONFIG" ]; then
 
     # Update existing config
     echo "Updating MCP configuration..."
-    python3 -c "
-import json
-import sys
 
-config_file = '$MCP_CONFIG'
-with open(config_file, 'r') as f:
-    config = json.load(f)
+    # Check if jq is available
+    if command -v jq &> /dev/null; then
+        # Use jq to update JSON
+        TEMP_CONFIG=$(mktemp)
+        jq --arg cmd "$MCP_SERVER" \
+           '.mcpServers["intent-engine"] = {
+               command: $cmd,
+               args: [],
+               description: "Strategic intent and task workflow management for human-AI collaboration"
+           }' "$MCP_CONFIG" > "$TEMP_CONFIG"
+        mv "$TEMP_CONFIG" "$MCP_CONFIG"
+        echo "Configuration updated successfully (using jq)"
+    else
+        # Fallback: manual JSON manipulation (warning about potential issues)
+        echo "Warning: jq not found, using basic text replacement"
+        echo "For safer JSON editing, install jq: sudo apt-get install jq (or brew install jq on macOS)"
 
-if 'mcpServers' not in config:
-    config['mcpServers'] = {}
+        # Check if intent-engine entry exists
+        if grep -q '"intent-engine"' "$MCP_CONFIG"; then
+            # Remove old intent-engine entry
+            TEMP_CONFIG=$(mktemp)
+            sed '/"intent-engine"/,/}/d' "$MCP_CONFIG" > "$TEMP_CONFIG"
+            mv "$TEMP_CONFIG" "$MCP_CONFIG"
+        fi
 
-config['mcpServers']['intent-engine'] = {
-    'command': '$MCP_COMMAND',
-    'args': $MCP_ARGS,
-    'description': 'Strategic intent and task workflow management for human-AI collaboration'
-}
-
-with open(config_file, 'w') as f:
-    json.dump(config, f, indent=2)
-
-print('Configuration updated successfully')
-"
+        # Add new intent-engine entry
+        # This is a simplified approach - assumes mcpServers object exists
+        TEMP_CONFIG=$(mktemp)
+        sed '/"mcpServers": {/a\
+    "intent-engine": {\
+      "command": "'"$MCP_SERVER"'",\
+      "args": [],\
+      "description": "Strategic intent and task workflow management for human-AI collaboration"\
+    },' "$MCP_CONFIG" > "$TEMP_CONFIG"
+        mv "$TEMP_CONFIG" "$MCP_CONFIG"
+        echo "Configuration updated (basic mode)"
+    fi
 else
     echo "Creating new MCP configuration..."
-    if [ "$MCP_COMMAND" = "python3" ]; then
-        cat > "$MCP_CONFIG" << EOF
-{
-  "mcpServers": {
-    "intent-engine": {
-      "command": "python3",
-      "args": ["$MCP_SERVER"],
-      "description": "Strategic intent and task workflow management for human-AI collaboration"
-    }
-  }
-}
-EOF
-    else
-        cat > "$MCP_CONFIG" << EOF
+    cat > "$MCP_CONFIG" << EOF
 {
   "mcpServers": {
     "intent-engine": {
@@ -149,20 +144,31 @@ EOF
   }
 }
 EOF
-    fi
     echo "Configuration created successfully"
 fi
 
 echo
 echo "✓ Installation complete!"
 echo
+echo "MCP Server Type: $SERVER_TYPE"
+echo "Configuration: $MCP_CONFIG"
+echo
 echo "Next steps:"
 echo "1. Restart Claude Code to load the MCP server"
-echo "2. Verify Intent-Engine tools are available in Claude Code"
-echo "3. Read THE_INTENT_ENGINE_WAY.md for usage philosophy"
+echo "2. Verify Intent-Engine tools are available (13 tools should appear)"
+echo "3. Test in Claude Code: Ask Claude to create a task for you"
 echo
 echo "To verify installation:"
+echo "  # Check config file"
 echo "  cat $MCP_CONFIG"
+echo
+echo "  # Test MCP server manually"
+echo "  echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' | $MCP_SERVER"
+echo
+echo "Documentation:"
+echo "  README.md - MCP Service section"
+echo "  docs/zh-CN/integration/mcp-server.md - Complete guide"
+echo "  CLAUDE.md - AI integration guide"
 echo
 echo "To uninstall:"
 echo "  Remove 'intent-engine' entry from $MCP_CONFIG"
