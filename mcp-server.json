@@ -5,7 +5,7 @@
   "tools": [
     {
       "name": "task_add",
-      "description": "Create a new task to capture strategic intent. Use when a requirement is complex enough to need multiple steps, context, or long-term tracking.",
+      "description": "Create a new task to capture strategic intent. Use when a requirement is complex enough to need multiple steps, context, or long-term tracking. For long specs, prefer using CLI with stdin pipe: echo 'spec content' | intent-engine task add --name 'task name' --spec-stdin",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -15,7 +15,7 @@
           },
           "spec": {
             "type": "string",
-            "description": "Detailed specification in markdown format (optional but recommended)"
+            "description": "Detailed specification in markdown format (optional but recommended). Example CLI usage: echo '## Architecture\\n- Use microservices\\n- PostgreSQL database' | intent-engine task add --name 'Design system' --spec-stdin"
           },
           "parent_id": {
             "type": "integer",
@@ -69,7 +69,7 @@
     },
     {
       "name": "task_spawn_subtask",
-      "description": "Create a subtask under current task and switch to it. ATOMIC operation. Use when you discover a sub-problem that must be solved first.",
+      "description": "Create a subtask under current task and switch to it. ATOMIC operation. Use when you discover a sub-problem that must be solved first. For long specs, use CLI with stdin: echo 'spec' | intent-engine task spawn-subtask --name 'subtask' --spec-stdin",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -79,7 +79,7 @@
           },
           "spec": {
             "type": "string",
-            "description": "Subtask specification (optional)"
+            "description": "Subtask specification (optional). Example CLI usage: echo 'Configure JWT with HS256 algorithm' | intent-engine task spawn-subtask --name 'JWT setup' --spec-stdin"
           }
         },
         "required": [
@@ -121,7 +121,7 @@
     },
     {
       "name": "task_update",
-      "description": "Update task properties including complexity (1-10) and priority (higher = more important).",
+      "description": "Update task properties including complexity (1-10) and priority (higher = more important). For updating long specs, prefer CLI with stdin pipe: echo 'new spec' | intent-engine task update <id> --spec-stdin",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -135,7 +135,7 @@
           },
           "spec": {
             "type": "string",
-            "description": "New specification (optional)"
+            "description": "New specification (optional). Example CLI usage: echo '## Updated Design\\n- Changed to REST API' | intent-engine task update 42 --spec-stdin"
           },
           "status": {
             "type": "string",
@@ -211,13 +211,13 @@
     },
     {
       "name": "event_add",
-      "description": "Record a key event for a task. Use to log decisions, blockers, milestones. This is AI's external long-term memory.",
+      "description": "Record a key event for a task. Use to log decisions, blockers, milestones. This is AI's external long-term memory. IMPORTANT: When you need to create design docs, summaries, or any temporary documentation, prefer storing them as events (type: 'note' or 'milestone') rather than creating separate files. This keeps documentation tightly coupled with tasks. For long content, use CLI with stdin pipe: echo 'content' | intent-engine event add --type note --data-stdin",
       "inputSchema": {
         "type": "object",
         "properties": {
           "task_id": {
             "type": "integer",
-            "description": "Task ID"
+            "description": "Task ID (optional if current task is set)"
           },
           "event_type": {
             "type": "string",
@@ -228,11 +228,11 @@
               "discussion",
               "note"
             ],
-            "description": "Event type"
+            "description": "Event type. Use 'note' for design docs/summaries, 'decision' for choices made, 'milestone' for phase completion, 'blocker' for issues, 'discussion' for analysis"
           },
           "data": {
             "type": "string",
-            "description": "Event content in markdown format"
+            "description": "Event content in markdown format. Can contain full documentation, design specs, analysis results, etc. Example CLI usage: echo '# API Design\\n## Endpoints\\n- GET /users\\n- POST /users' | intent-engine event add --type note --data-stdin"
           }
         },
         "required": [
