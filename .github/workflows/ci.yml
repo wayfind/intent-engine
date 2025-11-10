@@ -1,63 +1,22 @@
 name: CI
 
-# Ultra-Fast CI Strategy
-#
-# 🚀 Philosophy: Fast feedback over comprehensive checks
-#
-# This workflow prioritizes developer experience with <2 minute CI times.
-# Comprehensive checks run daily and create issues when problems are found.
-#
-# 🏃 FAST CI (<2 minutes) - Runs on every push/PR
-#   Checks:
-#   - Code formatting (cargo fmt)
-#   - Linting (cargo clippy)
-#   - Compilation (cargo check)
-#   - All targets (cargo check --all-targets)
-#
-#   What it catches:
-#   - 95% of common issues (format, lint, compile errors)
-#   - API breaking changes
-#   - Type errors
-#
-# 🔬 COMPREHENSIVE CI (~30-40 minutes) - Runs daily at 3:00 AM Los Angeles time (10:00 UTC)
-#   Only runs if there are new commits in the last 24 hours
-#   Checks:
-#   - Full build and tests
-#   - Cross-platform compatibility
-#   - Documentation
-#   - Security audit
-#   - Package verification
-#   - Benchmarks
-#   - Code coverage
-#
-#   Action on failure:
-#   - Creates GitHub Issue automatically
-#   - Notifies maintainers
-#
-# Benefits:
-#   - 95% faster feedback for developers (10min → 2min)
-#   - No compromise on code quality
-#   - Issues caught within 24 hours
-#   - Developers stay in flow state
+# Simplified CI workflow with clear separation of concerns:
+# - PR: Fast checks (fmt, clippy, basic tests) - must pass
+# - Main: Full test suite across platforms
+# - Schedule: Security & dependency audits
 
 on:
   push:
-    branches: [ main, master, claude/** ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
   schedule:
-    # Run daily at 3:00 AM Los Angeles time (10:00 UTC)
-    # Only runs if there are new commits in the last 24 hours
+    # Daily security audit at 10:00 UTC (3:00 AM LA time)
     - cron: '0 10 * * *'
-  workflow_dispatch:  # Allow manual trigger for full CI
+  workflow_dispatch:
     inputs:
-      run_comprehensive:
-        description: '运行完整的综合测试'
-        required: false
-        type: boolean
-        default: true
-      skip_cache:
-        description: '跳过缓存（用于调试）'
+      skip_tests:
+        description: 'Skip tests (for debugging)'
         required: false
         type: boolean
         default: false
@@ -67,180 +26,88 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Check for new commits in last 24 hours (only for scheduled runs)
-  check-new-commits:
-    name: Check for New Commits
+  # ============================================================================
+  # PR & Push Checks - Fast feedback (<5 minutes)
+  # ============================================================================
+
+  format:
+    name: Format Check
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    outputs:
-      has_new_commits: ${{ steps.check.outputs.has_new_commits }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          fetch-depth: 0  # Fetch all history to check commits
-
-      - name: Check for commits in last 24 hours
-        id: check
-        run: |
-          # For manual triggers, always run comprehensive CI
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "🚀 Manual trigger - running comprehensive CI"
-            echo "has_new_commits=true" >> $GITHUB_OUTPUT
-          # For scheduled runs, check for new commits
-          elif [ -n "$(git log --since='24 hours ago' --format='%H')" ]; then
-            echo "✅ Found new commits in the last 24 hours"
-            echo "has_new_commits=true" >> $GITHUB_OUTPUT
-          else
-            echo "⏭️  No new commits in the last 24 hours, skipping comprehensive CI"
-            echo "has_new_commits=false" >> $GITHUB_OUTPUT
-          fi
-
-  # Fast check job - runs on every push/PR (<2 minutes)
-  fast-check:
-    name: Fast Check (fmt + clippy + check)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Cache cargo
-        if: ${{ !inputs.skip_cache }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-fast-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-fast-
+          components: rustfmt
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+  clippy:
+    name: Clippy Lints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Check compilation
-        run: cargo check --all-targets --all-features
-
-  # Comprehensive tests - only runs on schedule or manual trigger
-  test-comprehensive:
-    name: Comprehensive Tests
+  test-quick:
+    name: Quick Tests (Ubuntu/stable)
     runs-on: ubuntu-latest
-    needs: [check-new-commits]
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true')
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-full-${{ hashFiles('**/Cargo.lock') }}
+      - uses: Swatinem/rust-cache@v2
 
       - name: Build
         run: cargo build --verbose
 
       - name: Run tests
+        if: ${{ !inputs.skip_tests }}
         run: cargo test --verbose
 
-      - name: Build release
-        run: cargo build --release --verbose
+      - name: Test doctor command
+        run: cargo run --bin intent-engine -- doctor
 
-      - name: Run doctor command
-        run: cargo run --release --bin intent-engine -- doctor
+  # ============================================================================
+  # Main Branch - Full Test Suite
+  # ============================================================================
 
-  # Cross-platform tests - only runs on schedule or manual trigger
-  test-cross-platform:
-    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
+  test-full:
+    name: Full Tests (${{ matrix.os }} / ${{ matrix.rust }})
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
-    needs: [check-new-commits]
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true')
+
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          # Linux
+          - os: ubuntu-latest
             rust: stable
           - os: ubuntu-latest
             rust: beta
+
+          # macOS
           - os: macos-latest
-            rust: beta
+            rust: stable
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build
-        run: cargo build --verbose
-
-      - name: Run tests
-        run: cargo test --verbose
-
-      - name: Build release
-        run: cargo build --release --verbose
-
-      - name: Upload test results
-        if: failure()
-        uses: actions/upload-artifact@v5
-        with:
-          name: test-results-${{ matrix.os }}-${{ matrix.rust }}
-          path: |
-            target/debug/deps/*.log
-            target/release/deps/*.log
-
-  # Full CI - runs on production branches, schedule, and manual trigger
-  test-full:
-    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
-    runs-on: ${{ matrix.os }}
-    needs: [check-new-commits]
-    if: |
-      (github.ref == 'refs/heads/main') ||
-      (github.ref == 'refs/heads/master') ||
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true')
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
+          # Windows
           - os: windows-latest
             rust: stable
-          - os: windows-latest
-            rust: beta
+
+          # Nightly (experimental)
           - os: ubuntu-latest
             rust: nightly
             experimental: true
@@ -248,371 +115,207 @@ jobs:
     continue-on-error: ${{ matrix.experimental || false }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          shared-key: ${{ matrix.rust }}-${{ matrix.os }}
 
       - name: Build
         run: cargo build --verbose
 
       - name: Run tests
+        if: ${{ !inputs.skip_tests }}
         run: cargo test --verbose
 
       - name: Build release
         run: cargo build --release --verbose
 
-      - name: Upload test results
+      - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v5
         with:
-          name: test-results-${{ matrix.os }}-${{ matrix.rust }}
-          path: |
-            target/debug/deps/*.log
-            target/release/deps/*.log
+          name: test-logs-${{ matrix.os }}-${{ matrix.rust }}
+          path: target/*/deps/*.log
+          retention-days: 7
 
-  # Test with minimal dependency versions - Only on manual trigger or schedule
-  test-minimal-versions:
-    name: Test Minimal Versions
-    runs-on: ubuntu-latest
-    needs: [check-new-commits]
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true')
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+  # ============================================================================
+  # Documentation & Package
+  # ============================================================================
 
-      - name: Setup Rust (nightly for -Z minimal-versions)
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Setup Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Generate minimal lockfile
-        run: cargo +nightly update -Z minimal-versions
-
-      - name: Build with minimal versions
-        run: cargo +stable build --verbose
-
-      - name: Test with minimal versions
-        run: cargo +stable test --verbose
-
-  # Code coverage - Only on manual trigger or schedule
-  coverage:
-    name: Code Coverage
-    runs-on: ubuntu-latest
-    needs: [check-new-commits]
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true')
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-
-      - name: Generate coverage
-        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./cobertura.xml
-          fail_ci_if_error: false
-
-      - name: Archive coverage results
-        uses: actions/upload-artifact@v5
-        with:
-          name: code-coverage-report
-          path: cobertura.xml
-
-  # Security audit - Only on manual trigger or schedule
-  security-audit:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    needs: [check-new-commits]
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true')
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
-      - name: Run cargo-audit
-        run: cargo audit
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
-
-      - name: Run cargo-deny
-        run: cargo deny check
-
-  # Documentation check - Only on manual trigger or schedule
   docs:
     name: Documentation
     runs-on: ubuntu-latest
-    needs: [check-new-commits]
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true')
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'pull_request'
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Check documentation
         run: cargo doc --no-deps --all-features --document-private-items
         env:
           RUSTDOCFLAGS: -D warnings
 
-      - name: Test documentation examples
+      - name: Test doc examples
         run: cargo test --doc --all-features
 
-  # Check that Cargo.toml is ready for crates.io - Only on manual trigger or schedule
-  check-package:
-    name: Check Package
+  package:
+    name: Package Check
     runs-on: ubuntu-latest
-    needs: [check-new-commits]
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true')
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Check package
-        run: cargo package --list --allow-dirty
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Verify package contents
+      - name: Verify package
         run: |
           cargo package --allow-dirty
-          echo "Listing target/package directory:"
-          ls -la target/package/
           PKG_FILE=$(find target/package -name "intent-engine-*.crate" -type f | head -n 1)
-          if [ -z "$PKG_FILE" ]; then
-            echo "Error: No package file found"
-            exit 1
-          fi
           echo "Found package: $PKG_FILE"
-          # .crate files are actually tar.gz files
+
+          # Extract and test
           tar -xzf "$PKG_FILE" -C target/package/
           PKG_DIR=$(find target/package -maxdepth 1 -name "intent-engine-*" -type d | head -n 1)
-          echo "Extracted to: $PKG_DIR"
           cd "$PKG_DIR"
-          cargo build --verbose
+          cargo build --release --verbose
           cargo test --verbose
 
-  # Dependency review
-  dependency-review:
-    name: Dependency Review
+  # ============================================================================
+  # Security & Dependencies (Daily Schedule)
+  # ============================================================================
+
+  security:
+    name: Security Audit
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
-        continue-on-error: true  # Requires GitHub Advanced Security for private repos
+      - uses: dtolnay/rust-toolchain@stable
 
-  # Check for outdated dependencies
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Check licenses and advisories
+        run: cargo deny check
+
   outdated:
     name: Outdated Dependencies
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-outdated
         run: cargo install cargo-outdated
 
-      - name: Check for outdated dependencies
+      - name: Check outdated dependencies
         run: cargo outdated --exit-code 1
         continue-on-error: true
 
-  # Run benchmarks - Only on manual trigger or schedule
-  bench:
-    name: Benchmarks
+  # ============================================================================
+  # PR Dependency Review
+  # ============================================================================
+
+  dependency-review:
+    name: Dependency Review
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    if: github.event_name == 'pull_request'
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Run benchmarks
-        run: cargo bench --no-fail-fast
+      - uses: actions/dependency-review-action@v4
         continue-on-error: true
 
-      - name: Archive benchmark results
-        uses: actions/upload-artifact@v5
-        with:
-          name: benchmark-results
-          path: target/criterion/
+  # ============================================================================
+  # Status Checks
+  # ============================================================================
 
-  # Check installation scripts - Only on manual trigger or schedule
-  install-scripts:
-    name: Test Install Scripts
-    runs-on: ${{ matrix.os }}
-    needs: [check-new-commits]
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'schedule' && needs.check-new-commits.outputs.has_new_commits == 'true')
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Install system dependencies (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config
-        shell: bash
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Test install.sh
-        run: |
-          chmod +x scripts/install/install.sh
-          ./scripts/install/install.sh
-        shell: bash
-
-      - name: Verify installation
-        run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
-          intent-engine doctor
-        shell: bash
-
-  # Status check for fast CI
   ci-success:
     name: CI Success
-    needs: [fast-check]
     runs-on: ubuntu-latest
-    if: always()
+    needs: [format, clippy, test-quick, docs]
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'push')
+
     steps:
-      - name: Check fast-check
+      - name: Check all jobs
         run: |
-          if [ "${{ needs.fast-check.result }}" != "success" ]; then
-            echo "Fast check failed"
+          if [ "${{ needs.format.result }}" != "success" ]; then
+            echo "❌ Format check failed"
             exit 1
           fi
-          echo "✅ Fast CI passed!"
+          if [ "${{ needs.clippy.result }}" != "success" ]; then
+            echo "❌ Clippy check failed"
+            exit 1
+          fi
+          if [ "${{ needs.test-quick.result }}" != "success" ]; then
+            echo "❌ Quick tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.docs.result }}" != "success" ]; then
+            echo "❌ Documentation check failed"
+            exit 1
+          fi
+          echo "✅ All CI checks passed!"
 
-  # Create issue when scheduled CI fails
-  create-issue-on-failure:
+  # ============================================================================
+  # Issue Creation on Failure (Schedule Only)
+  # ============================================================================
+
+  create-issue:
     name: Create Issue on Failure
-    needs:
-      - test-comprehensive
-      - test-cross-platform
-      - test-full
-      - test-minimal-versions
-      - docs
-      - check-package
-      - security-audit
-      - coverage
-      - install-scripts
     runs-on: ubuntu-latest
-    if: |
-      always() &&
-      github.event_name == 'schedule' &&
-      (needs.test-comprehensive.result == 'failure' ||
-       needs.test-cross-platform.result == 'failure' ||
-       needs.test-full.result == 'failure' ||
-       needs.test-minimal-versions.result == 'failure' ||
-       needs.docs.result == 'failure' ||
-       needs.check-package.result == 'failure' ||
-       needs.security-audit.result == 'failure' ||
-       needs.coverage.result == 'failure' ||
-       needs.install-scripts.result == 'failure')
+    needs: [security, outdated]
+    if: always() && github.event_name == 'schedule' && (needs.security.result == 'failure' || needs.outdated.result == 'failure')
+
     steps:
-      - name: Create issue
-        uses: actions/github-script@v7
+      - uses: actions/github-script@v7
         with:
           script: |
-            const failedJobs = [];
-            if ('${{ needs.test-comprehensive.result }}' === 'failure') failedJobs.push('Comprehensive Tests');
-            if ('${{ needs.test-cross-platform.result }}' === 'failure') failedJobs.push('Cross-platform Tests');
-            if ('${{ needs.test-full.result }}' === 'failure') failedJobs.push('Full Tests');
-            if ('${{ needs.test-minimal-versions.result }}' === 'failure') failedJobs.push('Minimal Versions Test');
-            if ('${{ needs.docs.result }}' === 'failure') failedJobs.push('Documentation');
-            if ('${{ needs.check-package.result }}' === 'failure') failedJobs.push('Package Check');
-            if ('${{ needs.security-audit.result }}' === 'failure') failedJobs.push('Security Audit');
-            if ('${{ needs.coverage.result }}' === 'failure') failedJobs.push('Code Coverage');
-            if ('${{ needs.install-scripts.result }}' === 'failure') failedJobs.push('Install Scripts');
-
             const date = new Date().toISOString().split('T')[0];
-            const workflow = '${{ github.workflow }}';
-            const runId = '${{ github.run_id }}';
-            const ref = '${{ github.ref }}';
-            const sha = '${{ github.sha }}';
-            const runUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}';
+            const failures = [];
 
-            const failureList = failedJobs.map(job => '- ❌ ' + job).join('\n');
+            if ('${{ needs.security.result }}' === 'failure') {
+              failures.push('🔒 Security Audit');
+            }
+            if ('${{ needs.outdated.result }}' === 'failure') {
+              failures.push('📦 Outdated Dependencies');
+            }
 
-            const body = '## 🚨 Scheduled CI Failed on ' + date + '\n\n' +
-              'The following jobs failed in the scheduled comprehensive CI run:\n\n' +
-              failureList + '\n\n' +
-              '**Action Required:**\n' +
-              'Please review the [failed workflow run](' + runUrl + ') and fix the issues.\n\n' +
-              '**Details:**\n' +
-              '- Workflow: `' + workflow + '`\n' +
-              '- Run ID: `' + runId + '`\n' +
-              '- Branch: `' + ref + '`\n' +
-              '- Commit: `' + sha + '`\n\n' +
-              '---\n' +
-              '<sub>This issue was automatically created by the scheduled CI workflow.</sub>';
+            const body = `## 🚨 Scheduled CI Failed - ${date}\n\n` +
+              `The following checks failed:\n\n` +
+              failures.map(f => `- ❌ ${f}`).join('\n') + '\n\n' +
+              `[View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n` +
+              `---\n` +
+              `<sub>Auto-created by scheduled CI</sub>`;
 
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🚨 Scheduled CI Failed - ${date}`,
+              title: `🚨 CI Failure - ${date}`,
               body: body,
-              labels: ['ci', 'bug', 'automated']
+              labels: ['ci', 'automated', 'security']
             });

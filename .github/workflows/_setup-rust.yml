@@ -1,0 +1,56 @@
+name: Setup Rust Environment
+
+# Reusable workflow for setting up Rust toolchain with caching
+# Usage:
+#   jobs:
+#     build:
+#       uses: ./.github/workflows/_setup-rust.yml
+#       with:
+#         toolchain: stable
+#         components: rustfmt, clippy
+
+on:
+  workflow_call:
+    inputs:
+      toolchain:
+        description: 'Rust toolchain to install (stable, beta, nightly, or specific version)'
+        required: false
+        type: string
+        default: 'stable'
+      components:
+        description: 'Comma-separated list of components to install (e.g., rustfmt, clippy)'
+        required: false
+        type: string
+        default: ''
+      targets:
+        description: 'Comma-separated list of targets to install'
+        required: false
+        type: string
+        default: ''
+      cache-key-suffix:
+        description: 'Optional suffix for cache key (e.g., "coverage", "bench")'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          components: ${{ inputs.components }}
+          targets: ${{ inputs.targets }}
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
+          shared-key: ${{ inputs.toolchain }}-${{ inputs.cache-key-suffix }}
+          cache-all-crates: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}

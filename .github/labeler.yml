@@ -1,0 +1,64 @@
+# Auto-labeler configuration
+# Automatically adds labels to PRs based on changed files
+
+# Documentation changes
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'docs/**/*'
+      - 'README.md'
+      - 'QUICKSTART.md'
+      - 'CLAUDE.md'
+      - 'AGENT.md'
+      - '**/*.md'
+
+# Source code changes
+rust:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/**/*.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+# Test changes
+tests:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tests/**/*'
+      - 'benches/**/*'
+
+# CI/CD changes
+ci:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/workflows/**/*'
+      - '.github/**/*.yml'
+      - '.github/**/*.yaml'
+
+# Dependencies
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+# Scripts
+scripts:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'scripts/**/*'
+
+# MCP Server
+mcp:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/bin/mcp-server.rs'
+      - 'mcp-server.json'
+      - 'docs/**/mcp-server.md'
+
+# CLI changes
+cli:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/main.rs'
+      - 'src/cli/**/*'
