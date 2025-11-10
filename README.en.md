@@ -174,8 +174,8 @@ Intent-Engine provides a **Rust-native MCP (Model Context Protocol) server**, en
 git clone https://github.com/wayfind/intent-engine.git
 cd intent-engine
 
-# Build and install MCP server
-cargo install --path . --bin intent-engine-mcp-server
+# Build and install (unified binary with CLI and MCP server)
+cargo install --path .
 
 # Auto-configure for Claude Code/Desktop
 ./scripts/install/install-mcp-server.sh
@@ -199,8 +199,11 @@ Add configuration:
 {
   "mcpServers": {
     "intent-engine": {
-      "command": "/home/user/.cargo/bin/intent-engine-mcp-server",
-      "args": [],
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
+      },
       "description": "Strategic intent and task workflow management"
     }
   }
@@ -275,9 +278,14 @@ Intent-Engine's MCP server uses **Rust native implementation**, compared to trad
 ### Verify Installation
 
 ```bash
-# Manually test MCP server
+# Manually test MCP server (from project directory)
+cd /path/to/your/project
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  intent-engine-mcp-server
+  intent-engine mcp-server
+
+# Or using environment variable
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
 
 # Should return JSON response with 13 tools
 ```

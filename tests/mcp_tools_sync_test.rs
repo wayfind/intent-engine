@@ -57,9 +57,9 @@ fn test_mcp_tools_match_handlers() {
         })
         .collect();
 
-    // Read mcp-server.rs to find handler implementations
+    // Read mcp server implementation to find handler implementations
     let mcp_server_rs =
-        fs::read_to_string("src/bin/mcp-server.rs").expect("Failed to read mcp-server.rs");
+        fs::read_to_string("src/mcp/server.rs").expect("Failed to read mcp/server.rs");
 
     // Extract tool names from handle_tool_call match statement
     // Exclude MCP protocol methods (tools/list, tools/call)

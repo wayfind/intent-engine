@@ -18,8 +18,8 @@
 git clone https://github.com/wayfind/intent-engine.git
 cd intent-engine
 
-# 构建并安装 MCP 服务器
-cargo install --path . --bin intent-engine-mcp-server
+# 构建并安装 (单一二进制，包含 CLI 和 MCP 服务器)
+cargo install --path .
 
 # 运行自动配置脚本
 ./scripts/install/install-mcp-server.sh
@@ -36,15 +36,15 @@ cargo install --path . --bin intent-engine-mcp-server
 #### 步骤 1: 构建 MCP 服务器
 
 ```bash
-# 从源码构建
-cargo build --release --bin intent-engine-mcp-server
+# 从源码构建 (单一二进制，包含 CLI 和 MCP 服务器)
+cargo build --release
 
 # 安装到用户路径 (推荐)
-cargo install --path . --bin intent-engine-mcp-server
-# 安装后路径: ~/.cargo/bin/intent-engine-mcp-server
+cargo install --path .
+# 安装后路径: ~/.cargo/bin/intent-engine
 
 # 或者复制到系统路径
-sudo cp target/release/intent-engine-mcp-server /usr/local/bin/
+sudo cp target/release/intent-engine /usr/local/bin/
 ```
 
 #### 步骤 2: 配置 Claude Code
@@ -60,17 +60,25 @@ sudo cp target/release/intent-engine-mcp-server /usr/local/bin/
 {
   "mcpServers": {
     "intent-engine": {
-      "command": "/home/user/.cargo/bin/intent-engine-mcp-server",
-      "args": [],
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
+      },
       "description": "Strategic intent and task workflow management for human-AI collaboration"
     }
   }
 }
 ```
 
-**路径说明**:
-- 使用 `cargo install` 安装: `~/.cargo/bin/intent-engine-mcp-server`
-- 复制到系统路径: `/usr/local/bin/intent-engine-mcp-server`
+**配置说明**:
+- `command`: Intent-Engine 二进制文件的绝对路径
+  - 使用 `cargo install` 安装: `~/.cargo/bin/intent-engine`
+  - 复制到系统路径: `/usr/local/bin/intent-engine`
+- `args`: 必须包含 `["mcp-server"]` 以启动 MCP 服务器模式
+- `env`: 环境变量设置
+  - `INTENT_ENGINE_PROJECT_DIR`: 指定项目根目录的绝对路径
+  - 替换 `/path/to/your/project` 为你的实际项目路径
 - 使用绝对路径确保可靠性
 
 #### 步骤 3: 重启 Claude Code
@@ -82,9 +90,14 @@ sudo cp target/release/intent-engine-mcp-server /usr/local/bin/
 ### 手动测试 MCP 服务器
 
 ```bash
-# 测试 JSON-RPC 接口
+# 测试 JSON-RPC 接口 (从项目目录运行)
+cd /path/to/your/project
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  intent-engine-mcp-server
+  intent-engine mcp-server
+
+# 或者使用环境变量指定项目目录
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
 
 # 应该返回包含 13 个工具的 JSON 响应
 ```
@@ -152,8 +165,8 @@ Claude Code (客户端)
       ├─ JSON-RPC 2.0 over stdio ─┐
       │                           │
       ▼                           ▼
-intent-engine-mcp-server ─────> SQLite
-  (Rust 原生)                (.intent-engine/project.db)
+intent-engine mcp-server ─────> SQLite
+  (Rust 原生,单一二进制)     (.intent-engine/project.db)
 ```
 
 ## 故障排查
@@ -178,12 +191,13 @@ intent-engine-mcp-server ─────> SQLite
 
 3. 检查二进制文件存在且可执行:
    ```bash
-   which intent-engine-mcp-server
-   # 应该输出: ~/.cargo/bin/intent-engine-mcp-server
+   which intent-engine
+   # 应该输出: ~/.cargo/bin/intent-engine
 
-   # 测试运行
+   # 测试运行 (需要指定项目目录)
+   cd /path/to/your/project
    echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-     intent-engine-mcp-server
+     intent-engine mcp-server
    ```
 
 4. 查看 Claude Code 日志:
@@ -201,10 +215,10 @@ intent-engine-mcp-server ─────> SQLite
 
 ```bash
 # 确保二进制文件可执行
-chmod +x ~/.cargo/bin/intent-engine-mcp-server
+chmod +x ~/.cargo/bin/intent-engine
 
 # 或者
-chmod +x /usr/local/bin/intent-engine-mcp-server
+chmod +x /usr/local/bin/intent-engine
 ```
 
 ### 配置文件路径问题
@@ -215,8 +229,11 @@ chmod +x /usr/local/bin/intent-engine-mcp-server
 {
   "mcpServers": {
     "intent-engine": {
-      "command": "/home/username/.cargo/bin/intent-engine-mcp-server",
-      "args": []
+      "command": "/home/username/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/home/username/your-project"
+      }
     }
   }
 }
@@ -225,8 +242,14 @@ chmod +x /usr/local/bin/intent-engine-mcp-server
 ### 测试 MCP 服务器是否正常工作
 
 ```bash
-# 完整的测试命令
-cat << 'EOF' | intent-engine-mcp-server
+# 完整的测试命令 (从项目目录运行)
+cd /path/to/your/project
+cat << 'EOF' | intent-engine mcp-server
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+EOF
+
+# 或者使用环境变量
+cat << 'EOF' | INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
 {"jsonrpc":"2.0","id":1,"method":"tools/list"}
 EOF
 
@@ -246,10 +269,10 @@ EOF
 
 ```bash
 # 如果使用 cargo install 安装
-cargo uninstall intent-engine-mcp-server
+cargo uninstall intent-engine
 
 # 如果手动复制到系统路径
-sudo rm /usr/local/bin/intent-engine-mcp-server
+sudo rm /usr/local/bin/intent-engine
 ```
 
 ## 相关资源
@@ -263,14 +286,37 @@ sudo rm /usr/local/bin/intent-engine-mcp-server
 
 ### 为不同项目使用不同的 Intent-Engine 数据库
 
-Intent-Engine 会自动在项目根目录创建 `.intent-engine/project.db`,支持多项目隔离:
+Intent-Engine 支持多项目隔离,每个项目有自己的数据库:
 
 ```
 /home/user/project-a/.intent-engine/project.db  # 项目 A 的任务
 /home/user/project-b/.intent-engine/project.db  # 项目 B 的任务
 ```
 
-无需额外配置,只要在不同项目目录下使用 Claude Code,任务会自动隔离。
+**配置方式**: 为每个项目配置独立的 MCP 服务器实例,使用不同的 `INTENT_ENGINE_PROJECT_DIR`:
+
+```json
+{
+  "mcpServers": {
+    "intent-engine-project-a": {
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/home/user/project-a"
+      }
+    },
+    "intent-engine-project-b": {
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/home/user/project-b"
+      }
+    }
+  }
+}
+```
+
+或者使用单一配置,让 Intent-Engine 根据 Claude Code 的当前工作目录自动发现项目 (会向上搜索 `.intent-engine/` 目录)。
 
 ### 与 Claude Desktop 配合使用
 
@@ -285,8 +331,11 @@ Intent-Engine MCP 服务器同样适用于 Claude Desktop。配置文件路径:
 {
   "mcpServers": {
     "intent-engine": {
-      "command": "/home/user/.cargo/bin/intent-engine-mcp-server",
-      "args": []
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
+      }
     }
   }
 }

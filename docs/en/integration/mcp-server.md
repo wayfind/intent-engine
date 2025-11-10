@@ -18,8 +18,8 @@ This guide explains how to add Intent-Engine as an MCP (Model Context Protocol) 
 git clone https://github.com/wayfind/intent-engine.git
 cd intent-engine
 
-# Build and install MCP server
-cargo install --path . --bin intent-engine-mcp-server
+# Build and install (unified binary with CLI and MCP server)
+cargo install --path .
 
 # Run auto-configuration script
 ./scripts/install/install-mcp-server.sh
@@ -36,15 +36,15 @@ The auto-configuration script will:
 #### Step 1: Build MCP Server
 
 ```bash
-# Build from source
-cargo build --release --bin intent-engine-mcp-server
+# Build from source (unified binary with CLI and MCP server)
+cargo build --release
 
 # Install to user path (recommended)
-cargo install --path . --bin intent-engine-mcp-server
-# Installs to: ~/.cargo/bin/intent-engine-mcp-server
+cargo install --path .
+# Installs to: ~/.cargo/bin/intent-engine
 
 # Or copy to system path
-sudo cp target/release/intent-engine-mcp-server /usr/local/bin/
+sudo cp target/release/intent-engine /usr/local/bin/
 ```
 
 #### Step 2: Configure Claude Code
@@ -60,17 +60,25 @@ Add Intent-Engine server configuration:
 {
   "mcpServers": {
     "intent-engine": {
-      "command": "/home/user/.cargo/bin/intent-engine-mcp-server",
-      "args": [],
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
+      },
       "description": "Strategic intent and task workflow management for human-AI collaboration"
     }
   }
 }
 ```
 
-**Path notes**:
-- Using `cargo install`: `~/.cargo/bin/intent-engine-mcp-server`
-- Copied to system path: `/usr/local/bin/intent-engine-mcp-server`
+**Configuration notes**:
+- `command`: Absolute path to Intent-Engine binary
+  - Using `cargo install`: `~/.cargo/bin/intent-engine`
+  - Copied to system path: `/usr/local/bin/intent-engine`
+- `args`: Must include `["mcp-server"]` to start MCP server mode
+- `env`: Environment variables
+  - `INTENT_ENGINE_PROJECT_DIR`: Absolute path to project root
+  - Replace `/path/to/your/project` with your actual project path
 - Use absolute paths for reliability
 
 #### Step 3: Restart Claude Code
@@ -82,9 +90,14 @@ Restart Claude Code to load the new MCP server.
 ### Manual Testing
 
 ```bash
-# Test JSON-RPC interface
+# Test JSON-RPC interface (from project directory)
+cd /path/to/your/project
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  intent-engine-mcp-server
+  intent-engine mcp-server
+
+# Or using environment variable
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
 
 # Should return JSON response with 13 tools
 ```
@@ -152,8 +165,8 @@ Claude Code (Client)
       ├─ JSON-RPC 2.0 over stdio ─┐
       │                           │
       ▼                           ▼
-intent-engine-mcp-server ─────> SQLite
-  (Rust Native)             (.intent-engine/project.db)
+intent-engine mcp-server ──────> SQLite
+  (Rust Native, unified binary) (.intent-engine/project.db)
 ```
 
 ## Troubleshooting
@@ -178,12 +191,13 @@ intent-engine-mcp-server ─────> SQLite
 
 3. Check binary exists and is executable:
    ```bash
-   which intent-engine-mcp-server
-   # Should output: ~/.cargo/bin/intent-engine-mcp-server
+   which intent-engine
+   # Should output: ~/.cargo/bin/intent-engine
 
-   # Test run
+   # Test run (requires project directory)
+   cd /path/to/your/project
    echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-     intent-engine-mcp-server
+     intent-engine mcp-server
    ```
 
 4. Check Claude Code logs:
@@ -201,10 +215,10 @@ intent-engine-mcp-server ─────> SQLite
 
 ```bash
 # Ensure binary is executable
-chmod +x ~/.cargo/bin/intent-engine-mcp-server
+chmod +x ~/.cargo/bin/intent-engine
 
 # Or
-chmod +x /usr/local/bin/intent-engine-mcp-server
+chmod +x /usr/local/bin/intent-engine
 ```
 
 ### Config Path Issues
@@ -215,8 +229,11 @@ If relative paths or `~` symbols don't work, use **absolute paths**:
 {
   "mcpServers": {
     "intent-engine": {
-      "command": "/home/username/.cargo/bin/intent-engine-mcp-server",
-      "args": []
+      "command": "/home/username/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/home/username/your-project"
+      }
     }
   }
 }
@@ -225,8 +242,14 @@ If relative paths or `~` symbols don't work, use **absolute paths**:
 ### Test MCP Server Functionality
 
 ```bash
-# Complete test command
-cat << 'EOF' | intent-engine-mcp-server
+# Complete test command (from project directory)
+cd /path/to/your/project
+cat << 'EOF' | intent-engine mcp-server
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+EOF
+
+# Or using environment variable
+cat << 'EOF' | INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
 {"jsonrpc":"2.0","id":1,"method":"tools/list"}
 EOF
 
@@ -246,10 +269,10 @@ EOF
 
 ```bash
 # If installed via cargo install
-cargo uninstall intent-engine-mcp-server
+cargo uninstall intent-engine
 
 # If manually copied to system path
-sudo rm /usr/local/bin/intent-engine-mcp-server
+sudo rm /usr/local/bin/intent-engine
 ```
 
 ## Related Resources
@@ -263,14 +286,37 @@ sudo rm /usr/local/bin/intent-engine-mcp-server
 
 ### Using Different Intent-Engine Databases for Different Projects
 
-Intent-Engine automatically creates `.intent-engine/project.db` in each project root, supporting multi-project isolation:
+Intent-Engine supports multi-project isolation, with each project having its own database:
 
 ```
 /home/user/project-a/.intent-engine/project.db  # Project A tasks
 /home/user/project-b/.intent-engine/project.db  # Project B tasks
 ```
 
-No additional configuration needed. Tasks are automatically isolated when using Claude Code in different project directories.
+**Configuration approach**: Configure separate MCP server instances for each project using different `INTENT_ENGINE_PROJECT_DIR`:
+
+```json
+{
+  "mcpServers": {
+    "intent-engine-project-a": {
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/home/user/project-a"
+      }
+    },
+    "intent-engine-project-b": {
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/home/user/project-b"
+      }
+    }
+  }
+}
+```
+
+Alternatively, use a single configuration and let Intent-Engine automatically discover the project based on Claude Code's current working directory (searches upward for `.intent-engine/` directory).
 
 ### Using with Claude Desktop
 
@@ -285,8 +331,11 @@ Configuration format is the same:
 {
   "mcpServers": {
     "intent-engine": {
-      "command": "/home/user/.cargo/bin/intent-engine-mcp-server",
-      "args": []
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
+      }
     }
   }
 }

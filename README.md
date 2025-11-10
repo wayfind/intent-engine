@@ -175,8 +175,8 @@ Intent-Engine 提供 **Rust 原生 MCP (Model Context Protocol) 服务器**,让 
 git clone https://github.com/wayfind/intent-engine.git
 cd intent-engine
 
-# 构建并安装 MCP 服务器
-cargo install --path . --bin intent-engine-mcp-server
+# 构建并安装 (单一二进制，包含 CLI 和 MCP 服务器)
+cargo install --path .
 
 # 自动配置到 Claude Code/Desktop
 ./scripts/install/install-mcp-server.sh
@@ -200,13 +200,21 @@ cargo install --path . --bin intent-engine-mcp-server
 {
   "mcpServers": {
     "intent-engine": {
-      "command": "/home/user/.cargo/bin/intent-engine-mcp-server",
-      "args": [],
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
+      },
       "description": "Strategic intent and task workflow management"
     }
   }
 }
 ```
+
+**说明**：
+- `command`: 指向 `intent-engine` 二进制（包含所有功能）
+- `args`: 使用 `mcp-server` 子命令启动 MCP 服务器模式
+- `env.INTENT_ENGINE_PROJECT_DIR`: 指定项目目录（可选，如果从项目目录启动则自动检测）
 
 重启 Claude Code/Desktop,你将看到 **13 个 Intent-Engine 工具**可用。
 
@@ -277,8 +285,14 @@ Intent-Engine 的 MCP 服务器采用 **Rust 原生实现**,相比传统 Python 
 
 ```bash
 # 手动测试 MCP 服务器
+cd /path/to/your/project  # 切换到项目目录
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  intent-engine-mcp-server
+  intent-engine mcp-server
+
+# 或使用环境变量
+INTENT_ENGINE_PROJECT_DIR=/path/to/your/project \
+  echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  intent-engine mcp-server
 
 # 应该返回包含 13 个工具的 JSON 响应
 ```
