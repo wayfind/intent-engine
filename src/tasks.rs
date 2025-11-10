@@ -1,7 +1,7 @@
 use crate::db::models::{
     CurrentTaskInfo, DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, ParentTaskInfo,
     PickNextResponse, PreviousTaskInfo, SpawnSubtaskResponse, SubtaskInfo, SwitchTaskResponse,
-    Task, TaskSearchResult, TaskWithEvents, WorkspaceStatus,
+    Task, TaskContext, TaskSearchResult, TaskWithEvents, WorkspaceStatus,
 };
 use crate::error::{IntentError, Result};
 use chrono::Utc;
@@ -72,6 +72,80 @@ impl<'a> TaskManager<'a> {
         Ok(TaskWithEvents {
             task,
             events_summary: Some(events_summary),
+        })
+    }
+
+    /// Get task context - the complete family tree of a task
+    ///
+    /// Returns:
+    /// - task: The requested task
+    /// - ancestors: Parent chain up to root (ordered from immediate parent to root)
+    /// - siblings: Other tasks at the same level (same parent_id)
+    /// - children: Direct subtasks of this task
+    pub async fn get_task_context(&self, id: i64) -> Result<TaskContext> {
+        // Get the main task
+        let task = self.get_task(id).await?;
+
+        // Get ancestors (walk up parent chain)
+        let mut ancestors = Vec::new();
+        let mut current_parent_id = task.parent_id;
+
+        while let Some(parent_id) = current_parent_id {
+            let parent = self.get_task(parent_id).await?;
+            current_parent_id = parent.parent_id;
+            ancestors.push(parent);
+        }
+
+        // Get siblings (tasks with same parent_id)
+        let siblings = if let Some(parent_id) = task.parent_id {
+            sqlx::query_as::<_, Task>(
+                r#"
+                SELECT id, parent_id, name, spec, status, complexity, priority,
+                       first_todo_at, first_doing_at, first_done_at
+                FROM tasks
+                WHERE parent_id = ? AND id != ?
+                ORDER BY priority ASC NULLS LAST, id ASC
+                "#,
+            )
+            .bind(parent_id)
+            .bind(id)
+            .fetch_all(self.pool)
+            .await?
+        } else {
+            // For root tasks, get other root tasks as siblings
+            sqlx::query_as::<_, Task>(
+                r#"
+                SELECT id, parent_id, name, spec, status, complexity, priority,
+                       first_todo_at, first_doing_at, first_done_at
+                FROM tasks
+                WHERE parent_id IS NULL AND id != ?
+                ORDER BY priority ASC NULLS LAST, id ASC
+                "#,
+            )
+            .bind(id)
+            .fetch_all(self.pool)
+            .await?
+        };
+
+        // Get children (direct subtasks)
+        let children = sqlx::query_as::<_, Task>(
+            r#"
+            SELECT id, parent_id, name, spec, status, complexity, priority,
+                   first_todo_at, first_doing_at, first_done_at
+            FROM tasks
+            WHERE parent_id = ?
+            ORDER BY priority ASC NULLS LAST, id ASC
+            "#,
+        )
+        .bind(id)
+        .fetch_all(self.pool)
+        .await?;
+
+        Ok(TaskContext {
+            task,
+            ancestors,
+            siblings,
+            children,
         })
     }
 

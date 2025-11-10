@@ -178,6 +178,15 @@ pub struct ParentTaskInfo {
     pub name: String,
 }
 
+/// Response for task_context - provides the complete family tree of a task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskContext {
+    pub task: Task,
+    pub ancestors: Vec<Task>,
+    pub siblings: Vec<Task>,
+    pub children: Vec<Task>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PickNextResponse {
     pub suggestion_type: String,

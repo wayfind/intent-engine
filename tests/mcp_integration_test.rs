@@ -77,7 +77,7 @@ fn test_ping_returns_empty_result() {
 }
 
 #[test]
-fn test_tools_list_returns_15_tools() {
+fn test_tools_list_returns_16_tools() {
     let request = json!({
         "jsonrpc": "2.0",
         "id": 3,
@@ -90,7 +90,7 @@ fn test_tools_list_returns_15_tools() {
     assert!(response["result"]["tools"].is_array());
 
     let tools = response["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 15, "Expected 15 tools, got {}", tools.len());
+    assert_eq!(tools.len(), 16, "Expected 16 tools, got {}", tools.len());
 
     // Verify all expected tools are present
     let tool_names: Vec<String> = tools
@@ -109,6 +109,7 @@ fn test_tools_list_returns_15_tools() {
         "task_find",
         "task_search", // FTS5 精华功能
         "task_get",
+        "task_context",
         "task_delete",
         "event_add",
         "event_list",
