@@ -1,12 +1,13 @@
 # Intent-Engine MCP Server Setup
 
-This guide explains how to add Intent-Engine as an MCP (Model Context Protocol) server to Claude Code.
+This guide explains how to add Intent-Engine as an MCP (Model Context Protocol) server to Claude Code or Claude Desktop.
 
 ## Prerequisites
 
-1. **Intent-Engine installed**: Make sure `intent-engine` is in your PATH
-2. **Python 3.7+**: Required for the MCP server wrapper
-3. **Claude Code**: Desktop app with MCP support
+1. **Rust toolchain**: For building the MCP server binary
+2. **Claude Code/Claude Desktop**: AI assistant application with MCP support
+
+> **Note**: Intent-Engine uses a **Rust-native MCP server** with zero Python dependencies, offering superior performance and faster startup times.
 
 ## Installation Methods
 
@@ -17,52 +18,60 @@ This guide explains how to add Intent-Engine as an MCP (Model Context Protocol) 
 git clone https://github.com/wayfind/intent-engine.git
 cd intent-engine
 
-# Build and install
-cargo build --release
-sudo cp target/release/intent-engine /usr/local/bin/
+# Build and install MCP server
+cargo install --path . --bin intent-engine-mcp-server
 
-# Install MCP server
+# Run auto-configuration script
 ./scripts/install/install-mcp-server.sh
 ```
 
+The auto-configuration script will:
+- ✅ Detect your operating system and locate the correct config directory
+- ✅ Automatically locate the MCP server binary
+- ✅ Backup existing configuration (if any)
+- ✅ Create or update `mcp_servers.json` configuration
+
 ### Method 2: Manual Setup
 
-#### Step 1: Install Intent-Engine Binary
+#### Step 1: Build MCP Server
 
 ```bash
 # Build from source
-cargo build --release
+cargo build --release --bin intent-engine-mcp-server
 
-# Or download pre-built binary from releases
-# https://github.com/wayfind/intent-engine/releases
+# Install to user path (recommended)
+cargo install --path . --bin intent-engine-mcp-server
+# Installs to: ~/.cargo/bin/intent-engine-mcp-server
 
-# Make sure it's in PATH
-sudo cp target/release/intent-engine /usr/local/bin/
-# Or add to PATH: export PATH=$PATH:/path/to/intent-engine
+# Or copy to system path
+sudo cp target/release/intent-engine-mcp-server /usr/local/bin/
 ```
 
-#### Step 2: Configure MCP Server in Claude Code
+#### Step 2: Configure Claude Code
 
 Edit Claude Code's MCP settings file:
 
-**macOS/Linux**: `~/.config/claude-code/mcp_servers.json`
-**Windows**: `%APPDATA%\claude-code\mcp_servers.json`
+- **macOS/Linux**: `~/.config/claude-code/mcp_servers.json`
+- **Windows**: `%APPDATA%\claude-code\mcp_servers.json`
 
-Add Intent-Engine server:
+Add Intent-Engine server configuration:
 
 ```json
 {
   "mcpServers": {
     "intent-engine": {
-      "command": "python3",
-      "args": ["/path/to/intent-engine/mcp-server.py"],
+      "command": "/home/user/.cargo/bin/intent-engine-mcp-server",
+      "args": [],
       "description": "Strategic intent and task workflow management for human-AI collaboration"
     }
   }
 }
 ```
 
-Replace `/path/to/intent-engine/` with your actual path.
+**Path notes**:
+- Using `cargo install`: `~/.cargo/bin/intent-engine-mcp-server`
+- Copied to system path: `/usr/local/bin/intent-engine-mcp-server`
+- Use absolute paths for reliability
 
 #### Step 3: Restart Claude Code
 
@@ -70,16 +79,37 @@ Restart Claude Code to load the new MCP server.
 
 ## Verification
 
-In Claude Code, you should now see Intent-Engine tools available:
+### Manual Testing
 
+```bash
+# Test JSON-RPC interface
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  intent-engine-mcp-server
+
+# Should return JSON response with 13 tools
+```
+
+### Verify in Claude Code
+
+After starting Claude Code, you should see **13 Intent-Engine MCP tools** available:
+
+**Task Management**:
 - `task_add` - Create strategic task
-- `task_start` - Begin working on task
-- `task_pick_next` - Select optimal tasks
-- `task_spawn_subtask` - Create and switch to subtask
-- `task_switch` - Switch between tasks
-- `task_done` - Complete task
+- `task_start` - Start task (atomic: set doing + set as current)
+- `task_pick_next` - Intelligently recommend next task
+- `task_spawn_subtask` - Create subtask and switch (atomic)
+- `task_switch` - Switch tasks (atomic: pause current + start new)
+- `task_done` - Complete task (validates all subtasks done)
 - `task_update` - Update task properties
-- `event_add` - Record decisions/blockers/milestones
+- `task_find` - Find tasks by status/parent
+- `task_get` - Get detailed task information
+
+**Event Tracking**:
+- `event_add` - Record decisions/blockers/milestones (AI's external long-term memory)
+- `event_list` - List event history for a task
+
+**Workflow**:
+- `current_task_get` - Get currently focused task
 - `report_generate` - Generate work reports
 
 ## Usage Example
@@ -91,65 +121,173 @@ You: "Help me refactor the authentication system"
 
 Claude: I'll create a task to track this work.
 [Uses task_add tool]
-[Uses task_start tool with --with-events]
+[Uses task_start tool with events history]
 
-"I've started task #42. Based on the code, I see three main areas:
-1. Password hashing (currently MD5, should upgrade)
-2. Session management (no expiration)
+"I've started task #42. Based on the code analysis, I see three main areas:
+1. Password hashing (currently MD5, should upgrade to bcrypt)
+2. Session management (no expiration mechanism)
 3. OAuth integration (missing)
 
-Let me create subtasks for each..."
+Let me create subtasks for each area..."
 [Uses task_spawn_subtask for each area]
+```
+
+## Technical Advantages
+
+### Why Rust Native Implementation?
+
+| Feature | Rust Native MCP Server | Python Wrapper (Legacy) |
+|---------|------------------------|------------------------|
+| **Startup Time** | < 10ms | 300-500ms |
+| **Memory Usage** | ~5MB | ~30-50MB |
+| **Dependencies** | Zero | Requires Python 3.7+ |
+| **Performance** | Native | IPC overhead |
+| **Maintenance** | Single codebase | Dual maintenance |
+
+### Architecture
+
+```
+Claude Code (Client)
+      │
+      ├─ JSON-RPC 2.0 over stdio ─┐
+      │                           │
+      ▼                           ▼
+intent-engine-mcp-server ─────> SQLite
+  (Rust Native)             (.intent-engine/project.db)
 ```
 
 ## Troubleshooting
 
-### "Command not found: intent-engine"
+### MCP Server Not Showing in Claude Code
 
-Make sure `intent-engine` is in your PATH:
+**Checklist**:
+1. Verify MCP config file path:
+   ```bash
+   # Linux/macOS
+   cat ~/.config/claude-code/mcp_servers.json
+
+   # Windows PowerShell
+   Get-Content $env:APPDATA\claude-code\mcp_servers.json
+   ```
+
+2. Validate JSON syntax:
+   ```bash
+   # Using jq to validate JSON
+   jq . ~/.config/claude-code/mcp_servers.json
+   ```
+
+3. Check binary exists and is executable:
+   ```bash
+   which intent-engine-mcp-server
+   # Should output: ~/.cargo/bin/intent-engine-mcp-server
+
+   # Test run
+   echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+     intent-engine-mcp-server
+   ```
+
+4. Check Claude Code logs:
+   ```bash
+   # macOS/Linux
+   tail -f ~/.config/claude-code/logs/mcp.log
+
+   # Windows
+   # Check %APPDATA%\claude-code\logs\
+   ```
+
+5. **Restart Claude Code** (Required!)
+
+### Permission Issues
+
 ```bash
-which intent-engine
-# Should print: /usr/local/bin/intent-engine or similar
+# Ensure binary is executable
+chmod +x ~/.cargo/bin/intent-engine-mcp-server
+
+# Or
+chmod +x /usr/local/bin/intent-engine-mcp-server
 ```
 
-### "Permission denied"
+### Config Path Issues
 
-Make MCP server executable:
-```bash
-chmod +x /path/to/intent-engine/mcp-server.py
+If relative paths or `~` symbols don't work, use **absolute paths**:
+
+```json
+{
+  "mcpServers": {
+    "intent-engine": {
+      "command": "/home/username/.cargo/bin/intent-engine-mcp-server",
+      "args": []
+    }
+  }
+}
 ```
 
-### "Python not found"
+### Test MCP Server Functionality
 
-Install Python 3:
 ```bash
-# macOS
-brew install python3
+# Complete test command
+cat << 'EOF' | intent-engine-mcp-server
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+EOF
 
-# Ubuntu/Debian
-sudo apt-get install python3
-
-# Windows
-# Download from python.org
+# Expected: JSON response with 13 tools
+# Errors will be output to stderr
 ```
-
-### MCP server not showing in Claude Code
-
-1. Check MCP settings file path is correct
-2. Verify JSON syntax is valid
-3. Check Claude Code logs: `~/.config/claude-code/logs/`
-4. Restart Claude Code
 
 ## Uninstall
 
-To remove Intent-Engine MCP server:
+### Remove MCP Server Configuration
 
-1. Remove from `mcp_servers.json`
-2. Restart Claude Code
-3. Optionally remove binary: `sudo rm /usr/local/bin/intent-engine`
+1. Edit `~/.config/claude-code/mcp_servers.json`
+2. Delete the `"intent-engine"` entry
+3. Restart Claude Code
 
-## See Also
+### Uninstall Binary
 
-- [The Intent-Engine Way](../guide/the-intent-engine-way.md) - Collaboration philosophy
-- [README.md](../../../README.md) - Full command reference
-- [Task Workflow Analysis](../technical/task-workflow-analysis.md) - Technical details
+```bash
+# If installed via cargo install
+cargo uninstall intent-engine-mcp-server
+
+# If manually copied to system path
+sudo rm /usr/local/bin/intent-engine-mcp-server
+```
+
+## Related Resources
+
+- [CLAUDE.md](../../../CLAUDE.md) - Complete Claude integration guide
+- [INTERFACE_SPEC.md](../../INTERFACE_SPEC.md) - Interface specification (authoritative)
+- [MCP Tools Sync System](../technical/mcp-tools-sync.md) - Maintenance and testing
+- [README.md](../../../README.md) - Project homepage
+
+## Advanced Configuration
+
+### Using Different Intent-Engine Databases for Different Projects
+
+Intent-Engine automatically creates `.intent-engine/project.db` in each project root, supporting multi-project isolation:
+
+```
+/home/user/project-a/.intent-engine/project.db  # Project A tasks
+/home/user/project-b/.intent-engine/project.db  # Project B tasks
+```
+
+No additional configuration needed. Tasks are automatically isolated when using Claude Code in different project directories.
+
+### Using with Claude Desktop
+
+The Intent-Engine MCP server also works with Claude Desktop. Configuration file paths:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Configuration format is the same:
+
+```json
+{
+  "mcpServers": {
+    "intent-engine": {
+      "command": "/home/user/.cargo/bin/intent-engine-mcp-server",
+      "args": []
+    }
+  }
+}
+```

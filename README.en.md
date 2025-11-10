@@ -151,6 +151,145 @@ intent-engine report --since 1d --summary-only
 
 ---
 
+## 🔌 MCP Service: Deep Integration with Claude Code/Desktop
+
+Intent-Engine provides a **Rust-native MCP (Model Context Protocol) server**, enabling Claude Code and Claude Desktop to directly use all Intent-Engine features without manually running commands.
+
+### Why Use MCP Service?
+
+**Traditional CLI Approach** vs **MCP Service**:
+
+| Aspect | CLI Commands | MCP Service |
+|--------|--------------|-------------|
+| **Usage** | Humans manually execute commands | AI automatically invokes tools |
+| **Integration Difficulty** | Need to copy-paste commands | Completely transparent, works out-of-box |
+| **Context Awareness** | Need to manually pass task IDs | AI automatically manages current task |
+| **Token Efficiency** | Need to output full commands | Atomic operations, save 50-70% |
+| **User Experience** | Need to switch between terminal | Seamlessly complete within conversation |
+
+### Quick Installation
+
+```bash
+# Clone the project
+git clone https://github.com/wayfind/intent-engine.git
+cd intent-engine
+
+# Build and install MCP server
+cargo install --path . --bin intent-engine-mcp-server
+
+# Auto-configure for Claude Code/Desktop
+./scripts/install/install-mcp-server.sh
+```
+
+### Manual Configuration
+
+Edit Claude's MCP configuration file:
+
+**Claude Code**:
+- Linux/macOS: `~/.config/claude-code/mcp_servers.json`
+- Windows: `%APPDATA%\claude-code\mcp_servers.json`
+
+**Claude Desktop**:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Add configuration:
+
+```json
+{
+  "mcpServers": {
+    "intent-engine": {
+      "command": "/home/user/.cargo/bin/intent-engine-mcp-server",
+      "args": [],
+      "description": "Strategic intent and task workflow management"
+    }
+  }
+}
+```
+
+Restart Claude Code/Desktop, and you'll see **13 Intent-Engine tools** available.
+
+### MCP Tools List
+
+After installation, Claude can automatically use the following tools:
+
+**Task Management** (9 tools):
+- `task_add` - Create strategic task
+- `task_start` - Start task (atomic: set doing + set as current)
+- `task_pick_next` - Intelligently recommend next task
+- `task_spawn_subtask` - Create subtask and switch (atomic)
+- `task_switch` - Switch tasks (atomic: pause current + start new)
+- `task_done` - Complete task (validates all subtasks done)
+- `task_update` - Update task properties
+- `task_find` - Find tasks by status/parent
+- `task_get` - Get detailed task information
+
+**Event Tracking** (2 tools):
+- `event_add` - Record decisions/blockers/milestones (AI's external long-term memory)
+- `event_list` - List event history for a task
+
+**Workflow** (2 tools):
+- `current_task_get` - Get currently focused task
+- `report_generate` - Generate work reports
+
+### Usage Example
+
+After installation, the experience in Claude Code:
+
+```
+You: "Help me implement a user authentication system"
+
+Claude: I'll use Intent-Engine to track this work.
+[Automatically calls task_add to create task #1]
+[Automatically calls task_start to begin and get context]
+
+"I've created and started task #1: Implement user authentication system.
+Based on project analysis, I suggest breaking it down into these subtasks:
+
+1. JWT Token generation and validation
+2. User password hashing storage
+3. Refresh Token mechanism
+
+Let me create subtasks for each area..."
+[Automatically calls task_spawn_subtask to create subtask #2]
+[Begins implementing first subtask]
+```
+
+**Key Advantages**:
+- ✅ **Zero Manual Operations**: AI automatically manages tasks, no need to copy-paste commands
+- ✅ **Context Preservation**: Automatically resume task status and decision history across sessions
+- ✅ **Transparent Tracking**: All decisions automatically recorded to event stream
+- ✅ **Multi-project Isolation**: Different projects automatically use their own `.intent-engine` databases
+
+### Technical Advantages
+
+Intent-Engine's MCP server uses **Rust native implementation**, compared to traditional Python wrappers:
+
+| Metric | Rust Native | Python Wrapper |
+|--------|-------------|----------------|
+| **Startup Time** | < 10ms | 300-500ms |
+| **Memory Usage** | ~5MB | ~30-50MB |
+| **Dependencies** | Zero | Requires Python 3.7+ |
+| **Performance** | Native | IPC overhead |
+
+### Verify Installation
+
+```bash
+# Manually test MCP server
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  intent-engine-mcp-server
+
+# Should return JSON response with 13 tools
+```
+
+### Detailed Documentation
+
+- 📖 [Complete MCP Server Configuration Guide](docs/en/integration/mcp-server.md) - Installation, configuration, troubleshooting
+- 🔧 [MCP Tools Sync System](docs/en/technical/mcp-tools-sync.md) - Maintainer's guide
+- 📘 [CLAUDE.md](CLAUDE.md) - Complete AI assistant integration guide
+
+---
+
 ## ✨ Core Features
 
 - **Project Awareness**: Automatically searches upward for `.intent-engine` directory, senses project root
