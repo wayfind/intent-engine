@@ -1,6 +1,6 @@
 [package]
 name = "intent-engine"
-version = "0.1.13"
+version = "0.1.15"
 edition = "2021"
 authors = ["Intent Engine Contributors"]
 description = "A command-line database service for tracking strategic intent, tasks, and events"
@@ -45,6 +45,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 tokio = { version = "1.35", features = ["full"] }
 anyhow = "1.0"
+encoding_rs = "0.8"
 
 # Windows console support
 [target.'cfg(windows)'.dependencies]
@@ -55,7 +56,7 @@ tempfile = "3.8"
 assert_cmd = "2.0"
 predicates = "3.0"
 criterion = { version = "0.7", features = ["async_tokio"] }
-rand = "0.8"
+rand = "0.9"
 
 [[bin]]
 name = "intent-engine"

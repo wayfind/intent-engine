@@ -1,5 +1,21 @@
 # Windows 命令行中文编码问题分析与解决方案
 
+## ✅ 重要更新：已自动修复
+
+**自 v0.1.13 起，intent-engine 已自动处理 Windows 编码问题！**
+
+程序启动时会自动：
+- ✅ 设置控制台输入编码为 UTF-8 (`SetConsoleCP(65001)`)
+- ✅ 设置控制台输出编码为 UTF-8 (`SetConsoleOutputCP(65001)`)
+- ✅ 启用虚拟终端处理（支持 ANSI 颜色）
+
+**这意味着**：
+- 🎯 **无需手动配置**：直接使用即可
+- 🎯 **管道传输正常**：`echo "中文" | intent-engine ...` 正常工作
+- 🎯 **输出正确显示**：JSON 中的中文正确显示
+
+**如果仍然遇到乱码**，请参考下面的疑难解答部分。
+
 ## 问题背景
 
 在 Windows 的 cmd 和 PowerShell 中使用 intent-engine 时，可能会遇到中文字符输入和显示的问题。本文档详细分析了问题根源和多种解决方案。
@@ -374,6 +390,83 @@ fn test_chinese_stdin() {
 - [ ] Windows Terminal
 - [ ] Git Bash for Windows
 
+## 疑难解答
+
+### 问题：PowerShell 管道传输中文仍然乱码
+
+**症状**：
+```powershell
+PS> echo "实现 JWT 认证，支持刷新 Token，有效期 7 天" | intent-engine task add --name "测试" --spec-stdin
+# spec 显示为: "?? JWT ??????? Token???? 7 ?"
+```
+
+**根本原因**：
+- PowerShell 5.x 的 `echo` 默认使用系统代码页（通常是 GBK）
+- 即使程序设置了 UTF-8，管道数据已经是 GBK 编码
+
+**解决方法 1：使用 PowerShell 7+**
+```powershell
+# PowerShell 7 默认 UTF-8，无需配置
+pwsh  # 启动 PowerShell 7
+echo "实现 JWT 认证" | intent-engine task add --name "测试" --spec-stdin
+```
+
+**解决方法 2：在 PowerShell 5.x 中设置编码**
+```powershell
+# 在使用管道前设置
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+echo "实现 JWT 认证" | intent-engine task add --name "测试" --spec-stdin
+```
+
+**解决方法 3：使用 Out-File + Get-Content**
+```powershell
+# 写入临时文件
+"实现 JWT 认证" | Out-File -Encoding utf8 temp.txt
+Get-Content temp.txt | intent-engine task add --name "测试" --spec-stdin
+Remove-Item temp.txt
+```
+
+**解决方法 4：使用 Here-String**
+```powershell
+@"
+实现 JWT 认证，支持刷新 Token，有效期 7 天
+"@ | intent-engine task add --name "测试" --spec-stdin
+```
+
+**最佳实践**：
+- 在 PowerShell Profile (`$PROFILE`) 中永久设置编码
+- 或者使用 Windows Terminal + PowerShell 7
+
+### 问题：升级后仍然看到乱码
+
+**检查步骤**：
+
+1. 确认版本是否为 v0.1.13+：
+```bash
+intent-engine --version
+```
+
+2. 检查控制台编码是否已设置：
+```powershell
+# PowerShell 中检查
+[Console]::InputEncoding.CodePage   # 应该是 65001
+[Console]::OutputEncoding.CodePage  # 应该是 65001
+```
+
+```cmd
+REM cmd 中检查
+chcp  # 应该显示 "活动代码页: 65001"
+```
+
+3. 测试简单命令（不使用管道）：
+```bash
+intent-engine task add --name "测试中文"
+```
+
+如果不使用管道能正常显示，说明是管道编码问题，请参考上面的 PowerShell 管道解决方法。
+
 ## 常见问题
 
 ### Q1: 为什么不直接输出 GBK？
@@ -392,6 +485,10 @@ serde_json::to_string_pretty(&task)?
 ### Q3: 为什么 PowerShell 7 没问题，PowerShell 5 有问题？
 
 **A**: PowerShell 7 是跨平台重写版本，默认 UTF-8。PowerShell 5.x 是 Windows 专有版本，继承了旧的编码系统。
+
+### Q4: 为什么程序设置了 UTF-8，管道传输还是乱码？
+
+**A**: 程序只能设置自己的控制台编码，无法改变 PowerShell 管道传输的编码。PowerShell 5.x 管道默认使用系统代码页。解决方法是在 PowerShell 中设置编码，或使用 PowerShell 7。
 
 ## 相关资源
 

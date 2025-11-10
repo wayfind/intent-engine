@@ -200,8 +200,6 @@ impl ProjectContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::TempDir;
 
     // Note: Tests that modify the current directory are intentionally limited
     // because they can interfere with other tests running in parallel.
@@ -224,8 +222,7 @@ mod tests {
 
     #[test]
     fn test_project_root_markers_list() {
-        // Verify that the markers list is not empty and contains expected markers
-        assert!(!PROJECT_ROOT_MARKERS.is_empty());
+        // Verify that the markers list contains expected markers
         assert!(PROJECT_ROOT_MARKERS.contains(&".git"));
         assert!(PROJECT_ROOT_MARKERS.contains(&"Cargo.toml"));
         assert!(PROJECT_ROOT_MARKERS.contains(&"package.json"));
