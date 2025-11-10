@@ -144,7 +144,21 @@ jobs:
       - name: Delete existing release if it exists
         continue-on-error: true
         run: |
-          gh release delete ${{ github.ref_name }} --yes
+          # Get release ID if it exists
+          RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}" \
+            | jq -r '.id // empty')
+
+          if [ ! -z "$RELEASE_ID" ]; then
+            echo "Found existing release with ID: $RELEASE_ID"
+            # Delete the release
+            curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+            echo "Release deleted successfully"
+            sleep 2
+          else
+            echo "No existing release found"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
