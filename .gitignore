@@ -1,6 +1,8 @@
 # Rust build artifacts
 /target/
-Cargo.lock
+
+# Note: Cargo.lock is committed for binary crates to ensure reproducible builds
+# See: https://doc.rust-lang.org/cargo/faq.html#why-do-binaries-have-cargolock-in-version-control-but-not-libraries
 
 # IDE
 .vscode/*
