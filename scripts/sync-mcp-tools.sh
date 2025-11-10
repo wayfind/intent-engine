@@ -21,7 +21,10 @@ if [ -z "$CARGO_VERSION" ]; then
     echo -e "${RED}❌ Failed to extract version from Cargo.toml${NC}"
     exit 1
 fi
-echo "📦 Cargo version: $CARGO_VERSION"
+
+# Extract major.minor from Cargo version (e.g., "0.1.12" -> "0.1")
+CARGO_MINOR=$(echo "$CARGO_VERSION" | cut -d. -f1-2)
+echo "📦 Cargo version (major.minor): $CARGO_MINOR"
 
 # Extract version from mcp-server.json
 MCP_VERSION=$(jq -r '.version' "$PROJECT_ROOT/mcp-server.json")
@@ -32,7 +35,7 @@ fi
 echo "🔧 MCP version: $MCP_VERSION"
 
 # Compare versions
-if [ "$CARGO_VERSION" = "$MCP_VERSION" ]; then
+if [ "$CARGO_MINOR" = "$MCP_VERSION" ]; then
     echo -e "${GREEN}✅ Versions are in sync!${NC}"
     exit 0
 fi
@@ -41,8 +44,8 @@ fi
 echo -e "${YELLOW}⚠️  Versions are out of sync, updating...${NC}"
 
 # Use jq to update version
-jq --arg version "$CARGO_VERSION" '.version = $version' "$PROJECT_ROOT/mcp-server.json" > "$PROJECT_ROOT/mcp-server.json.tmp"
+jq --arg version "$CARGO_MINOR" '.version = $version' "$PROJECT_ROOT/mcp-server.json" > "$PROJECT_ROOT/mcp-server.json.tmp"
 mv "$PROJECT_ROOT/mcp-server.json.tmp" "$PROJECT_ROOT/mcp-server.json"
 
-echo -e "${GREEN}✅ Updated mcp-server.json version to $CARGO_VERSION${NC}"
+echo -e "${GREEN}✅ Updated mcp-server.json version to $CARGO_MINOR${NC}"
 echo "📝 Don't forget to commit this change!"

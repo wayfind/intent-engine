@@ -1,6 +1,6 @@
 {
   "name": "intent-engine",
-  "version": "0.1.12",
+  "version": "0.1",
   "description": "Intent-Engine MCP Server - Manage strategic intent and task workflow for human-AI collaboration",
   "tools": [
     {
