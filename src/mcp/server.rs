@@ -102,6 +102,7 @@ async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
     }
 
     let result = match request.method.as_str() {
+        "initialize" => handle_initialize(request.params),
         "tools/list" => handle_tools_list(),
         "tools/call" => handle_tool_call(request.params).await,
         _ => Err(format!("Unknown method: {}", request.method)),
@@ -124,6 +125,21 @@ async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
             }),
         },
     }
+}
+
+fn handle_initialize(_params: Option<Value>) -> Result<Value, String> {
+    // MCP initialize handshake
+    // Return server capabilities and info
+    Ok(json!({
+        "protocolVersion": "2024-11-05",
+        "capabilities": {
+            "tools": {}
+        },
+        "serverInfo": {
+            "name": "intent-engine",
+            "version": env!("CARGO_PKG_VERSION")
+        }
+    }))
 }
 
 fn handle_tools_list() -> Result<Value, String> {
