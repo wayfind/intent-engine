@@ -38,15 +38,13 @@ pub fn setup_windows_console() -> Result<(), String> {
     unsafe {
         // Set console INPUT code page to UTF-8 (65001)
         // This is CRITICAL for reading UTF-8 from stdin (pipes, redirects)
-        if !SetConsoleCP(65001).as_bool() {
-            return Err("Failed to set console input code page to UTF-8".to_string());
-        }
+        SetConsoleCP(65001)
+            .map_err(|e| format!("Failed to set console input code page to UTF-8: {}", e))?;
 
         // Set console OUTPUT code page to UTF-8 (65001)
         // This ensures that our UTF-8 output is correctly interpreted
-        if !SetConsoleOutputCP(65001).as_bool() {
-            return Err("Failed to set console output code page to UTF-8".to_string());
-        }
+        SetConsoleOutputCP(65001)
+            .map_err(|e| format!("Failed to set console output code page to UTF-8: {}", e))?;
 
         // Get the standard output handle
         let handle = match GetStdHandle(STD_OUTPUT_HANDLE) {
