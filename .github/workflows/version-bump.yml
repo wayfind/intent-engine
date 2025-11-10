@@ -41,6 +41,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -182,7 +183,7 @@ jobs:
           git push -f origin "$TAG"
 
           echo "✅ Version bumped and tagged: $TAG"
-          echo "🚀 Release workflow will be triggered automatically"
+          echo "🚀 Release workflow should be triggered automatically (requires GH_PAT secret)"
 
       - name: Summary
         run: |
@@ -195,7 +196,19 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ inputs.create_tag }}" == "true" ]; then
             echo "✅ Tag created: \`v${{ steps.bump.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "🚀 Release workflow will start shortly" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${{ secrets.GH_PAT }}" ]; then
+              echo "🚀 Release workflow will start shortly" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ **Release workflow NOT triggered** (GH_PAT secret not configured)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Manual action required:**" >> $GITHUB_STEP_SUMMARY
+              echo "1. Go to [Release Workflow](https://github.com/${{ github.repository }}/actions/workflows/release.yml)" >> $GITHUB_STEP_SUMMARY
+              echo "2. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
+              echo "3. Enter tag: \`v${{ steps.bump.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**To fix permanently:** Add GH_PAT secret with repo scope" >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "📝 Pull request created for review" >> $GITHUB_STEP_SUMMARY
           fi
