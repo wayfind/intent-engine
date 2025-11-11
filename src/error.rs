@@ -21,6 +21,12 @@ pub enum IntentError {
         blocked_task_id: i64,
     },
 
+    #[error("Task {task_id} is blocked by incomplete tasks: {blocking_task_ids:?}")]
+    TaskBlocked {
+        task_id: i64,
+        blocking_task_ids: Vec<i64>,
+    },
+
     #[error("Action not allowed: {0}")]
     ActionNotAllowed(String),
 
@@ -47,6 +53,7 @@ impl IntentError {
             IntentError::DatabaseError(_) => "DATABASE_ERROR",
             IntentError::InvalidInput(_) => "INVALID_INPUT",
             IntentError::CircularDependency { .. } => "CIRCULAR_DEPENDENCY",
+            IntentError::TaskBlocked { .. } => "TASK_BLOCKED",
             IntentError::ActionNotAllowed(_) => "ACTION_NOT_ALLOWED",
             IntentError::UncompletedChildren => "UNCOMPLETED_CHILDREN",
             IntentError::NotAProject => "NOT_A_PROJECT",

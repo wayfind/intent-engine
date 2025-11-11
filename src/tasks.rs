@@ -386,6 +386,15 @@ impl<'a> TaskManager<'a> {
 
     /// Start a task (atomic: update status + set current)
     pub async fn start_task(&self, id: i64, with_events: bool) -> Result<TaskWithEvents> {
+        // Check if task is blocked by incomplete dependencies
+        use crate::dependencies::get_incomplete_blocking_tasks;
+        if let Some(blocking_tasks) = get_incomplete_blocking_tasks(self.pool, id).await? {
+            return Err(IntentError::TaskBlocked {
+                task_id: id,
+                blocking_task_ids: blocking_tasks,
+            });
+        }
+
         let mut tx = self.pool.begin().await?;
 
         let now = Utc::now();
