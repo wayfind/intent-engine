@@ -1,6 +1,6 @@
 {
   "name": "intent-engine",
-  "version": "0.1",
+  "version": "0.2",
   "description": "An MCP server that provides a persistent, intent-driven context layer for AI Agents, enabling them to maintain long-term memory and strategic clarity in complex projects. Think of it as your external brain for task management - one focused task at a time, with full decision history.",
   "usage_philosophy": {
     "core_principle": "Focus-Driven Workflow - The system maintains a single current_task_id representing your focus. Most operations are atomic and operate on this focus to ensure consistency.",

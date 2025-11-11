@@ -276,7 +276,7 @@ fn test_pick_next_respects_priority_with_blocking() {
         .arg("update")
         .arg(task1.to_string())
         .arg("--priority")
-        .arg("100")
+        .arg("low")
         .assert()
         .success();
 
@@ -286,7 +286,7 @@ fn test_pick_next_respects_priority_with_blocking() {
         .arg("update")
         .arg(task2.to_string())
         .arg("--priority")
-        .arg("1")
+        .arg("critical")
         .assert()
         .success();
 
@@ -296,7 +296,7 @@ fn test_pick_next_respects_priority_with_blocking() {
         .arg("update")
         .arg(task3.to_string())
         .arg("--priority")
-        .arg("50")
+        .arg("medium")
         .assert()
         .success();
 
