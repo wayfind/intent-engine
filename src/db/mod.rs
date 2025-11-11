@@ -173,6 +173,64 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Create dependencies table for v0.2.0
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS dependencies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            blocking_task_id INTEGER NOT NULL,
+            blocked_task_id INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (blocking_task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+            UNIQUE(blocking_task_id, blocked_task_id),
+            CHECK(blocking_task_id != blocked_task_id)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Create indexes for dependencies table
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_dependencies_blocking
+        ON dependencies(blocking_task_id)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_dependencies_blocked
+        ON dependencies(blocked_task_id)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Create composite index for event filtering (v0.2.0)
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_events_task_type_time
+        ON events(task_id, log_type, timestamp)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Update schema version to 0.2.0
+    sqlx::query(
+        r#"
+        INSERT INTO workspace_state (key, value)
+        VALUES ('schema_version', '0.2.0')
+        ON CONFLICT(key) DO UPDATE SET value = '0.2.0'
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 
@@ -346,5 +404,204 @@ mod tests {
 
         // Should fail due to CHECK constraint
         assert!(result.is_err());
+    }
+
+    // v0.2.0 Migration Tests
+
+    #[tokio::test]
+    async fn test_dependencies_table_created() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Verify dependencies table exists
+        let tables: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='dependencies'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert!(tables.contains(&"dependencies".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_dependencies_indexes_created() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Verify indexes exist
+        let indexes: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name IN ('idx_dependencies_blocking', 'idx_dependencies_blocked', 'idx_events_task_type_time')",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert!(indexes.contains(&"idx_dependencies_blocking".to_string()));
+        assert!(indexes.contains(&"idx_dependencies_blocked".to_string()));
+        assert!(indexes.contains(&"idx_events_task_type_time".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_dependencies_self_dependency_constraint() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Create a task
+        sqlx::query("INSERT INTO tasks (name, status) VALUES (?, ?)")
+            .bind("Task 1")
+            .bind("todo")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Try to create self-dependency (should fail)
+        let result = sqlx::query(
+            "INSERT INTO dependencies (blocking_task_id, blocked_task_id) VALUES (?, ?)",
+        )
+        .bind(1)
+        .bind(1)
+        .execute(&pool)
+        .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_dependencies_unique_constraint() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Create tasks
+        for i in 1..=2 {
+            sqlx::query("INSERT INTO tasks (name, status) VALUES (?, ?)")
+                .bind(format!("Task {}", i))
+                .bind("todo")
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+
+        // Create dependency
+        sqlx::query("INSERT INTO dependencies (blocking_task_id, blocked_task_id) VALUES (?, ?)")
+            .bind(1)
+            .bind(2)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Try to create duplicate dependency (should fail)
+        let result = sqlx::query(
+            "INSERT INTO dependencies (blocking_task_id, blocked_task_id) VALUES (?, ?)",
+        )
+        .bind(1)
+        .bind(2)
+        .execute(&pool)
+        .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_dependencies_cascade_delete() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Create tasks
+        for i in 1..=2 {
+            sqlx::query("INSERT INTO tasks (name, status) VALUES (?, ?)")
+                .bind(format!("Task {}", i))
+                .bind("todo")
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+
+        // Create dependency
+        sqlx::query("INSERT INTO dependencies (blocking_task_id, blocked_task_id) VALUES (?, ?)")
+            .bind(1)
+            .bind(2)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Verify dependency exists
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM dependencies")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // Delete blocking task
+        sqlx::query("DELETE FROM tasks WHERE id = ?")
+            .bind(1)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Verify dependency was cascade deleted
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM dependencies")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_schema_version_tracking() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Verify schema version is set to 0.2.0
+        let version: String =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'schema_version'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(version, "0.2.0");
+    }
+
+    #[tokio::test]
+    async fn test_migration_idempotency_v0_2_0() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+
+        // Run migrations multiple times
+        run_migrations(&pool).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Verify dependencies table exists and is functional
+        let tables: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='dependencies'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert!(tables.contains(&"dependencies".to_string()));
+
+        // Verify schema version is still correct
+        let version: String =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'schema_version'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(version, "0.2.0");
     }
 }

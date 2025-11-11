@@ -3,6 +3,14 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Dependency {
+    pub id: i64,
+    pub blocking_task_id: i64,
+    pub blocked_task_id: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Task {
     pub id: i64,
     pub parent_id: Option<i64>,

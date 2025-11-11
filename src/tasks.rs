@@ -200,7 +200,10 @@ impl<'a> TaskManager<'a> {
         // Check for circular dependency if parent_id is being changed
         if let Some(Some(pid)) = parent_id {
             if pid == id {
-                return Err(IntentError::CircularDependency);
+                return Err(IntentError::CircularDependency {
+                    blocking_task_id: pid,
+                    blocked_task_id: id,
+                });
             }
             self.check_task_exists(pid).await?;
             self.check_circular_dependency(id, pid).await?;
@@ -603,7 +606,10 @@ impl<'a> TaskManager<'a> {
 
         loop {
             if current_id == task_id {
-                return Err(IntentError::CircularDependency);
+                return Err(IntentError::CircularDependency {
+                    blocking_task_id: new_parent_id,
+                    blocked_task_id: task_id,
+                });
             }
 
             let parent: Option<i64> =
@@ -1223,7 +1229,10 @@ mod tests {
             .update_task(task1.id, None, None, Some(Some(task2.id)), None, None, None)
             .await;
 
-        assert!(matches!(result, Err(IntentError::CircularDependency)));
+        assert!(matches!(
+            result,
+            Err(IntentError::CircularDependency { .. })
+        ));
     }
 
     #[tokio::test]

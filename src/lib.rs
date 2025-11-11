@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod db;
+pub mod dependencies;
 pub mod error;
 pub mod events;
 pub mod mcp;

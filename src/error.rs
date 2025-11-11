@@ -15,8 +15,11 @@ pub enum IntentError {
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
-    #[error("Circular dependency detected")]
-    CircularDependency,
+    #[error("Circular dependency detected: adding dependency from task {blocking_task_id} to task {blocked_task_id} would create a cycle")]
+    CircularDependency {
+        blocking_task_id: i64,
+        blocked_task_id: i64,
+    },
 
     #[error("Action not allowed: {0}")]
     ActionNotAllowed(String),
@@ -43,7 +46,7 @@ impl IntentError {
             IntentError::TaskNotFound(_) => "TASK_NOT_FOUND",
             IntentError::DatabaseError(_) => "DATABASE_ERROR",
             IntentError::InvalidInput(_) => "INVALID_INPUT",
-            IntentError::CircularDependency => "CIRCULAR_DEPENDENCY",
+            IntentError::CircularDependency { .. } => "CIRCULAR_DEPENDENCY",
             IntentError::ActionNotAllowed(_) => "ACTION_NOT_ALLOWED",
             IntentError::UncompletedChildren => "UNCOMPLETED_CHILDREN",
             IntentError::NotAProject => "NOT_A_PROJECT",
@@ -81,8 +84,13 @@ mod tests {
 
     #[test]
     fn test_circular_dependency_error() {
-        let error = IntentError::CircularDependency;
-        assert_eq!(error.to_string(), "Circular dependency detected");
+        let error = IntentError::CircularDependency {
+            blocking_task_id: 1,
+            blocked_task_id: 2,
+        };
+        assert!(error.to_string().contains("Circular dependency detected"));
+        assert!(error.to_string().contains("task 1"));
+        assert!(error.to_string().contains("task 2"));
         assert_eq!(error.to_error_code(), "CIRCULAR_DEPENDENCY");
     }
 
