@@ -191,6 +191,7 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
         "task_find" => handle_task_find(params.arguments).await,
         "task_search" => handle_task_search(params.arguments).await,
         "task_get" => handle_task_get(params.arguments).await,
+        "task_context" => handle_task_context(params.arguments).await,
         "task_delete" => handle_task_delete(params.arguments).await,
         "event_add" => handle_event_add(params.arguments).await,
         "event_list" => handle_event_list(params.arguments).await,
@@ -445,6 +446,44 @@ async fn handle_task_get(args: Value) -> Result<Value, String> {
             .map_err(|e| format!("Failed to get task: {}", e))?;
         serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
     }
+}
+
+async fn handle_task_context(args: Value) -> Result<Value, String> {
+    // Get task_id from args, or fall back to current task
+    let task_id = if let Some(id) = args.get("task_id").and_then(|v| v.as_i64()) {
+        id
+    } else {
+        // Fall back to current_task_id if no task_id provided
+        let ctx = ProjectContext::load()
+            .await
+            .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+        let current_task_id: Option<String> =
+            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+                .fetch_optional(&ctx.pool)
+                .await
+                .map_err(|e| format!("Database error: {}", e))?;
+
+        current_task_id
+            .and_then(|s| s.parse::<i64>().ok())
+            .ok_or_else(|| {
+                "No current task is set and task_id was not provided. \
+                 Use task_start or task_switch to set a task first, or provide task_id parameter."
+                    .to_string()
+            })?
+    };
+
+    let ctx = ProjectContext::load()
+        .await
+        .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+    let task_mgr = TaskManager::new(&ctx.pool);
+    let context = task_mgr
+        .get_task_context(task_id)
+        .await
+        .map_err(|e| format!("Failed to get task context: {}", e))?;
+
+    serde_json::to_value(&context).map_err(|e| format!("Serialization error: {}", e))
 }
 
 async fn handle_task_delete(args: Value) -> Result<Value, String> {

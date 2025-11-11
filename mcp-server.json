@@ -1,6 +1,6 @@
 {
   "name": "intent-engine",
-  "version": "0.1.9",
+  "version": "0.1",
   "description": "An MCP server that provides a persistent, intent-driven context layer for AI Agents, enabling them to maintain long-term memory and strategic clarity in complex projects. Think of it as your external brain for task management - one focused task at a time, with full decision history.",
   "usage_philosophy": {
     "core_principle": "Focus-Driven Workflow - The system maintains a single current_task_id representing your focus. Most operations are atomic and operate on this focus to ensure consistency.",
@@ -296,43 +296,6 @@
             "description": "Task ID to get context for. If omitted, uses the current focused task."
           }
         }
-      }
-    },
-    {
-      "name": "task_search",
-      "description": "Search tasks by content using FTS5 full-text search. Returns tasks with match snippets highlighting keywords with **. Supports advanced FTS5 syntax like 'bug AND NOT critical', phrase searches with quotes. This is the RECOMMENDED way to find tasks by content - much more powerful than task_find.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "Search query. Supports FTS5 syntax: 'keyword' for simple search, 'term1 AND term2' for boolean, 'term1 OR term2', 'NOT term', '\"exact phrase\"' for phrases. Searches in both task names and specifications."
-          },
-          "snippet": {
-            "type": "boolean",
-            "description": "Return match snippets with ** highlighting (default: true)",
-            "default": true
-          }
-        },
-        "required": [
-          "query"
-        ]
-      }
-    },
-    {
-      "name": "task_get",
-      "description": "Core Duty: Retrieves the full details of a SINGLE, KNOWN task by its ID.\nTactical Guide: Use this after `find` or `search` to get the complete `spec` before starting work.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "task_id": {
-            "type": "integer",
-            "description": "The exact ID of the task to retrieve."
-          }
-        },
-        "required": [
-          "task_id"
-        ]
       }
     },
     {
