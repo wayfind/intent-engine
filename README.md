@@ -1,10 +1,10 @@
 # Intent-Engine
 **为人机协作，编织清晰的思路**
 
+> AI 的外部长时记忆 + 战略任务管理系统
 >
 > 将您和 AI 伙伴短暂、易失的协作瞬间，沉淀为项目可追溯、可恢复的永恒智慧
->
- 
+
 **中文 | [English](README.en.md)**
 
 [![CI](https://github.com/wayfind/intent-engine/workflows/CI/badge.svg)](https://github.com/wayfind/intent-engine/actions/workflows/ci.yml)
@@ -17,414 +17,166 @@
 
 ## 🎯 这是什么？
 
-Intent-Engine 是一个命令行工具 + 数据库系统，用于记录、追踪和回顾**战略意图**。它为人类与 AI 的协作提供了一个共享的、可追溯的"意图层"。
+**项目级持久化任务系统** + **完整决策历史追踪** = AI 的外部长时记忆
 
-**核心特点：**
-- 📝 **战略级任务管理**：关注 What（做什么）和 Why（为什么），而不仅仅是 How（怎么做）
-- 🧠 **AI 的外部长时记忆**：跨会话持久化决策历史和上下文
-- 🌳 **层级化问题分解**：支持无限层级的父子任务关系
-- 📊 **结构化决策追踪**：每个关键决策都被记录为事件流
-- 🔄 **JSON 原生接口**：完美适配 AI 工具集成
-
----
-
-## 👥 为谁设计？
-
-### 主要用户
-
-1. **人类开发者**：设定战略目标，记录项目意图
-2. **AI Agent**：理解目标、执行任务、记录决策过程
-3. **人机协作团队**：在长期项目中保持上下文同步
-
-### 使用场景
-
-- ✅ 需要 AI 在多个会话间持续工作的复杂项目
-- ✅ 需要追溯"为什么做这个决策"的技术项目
-- ✅ 需要分解大型任务为子任务树的系统工程
-- ✅ 需要 AI 自主管理工作优先级的自动化流程
+- 📝 **战略意图层**：关注 What（做什么）和 Why（为什么），而非 How（怎么做）
+- 🧠 **跨会话记忆**：持久化到 SQLite，任何时候都能恢复完整上下文
+- 🌳 **层级任务树**：支持无限层级的父子任务，自然的问题分解
+- 📊 **决策历史**：每个关键决策都被记录为事件流，可追溯、可回顾
+- 🔄 **AI 原生**：CLI + JSON + MCP 协议，为 AI 工具链深度优化
 
 ---
 
 ## 💡 解决什么痛点？
 
-### 对人类的价值
+### Claude Code TodoWrite 的局限
 
-**传统任务管理工具（Jira/Linear）的问题：**
-- ❌ 聚焦于战术执行（Sprint、Story Points），缺少战略层
-- ❌ 需要大量手动维护（状态更新、评论）
-- ❌ 不适合 AI 集成（Web UI 为主）
+❌ **会话级生命周期** - 对话结束即消失，无法跨会话
+❌ **无决策历史** - 不知道为什么做某个决定
+❌ **平铺结构** - 难以管理复杂的层级任务
 
-**Intent-Engine 的解决方案：**
-- ✅ 战略意图层：每个任务包含完整的 **规格说明（spec）** 和 **决策历史（events）**
-- ✅ 自动化友好：AI 可以自主创建、更新、切换任务
-- ✅ CLI + JSON：完美的 AI 工具链集成
+### Intent-Engine 的解决方案
 
-### 对 AI的价值
-
-**Claude Code TodoWrite 的局限性：**
-- ❌ **会话级**：仅存在于当前对话，会话结束即消失
-- ❌ **无历史**：无法追溯之前的决策和思考过程
-- ❌ **平铺结构**：缺少层级关系，难以管理复杂任务
-
-**Intent-Engine 的优势：**
-- ✅ **项目级**：持久化到 SQLite 数据库，跨会话永久保存
-- ✅ **可追溯**：完整的事件流记录每个决策的上下文
-- ✅ **层级化**：任务树结构，强制完成子任务才能完成父任务
-- ✅ **原子操作**：`start`、`pick-next`、`spawn-subtask`、`switch` 等命令节省 50-70% Token
-
----
-
-## 📊 与其他工具的本质区别
-
-| 维度 | Intent-Engine | Claude Code TodoWrite | Jira/Linear |
-|------|---------------|----------------------|-------------|
-| **核心哲学** | 战略意图层：What + Why | 战术执行层：What (临时) | 任务追踪层：What + When |
-| **主要用户** | 人类 ↔ AI（双向协作） | AI 内部使用（单向） | 人类团队（协作） |
-| **生命周期** | 项目级（跨会话、持久化） | 会话级（临时、易失） | 项目级（持久化） |
-| **数据结构** | 任务树 + 事件流 + 规格说明 | 平铺列表（无层级） | 工作流 + 字段 + 评论 |
-| **历史追溯** | ✅ 完整决策历史（events）| ❌ 无历史记录 | ⚠️ 有评论但无结构化决策 |
-| **交互模式** | CLI + JSON（AI友好） | Tool Call（AI专用） | Web UI（人类友好） |
-| **粒度定位** | 粗粒度（战略里程碑） | 细粒度（当前步骤） | 中粒度（Sprint任务） |
-| **核心价值** | AI的外部长时记忆 | AI的工作记忆（短期） | 团队的工作协调 |
-
-### 典型使用场景对比
-
-**Intent-Engine：** "实现用户认证系统"（包含完整的技术规格、决策历史、子任务树）
-- 生命周期：数天到数周
-- AI 可以在任何时候通过 `task start --with-events` 恢复上下文并继续工作
-
-**TodoWrite：** "修改 auth.rs 文件"（当前会话的临时步骤）
-- 生命周期：当前会话
-- 会话结束后消失，无法恢复
-
-**Jira：** "PROJ-123: 添加 OAuth2 支持"（团队分配的具体任务）
-- 生命周期：一个 Sprint（1-2周）
-- 需要手动更新状态和进度
+✅ **项目级持久化** - 永久保存在 `.intent-engine/project.db`
+✅ **完整事件流** - 记录每个 decision/blocker/milestone
+✅ **任务树结构** - 自然的层级分解 + 强制子任务完成验证
+✅ **原子操作** - `start`/`spawn-subtask`/`switch` 等命令节省 50-70% Token
 
 ---
 
 ## 🚀 快速开始
 
-### 1. 安装
+### 安装
 
 ```bash
 # 方式 1: Cargo Install（推荐）
 cargo install intent-engine
 
-# 方式 2: 下载预编译二进制
+# 方式 2: 预编译二进制
 # 访问 https://github.com/wayfind/intent-engine/releases
 
 # 验证安装
 intent-engine --version
 ```
 
-> 📖 **详细安装指南**：查看 [INSTALLATION.md](docs/zh-CN/guide/installation.md) 了解所有安装方式、故障排除和集成选项。
-
-### 2. 5 分钟体验核心功能
+### 5 分钟核心体验
 
 ```bash
-# 1. 添加一个战略任务
-echo "实现 JWT 认证，支持刷新 Token，有效期 7 天" | \
+# 1. 添加任务（自动初始化项目）
+echo "使用 JWT 认证，支持刷新 Token" | \
   intent-engine task add --name "实现用户认证" --spec-stdin
 
-# 2. 开始任务并查看上下文
+# 2. 开始任务
 intent-engine task start 1 --with-events
 
-# 3. 在工作中发现子问题？创建子任务并自动切换
+# 3. 发现子问题？创建子任务并自动切换
 intent-engine task spawn-subtask --name "配置 JWT 密钥"
 
-# 4. 记录关键决策（子任务已是当前任务）
-echo "选择使用 HS256 算法，密钥存储在环境变量中" | \
+# 4. 记录决策
+echo "选择 HS256 算法，密钥存储在环境变量" | \
   intent-engine event add --type decision --data-stdin
 
-# 5. 完成子任务
+# 5. 完成子任务，获取下一步建议
 intent-engine task done
-
-# 6. 切回父任务并完成
-intent-engine task switch 1
-intent-engine task done
-
-# 7. 生成工作报告
-intent-engine report --since 1d --summary-only
+intent-engine task pick-next
 ```
 
-> 💡 **更详细的教程**：参见 [QUICKSTART.md](docs/zh-CN/guide/quickstart.md)
+> 💡 **详细教程**: [Quickstart Guide](docs/zh-CN/guide/quickstart.md) | [The Intent-Engine Way](docs/zh-CN/guide/the-intent-engine-way.md)
 
 ---
 
-## 🔌 MCP 服务：与 Claude Code/Desktop 深度集成
+## 🔌 MCP 集成：与 Claude Code/Desktop 无缝集成
 
-Intent-Engine 提供 **Rust 原生 MCP (Model Context Protocol) 服务器**,让 Claude Code 和 Claude Desktop 能够直接使用 Intent-Engine 的所有功能,无需手动运行命令。
-
-### 为什么使用 MCP 服务?
-
-**传统 CLI 方式** vs **MCP 服务**:
-
-| 对比项 | CLI 命令 | MCP 服务 |
-|--------|----------|----------|
-| **使用方式** | 人类手动执行命令 | AI 自动调用工具 |
-| **集成难度** | 需要复制粘贴命令 | 完全透明,开箱即用 |
-| **上下文感知** | 需要手动传递任务ID | AI 自动管理当前任务 |
-| **Token 效率** | 需要输出完整命令 | 原子操作,节省 50-70% |
-| **用户体验** | 需要来回切换终端 | 在对话中无缝完成 |
-
-### 快速安装
+一键安装脚本：
 
 ```bash
-# 克隆项目
+# 克隆并安装
 git clone https://github.com/wayfind/intent-engine.git
 cd intent-engine
-
-# 构建并安装 (单一二进制，包含 CLI 和 MCP 服务器)
 cargo install --path .
 
-# 自动配置到 Claude Code/Desktop
+# 自动配置 MCP 服务器
 ./scripts/install/install-mcp-server.sh
 ```
 
-### 手动配置
+安装后，Claude 可以自动使用 **13 个 MCP 工具** 来管理任务和记录决策，无需手动运行命令。
 
-编辑 Claude 的 MCP 配置文件:
-
-**Claude Code**:
-- Linux/macOS: `~/.config/claude-code/mcp_servers.json`
-- Windows: `%APPDATA%\claude-code\mcp_servers.json`
-
-**Claude Desktop**:
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-添加配置:
-
-```json
-{
-  "mcpServers": {
-    "intent-engine": {
-      "command": "/home/user/.cargo/bin/intent-engine",
-      "args": ["mcp-server"],
-      "env": {
-        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
-      },
-      "description": "Strategic intent and task workflow management"
-    }
-  }
-}
-```
-
-**说明**：
-- `command`: 指向 `intent-engine` 二进制（包含所有功能）
-- `args`: 使用 `mcp-server` 子命令启动 MCP 服务器模式
-- `env.INTENT_ENGINE_PROJECT_DIR`: 指定项目目录（可选，如果从项目目录启动则自动检测）
-
-重启 Claude Code/Desktop,你将看到 **13 个 Intent-Engine 工具**可用。
-
-### MCP 工具列表
-
-安装完成后,Claude 可以自动使用以下工具:
-
-**任务管理** (9 个):
-- `task_add` - 创建战略任务
-- `task_start` - 开始任务 (原子操作: 设为 doing + 设为当前任务)
-- `task_pick_next` - 智能推荐下一个任务
-- `task_spawn_subtask` - 创建子任务并切换 (原子操作)
-- `task_switch` - 切换任务 (原子操作: 暂停当前 + 开始新任务)
-- `task_done` - 完成任务 (验证所有子任务已完成)
-- `task_update` - 更新任务属性
-- `task_find` - 按状态/父任务查找
-- `task_get` - 获取任务详细信息
-
-**事件追踪** (2 个):
-- `event_add` - 记录决策/阻碍/里程碑 (AI 的外部长时记忆)
-- `event_list` - 列出任务的事件历史
-
-**工作流** (2 个):
-- `current_task_get` - 获取当前聚焦的任务
-- `report_generate` - 生成工作报告
-
-### 使用示例
-
-安装后,在 Claude Code 中的体验:
-
-```
-你: "帮我实现一个用户认证系统"
-
-Claude: 我会使用 Intent-Engine 追踪这项工作。
-[自动调用 task_add 创建任务 #1]
-[自动调用 task_start 开始任务并获取上下文]
-
-"我已经创建并开始了任务 #1: 实现用户认证系统。
-基于项目分析,我建议分解为以下子任务:
-
-1. JWT Token 生成与验证
-2. 用户密码哈希存储
-3. 刷新 Token 机制
-
-让我为每个部分创建子任务..."
-[自动调用 task_spawn_subtask 创建子任务 #2]
-[开始实现第一个子任务]
-```
-
-**关键优势**:
-- ✅ **零手动操作**: AI 自动管理任务,无需你复制粘贴命令
-- ✅ **上下文保持**: 跨会话自动恢复任务状态和决策历史
-- ✅ **透明追踪**: 所有决策自动记录到事件流
-- ✅ **多项目隔离**: 不同项目自动使用各自的 `.intent-engine` 数据库
-
-### 技术优势
-
-Intent-Engine 的 MCP 服务器采用 **Rust 原生实现**,相比传统 Python 包装器:
-
-| 指标 | Rust 原生 | Python 包装器 |
-|------|-----------|--------------|
-| **启动时间** | < 10ms | 300-500ms |
-| **内存占用** | ~5MB | ~30-50MB |
-| **依赖** | 零依赖 | 需要 Python 3.7+ |
-| **性能** | 原生性能 | 进程间通信开销 |
-
-### 验证安装
-
-```bash
-# 手动测试 MCP 服务器
-cd /path/to/your/project  # 切换到项目目录
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  intent-engine mcp-server
-
-# 或使用环境变量
-INTENT_ENGINE_PROJECT_DIR=/path/to/your/project \
-  echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  intent-engine mcp-server
-
-# 应该返回包含 13 个工具的 JSON 响应
-```
-
-### 详细文档
-
-- 📖 [MCP 服务器完整配置指南](docs/zh-CN/integration/mcp-server.md) - 安装、配置、故障排查
-- 🔧 [MCP 工具同步系统](docs/zh-CN/technical/mcp-tools-sync.md) - 维护者指南
-- 📘 [CLAUDE.md](CLAUDE.md) - AI 助手集成完整指南
+> 📖 **详细指南**: [MCP 服务器集成](docs/zh-CN/integration/mcp-server.md) | [AI 集成完整指南](CLAUDE.md)
 
 ---
 
 ## ✨ 核心特性
 
-- **项目感知**：自动向上查找 `.intent-engine` 目录，感知项目根目录
-- **惰性初始化**：写入命令自动初始化项目，无需手动 init
-- **任务树管理**：支持无限层级的父子任务关系
-- **决策历史**：完整的事件流记录（decision、blocker、milestone 等）
-- **智能推荐**：`pick-next` 基于上下文推荐下一个任务
-- **原子操作**：`start`、`switch`、`spawn-subtask` 等命令节省 50-70% Token
-- **🔍 FTS5 搜索引擎**：GB 级任务量下毫秒级响应，独特的 snippet 函数用 `**` 高亮匹配词，对 Agent 上下文极度友好
-- **JSON 输出**：所有命令输出结构化 JSON，完美集成 AI 工具
+- **🔍 智能项目检测**：自动向上查找 `.git`/`Cargo.toml` 等标记，确定项目根目录
+- **⚡ 惰性初始化**：写入命令自动初始化，无需手动 `init`
+- **🎯 聚焦工作流**：`current_task_id` 概念，大部分命令操作当前聚焦任务
+- **🤖 智能推荐**：`pick-next` 基于深度优先策略推荐下一个任务
+- **🔍 FTS5 全文搜索**：GB 级任务量下毫秒级响应，`**` 高亮匹配词
+- **📦 零依赖部署**：单一静态链接二进制，无需 Python/Node 环境
+- **🚀 Rust 原生 MCP**：启动 < 10ms，内存占用 ~5MB
 
 ---
 
 ## 📚 文档导航
 
 ### 🎯 核心文档
-- [**INTERFACE_SPEC.md**](docs/INTERFACE_SPEC.md) - **接口规范** (权威定义)
-- [**QUICKSTART.md**](QUICKSTART.md) - 5 分钟快速上手
+- [**接口规范**](docs/INTERFACE_SPEC.md) - CLI/MCP/Rust API 权威定义
+- [**设计哲学**](docs/zh-CN/guide/the-intent-engine-way.md) - Intent-Engine Way 深入解读
 
-### 🚀 新用户入门
-- [**The Intent-Engine Way**](docs/zh-CN/guide/the-intent-engine-way.md) - 设计哲学和协作模式（强烈推荐）
-- [**Installation Guide**](docs/zh-CN/guide/installation.md) - 详细安装指南和故障排除
+### 🚀 用户指南
+- [安装指南](docs/zh-CN/guide/installation.md) - 所有安装方式 + 故障排除
+- [快速开始](docs/zh-CN/guide/quickstart.md) - 详细教程和最佳实践
+- [命令参考](docs/zh-CN/guide/command-reference-full.md) - 完整命令说明
 
 ### 🤖 AI 集成
-- [**AI Quick Guide**](docs/zh-CN/guide/ai-quick-guide.md) - AI 客户端速查手册
-- [**MCP Server**](docs/zh-CN/integration/mcp-server.md) - 集成到 Claude Code/Desktop
-- [**Claude Skill**](.claude-code/intent-engine.skill.md) - 轻量级 Claude Code 集成
+- [Claude 集成指南](CLAUDE.md) - AI 助手完整集成手册
+- [MCP 服务器](docs/zh-CN/integration/mcp-server.md) - Claude Code/Desktop 配置
+- [通用 LLM 集成](docs/zh-CN/integration/generic-llm.md) - 其他 AI 工具集成
 
-### 📖 深度学习
-- [**Command Reference**](docs/zh-CN/guide/command-reference.md) - 完整命令参考
-- [**Task Workflow Analysis**](docs/zh-CN/technical/task-workflow-analysis.md) - Token 优化策略详解
-- [**Performance Report**](docs/zh-CN/technical/performance.md) - 性能基准测试
-- [**Security Testing**](docs/zh-CN/technical/security.md) - 安全性测试报告
-- [**MCP Tools Sync**](docs/zh-CN/technical/mcp-tools-sync.md) - MCP 工具同步系统
+### 🔧 技术文档
+- [性能基准](docs/zh-CN/technical/performance.md) - 性能测试和优化
+- [安全测试](docs/zh-CN/technical/security.md) - 安全性验证
+- [MCP 工具同步](docs/zh-CN/technical/mcp-tools-sync.md) - 维护者指南
 
 ### 👥 贡献者
-- [**Contributing Guide**](docs/zh-CN/contributing/contributing.md) - 如何贡献代码
-- [**Release Process**](docs/zh-CN/contributing/publish-to-crates-io.md) - 发布流程
+- [贡献指南](docs/zh-CN/contributing/contributing.md) - 如何贡献代码
+- [发布流程](docs/zh-CN/contributing/publish-to-crates-io.md) - 发布到 crates.io
 
 ---
 
-## 🌟 Intent-Engine 的独特价值
+## 🧪 质量保证
 
-### 1. 人机协作的记忆共享层
-- 人类设定战略意图（What + Why）
-- AI 执行战术任务（How）
-- Intent-Engine 记录整个过程
-
-### 2. 跨会话的上下文恢复
-- AI 可以随时通过 `task start --with-events` 恢复完整上下文
-- 无需人类重复解释背景
-
-### 3. 决策可追溯性
-- 每个关键决策都被记录（`event add --type decision`）
-- 未来可以回顾"为什么当时选择了方案 A 而不是方案 B"
-
-### 4. 层级化的问题分解
-- 支持无限层级的父子任务
-- 强制完成所有子任务才能完成父任务
+- **240+ 测试全部通过** ✅ (单元测试 + 集成测试 + 性能测试)
+- **85% 代码覆盖率** 📊 持续集成验证
+- **安全性测试** 🛡️ 特殊字符、SQL 注入、路径遍历防护
+- **跨平台验证** 🖥️ Linux/macOS/Windows 自动化测试
 
 ---
 
 ## 🛠️ 技术栈
 
-- **语言**：Rust 2021
-- **CLI**：clap 4.5
-- **数据库**：SQLite with sqlx 0.7
-- **异步运行时**：tokio 1.35
-- **全文搜索**：SQLite FTS5
+- **语言**: Rust 2021 Edition
+- **CLI**: clap 4.5 (声明式命令行)
+- **数据库**: SQLite + sqlx 0.7 (异步查询)
+- **全文搜索**: SQLite FTS5 (毫秒级搜索)
+- **异步运行时**: tokio 1.35
 
 ---
 
-## 🔧 开发设置
+## 🌟 与其他工具的本质区别
 
-### 首次克隆项目后（贡献者必读）
+| 维度 | Intent-Engine | Claude Code TodoWrite | Jira/Linear |
+|------|---------------|----------------------|-------------|
+| **生命周期** | 项目级（永久） | 会话级（临时） | 项目级（永久） |
+| **核心用户** | 人类 ↔ AI | AI 内部 | 人类团队 |
+| **决策历史** | ✅ 完整事件流 | ❌ 无记录 | ⚠️ 评论（非结构化） |
+| **任务结构** | 层级树 + 规格 | 平铺列表 | 工作流 + 字段 |
+| **AI 集成** | CLI + JSON + MCP | Tool Call | ❌ 不支持 |
 
-为了避免 CI 格式检查失败，请立即运行：
-
-```bash
-./scripts/setup-git-hooks.sh
-```
-
-这会安装 git pre-commit hooks，在每次提交前自动运行 `cargo fmt`，确保代码格式符合规范。
-
-### 开发工具命令
-
-项目提供了 Makefile 简化常用操作：
-
-```bash
-make help          # 显示所有可用命令
-make fmt           # 格式化代码
-make check         # 运行格式化、clippy 和测试
-make test          # 运行所有测试
-make setup-hooks   # 安装 git hooks（同上述脚本）
-```
-
-> 📖 **详细说明**：查看 [scripts/README.md](scripts/README.md) 了解完整的开发工作流和自动化工具。
-
----
-
-## 🧪 测试
-
-Intent-Engine 包含完整的测试体系：
-
-```bash
-# 运行所有测试
-cargo test
-
-# 运行性能测试
-cargo test --test performance_tests -- --ignored
-
-# 查看测试覆盖率
-cargo tarpaulin
-```
-
-**测试统计**：116 个测试全部通过 ✅
-- 47 个单元测试
-- 22 个 CLI 集成测试
-- 10 个特殊字符安全性测试
-- 37 个性能测试
+**典型使用场景**:
+- **Intent-Engine**: "实现用户认证系统"（数天，完整上下文，可恢复）
+- **TodoWrite**: "修改 auth.rs"（当前会话，临时步骤）
+- **Jira**: "PROJ-123: OAuth2 支持"（Sprint 任务，人工维护）
 
 ---
 
@@ -437,5 +189,4 @@ cargo tarpaulin
 
 ---
 
-
-**下一步**：阅读 [The Intent-Engine Way](docs/zh-CN/guide/the-intent-engine-way.md) 深入理解设计哲学，或直接查看 [QUICKSTART.md](QUICKSTART.md) 开始使用。
+**下一步**: 阅读 [The Intent-Engine Way](docs/zh-CN/guide/the-intent-engine-way.md) 深入理解设计哲学，或查看 [Quickstart](docs/zh-CN/guide/quickstart.md) 开始使用。
