@@ -660,6 +660,7 @@ intent-engine current --set <TASK_ID>
 | Tool Name | Purpose | Maps to CLI |
 |-----------|---------|-------------|
 | `task_add` | Create task | `task add` |
+| `task_add_dependency` | Add task dependency | `task depends-on` |
 | `task_start` | Start task | `task start` |
 | `task_pick_next` | Recommend tasks | `task pick-next` |
 | `task_spawn_subtask` | Create subtask | `task spawn-subtask` |

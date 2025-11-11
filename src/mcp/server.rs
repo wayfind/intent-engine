@@ -182,6 +182,7 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
 
     let result = match params.name.as_str() {
         "task_add" => handle_task_add(params.arguments).await,
+        "task_add_dependency" => handle_task_add_dependency(params.arguments).await,
         "task_start" => handle_task_start(params.arguments).await,
         "task_pick_next" => handle_task_pick_next(params.arguments).await,
         "task_spawn_subtask" => handle_task_spawn_subtask(params.arguments).await,
@@ -231,6 +232,29 @@ async fn handle_task_add(args: Value) -> Result<Value, String> {
         .map_err(|e| format!("Failed to add task: {}", e))?;
 
     serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
+}
+
+async fn handle_task_add_dependency(args: Value) -> Result<Value, String> {
+    let blocked_task_id = args
+        .get("blocked_task_id")
+        .and_then(|v| v.as_i64())
+        .ok_or("Missing required parameter: blocked_task_id")?;
+
+    let blocking_task_id = args
+        .get("blocking_task_id")
+        .and_then(|v| v.as_i64())
+        .ok_or("Missing required parameter: blocking_task_id")?;
+
+    let ctx = ProjectContext::load_or_init()
+        .await
+        .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+    let dependency =
+        crate::dependencies::add_dependency(&ctx.pool, blocking_task_id, blocked_task_id)
+            .await
+            .map_err(|e| format!("Failed to add dependency: {}", e))?;
+
+    serde_json::to_value(&dependency).map_err(|e| format!("Serialization error: {}", e))
 }
 
 async fn handle_task_start(args: Value) -> Result<Value, String> {

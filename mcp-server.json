@@ -137,6 +137,27 @@
       }
     },
     {
+      "name": "task_add_dependency",
+      "description": "Core Duty: Establishes a dependency relationship between two tasks.\n\nTactical Guide: Use this when one task must be completed before another can start. The blocked task cannot be started until all its blocking tasks are done.\n\nSemantics:\n- blocked_task_id: The task that has the dependency (cannot start until blocker is done)\n- blocking_task_id: The task that must be completed first (blocks the other task)\n\nExample: task_add_dependency({blocked_task_id: 42, blocking_task_id: 41}) means 'Task 42 depends on Task 41' or 'Task 41 must be done before Task 42 can start'.\n\nCircular Dependency Prevention: The system automatically checks for cycles and will reject dependencies that would create circular references.\n\nImpact on Workflow:\n- task_start will fail if task has incomplete dependencies\n- task_pick_next will filter out blocked tasks\n- task_context shows both blocking_tasks and blocked_by_tasks",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "blocked_task_id": {
+            "type": "integer",
+            "description": "ID of the task that has the dependency (cannot start until blocking task is done)."
+          },
+          "blocking_task_id": {
+            "type": "integer",
+            "description": "ID of the task that must be completed first (blocks the other task)."
+          }
+        },
+        "required": [
+          "blocked_task_id",
+          "blocking_task_id"
+        ]
+      }
+    },
+    {
       "name": "task_start",
       "description": "Core Duty: Activates an intent and sets it as the current focus. This is the entry point to the focus-driven workflow.\n\nTactical Guide: ALWAYS call this before working on a task. This is an ATOMIC operation that:\n1. Sets task status to 'doing' (marks first_doing_at timestamp)\n2. Sets as current_task_id in workspace\n3. Returns full context including event history (if with_events: true)\n\nBest Practice: ALWAYS use with_events: true to get the complete decision history. This is crucial for resuming work.\n\nExample: Before starting any work, call task_start({task_id: 42, with_events: true}).",
       "inputSchema": {
