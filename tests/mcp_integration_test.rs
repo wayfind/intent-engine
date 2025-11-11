@@ -404,7 +404,18 @@ fn test_task_context_returns_family_tree() {
     // Verify response structure
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 7);
-    assert!(response["result"]["content"].is_array());
+
+    // Debug output for CI diagnosis
+    eprintln!(
+        "Response structure: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
+
+    assert!(
+        response["result"]["content"].is_array(),
+        "Expected content to be array. Full response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
 
     let content_text = response["result"]["content"][0]["text"].as_str().unwrap();
     let context: Value = serde_json::from_str(content_text).unwrap();
@@ -487,7 +498,18 @@ fn test_task_context_uses_current_task_when_no_id_provided() {
 
     // Verify response
     assert_eq!(response["jsonrpc"], "2.0");
-    assert!(response["result"]["content"].is_array());
+
+    // Debug output for CI diagnosis
+    eprintln!(
+        "Response structure: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
+
+    assert!(
+        response["result"]["content"].is_array(),
+        "Expected content to be array. Full response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
 
     let content_text = response["result"]["content"][0]["text"].as_str().unwrap();
     let context: Value = serde_json::from_str(content_text).unwrap();
