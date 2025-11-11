@@ -141,11 +141,45 @@ impl<'a> TaskManager<'a> {
         .fetch_all(self.pool)
         .await?;
 
+        // Get blocking tasks (tasks that this task depends on)
+        let blocking_tasks = sqlx::query_as::<_, Task>(
+            r#"
+            SELECT t.id, t.parent_id, t.name, t.spec, t.status, t.complexity, t.priority,
+                   t.first_todo_at, t.first_doing_at, t.first_done_at
+            FROM tasks t
+            JOIN dependencies d ON t.id = d.blocking_task_id
+            WHERE d.blocked_task_id = ?
+            ORDER BY t.priority ASC NULLS LAST, t.id ASC
+            "#,
+        )
+        .bind(id)
+        .fetch_all(self.pool)
+        .await?;
+
+        // Get blocked_by tasks (tasks that depend on this task)
+        let blocked_by_tasks = sqlx::query_as::<_, Task>(
+            r#"
+            SELECT t.id, t.parent_id, t.name, t.spec, t.status, t.complexity, t.priority,
+                   t.first_todo_at, t.first_doing_at, t.first_done_at
+            FROM tasks t
+            JOIN dependencies d ON t.id = d.blocked_task_id
+            WHERE d.blocking_task_id = ?
+            ORDER BY t.priority ASC NULLS LAST, t.id ASC
+            "#,
+        )
+        .bind(id)
+        .fetch_all(self.pool)
+        .await?;
+
         Ok(TaskContext {
             task,
             ancestors,
             siblings,
             children,
+            dependencies: crate::db::models::TaskDependencies {
+                blocking_tasks,
+                blocked_by_tasks,
+            },
         })
     }
 

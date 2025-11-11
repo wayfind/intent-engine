@@ -186,6 +186,15 @@ pub struct ParentTaskInfo {
     pub name: String,
 }
 
+/// Dependency information for a task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskDependencies {
+    /// Tasks that must be completed before this task can start
+    pub blocking_tasks: Vec<Task>,
+    /// Tasks that are blocked by this task
+    pub blocked_by_tasks: Vec<Task>,
+}
+
 /// Response for task_context - provides the complete family tree of a task
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskContext {
@@ -193,6 +202,7 @@ pub struct TaskContext {
     pub ancestors: Vec<Task>,
     pub siblings: Vec<Task>,
     pub children: Vec<Task>,
+    pub dependencies: TaskDependencies,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
