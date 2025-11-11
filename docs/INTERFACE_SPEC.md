@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.1
-**Last Updated**: 2024-11-09
+**Version**: 0.2
+**Last Updated**: 2025-11-11
 **Status**: Experimental (Pre-1.0)
 
 ---
@@ -24,6 +24,34 @@
 > If you modify this file and change the interface (add/remove/modify CLI commands,
 > MCP tools, or data models), you MUST increment the version number above and
 > remind the user to run the version sync workflow.
+
+---
+
+## Changelog
+
+### Version 0.2 (2025-11-11)
+
+**Theme**: "Intelligence & Interconnection"
+
+**New Features:**
+- **Task Dependency System**: Define task dependencies with `task depends-on`, circular dependency detection, blocking checks in `task start` and `pick-next`
+- **Smart Event Querying**: Filter events by type (`--type`) and time range (`--since`) for efficient context retrieval
+- **Priority Enum Interface**: Human-friendly priority levels (`critical`, `high`, `medium`, `low`) instead of raw integers
+- **Command Rename**: `task find` → `task list` for better clarity (with backward-compatible alias)
+
+**MCP Tools Added/Updated:**
+- `task_add_dependency` (new): Create task dependencies
+- `task_list` (renamed from `task_find`): List/filter tasks
+- `event_list` (enhanced): Added `type` and `since` filtering parameters
+- `task_context` (enhanced): Now includes dependency information
+
+**Breaking Changes:**
+- None (all changes are backward-compatible additions or have deprecation aliases)
+
+**Migration Notes:**
+- Priority strings are now recommended (`--priority critical` instead of `--priority 1`)
+- Use `task list` instead of `task find` (old command still works with deprecation warning)
+- Old integer priorities still work internally but string interface is preferred
 
 ---
 
@@ -63,6 +91,12 @@ Event
 ├── log_type: String { "decision", "blocker", "milestone", "note" }
 └── discussion_data: String (markdown)
 
+Dependency
+├── id: Integer (auto-increment)
+├── blocking_task_id: Integer (FK to tasks.id)
+├── blocked_task_id: Integer (FK to tasks.id)
+└── created_at: Timestamp
+
 Workspace State
 └── current_task_id: Integer (nullable)
 ```
@@ -70,6 +104,7 @@ Workspace State
 **Key Design Principles**:
 - **Focus-Driven**: Most commands operate on `current_task_id` (the "focused" task)
 - **Priority Model**: String interface ("critical", "high", "medium", "low") maps to integers (1-4), lower number = higher priority
+- **Dependency System**: Tasks can depend on others; blocked tasks cannot start until dependencies are done
 - **Lifecycle Timestamps**: Track first occurrence of each status for analysis
 - **Atomic Operations**: Commands like `start`, `switch`, `done` combine multiple steps
 

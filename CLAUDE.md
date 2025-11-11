@@ -1,6 +1,6 @@
 # Intent-Engine: Claude Integration Guide
 
-**Version**: 0.1
+**Version**: 0.2
 **Target**: Claude Code, Claude Desktop, and AI assistants via MCP
 
 ---
@@ -68,9 +68,16 @@ Intent-Engine works like your brain - **one focused task at a time**:
 ```json
 {
   "name": "Implement user authentication",
-  "spec": "Use JWT with 7-day expiry, refresh tokens, HS256 algorithm"
+  "spec": "Use JWT with 7-day expiry, refresh tokens, HS256 algorithm",
+  "priority": "high"  // Optional: "critical", "high", "medium", "low"
 }
 ```
+
+**Priority levels** (new in v0.2):
+- `critical` - Highest priority
+- `high` - Important
+- `medium` - Normal priority
+- `low` - Can wait
 
 **When to use**:
 - User gives you a complex requirement
@@ -167,7 +174,7 @@ Intent-Engine works like your brain - **one focused task at a time**:
 - Current task is done, need next step
 - Starting a new work session
 
-#### `task_find` - Filter by Metadata
+#### `task_list` - Filter by Metadata
 ```json
 {
   "status": "doing",
@@ -181,6 +188,8 @@ Intent-Engine works like your brain - **one focused task at a time**:
 - Query structured properties
 
 **NOT for text search** - use `task_search` instead
+
+> **Note**: Previously called `task_find` (deprecated in v0.2). Old name still works but shows a warning.
 
 #### `task_search` - Full-Text Search
 ```json
@@ -196,6 +205,28 @@ Intent-Engine works like your brain - **one focused task at a time**:
 - Find tasks by content/keywords
 - Search for specific technical terms
 - Locate related work
+
+#### `task_add_dependency` - Define Task Dependencies
+```json
+{
+  "blocked_task_id": 43,
+  "blocking_task_id": 42
+}
+```
+
+**What it does**:
+- Creates a dependency: Task 43 depends on Task 42
+- Validates no circular dependencies exist
+- Task 43 cannot start until Task 42 is `done`
+
+**When to use**:
+- Define execution order between tasks
+- Ensure prerequisites are met before starting work
+- Model complex workflows with dependencies
+
+**Important**:
+- `task_start` will fail if task has incomplete dependencies
+- `task_pick_next` filters out blocked tasks automatically
 
 ### Event Recording
 
@@ -217,6 +248,41 @@ Intent-Engine works like your brain - **one focused task at a time**:
 - Hit a blocker that needs tracking
 - Reached a milestone
 - Quick note for future reference
+
+#### `event_list` - Query Events with Filters
+```json
+{
+  "task_id": 42,
+  "type": "decision",        // Optional: filter by type
+  "since": "7d",             // Optional: only recent events
+  "limit": 10                // Optional: limit results
+}
+```
+
+**New in v0.2**: Smart filtering for efficiency
+
+**Filtering options**:
+- `type`: Filter by event type (`decision`, `blocker`, `milestone`, `note`)
+- `since`: Time-based filter (`7d`, `24h`, `30m`, `60s`)
+- Combine both for precise queries
+
+**When to use**:
+- Task has many events, need specific subset
+- Find all decisions made on a task
+- Review recent blockers or milestones
+- Optimize token usage by filtering
+
+**Example use cases**:
+```json
+// Get only decisions from last week
+{"task_id": 42, "type": "decision", "since": "7d"}
+
+// Get all recent events (any type)
+{"task_id": 42, "since": "24h"}
+
+// Get all blockers (any time)
+{"task_id": 42, "type": "blocker"}
+```
 
 ### Reporting
 
@@ -305,6 +371,37 @@ You:
 3. Fix the bug
 4. task_done()
 5. task_switch(task_id: 42)  # Back to auth
+```
+
+### Pattern 6: Working with Dependencies (new in v0.2)
+```
+User: "Implement the API client, but it depends on authentication being done first"
+
+You:
+1. task_list(status: "doing")
+   → Find current auth task (ID 42)
+2. task_add(name: "Implement API client", priority: "high")
+   → Creates task ID 50
+3. task_add_dependency(blocked_task_id: 50, blocking_task_id: 42)
+   → API client now depends on auth completion
+4. Continue working on task 42 (auth)
+5. When task 42 is done, task_pick_next() will recommend task 50
+```
+
+### Pattern 7: Smart Event Filtering (new in v0.2)
+```
+User: "What decisions did we make on the authentication task?"
+
+You:
+1. task_search(query: "authentication")
+   → Find task ID 42
+2. event_list(task_id: 42, type: "decision")
+   → Get only decision events (efficient!)
+3. Review and summarize the decisions
+
+Alternative - Recent blockers:
+event_list(task_id: 42, type: "blocker", since: "7d")
+→ Get blockers from last week only
 ```
 
 ---
@@ -538,7 +635,7 @@ Intent-Engine is designed for **strategic intent tracking**, not tactical todo l
 
 ---
 
-**Last Updated**: 2024-11-09
-**Spec Version**: 0.1
-**MCP Tools**: 13 available
+**Last Updated**: 2025-11-11
+**Spec Version**: 0.2
+**MCP Tools**: 14 available (added task_add_dependency)
 **Status**: Experimental (Pre-1.0)
