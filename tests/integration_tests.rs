@@ -83,14 +83,14 @@ fn test_task_update_priority_and_complexity() {
         .arg("update")
         .arg("1")
         .arg("--priority")
-        .arg("8")
+        .arg("high")
         .arg("--complexity")
         .arg("6");
 
     update
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"priority\": 8"))
+        .stdout(predicate::str::contains("\"priority\": 2"))
         .stdout(predicate::str::contains("\"complexity\": 6"));
 }
 
@@ -387,6 +387,7 @@ fn test_multiple_tasks_with_priorities() {
     let temp_dir = setup_test_env();
 
     // Add tasks with different priorities
+    let priorities = ["low", "low", "medium", "high", "critical"];
     for i in 1..=5 {
         let mut add = Command::cargo_bin("intent-engine").unwrap();
         add.current_dir(temp_dir.path())
@@ -405,12 +406,12 @@ fn test_multiple_tasks_with_priorities() {
             .arg("update")
             .arg(i.to_string())
             .arg("--priority")
-            .arg((6 - i).to_string())
+            .arg(priorities[i - 1])
             .assert()
             .success();
     }
 
-    // Pick next should recommend task 5 (priority 1)
+    // Pick next should recommend task 5 (priority critical = 1)
     let mut pick = Command::cargo_bin("intent-engine").unwrap();
     pick.current_dir(temp_dir.path())
         .arg("task")

@@ -238,8 +238,30 @@
       }
     },
     {
+      "name": "task_list",
+      "description": "Core Duty: Performs STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\nTactical Guide: Use this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\nNOT for text search:\n- ❌ task_list: For structured metadata filtering only\n- ✅ task_search: For searching by keywords, names, or spec content\n\nExamples:\n- List all in-progress work: {status: 'doing'}\n- List all top-level tasks: {parent: 'null'}\n- List subtasks of task 42: {parent: '42'}",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
+            "description": "Filter by task status (optional)."
+          },
+          "parent": {
+            "type": "string",
+            "description": "Filter by parent ID. Use the string 'null' for top-level tasks, or a numeric string like '42' for subtasks of task 42 (optional)."
+          }
+        }
+      }
+    },
+    {
       "name": "task_find",
-      "description": "Core Duty: Performs STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\nTactical Guide: Use this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\nNOT for text search:\n- ❌ task_find: For text/content search\n- ✅ task_search: For searching by keywords, names, or spec content\n\nExamples:\n- Find all in-progress work: {status: 'doing'}\n- Find all top-level tasks: {parent: 'null'}\n- Find subtasks of task 42: {parent: '42'}",
+      "description": "⚠️  DEPRECATED: Use 'task_list' instead.\n\nCore Duty: Performs STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\nThis tool is deprecated and will be removed in a future version. Please use 'task_list' for the same functionality.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -347,8 +369,9 @@
             "description": "New status (optional). WARNING: Prefer atomic commands (task_start, task_done, task_switch) over direct status updates to maintain workspace consistency."
           },
           "priority": {
-            "type": "integer",
-            "description": "New priority where LOWER number = HIGHER priority (1 is highest). Optional."
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"],
+            "description": "New priority level (optional). Values: 'critical' (highest), 'high', 'medium', 'low' (lowest). Internally mapped to integers for sorting."
           },
           "parent_id": {
             "type": "integer",

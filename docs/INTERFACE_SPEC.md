@@ -50,7 +50,7 @@ Task
 ├── spec: String (markdown, optional)
 ├── status: String { "todo", "doing", "done" }
 ├── complexity: Integer (optional, nullable)
-├── priority: Integer (optional, nullable, 1=highest)
+├── priority: Integer (stored as 1-4: critical=1, high=2, medium=3, low=4)
 ├── parent_id: Integer (optional, nullable)
 ├── first_todo_at: Timestamp (when first set to todo)
 ├── first_doing_at: Timestamp (when first set to doing)
@@ -69,7 +69,7 @@ Workspace State
 
 **Key Design Principles**:
 - **Focus-Driven**: Most commands operate on `current_task_id` (the "focused" task)
-- **Priority Model**: Lower number = higher priority (1 is highest, optional field)
+- **Priority Model**: String interface ("critical", "high", "medium", "low") maps to integers (1-4), lower number = higher priority
 - **Lifecycle Timestamps**: Track first occurrence of each status for analysis
 - **Atomic Operations**: Commands like `start`, `switch`, `done` combine multiple steps
 
@@ -667,7 +667,8 @@ intent-engine current --set <TASK_ID>
 | `task_switch` | Switch task | `task switch` |
 | `task_done` | Complete task | `task done` |
 | `task_update` | Update task | `task update` |
-| `task_find` | Filter tasks | `task find` |
+| `task_list` | List/filter tasks | `task list` |
+| `task_find` | ⚠️  Deprecated (use `task_list`) | `task find` (deprecated) |
 | `task_search` | Search tasks (FTS5) | `task search` |
 | `task_get` | Get task by ID | `task get` |
 | `task_context` | Get task family tree | N/A |

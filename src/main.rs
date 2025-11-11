@@ -105,6 +105,12 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                 None
             };
 
+            // Convert priority string to integer
+            let priority_int = match &priority {
+                Some(p) => Some(intent_engine::priority::PriorityLevel::from_str(p)?),
+                None => None,
+            };
+
             let parent_opt = parent.map(Some);
             let task = task_mgr
                 .update_task(
@@ -114,7 +120,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                     parent_opt,
                     status.as_deref(),
                     complexity,
-                    priority,
+                    priority_int,
                 )
                 .await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
@@ -134,7 +140,24 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             );
         },
 
+        TaskCommands::List { status, parent } => {
+            let ctx = ProjectContext::load().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+
+            let parent_opt = parent.map(|p| {
+                if p == "null" {
+                    None
+                } else {
+                    p.parse::<i64>().ok()
+                }
+            });
+
+            let tasks = task_mgr.find_tasks(status.as_deref(), parent_opt).await?;
+            println!("{}", serde_json::to_string_pretty(&tasks)?);
+        },
+
         TaskCommands::Find { status, parent } => {
+            eprintln!("⚠️  Warning: 'task find' is deprecated. Please use 'task list' instead.");
             let ctx = ProjectContext::load().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 

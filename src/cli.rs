@@ -109,9 +109,9 @@ pub enum TaskCommands {
         #[arg(long)]
         complexity: Option<i32>,
 
-        /// Task priority
+        /// Task priority (critical, high, medium, low)
         #[arg(long)]
-        priority: Option<i32>,
+        priority: Option<String>,
 
         /// Read spec from stdin
         #[arg(long)]
@@ -124,7 +124,19 @@ pub enum TaskCommands {
         id: i64,
     },
 
-    /// Find tasks with filters
+    /// List tasks with filters
+    List {
+        /// Filter by status
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Filter by parent ID (use "null" for no parent)
+        #[arg(long)]
+        parent: Option<String>,
+    },
+
+    /// Find tasks with filters (deprecated: use 'list' instead)
+    #[command(hide = true)]
     Find {
         /// Filter by status
         #[arg(long)]

@@ -670,13 +670,13 @@ fn test_cli_task_update_with_complexity_priority() {
         .arg("--complexity")
         .arg("7")
         .arg("--priority")
-        .arg("5");
+        .arg("low");
 
     update_cmd
         .assert()
         .success()
         .stdout(predicate::str::contains("\"complexity\": 7"))
-        .stdout(predicate::str::contains("\"priority\": 5"));
+        .stdout(predicate::str::contains("\"priority\": 4"));
 }
 
 #[test]
@@ -703,7 +703,7 @@ fn test_cli_pick_next_tasks() {
             .arg("update")
             .arg(i.to_string())
             .arg("--priority")
-            .arg(if i == 2 { "1" } else { "10" })
+            .arg(if i == 2 { "critical" } else { "low" })
             .assert()
             .success();
     }
@@ -1024,7 +1024,7 @@ fn test_cli_pick_next_priority_ordering() {
         .arg("update")
         .arg("1")
         .arg("--priority")
-        .arg("10")
+        .arg("low")
         .assert()
         .success();
 
@@ -1035,7 +1035,7 @@ fn test_cli_pick_next_priority_ordering() {
         .arg("update")
         .arg("2")
         .arg("--priority")
-        .arg("1")
+        .arg("critical")
         .assert()
         .success();
 

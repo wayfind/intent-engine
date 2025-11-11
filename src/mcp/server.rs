@@ -189,6 +189,7 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
         "task_switch" => handle_task_switch(params.arguments).await,
         "task_done" => handle_task_done(params.arguments).await,
         "task_update" => handle_task_update(params.arguments).await,
+        "task_list" => handle_task_list(params.arguments).await,
         "task_find" => handle_task_find(params.arguments).await,
         "task_search" => handle_task_search(params.arguments).await,
         "task_get" => handle_task_get(params.arguments).await,
@@ -377,10 +378,13 @@ async fn handle_task_update(args: Value) -> Result<Value, String> {
         .get("complexity")
         .and_then(|v| v.as_i64())
         .map(|v| v as i32);
-    let priority = args
-        .get("priority")
-        .and_then(|v| v.as_i64())
-        .map(|v| v as i32);
+    let priority = match args.get("priority").and_then(|v| v.as_str()) {
+        Some(p) => Some(
+            crate::priority::PriorityLevel::from_str(p)
+                .map_err(|e| format!("Invalid priority: {}", e))?,
+        ),
+        None => None,
+    };
     let parent_id = args.get("parent_id").and_then(|v| v.as_i64()).map(Some);
 
     let ctx = ProjectContext::load_or_init()
@@ -396,7 +400,33 @@ async fn handle_task_update(args: Value) -> Result<Value, String> {
     serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
 }
 
+async fn handle_task_list(args: Value) -> Result<Value, String> {
+    let status = args.get("status").and_then(|v| v.as_str());
+    let parent = args.get("parent").and_then(|v| v.as_str());
+
+    let parent_opt = parent.map(|p| {
+        if p == "null" {
+            None
+        } else {
+            p.parse::<i64>().ok()
+        }
+    });
+
+    let ctx = ProjectContext::load()
+        .await
+        .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+    let task_mgr = TaskManager::new(&ctx.pool);
+    let tasks = task_mgr
+        .find_tasks(status, parent_opt)
+        .await
+        .map_err(|e| format!("Failed to list tasks: {}", e))?;
+
+    serde_json::to_value(&tasks).map_err(|e| format!("Serialization error: {}", e))
+}
+
 async fn handle_task_find(args: Value) -> Result<Value, String> {
+    eprintln!("⚠️  Warning: 'task_find' is deprecated. Please use 'task_list' instead.");
     let status = args.get("status").and_then(|v| v.as_str());
     let parent = args.get("parent").and_then(|v| v.as_str());
 
