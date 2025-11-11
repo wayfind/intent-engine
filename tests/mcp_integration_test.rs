@@ -355,16 +355,19 @@ fn test_task_context_returns_family_tree() {
 
     // Initialize project and create task hierarchy
     let _ = Command::new(get_binary_path())
+        .current_dir(project_path)
         .args(["task", "add", "--name", "Root task"])
         .output()
         .unwrap();
 
     let _ = Command::new(get_binary_path())
+        .current_dir(project_path)
         .args(["task", "add", "--name", "Child task", "--parent", "1"])
         .output()
         .unwrap();
 
     let _ = Command::new(get_binary_path())
+        .current_dir(project_path)
         .args(["task", "add", "--name", "Grandchild task", "--parent", "2"])
         .output()
         .unwrap();
@@ -456,12 +459,14 @@ fn test_task_context_uses_current_task_when_no_id_provided() {
 
     // Initialize project and create a task
     let _ = Command::new(get_binary_path())
+        .current_dir(project_path)
         .args(["task", "add", "--name", "Test task"])
         .output()
         .unwrap();
 
     // Start the task (sets it as current)
     let _ = Command::new(get_binary_path())
+        .current_dir(project_path)
         .args(["task", "start", "1"])
         .output()
         .unwrap();
@@ -531,6 +536,7 @@ fn test_task_context_error_when_no_current_task_and_no_id() {
 
     // Initialize project but don't create or start any tasks
     let _ = Command::new(get_binary_path())
+        .current_dir(project_path)
         .args(["task", "add", "--name", "Test task"])
         .output()
         .unwrap();
@@ -585,6 +591,7 @@ fn test_task_context_nonexistent_task() {
 
     // Initialize project
     let _ = Command::new(get_binary_path())
+        .current_dir(project_path)
         .args(["task", "add", "--name", "Test task"])
         .output()
         .unwrap();
