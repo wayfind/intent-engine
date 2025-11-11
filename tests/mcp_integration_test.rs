@@ -84,6 +84,23 @@ fn test_ping_returns_empty_result() {
 
 #[test]
 fn test_tools_list_returns_16_tools() {
+    // Load expected tools from mcp-server.json (single source of truth)
+    let mcp_schema_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("mcp-server.json");
+    let mcp_schema_content =
+        std::fs::read_to_string(&mcp_schema_path).expect("Failed to read mcp-server.json");
+    let mcp_schema: Value =
+        serde_json::from_str(&mcp_schema_content).expect("Failed to parse mcp-server.json");
+
+    let expected_tools_from_schema = mcp_schema["tools"]
+        .as_array()
+        .expect("mcp-server.json should have 'tools' array");
+
+    let expected_tool_names: Vec<String> = expected_tools_from_schema
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
+
+    // Make the actual MCP request
     let request = json!({
         "jsonrpc": "2.0",
         "id": 3,
@@ -96,38 +113,36 @@ fn test_tools_list_returns_16_tools() {
     assert!(response["result"]["tools"].is_array());
 
     let tools = response["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 16, "Expected 16 tools, got {}", tools.len());
+
+    // Verify count matches mcp-server.json (no hard-coded magic number)
+    assert_eq!(
+        tools.len(),
+        expected_tools_from_schema.len(),
+        "Tool count mismatch: expected {} tools from mcp-server.json, got {}",
+        expected_tools_from_schema.len(),
+        tools.len()
+    );
 
     // Verify all expected tools are present
-    let tool_names: Vec<String> = tools
+    let actual_tool_names: Vec<String> = tools
         .iter()
         .map(|t| t["name"].as_str().unwrap().to_string())
         .collect();
 
-    let expected_tools = vec![
-        "task_add",
-        "task_start",
-        "task_pick_next",
-        "task_spawn_subtask",
-        "task_switch",
-        "task_done",
-        "task_update",
-        "task_find",
-        "task_search", // FTS5 精华功能
-        "task_get",
-        "task_context",
-        "task_delete",
-        "event_add",
-        "event_list",
-        "current_task_get",
-        "report_generate",
-    ];
-
-    for expected in &expected_tools {
+    for expected_name in &expected_tool_names {
         assert!(
-            tool_names.contains(&expected.to_string()),
+            actual_tool_names.contains(expected_name),
             "Missing tool: {}",
-            expected
+            expected_name
+        );
+    }
+
+    // Verify no unexpected tools were returned
+    for actual_name in &actual_tool_names {
+        assert!(
+            expected_tool_names.contains(actual_name),
+            "Unexpected tool returned: {}",
+            actual_name
         );
     }
 }
