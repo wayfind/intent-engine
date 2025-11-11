@@ -409,7 +409,7 @@
     },
     {
       "name": "event_list",
-      "description": "Core Duty: Retrieves the historical event stream for a task.\n\nTactical Guide: Use this to:\n- Review decision-making process\n- Recover context when resuming old work\n- Understand blockers and milestones\n- Prepare project retrospectives\n\nReturns: Array of events sorted by timestamp (oldest first).\n\nBest Practice: When resuming work on a task, call task_start with with_events: true instead of separately calling event_list - it's more efficient.",
+      "description": "Core Duty: Retrieves the historical event stream for a task.\n\nTactical Guide: Use this to:\n- Review decision-making process\n- Recover context when resuming old work\n- Understand blockers and milestones\n- Prepare project retrospectives\n\nPerformance Optimization:\n- For tasks with hundreds of events, use filters to reduce token usage\n- Filter by type (e.g., 'decision') to focus on specific event categories\n- Filter by since (e.g., '7d') to get recent events only\n- Combine filters for maximum efficiency\n\nReturns: Array of events sorted by timestamp (newest first).\n\nBest Practice: When resuming work on a task, call task_start with with_events: true instead of separately calling event_list - it's more efficient.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -419,7 +419,17 @@
           },
           "limit": {
             "type": "integer",
-            "description": "Maximum number of events to return (optional). Useful for large histories."
+            "description": "Maximum number of events to return (optional). Useful for large histories. Defaults to 100."
+          },
+          "type": {
+            "type": "string",
+            "description": "Filter events by log_type (optional). Common types: 'decision', 'blocker', 'milestone', 'note'. Use this to focus on specific event categories and save tokens.",
+            "enum": ["decision", "blocker", "milestone", "note"]
+          },
+          "since": {
+            "type": "string",
+            "description": "Filter events created within duration (optional). Format: '7d' (7 days), '24h' (24 hours), '30m' (30 minutes), '60s' (60 seconds). Use this to get recent events only and save processing time.",
+            "pattern": "^\\d+[dhms]$"
           }
         },
         "required": [

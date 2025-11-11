@@ -57,7 +57,13 @@ impl<'a> EventManager<'a> {
     }
 
     /// List events for a task
-    pub async fn list_events(&self, task_id: i64, limit: Option<i64>) -> Result<Vec<Event>> {
+    pub async fn list_events(
+        &self,
+        task_id: i64,
+        limit: Option<i64>,
+        log_type: Option<String>,
+        since: Option<String>,
+    ) -> Result<Vec<Event>> {
         // Check if task exists
         let task_exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)")
@@ -71,21 +77,81 @@ impl<'a> EventManager<'a> {
 
         let limit = limit.unwrap_or(100);
 
-        let events = sqlx::query_as::<_, Event>(
-            r#"
-            SELECT id, task_id, timestamp, log_type, discussion_data
-            FROM events
-            WHERE task_id = ?
-            ORDER BY timestamp DESC
-            LIMIT ?
-            "#,
-        )
-        .bind(task_id)
-        .bind(limit)
-        .fetch_all(self.pool)
-        .await?;
+        // Parse since duration if provided
+        let since_timestamp = if let Some(duration_str) = since {
+            Some(Self::parse_duration(&duration_str)?)
+        } else {
+            None
+        };
+
+        // Build dynamic query based on filters
+        let mut query = String::from(
+            "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE task_id = ?",
+        );
+        let mut conditions = Vec::new();
+
+        if log_type.is_some() {
+            conditions.push("log_type = ?");
+        }
+
+        if since_timestamp.is_some() {
+            conditions.push("timestamp >= ?");
+        }
+
+        if !conditions.is_empty() {
+            query.push_str(" AND ");
+            query.push_str(&conditions.join(" AND "));
+        }
+
+        query.push_str(" ORDER BY timestamp DESC LIMIT ?");
+
+        // Build and execute query
+        let mut sql_query = sqlx::query_as::<_, Event>(&query).bind(task_id);
+
+        if let Some(ref typ) = log_type {
+            sql_query = sql_query.bind(typ);
+        }
+
+        if let Some(ts) = since_timestamp {
+            sql_query = sql_query.bind(ts);
+        }
+
+        sql_query = sql_query.bind(limit);
+
+        let events = sql_query.fetch_all(self.pool).await?;
 
         Ok(events)
+    }
+
+    /// Parse duration string (e.g., "7d", "24h", "30m") into a DateTime
+    fn parse_duration(duration: &str) -> Result<chrono::DateTime<Utc>> {
+        let len = duration.len();
+        if len < 2 {
+            return Err(IntentError::InvalidInput(
+                "Duration must be in format like '7d', '24h', or '30m'".to_string(),
+            ));
+        }
+
+        let (num_str, unit) = duration.split_at(len - 1);
+        let num: i64 = num_str.parse().map_err(|_| {
+            IntentError::InvalidInput(format!("Invalid number in duration: {}", num_str))
+        })?;
+
+        let now = Utc::now();
+        let result = match unit {
+            "d" => now - chrono::Duration::days(num),
+            "h" => now - chrono::Duration::hours(num),
+            "m" => now - chrono::Duration::minutes(num),
+            "s" => now - chrono::Duration::seconds(num),
+            _ => {
+                return Err(IntentError::InvalidInput(format!(
+                    "Invalid duration unit '{}'. Use 'd' (days), 'h' (hours), 'm' (minutes), or 's' (seconds)",
+                    unit
+                )))
+            }
+        };
+
+        Ok(result)
     }
 }
 
@@ -143,7 +209,10 @@ mod tests {
             .await
             .unwrap();
 
-        let events = event_mgr.list_events(task.id, None).await.unwrap();
+        let events = event_mgr
+            .list_events(task.id, None, None, None)
+            .await
+            .unwrap();
         assert_eq!(events.len(), 3);
 
         // Events should be in reverse chronological order
@@ -168,7 +237,10 @@ mod tests {
                 .unwrap();
         }
 
-        let events = event_mgr.list_events(task.id, Some(3)).await.unwrap();
+        let events = event_mgr
+            .list_events(task.id, Some(3), None, None)
+            .await
+            .unwrap();
         assert_eq!(events.len(), 3);
     }
 
@@ -177,7 +249,7 @@ mod tests {
         let ctx = TestContext::new().await;
         let event_mgr = EventManager::new(ctx.pool());
 
-        let result = event_mgr.list_events(999, None).await;
+        let result = event_mgr.list_events(999, None, None, None).await;
         assert!(matches!(result, Err(IntentError::TaskNotFound(999))));
     }
 
@@ -189,7 +261,10 @@ mod tests {
 
         let task = task_mgr.add_task("Test task", None, None).await.unwrap();
 
-        let events = event_mgr.list_events(task.id, None).await.unwrap();
+        let events = event_mgr
+            .list_events(task.id, None, None, None)
+            .await
+            .unwrap();
         assert_eq!(events.len(), 0);
     }
 }

@@ -233,5 +233,13 @@ pub enum EventCommands {
         /// Maximum number of events to return
         #[arg(long)]
         limit: Option<i64>,
+
+        /// Filter by log type (e.g., "decision", "blocker", "milestone", "note")
+        #[arg(long = "type")]
+        log_type: Option<String>,
+
+        /// Filter events created within duration (e.g., "7d", "24h", "30m")
+        #[arg(long)]
+        since: Option<String>,
     },
 }

@@ -582,6 +582,14 @@ async fn handle_event_list(args: Value) -> Result<Value, String> {
         .ok_or("Missing required parameter: task_id")?;
 
     let limit = args.get("limit").and_then(|v| v.as_i64());
+    let log_type = args
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let since = args
+        .get("since")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
 
     let ctx = ProjectContext::load()
         .await
@@ -589,7 +597,7 @@ async fn handle_event_list(args: Value) -> Result<Value, String> {
 
     let event_mgr = EventManager::new(&ctx.pool);
     let events = event_mgr
-        .list_events(task_id, limit)
+        .list_events(task_id, limit, log_type, since)
         .await
         .map_err(|e| format!("Failed to list events: {}", e))?;
 

@@ -324,11 +324,18 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&event)?);
         },
 
-        EventCommands::List { task_id, limit } => {
+        EventCommands::List {
+            task_id,
+            limit,
+            log_type,
+            since,
+        } => {
             let ctx = ProjectContext::load().await?;
             let event_mgr = EventManager::new(&ctx.pool);
 
-            let events = event_mgr.list_events(task_id, limit).await?;
+            let events = event_mgr
+                .list_events(task_id, limit, log_type, since)
+                .await?;
             println!("{}", serde_json::to_string_pretty(&events)?);
         },
     }
