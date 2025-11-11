@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 
+use assert_cmd::cargo;
 /// CLI integration tests for special characters
 ///
 /// Tests that special characters work correctly through the CLI interface
@@ -15,7 +16,7 @@ fn setup_test_env() -> TempDir {
 fn test_cli_unicode_task_name() {
     let temp_dir = setup_test_env();
 
-    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -31,7 +32,7 @@ fn test_cli_unicode_task_name() {
 fn test_cli_emoji_task_name() {
     let temp_dir = setup_test_env();
 
-    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -47,7 +48,7 @@ fn test_cli_emoji_task_name() {
 fn test_cli_quotes_in_task_name() {
     let temp_dir = setup_test_env();
 
-    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -65,7 +66,7 @@ fn test_cli_multiline_spec() {
 
     let multiline_spec = "Line 1\nLine 2\nLine 3";
 
-    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -82,7 +83,7 @@ fn test_cli_special_chars_in_event() {
     let temp_dir = setup_test_env();
 
     // Create task first
-    let mut add_cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -93,7 +94,7 @@ fn test_cli_special_chars_in_event() {
         .success();
 
     // Add event with special characters
-    let mut event_cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut event_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     event_cmd
         .current_dir(temp_dir.path())
         .arg("event")
@@ -117,7 +118,7 @@ fn test_cli_very_long_task_name() {
 
     let long_name = "A".repeat(1000);
 
-    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -131,7 +132,7 @@ fn test_cli_very_long_task_name() {
 fn test_cli_url_in_task_name() {
     let temp_dir = setup_test_env();
 
-    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -145,7 +146,7 @@ fn test_cli_url_in_task_name() {
 fn test_cli_shell_metacharacters() {
     let temp_dir = setup_test_env();
 
-    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -159,7 +160,7 @@ fn test_cli_shell_metacharacters() {
 fn test_cli_markdown_in_name() {
     let temp_dir = setup_test_env();
 
-    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -173,7 +174,7 @@ fn test_cli_markdown_in_name() {
 fn test_cli_backslash_path() {
     let temp_dir = setup_test_env();
 
-    let mut cmd = Command::cargo_bin("intent-engine").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")

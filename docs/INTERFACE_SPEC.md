@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.1
-**Last Updated**: 2024-11-09
+**Version**: 0.2
+**Last Updated**: 2025-11-11
 **Status**: Experimental (Pre-1.0)
 
 ---
@@ -24,6 +24,34 @@
 > If you modify this file and change the interface (add/remove/modify CLI commands,
 > MCP tools, or data models), you MUST increment the version number above and
 > remind the user to run the version sync workflow.
+
+---
+
+## Changelog
+
+### Version 0.2 (2025-11-11)
+
+**Theme**: "Intelligence & Interconnection"
+
+**New Features:**
+- **Task Dependency System**: Define task dependencies with `task depends-on`, circular dependency detection, blocking checks in `task start` and `pick-next`
+- **Smart Event Querying**: Filter events by type (`--type`) and time range (`--since`) for efficient context retrieval
+- **Priority Enum Interface**: Human-friendly priority levels (`critical`, `high`, `medium`, `low`) instead of raw integers
+- **Command Rename**: `task find` → `task list` for better clarity (with backward-compatible alias)
+
+**MCP Tools Added/Updated:**
+- `task_add_dependency` (new): Create task dependencies
+- `task_list` (renamed from `task_find`): List/filter tasks
+- `event_list` (enhanced): Added `type` and `since` filtering parameters
+- `task_context` (enhanced): Now includes dependency information
+
+**Breaking Changes:**
+- None (all changes are backward-compatible additions or have deprecation aliases)
+
+**Migration Notes:**
+- Priority strings are now recommended (`--priority critical` instead of `--priority 1`)
+- Use `task list` instead of `task find` (old command still works with deprecation warning)
+- Old integer priorities still work internally but string interface is preferred
 
 ---
 
@@ -50,7 +78,7 @@ Task
 ├── spec: String (markdown, optional)
 ├── status: String { "todo", "doing", "done" }
 ├── complexity: Integer (optional, nullable)
-├── priority: Integer (optional, nullable, 1=highest)
+├── priority: Integer (stored as 1-4: critical=1, high=2, medium=3, low=4)
 ├── parent_id: Integer (optional, nullable)
 ├── first_todo_at: Timestamp (when first set to todo)
 ├── first_doing_at: Timestamp (when first set to doing)
@@ -63,13 +91,20 @@ Event
 ├── log_type: String { "decision", "blocker", "milestone", "note" }
 └── discussion_data: String (markdown)
 
+Dependency
+├── id: Integer (auto-increment)
+├── blocking_task_id: Integer (FK to tasks.id)
+├── blocked_task_id: Integer (FK to tasks.id)
+└── created_at: Timestamp
+
 Workspace State
 └── current_task_id: Integer (nullable)
 ```
 
 **Key Design Principles**:
 - **Focus-Driven**: Most commands operate on `current_task_id` (the "focused" task)
-- **Priority Model**: Lower number = higher priority (1 is highest, optional field)
+- **Priority Model**: String interface ("critical", "high", "medium", "low") maps to integers (1-4), lower number = higher priority
+- **Dependency System**: Tasks can depend on others; blocked tasks cannot start until dependencies are done
 - **Lifecycle Timestamps**: Track first occurrence of each status for analysis
 - **Atomic Operations**: Commands like `start`, `switch`, `done` combine multiple steps
 
@@ -660,13 +695,15 @@ intent-engine current --set <TASK_ID>
 | Tool Name | Purpose | Maps to CLI |
 |-----------|---------|-------------|
 | `task_add` | Create task | `task add` |
+| `task_add_dependency` | Add task dependency | `task depends-on` |
 | `task_start` | Start task | `task start` |
 | `task_pick_next` | Recommend tasks | `task pick-next` |
 | `task_spawn_subtask` | Create subtask | `task spawn-subtask` |
 | `task_switch` | Switch task | `task switch` |
 | `task_done` | Complete task | `task done` |
 | `task_update` | Update task | `task update` |
-| `task_find` | Filter tasks | `task find` |
+| `task_list` | List/filter tasks | `task list` |
+| `task_find` | ⚠️  Deprecated (use `task_list`) | `task find` (deprecated) |
 | `task_search` | Search tasks (FTS5) | `task search` |
 | `task_get` | Get task by ID | `task get` |
 | `task_context` | Get task family tree | N/A |

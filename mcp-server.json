@@ -1,6 +1,6 @@
 {
   "name": "intent-engine",
-  "version": "0.1",
+  "version": "0.2",
   "description": "An MCP server that provides a persistent, intent-driven context layer for AI Agents, enabling them to maintain long-term memory and strategic clarity in complex projects. Think of it as your external brain for task management - one focused task at a time, with full decision history.",
   "usage_philosophy": {
     "core_principle": "Focus-Driven Workflow - The system maintains a single current_task_id representing your focus. Most operations are atomic and operate on this focus to ensure consistency.",
@@ -137,6 +137,27 @@
       }
     },
     {
+      "name": "task_add_dependency",
+      "description": "Core Duty: Establishes a dependency relationship between two tasks.\n\nTactical Guide: Use this when one task must be completed before another can start. The blocked task cannot be started until all its blocking tasks are done.\n\nSemantics:\n- blocked_task_id: The task that has the dependency (cannot start until blocker is done)\n- blocking_task_id: The task that must be completed first (blocks the other task)\n\nExample: task_add_dependency({blocked_task_id: 42, blocking_task_id: 41}) means 'Task 42 depends on Task 41' or 'Task 41 must be done before Task 42 can start'.\n\nCircular Dependency Prevention: The system automatically checks for cycles and will reject dependencies that would create circular references.\n\nImpact on Workflow:\n- task_start will fail if task has incomplete dependencies\n- task_pick_next will filter out blocked tasks\n- task_context shows both blocking_tasks and blocked_by_tasks",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "blocked_task_id": {
+            "type": "integer",
+            "description": "ID of the task that has the dependency (cannot start until blocking task is done)."
+          },
+          "blocking_task_id": {
+            "type": "integer",
+            "description": "ID of the task that must be completed first (blocks the other task)."
+          }
+        },
+        "required": [
+          "blocked_task_id",
+          "blocking_task_id"
+        ]
+      }
+    },
+    {
       "name": "task_start",
       "description": "Core Duty: Activates an intent and sets it as the current focus. This is the entry point to the focus-driven workflow.\n\nTactical Guide: ALWAYS call this before working on a task. This is an ATOMIC operation that:\n1. Sets task status to 'doing' (marks first_doing_at timestamp)\n2. Sets as current_task_id in workspace\n3. Returns full context including event history (if with_events: true)\n\nBest Practice: ALWAYS use with_events: true to get the complete decision history. This is crucial for resuming work.\n\nExample: Before starting any work, call task_start({task_id: 42, with_events: true}).",
       "inputSchema": {
@@ -217,8 +238,30 @@
       }
     },
     {
+      "name": "task_list",
+      "description": "Core Duty: Performs STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\nTactical Guide: Use this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\nNOT for text search:\n- ❌ task_list: For structured metadata filtering only\n- ✅ task_search: For searching by keywords, names, or spec content\n\nExamples:\n- List all in-progress work: {status: 'doing'}\n- List all top-level tasks: {parent: 'null'}\n- List subtasks of task 42: {parent: '42'}",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
+            "description": "Filter by task status (optional)."
+          },
+          "parent": {
+            "type": "string",
+            "description": "Filter by parent ID. Use the string 'null' for top-level tasks, or a numeric string like '42' for subtasks of task 42 (optional)."
+          }
+        }
+      }
+    },
+    {
       "name": "task_find",
-      "description": "Core Duty: Performs STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\nTactical Guide: Use this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\nNOT for text search:\n- ❌ task_find: For text/content search\n- ✅ task_search: For searching by keywords, names, or spec content\n\nExamples:\n- Find all in-progress work: {status: 'doing'}\n- Find all top-level tasks: {parent: 'null'}\n- Find subtasks of task 42: {parent: '42'}",
+      "description": "⚠️  DEPRECATED: Use 'task_list' instead.\n\nCore Duty: Performs STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\nThis tool is deprecated and will be removed in a future version. Please use 'task_list' for the same functionality.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -326,8 +369,9 @@
             "description": "New status (optional). WARNING: Prefer atomic commands (task_start, task_done, task_switch) over direct status updates to maintain workspace consistency."
           },
           "priority": {
-            "type": "integer",
-            "description": "New priority where LOWER number = HIGHER priority (1 is highest). Optional."
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"],
+            "description": "New priority level (optional). Values: 'critical' (highest), 'high', 'medium', 'low' (lowest). Internally mapped to integers for sorting."
           },
           "parent_id": {
             "type": "integer",
@@ -388,7 +432,7 @@
     },
     {
       "name": "event_list",
-      "description": "Core Duty: Retrieves the historical event stream for a task.\n\nTactical Guide: Use this to:\n- Review decision-making process\n- Recover context when resuming old work\n- Understand blockers and milestones\n- Prepare project retrospectives\n\nReturns: Array of events sorted by timestamp (oldest first).\n\nBest Practice: When resuming work on a task, call task_start with with_events: true instead of separately calling event_list - it's more efficient.",
+      "description": "Core Duty: Retrieves the historical event stream for a task.\n\nTactical Guide: Use this to:\n- Review decision-making process\n- Recover context when resuming old work\n- Understand blockers and milestones\n- Prepare project retrospectives\n\nPerformance Optimization:\n- For tasks with hundreds of events, use filters to reduce token usage\n- Filter by type (e.g., 'decision') to focus on specific event categories\n- Filter by since (e.g., '7d') to get recent events only\n- Combine filters for maximum efficiency\n\nReturns: Array of events sorted by timestamp (newest first).\n\nBest Practice: When resuming work on a task, call task_start with with_events: true instead of separately calling event_list - it's more efficient.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -398,7 +442,17 @@
           },
           "limit": {
             "type": "integer",
-            "description": "Maximum number of events to return (optional). Useful for large histories."
+            "description": "Maximum number of events to return (optional). Useful for large histories. Defaults to 100."
+          },
+          "type": {
+            "type": "string",
+            "description": "Filter events by log_type (optional). Common types: 'decision', 'blocker', 'milestone', 'note'. Use this to focus on specific event categories and save tokens.",
+            "enum": ["decision", "blocker", "milestone", "note"]
+          },
+          "since": {
+            "type": "string",
+            "description": "Filter events created within duration (optional). Format: '7d' (7 days), '24h' (24 hours), '30m' (30 minutes), '60s' (60 seconds). Use this to get recent events only and save processing time.",
+            "pattern": "^\\d+[dhms]$"
           }
         },
         "required": [

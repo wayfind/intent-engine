@@ -182,12 +182,14 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
 
     let result = match params.name.as_str() {
         "task_add" => handle_task_add(params.arguments).await,
+        "task_add_dependency" => handle_task_add_dependency(params.arguments).await,
         "task_start" => handle_task_start(params.arguments).await,
         "task_pick_next" => handle_task_pick_next(params.arguments).await,
         "task_spawn_subtask" => handle_task_spawn_subtask(params.arguments).await,
         "task_switch" => handle_task_switch(params.arguments).await,
         "task_done" => handle_task_done(params.arguments).await,
         "task_update" => handle_task_update(params.arguments).await,
+        "task_list" => handle_task_list(params.arguments).await,
         "task_find" => handle_task_find(params.arguments).await,
         "task_search" => handle_task_search(params.arguments).await,
         "task_get" => handle_task_get(params.arguments).await,
@@ -231,6 +233,29 @@ async fn handle_task_add(args: Value) -> Result<Value, String> {
         .map_err(|e| format!("Failed to add task: {}", e))?;
 
     serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
+}
+
+async fn handle_task_add_dependency(args: Value) -> Result<Value, String> {
+    let blocked_task_id = args
+        .get("blocked_task_id")
+        .and_then(|v| v.as_i64())
+        .ok_or("Missing required parameter: blocked_task_id")?;
+
+    let blocking_task_id = args
+        .get("blocking_task_id")
+        .and_then(|v| v.as_i64())
+        .ok_or("Missing required parameter: blocking_task_id")?;
+
+    let ctx = ProjectContext::load_or_init()
+        .await
+        .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+    let dependency =
+        crate::dependencies::add_dependency(&ctx.pool, blocking_task_id, blocked_task_id)
+            .await
+            .map_err(|e| format!("Failed to add dependency: {}", e))?;
+
+    serde_json::to_value(&dependency).map_err(|e| format!("Serialization error: {}", e))
 }
 
 async fn handle_task_start(args: Value) -> Result<Value, String> {
@@ -353,10 +378,13 @@ async fn handle_task_update(args: Value) -> Result<Value, String> {
         .get("complexity")
         .and_then(|v| v.as_i64())
         .map(|v| v as i32);
-    let priority = args
-        .get("priority")
-        .and_then(|v| v.as_i64())
-        .map(|v| v as i32);
+    let priority = match args.get("priority").and_then(|v| v.as_str()) {
+        Some(p) => Some(
+            crate::priority::PriorityLevel::parse_to_int(p)
+                .map_err(|e| format!("Invalid priority: {}", e))?,
+        ),
+        None => None,
+    };
     let parent_id = args.get("parent_id").and_then(|v| v.as_i64()).map(Some);
 
     let ctx = ProjectContext::load_or_init()
@@ -372,7 +400,33 @@ async fn handle_task_update(args: Value) -> Result<Value, String> {
     serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
 }
 
+async fn handle_task_list(args: Value) -> Result<Value, String> {
+    let status = args.get("status").and_then(|v| v.as_str());
+    let parent = args.get("parent").and_then(|v| v.as_str());
+
+    let parent_opt = parent.map(|p| {
+        if p == "null" {
+            None
+        } else {
+            p.parse::<i64>().ok()
+        }
+    });
+
+    let ctx = ProjectContext::load()
+        .await
+        .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+    let task_mgr = TaskManager::new(&ctx.pool);
+    let tasks = task_mgr
+        .find_tasks(status, parent_opt)
+        .await
+        .map_err(|e| format!("Failed to list tasks: {}", e))?;
+
+    serde_json::to_value(&tasks).map_err(|e| format!("Serialization error: {}", e))
+}
+
 async fn handle_task_find(args: Value) -> Result<Value, String> {
+    eprintln!("⚠️  Warning: 'task_find' is deprecated. Please use 'task_list' instead.");
     let status = args.get("status").and_then(|v| v.as_str());
     let parent = args.get("parent").and_then(|v| v.as_str());
 
@@ -558,6 +612,14 @@ async fn handle_event_list(args: Value) -> Result<Value, String> {
         .ok_or("Missing required parameter: task_id")?;
 
     let limit = args.get("limit").and_then(|v| v.as_i64());
+    let log_type = args
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let since = args
+        .get("since")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
 
     let ctx = ProjectContext::load()
         .await
@@ -565,7 +627,7 @@ async fn handle_event_list(args: Value) -> Result<Value, String> {
 
     let event_mgr = EventManager::new(&ctx.pool);
     let events = event_mgr
-        .list_events(task_id, limit)
+        .list_events(task_id, limit, log_type, since)
         .await
         .map_err(|e| format!("Failed to list events: {}", e))?;
 

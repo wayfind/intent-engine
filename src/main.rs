@@ -105,6 +105,12 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                 None
             };
 
+            // Convert priority string to integer
+            let priority_int = match &priority {
+                Some(p) => Some(intent_engine::priority::PriorityLevel::parse_to_int(p)?),
+                None => None,
+            };
+
             let parent_opt = parent.map(Some);
             let task = task_mgr
                 .update_task(
@@ -114,7 +120,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                     parent_opt,
                     status.as_deref(),
                     complexity,
-                    priority,
+                    priority_int,
                 )
                 .await?;
             println!("{}", serde_json::to_string_pretty(&task)?);
@@ -134,7 +140,24 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             );
         },
 
+        TaskCommands::List { status, parent } => {
+            let ctx = ProjectContext::load().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+
+            let parent_opt = parent.map(|p| {
+                if p == "null" {
+                    None
+                } else {
+                    p.parse::<i64>().ok()
+                }
+            });
+
+            let tasks = task_mgr.find_tasks(status.as_deref(), parent_opt).await?;
+            println!("{}", serde_json::to_string_pretty(&tasks)?);
+        },
+
         TaskCommands::Find { status, parent } => {
+            eprintln!("⚠️  Warning: 'task find' is deprecated. Please use 'task list' instead.");
             let ctx = ProjectContext::load().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 
@@ -182,11 +205,6 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                     println!("{}", response.format_as_text());
                 },
             }
-
-            // Exit with code 1 if no recommendation found
-            if response.suggestion_type == "NONE" {
-                std::process::exit(1);
-            }
         },
 
         TaskCommands::SpawnSubtask { name, spec_stdin } => {
@@ -217,6 +235,33 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let results = task_mgr.search_tasks(&query).await?;
             println!("{}", serde_json::to_string_pretty(&results)?);
+        },
+
+        TaskCommands::DependsOn {
+            blocked_task_id,
+            blocking_task_id,
+        } => {
+            let ctx = ProjectContext::load().await?;
+
+            let dependency = intent_engine::dependencies::add_dependency(
+                &ctx.pool,
+                blocking_task_id,
+                blocked_task_id,
+            )
+            .await?;
+
+            let response = serde_json::json!({
+                "dependency_id": dependency.id,
+                "blocking_task_id": dependency.blocking_task_id,
+                "blocked_task_id": dependency.blocked_task_id,
+                "created_at": dependency.created_at,
+                "message": format!(
+                    "Dependency added: Task {} now depends on Task {}",
+                    blocked_task_id, blocking_task_id
+                )
+            });
+
+            println!("{}", serde_json::to_string_pretty(&response)?);
         },
     }
 
@@ -302,11 +347,18 @@ async fn handle_event_command(cmd: EventCommands) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&event)?);
         },
 
-        EventCommands::List { task_id, limit } => {
+        EventCommands::List {
+            task_id,
+            limit,
+            log_type,
+            since,
+        } => {
             let ctx = ProjectContext::load().await?;
             let event_mgr = EventManager::new(&ctx.pool);
 
-            let events = event_mgr.list_events(task_id, limit).await?;
+            let events = event_mgr
+                .list_events(task_id, limit, log_type, since)
+                .await?;
             println!("{}", serde_json::to_string_pretty(&events)?);
         },
     }

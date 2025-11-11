@@ -144,7 +144,12 @@ fn bench_event_list(c: &mut Criterion) {
                 }
 
                 // Benchmark list
-                black_box(event_mgr.list_events(task.id, None).await.unwrap());
+                black_box(
+                    event_mgr
+                        .list_events(task.id, None, None, None)
+                        .await
+                        .unwrap(),
+                );
             });
         });
     }

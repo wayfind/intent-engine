@@ -2,6 +2,7 @@
 //!
 //! These tests verify the MCP server handles edge cases and errors robustly.
 
+use assert_cmd::cargo;
 use serde_json::{json, Value};
 use std::io::Write;
 use std::path::PathBuf;
@@ -10,7 +11,7 @@ use tempfile::tempdir;
 
 /// Get the path to the intent-engine binary built by cargo test
 fn get_binary_path() -> PathBuf {
-    assert_cmd::cargo::cargo_bin!("intent-engine").to_path_buf()
+    cargo::cargo_bin!("intent-engine").to_path_buf()
 }
 
 /// Helper function to send JSON-RPC request and get response

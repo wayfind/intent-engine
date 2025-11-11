@@ -141,11 +141,45 @@ impl<'a> TaskManager<'a> {
         .fetch_all(self.pool)
         .await?;
 
+        // Get blocking tasks (tasks that this task depends on)
+        let blocking_tasks = sqlx::query_as::<_, Task>(
+            r#"
+            SELECT t.id, t.parent_id, t.name, t.spec, t.status, t.complexity, t.priority,
+                   t.first_todo_at, t.first_doing_at, t.first_done_at
+            FROM tasks t
+            JOIN dependencies d ON t.id = d.blocking_task_id
+            WHERE d.blocked_task_id = ?
+            ORDER BY t.priority ASC NULLS LAST, t.id ASC
+            "#,
+        )
+        .bind(id)
+        .fetch_all(self.pool)
+        .await?;
+
+        // Get blocked_by tasks (tasks that depend on this task)
+        let blocked_by_tasks = sqlx::query_as::<_, Task>(
+            r#"
+            SELECT t.id, t.parent_id, t.name, t.spec, t.status, t.complexity, t.priority,
+                   t.first_todo_at, t.first_doing_at, t.first_done_at
+            FROM tasks t
+            JOIN dependencies d ON t.id = d.blocked_task_id
+            WHERE d.blocking_task_id = ?
+            ORDER BY t.priority ASC NULLS LAST, t.id ASC
+            "#,
+        )
+        .bind(id)
+        .fetch_all(self.pool)
+        .await?;
+
         Ok(TaskContext {
             task,
             ancestors,
             siblings,
             children,
+            dependencies: crate::db::models::TaskDependencies {
+                blocking_tasks,
+                blocked_by_tasks,
+            },
         })
     }
 
@@ -200,7 +234,10 @@ impl<'a> TaskManager<'a> {
         // Check for circular dependency if parent_id is being changed
         if let Some(Some(pid)) = parent_id {
             if pid == id {
-                return Err(IntentError::CircularDependency);
+                return Err(IntentError::CircularDependency {
+                    blocking_task_id: pid,
+                    blocked_task_id: id,
+                });
             }
             self.check_task_exists(pid).await?;
             self.check_circular_dependency(id, pid).await?;
@@ -383,6 +420,15 @@ impl<'a> TaskManager<'a> {
 
     /// Start a task (atomic: update status + set current)
     pub async fn start_task(&self, id: i64, with_events: bool) -> Result<TaskWithEvents> {
+        // Check if task is blocked by incomplete dependencies
+        use crate::dependencies::get_incomplete_blocking_tasks;
+        if let Some(blocking_tasks) = get_incomplete_blocking_tasks(self.pool, id).await? {
+            return Err(IntentError::TaskBlocked {
+                task_id: id,
+                blocking_task_ids: blocking_tasks,
+            });
+        }
+
         let mut tx = self.pool.begin().await?;
 
         let now = Utc::now();
@@ -603,7 +649,10 @@ impl<'a> TaskManager<'a> {
 
         loop {
             if current_id == task_id {
-                return Err(IntentError::CircularDependency);
+                return Err(IntentError::CircularDependency {
+                    blocking_task_id: new_parent_id,
+                    blocked_task_id: task_id,
+                });
             }
 
             let parent: Option<i64> =
@@ -864,12 +913,19 @@ impl<'a> TaskManager<'a> {
         if let Some(current_id_str) = current_task_id {
             if let Ok(current_id) = current_id_str.parse::<i64>() {
                 // First priority: Get todo subtasks of current focused task
+                // Exclude tasks blocked by incomplete dependencies
                 let subtasks = sqlx::query_as::<_, Task>(
                     r#"
                     SELECT id, parent_id, name, spec, status, complexity, priority,
                            first_todo_at, first_doing_at, first_done_at
                     FROM tasks
                     WHERE parent_id = ? AND status = 'todo'
+                      AND NOT EXISTS (
+                        SELECT 1 FROM dependencies d
+                        JOIN tasks bt ON d.blocking_task_id = bt.id
+                        WHERE d.blocked_task_id = tasks.id
+                          AND bt.status != 'done'
+                      )
                     ORDER BY COALESCE(priority, 999999) ASC, id ASC
                     LIMIT 1
                     "#,
@@ -885,12 +941,19 @@ impl<'a> TaskManager<'a> {
         }
 
         // Step 2: Second priority - get top-level todo tasks
+        // Exclude tasks blocked by incomplete dependencies
         let top_level_task = sqlx::query_as::<_, Task>(
             r#"
             SELECT id, parent_id, name, spec, status, complexity, priority,
                    first_todo_at, first_doing_at, first_done_at
             FROM tasks
             WHERE parent_id IS NULL AND status = 'todo'
+              AND NOT EXISTS (
+                SELECT 1 FROM dependencies d
+                JOIN tasks bt ON d.blocking_task_id = bt.id
+                WHERE d.blocked_task_id = tasks.id
+                  AND bt.status != 'done'
+              )
             ORDER BY COALESCE(priority, 999999) ASC, id ASC
             LIMIT 1
             "#,
@@ -1223,7 +1286,10 @@ mod tests {
             .update_task(task1.id, None, None, Some(Some(task2.id)), None, None, None)
             .await;
 
-        assert!(matches!(result, Err(IntentError::CircularDependency)));
+        assert!(matches!(
+            result,
+            Err(IntentError::CircularDependency { .. })
+        ));
     }
 
     #[tokio::test]

@@ -300,6 +300,13 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
 
 ## ✨ Core Features
 
+### New in v0.2 (2025-11)
+- **🔗 Task Dependency System**: Define task dependencies, automatically prevent blocked tasks from starting
+- **📊 Smart Event Querying**: Filter events by type and time range, dramatically reduce token usage
+- **🎯 Priority Enum**: Human-friendly priority interface (`critical`/`high`/`medium`/`low`)
+- **📝 Command Rename**: `task find` → `task list` for better clarity
+
+### Core Capabilities
 - **Project Awareness**: Automatically searches upward for `.intent-engine` directory, senses project root
 - **Lazy Initialization**: Write commands auto-initialize project, no manual init needed
 - **Task Tree Management**: Support unlimited levels of parent-child task relationships
