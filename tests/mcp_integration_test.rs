@@ -7,6 +7,11 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use tempfile::tempdir;
 
+/// Get the path to the intent-engine binary
+fn get_binary_path() -> &'static str {
+    env!("CARGO_BIN_EXE_intent-engine")
+}
+
 /// Helper function to send JSON-RPC request and get response
 fn mcp_request(request: &Value) -> Value {
     let temp_dir = tempdir().unwrap();
@@ -14,12 +19,12 @@ fn mcp_request(request: &Value) -> Value {
 
     // Initialize project
     std::env::set_current_dir(project_path).unwrap();
-    let _ = Command::new("intent-engine")
+    let _ = Command::new(get_binary_path())
         .args(["task", "add", "--name", "test"])
         .output();
 
     // Send request to MCP server
-    let mut child = Command::new("intent-engine")
+    let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .stdin(Stdio::piped())
@@ -131,7 +136,7 @@ fn test_invalid_json_returns_parse_error() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
 
-    let mut child = Command::new("intent-engine")
+    let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .stdin(Stdio::piped())
@@ -184,12 +189,15 @@ fn test_task_search_with_fts5_query() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
 
+    // Create .git directory to mark as project root
+    std::fs::create_dir(project_path.join(".git")).unwrap();
+
     // Initialize project by changing to temp dir and running a command
     // This is necessary because initialize_project() doesn't respect INTENT_ENGINE_PROJECT_DIR
     let original_dir = std::env::current_dir().ok();
     std::env::set_current_dir(project_path).unwrap();
 
-    let init_output = Command::new("intent-engine")
+    let init_output = Command::new(get_binary_path())
         .args(["task", "add", "--name", "__init_test__"])
         .output()
         .unwrap();
@@ -206,7 +214,7 @@ fn test_task_search_with_fts5_query() {
     );
 
     // Create test tasks
-    let output1 = Command::new("intent-engine")
+    let output1 = Command::new(get_binary_path())
         .args(["task", "add", "--name", "Fix authentication bug"])
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .output()
@@ -217,7 +225,7 @@ fn test_task_search_with_fts5_query() {
         String::from_utf8_lossy(&output1.stderr)
     );
 
-    let output2 = Command::new("intent-engine")
+    let output2 = Command::new(get_binary_path())
         .args(["task", "add", "--name", "Add payment feature"])
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .output()
@@ -244,7 +252,7 @@ fn test_task_search_with_fts5_query() {
         }
     });
 
-    let mut child = Command::new("intent-engine")
+    let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .stdin(Stdio::piped())
@@ -323,20 +331,24 @@ fn test_missing_required_parameter() {
 fn test_task_context_returns_family_tree() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
+
+    // Create .git directory to mark as project root
+    std::fs::create_dir(project_path.join(".git")).unwrap();
+
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project and create task hierarchy
-    let _ = Command::new("intent-engine")
+    let _ = Command::new(get_binary_path())
         .args(["task", "add", "--name", "Root task"])
         .output()
         .unwrap();
 
-    let _ = Command::new("intent-engine")
+    let _ = Command::new(get_binary_path())
         .args(["task", "add", "--name", "Child task", "--parent", "1"])
         .output()
         .unwrap();
 
-    let _ = Command::new("intent-engine")
+    let _ = Command::new(get_binary_path())
         .args(["task", "add", "--name", "Grandchild task", "--parent", "2"])
         .output()
         .unwrap();
@@ -354,7 +366,7 @@ fn test_task_context_returns_family_tree() {
         }
     });
 
-    let mut child = Command::new("intent-engine")
+    let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .stdin(Stdio::piped())
@@ -409,16 +421,20 @@ fn test_task_context_returns_family_tree() {
 fn test_task_context_uses_current_task_when_no_id_provided() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
+
+    // Create .git directory to mark as project root
+    std::fs::create_dir(project_path.join(".git")).unwrap();
+
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project and create a task
-    let _ = Command::new("intent-engine")
+    let _ = Command::new(get_binary_path())
         .args(["task", "add", "--name", "Test task"])
         .output()
         .unwrap();
 
     // Start the task (sets it as current)
-    let _ = Command::new("intent-engine")
+    let _ = Command::new(get_binary_path())
         .args(["task", "start", "1"])
         .output()
         .unwrap();
@@ -434,7 +450,7 @@ fn test_task_context_uses_current_task_when_no_id_provided() {
         }
     });
 
-    let mut child = Command::new("intent-engine")
+    let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .stdin(Stdio::piped())
@@ -469,10 +485,14 @@ fn test_task_context_uses_current_task_when_no_id_provided() {
 fn test_task_context_error_when_no_current_task_and_no_id() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
+
+    // Create .git directory to mark as project root
+    std::fs::create_dir(project_path.join(".git")).unwrap();
+
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project but don't create or start any tasks
-    let _ = Command::new("intent-engine")
+    let _ = Command::new(get_binary_path())
         .args(["task", "add", "--name", "Test task"])
         .output()
         .unwrap();
@@ -488,7 +508,7 @@ fn test_task_context_error_when_no_current_task_and_no_id() {
         }
     });
 
-    let mut child = Command::new("intent-engine")
+    let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .stdin(Stdio::piped())
@@ -519,10 +539,14 @@ fn test_task_context_error_when_no_current_task_and_no_id() {
 fn test_task_context_nonexistent_task() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
+
+    // Create .git directory to mark as project root
+    std::fs::create_dir(project_path.join(".git")).unwrap();
+
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project
-    let _ = Command::new("intent-engine")
+    let _ = Command::new(get_binary_path())
         .args(["task", "add", "--name", "Test task"])
         .output()
         .unwrap();
@@ -540,7 +564,7 @@ fn test_task_context_nonexistent_task() {
         }
     });
 
-    let mut child = Command::new("intent-engine")
+    let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .stdin(Stdio::piped())
