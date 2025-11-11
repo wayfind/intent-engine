@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 
+use assert_cmd::cargo;
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
@@ -13,7 +14,7 @@ fn test_start_task_blocked_by_incomplete_dependency() {
     let temp_dir = setup_test_env();
 
     // Create two tasks
-    let mut add1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add1 = Command::new(cargo::cargo_bin!("intent-engine"));
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -22,7 +23,7 @@ fn test_start_task_blocked_by_incomplete_dependency() {
         .assert()
         .success();
 
-    let mut add2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add2 = Command::new(cargo::cargo_bin!("intent-engine"));
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -32,7 +33,7 @@ fn test_start_task_blocked_by_incomplete_dependency() {
         .success();
 
     // Make Task 2 depend on Task 1
-    let mut depends = Command::cargo_bin("intent-engine").unwrap();
+    let mut depends = Command::new(cargo::cargo_bin!("intent-engine"));
     depends
         .current_dir(temp_dir.path())
         .arg("task")
@@ -43,7 +44,7 @@ fn test_start_task_blocked_by_incomplete_dependency() {
         .success();
 
     // Try to start Task 2 (should fail because Task 1 is not done)
-    let mut start = Command::cargo_bin("intent-engine").unwrap();
+    let mut start = Command::new(cargo::cargo_bin!("intent-engine"));
     start
         .current_dir(temp_dir.path())
         .arg("task")
@@ -63,7 +64,7 @@ fn test_start_task_allowed_after_dependency_completed() {
     let temp_dir = setup_test_env();
 
     // Create two tasks
-    let mut add1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add1 = Command::new(cargo::cargo_bin!("intent-engine"));
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -72,7 +73,7 @@ fn test_start_task_allowed_after_dependency_completed() {
         .assert()
         .success();
 
-    let mut add2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add2 = Command::new(cargo::cargo_bin!("intent-engine"));
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -82,7 +83,7 @@ fn test_start_task_allowed_after_dependency_completed() {
         .success();
 
     // Make Task 2 depend on Task 1
-    let mut depends = Command::cargo_bin("intent-engine").unwrap();
+    let mut depends = Command::new(cargo::cargo_bin!("intent-engine"));
     depends
         .current_dir(temp_dir.path())
         .arg("task")
@@ -93,7 +94,7 @@ fn test_start_task_allowed_after_dependency_completed() {
         .success();
 
     // Start and complete Task 1
-    let mut start1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut start1 = Command::new(cargo::cargo_bin!("intent-engine"));
     start1
         .current_dir(temp_dir.path())
         .arg("task")
@@ -102,7 +103,7 @@ fn test_start_task_allowed_after_dependency_completed() {
         .assert()
         .success();
 
-    let mut done1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut done1 = Command::new(cargo::cargo_bin!("intent-engine"));
     done1
         .current_dir(temp_dir.path())
         .arg("task")
@@ -111,7 +112,7 @@ fn test_start_task_allowed_after_dependency_completed() {
         .success();
 
     // Now Task 2 should be allowed to start
-    let mut start2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut start2 = Command::new(cargo::cargo_bin!("intent-engine"));
     start2
         .current_dir(temp_dir.path())
         .arg("task")
@@ -130,7 +131,7 @@ fn test_start_task_blocked_by_multiple_dependencies() {
 
     // Create three tasks
     for i in 1..=3 {
-        let mut add = Command::cargo_bin("intent-engine").unwrap();
+        let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
         add.current_dir(temp_dir.path())
             .arg("task")
             .arg("add")
@@ -141,7 +142,7 @@ fn test_start_task_blocked_by_multiple_dependencies() {
     }
 
     // Task 3 depends on both Task 1 and Task 2
-    let mut dep1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut dep1 = Command::new(cargo::cargo_bin!("intent-engine"));
     dep1.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")
@@ -150,7 +151,7 @@ fn test_start_task_blocked_by_multiple_dependencies() {
         .assert()
         .success();
 
-    let mut dep2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut dep2 = Command::new(cargo::cargo_bin!("intent-engine"));
     dep2.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")
@@ -160,7 +161,7 @@ fn test_start_task_blocked_by_multiple_dependencies() {
         .success();
 
     // Try to start Task 3 (should fail because both Task 1 and Task 2 are not done)
-    let mut start = Command::cargo_bin("intent-engine").unwrap();
+    let mut start = Command::new(cargo::cargo_bin!("intent-engine"));
     start
         .current_dir(temp_dir.path())
         .arg("task")
@@ -180,7 +181,7 @@ fn test_start_task_with_partial_dependencies_completed() {
 
     // Create three tasks
     for i in 1..=3 {
-        let mut add = Command::cargo_bin("intent-engine").unwrap();
+        let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
         add.current_dir(temp_dir.path())
             .arg("task")
             .arg("add")
@@ -191,7 +192,7 @@ fn test_start_task_with_partial_dependencies_completed() {
     }
 
     // Task 3 depends on both Task 1 and Task 2
-    let mut dep1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut dep1 = Command::new(cargo::cargo_bin!("intent-engine"));
     dep1.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")
@@ -200,7 +201,7 @@ fn test_start_task_with_partial_dependencies_completed() {
         .assert()
         .success();
 
-    let mut dep2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut dep2 = Command::new(cargo::cargo_bin!("intent-engine"));
     dep2.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")
@@ -210,7 +211,7 @@ fn test_start_task_with_partial_dependencies_completed() {
         .success();
 
     // Complete Task 1 only
-    let mut start1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut start1 = Command::new(cargo::cargo_bin!("intent-engine"));
     start1
         .current_dir(temp_dir.path())
         .arg("task")
@@ -219,7 +220,7 @@ fn test_start_task_with_partial_dependencies_completed() {
         .assert()
         .success();
 
-    let mut done1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut done1 = Command::new(cargo::cargo_bin!("intent-engine"));
     done1
         .current_dir(temp_dir.path())
         .arg("task")
@@ -228,7 +229,7 @@ fn test_start_task_with_partial_dependencies_completed() {
         .success();
 
     // Try to start Task 3 (should still fail because Task 2 is not done)
-    let mut start3 = Command::cargo_bin("intent-engine").unwrap();
+    let mut start3 = Command::new(cargo::cargo_bin!("intent-engine"));
     start3
         .current_dir(temp_dir.path())
         .arg("task")
@@ -247,7 +248,7 @@ fn test_start_task_no_dependencies_allowed() {
     let temp_dir = setup_test_env();
 
     // Create a task with no dependencies
-    let mut add = Command::cargo_bin("intent-engine").unwrap();
+    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -257,7 +258,7 @@ fn test_start_task_no_dependencies_allowed() {
         .success();
 
     // Should be able to start immediately
-    let mut start = Command::cargo_bin("intent-engine").unwrap();
+    let mut start = Command::new(cargo::cargo_bin!("intent-engine"));
     start
         .current_dir(temp_dir.path())
         .arg("task")
@@ -275,7 +276,7 @@ fn test_start_task_blocked_by_doing_dependency() {
     let temp_dir = setup_test_env();
 
     // Create two tasks
-    let mut add1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add1 = Command::new(cargo::cargo_bin!("intent-engine"));
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -284,7 +285,7 @@ fn test_start_task_blocked_by_doing_dependency() {
         .assert()
         .success();
 
-    let mut add2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add2 = Command::new(cargo::cargo_bin!("intent-engine"));
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -294,7 +295,7 @@ fn test_start_task_blocked_by_doing_dependency() {
         .success();
 
     // Make Task 2 depend on Task 1
-    let mut depends = Command::cargo_bin("intent-engine").unwrap();
+    let mut depends = Command::new(cargo::cargo_bin!("intent-engine"));
     depends
         .current_dir(temp_dir.path())
         .arg("task")
@@ -305,7 +306,7 @@ fn test_start_task_blocked_by_doing_dependency() {
         .success();
 
     // Start Task 1 (but don't complete it)
-    let mut start1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut start1 = Command::new(cargo::cargo_bin!("intent-engine"));
     start1
         .current_dir(temp_dir.path())
         .arg("task")
@@ -315,7 +316,7 @@ fn test_start_task_blocked_by_doing_dependency() {
         .success();
 
     // Try to start Task 2 (should fail because Task 1 is doing, not done)
-    let mut start2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut start2 = Command::new(cargo::cargo_bin!("intent-engine"));
     start2
         .current_dir(temp_dir.path())
         .arg("task")

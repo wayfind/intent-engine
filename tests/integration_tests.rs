@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 
+use assert_cmd::cargo;
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
@@ -13,7 +14,7 @@ fn test_task_search_basic() {
     let temp_dir = setup_test_env();
 
     // Add tasks with different names and specs
-    let mut add1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add1 = Command::new(cargo::cargo_bin!("intent-engine"));
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -24,7 +25,7 @@ fn test_task_search_basic() {
         .assert()
         .success();
 
-    let mut add2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add2 = Command::new(cargo::cargo_bin!("intent-engine"));
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -35,7 +36,7 @@ fn test_task_search_basic() {
         .assert()
         .success();
 
-    let mut add3 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add3 = Command::new(cargo::cargo_bin!("intent-engine"));
     add3.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -47,7 +48,7 @@ fn test_task_search_basic() {
         .success();
 
     // Search for "authentication"
-    let mut search = Command::cargo_bin("intent-engine").unwrap();
+    let mut search = Command::new(cargo::cargo_bin!("intent-engine"));
     search
         .current_dir(temp_dir.path())
         .arg("task")
@@ -66,7 +67,7 @@ fn test_task_update_priority_and_complexity() {
     let temp_dir = setup_test_env();
 
     // Add a task
-    let mut add = Command::cargo_bin("intent-engine").unwrap();
+    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -76,7 +77,7 @@ fn test_task_update_priority_and_complexity() {
         .success();
 
     // Update priority and complexity
-    let mut update = Command::cargo_bin("intent-engine").unwrap();
+    let mut update = Command::new(cargo::cargo_bin!("intent-engine"));
     update
         .current_dir(temp_dir.path())
         .arg("task")
@@ -102,7 +103,7 @@ fn test_task_delete() {
     let temp_dir = setup_test_env();
 
     // Add a task
-    let mut add = Command::cargo_bin("intent-engine").unwrap();
+    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -112,7 +113,7 @@ fn test_task_delete() {
         .success();
 
     // Delete the task
-    let mut del = Command::cargo_bin("intent-engine").unwrap();
+    let mut del = Command::new(cargo::cargo_bin!("intent-engine"));
     del.current_dir(temp_dir.path())
         .arg("task")
         .arg("del")
@@ -121,7 +122,7 @@ fn test_task_delete() {
     del.assert().success();
 
     // Try to get deleted task
-    let mut get = Command::cargo_bin("intent-engine").unwrap();
+    let mut get = Command::new(cargo::cargo_bin!("intent-engine"));
     get.current_dir(temp_dir.path())
         .arg("task")
         .arg("get")
@@ -137,7 +138,7 @@ fn test_task_find_with_status_filter() {
     let temp_dir = setup_test_env();
 
     // Add multiple tasks
-    let mut add1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add1 = Command::new(cargo::cargo_bin!("intent-engine"));
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -146,7 +147,7 @@ fn test_task_find_with_status_filter() {
         .assert()
         .success();
 
-    let mut add2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add2 = Command::new(cargo::cargo_bin!("intent-engine"));
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -156,7 +157,7 @@ fn test_task_find_with_status_filter() {
         .success();
 
     // Start one task
-    let mut start = Command::cargo_bin("intent-engine").unwrap();
+    let mut start = Command::new(cargo::cargo_bin!("intent-engine"));
     start
         .current_dir(temp_dir.path())
         .arg("task")
@@ -166,7 +167,7 @@ fn test_task_find_with_status_filter() {
         .success();
 
     // Find only todo tasks
-    let mut find = Command::cargo_bin("intent-engine").unwrap();
+    let mut find = Command::new(cargo::cargo_bin!("intent-engine"));
     find.current_dir(temp_dir.path())
         .arg("task")
         .arg("find")
@@ -185,7 +186,7 @@ fn test_task_find_top_level_only() {
     let temp_dir = setup_test_env();
 
     // Add parent task
-    let mut add_parent = Command::cargo_bin("intent-engine").unwrap();
+    let mut add_parent = Command::new(cargo::cargo_bin!("intent-engine"));
     add_parent
         .current_dir(temp_dir.path())
         .arg("task")
@@ -196,7 +197,7 @@ fn test_task_find_top_level_only() {
         .success();
 
     // Add child task
-    let mut add_child = Command::cargo_bin("intent-engine").unwrap();
+    let mut add_child = Command::new(cargo::cargo_bin!("intent-engine"));
     add_child
         .current_dir(temp_dir.path())
         .arg("task")
@@ -209,7 +210,7 @@ fn test_task_find_top_level_only() {
         .success();
 
     // Find top-level tasks (parent is null)
-    let mut find = Command::cargo_bin("intent-engine").unwrap();
+    let mut find = Command::new(cargo::cargo_bin!("intent-engine"));
     find.current_dir(temp_dir.path())
         .arg("task")
         .arg("find")
@@ -228,7 +229,7 @@ fn test_event_add_with_current_task() {
     let temp_dir = setup_test_env();
 
     // Add and start a task
-    let mut add = Command::cargo_bin("intent-engine").unwrap();
+    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -237,7 +238,7 @@ fn test_event_add_with_current_task() {
         .assert()
         .success();
 
-    let mut start = Command::cargo_bin("intent-engine").unwrap();
+    let mut start = Command::new(cargo::cargo_bin!("intent-engine"));
     start
         .current_dir(temp_dir.path())
         .arg("task")
@@ -247,7 +248,7 @@ fn test_event_add_with_current_task() {
         .success();
 
     // Add event to current task
-    let mut event = Command::cargo_bin("intent-engine").unwrap();
+    let mut event = Command::new(cargo::cargo_bin!("intent-engine"));
     event
         .current_dir(temp_dir.path())
         .arg("event")
@@ -269,7 +270,7 @@ fn test_event_list_limit() {
     let temp_dir = setup_test_env();
 
     // Add a task
-    let mut add = Command::cargo_bin("intent-engine").unwrap();
+    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -280,7 +281,7 @@ fn test_event_list_limit() {
 
     // Add multiple events
     for i in 1..=10 {
-        let mut event = Command::cargo_bin("intent-engine").unwrap();
+        let mut event = Command::new(cargo::cargo_bin!("intent-engine"));
         event
             .current_dir(temp_dir.path())
             .arg("event")
@@ -296,7 +297,7 @@ fn test_event_list_limit() {
     }
 
     // List events with limit
-    let mut list = Command::cargo_bin("intent-engine").unwrap();
+    let mut list = Command::new(cargo::cargo_bin!("intent-engine"));
     list.current_dir(temp_dir.path())
         .arg("event")
         .arg("list")
@@ -318,7 +319,7 @@ fn test_report_with_time_filter() {
     let temp_dir = setup_test_env();
 
     // Add some tasks
-    let mut add1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add1 = Command::new(cargo::cargo_bin!("intent-engine"));
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -327,7 +328,7 @@ fn test_report_with_time_filter() {
         .assert()
         .success();
 
-    let mut add2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add2 = Command::new(cargo::cargo_bin!("intent-engine"));
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -337,7 +338,7 @@ fn test_report_with_time_filter() {
         .success();
 
     // Generate report for last 7 days
-    let mut report = Command::cargo_bin("intent-engine").unwrap();
+    let mut report = Command::new(cargo::cargo_bin!("intent-engine"));
     report
         .current_dir(temp_dir.path())
         .arg("report")
@@ -357,7 +358,7 @@ fn test_task_with_invalid_status() {
     let temp_dir = setup_test_env();
 
     // Add a task
-    let mut add = Command::cargo_bin("intent-engine").unwrap();
+    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -367,7 +368,7 @@ fn test_task_with_invalid_status() {
         .success();
 
     // Try to update with invalid status
-    let mut update = Command::cargo_bin("intent-engine").unwrap();
+    let mut update = Command::new(cargo::cargo_bin!("intent-engine"));
     update
         .current_dir(temp_dir.path())
         .arg("task")
@@ -389,7 +390,7 @@ fn test_multiple_tasks_with_priorities() {
     // Add tasks with different priorities
     let priorities = ["low", "low", "medium", "high", "critical"];
     for i in 1..=5 {
-        let mut add = Command::cargo_bin("intent-engine").unwrap();
+        let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
         add.current_dir(temp_dir.path())
             .arg("task")
             .arg("add")
@@ -399,7 +400,7 @@ fn test_multiple_tasks_with_priorities() {
             .success();
 
         // Set priority (lower number = higher priority)
-        let mut update = Command::cargo_bin("intent-engine").unwrap();
+        let mut update = Command::new(cargo::cargo_bin!("intent-engine"));
         update
             .current_dir(temp_dir.path())
             .arg("task")
@@ -412,7 +413,7 @@ fn test_multiple_tasks_with_priorities() {
     }
 
     // Pick next should recommend task 5 (priority critical = 1)
-    let mut pick = Command::cargo_bin("intent-engine").unwrap();
+    let mut pick = Command::new(cargo::cargo_bin!("intent-engine"));
     pick.current_dir(temp_dir.path())
         .arg("task")
         .arg("pick-next")
@@ -429,7 +430,7 @@ fn test_task_switch_between_tasks() {
     let temp_dir = setup_test_env();
 
     // Add two tasks
-    let mut add1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add1 = Command::new(cargo::cargo_bin!("intent-engine"));
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -438,7 +439,7 @@ fn test_task_switch_between_tasks() {
         .assert()
         .success();
 
-    let mut add2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut add2 = Command::new(cargo::cargo_bin!("intent-engine"));
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -448,7 +449,7 @@ fn test_task_switch_between_tasks() {
         .success();
 
     // Switch to task 1
-    let mut switch1 = Command::cargo_bin("intent-engine").unwrap();
+    let mut switch1 = Command::new(cargo::cargo_bin!("intent-engine"));
     switch1
         .current_dir(temp_dir.path())
         .arg("task")
@@ -458,7 +459,7 @@ fn test_task_switch_between_tasks() {
     switch1.assert().success();
 
     // Verify current task is 1
-    let mut current = Command::cargo_bin("intent-engine").unwrap();
+    let mut current = Command::new(cargo::cargo_bin!("intent-engine"));
     current.current_dir(temp_dir.path()).arg("current");
 
     current
@@ -467,7 +468,7 @@ fn test_task_switch_between_tasks() {
         .stdout(predicate::str::contains("\"current_task_id\": 1"));
 
     // Switch to task 2
-    let mut switch2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut switch2 = Command::new(cargo::cargo_bin!("intent-engine"));
     switch2
         .current_dir(temp_dir.path())
         .arg("task")
@@ -477,7 +478,7 @@ fn test_task_switch_between_tasks() {
     switch2.assert().success();
 
     // Verify current task is 2
-    let mut current2 = Command::cargo_bin("intent-engine").unwrap();
+    let mut current2 = Command::new(cargo::cargo_bin!("intent-engine"));
     current2.current_dir(temp_dir.path()).arg("current");
 
     current2
@@ -491,7 +492,7 @@ fn test_spawn_subtask_workflow() {
     let temp_dir = setup_test_env();
 
     // Add and start a parent task
-    let mut add = Command::cargo_bin("intent-engine").unwrap();
+    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -500,7 +501,7 @@ fn test_spawn_subtask_workflow() {
         .assert()
         .success();
 
-    let mut start = Command::cargo_bin("intent-engine").unwrap();
+    let mut start = Command::new(cargo::cargo_bin!("intent-engine"));
     start
         .current_dir(temp_dir.path())
         .arg("task")
@@ -510,7 +511,7 @@ fn test_spawn_subtask_workflow() {
         .success();
 
     // Spawn a subtask
-    let mut spawn = Command::cargo_bin("intent-engine").unwrap();
+    let mut spawn = Command::new(cargo::cargo_bin!("intent-engine"));
     spawn
         .current_dir(temp_dir.path())
         .arg("task")
@@ -528,7 +529,7 @@ fn test_spawn_subtask_workflow() {
         .stdout(predicate::str::contains("\"status\": \"doing\""));
 
     // Verify current task is now the subtask
-    let mut current = Command::cargo_bin("intent-engine").unwrap();
+    let mut current = Command::new(cargo::cargo_bin!("intent-engine"));
     current.current_dir(temp_dir.path()).arg("current");
 
     current
@@ -544,7 +545,7 @@ fn test_task_get_nonexistent() {
     let temp_dir = setup_test_env();
 
     // Initialize project
-    let mut add = Command::cargo_bin("intent-engine").unwrap();
+    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -554,7 +555,7 @@ fn test_task_get_nonexistent() {
         .success();
 
     // Try to get nonexistent task
-    let mut get = Command::cargo_bin("intent-engine").unwrap();
+    let mut get = Command::new(cargo::cargo_bin!("intent-engine"));
     get.current_dir(temp_dir.path())
         .arg("task")
         .arg("get")
@@ -571,7 +572,7 @@ fn test_event_add_to_nonexistent_task() {
     let temp_dir = setup_test_env();
 
     // Initialize project
-    let mut add = Command::cargo_bin("intent-engine").unwrap();
+    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -581,7 +582,7 @@ fn test_event_add_to_nonexistent_task() {
         .success();
 
     // Try to add event to nonexistent task
-    let mut event = Command::cargo_bin("intent-engine").unwrap();
+    let mut event = Command::new(cargo::cargo_bin!("intent-engine"));
     event
         .current_dir(temp_dir.path())
         .arg("event")

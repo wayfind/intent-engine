@@ -5,6 +5,7 @@
 
 #![allow(deprecated)]
 
+use assert_cmd::cargo;
 use assert_cmd::Command;
 use tempfile::TempDir;
 
@@ -17,8 +18,7 @@ fn setup_test_env() -> TempDir {
 fn test_chinese_task_name() {
     let temp_dir = setup_test_env();
 
-    let output = Command::cargo_bin("intent-engine")
-        .unwrap()
+    let output = Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "测试任务"])
         .output()
@@ -38,8 +38,7 @@ fn test_chinese_task_name() {
 fn test_chinese_task_name_with_spec() {
     let temp_dir = setup_test_env();
 
-    let output = Command::cargo_bin("intent-engine")
-        .unwrap()
+    let output = Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "用户认证", "--spec-stdin"])
         .write_stdin("使用 JWT 实现用户认证，支持刷新令牌")
@@ -66,8 +65,7 @@ fn test_chinese_event_data() {
     let temp_dir = setup_test_env();
 
     // First create a task
-    let task_output = Command::cargo_bin("intent-engine")
-        .unwrap()
+    let task_output = Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "测试任务"])
         .output()
@@ -78,16 +76,14 @@ fn test_chinese_event_data() {
     let task_id = 1;
 
     // Set it as current
-    Command::cargo_bin("intent-engine")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["current", "--set", &task_id.to_string()])
         .output()
         .unwrap();
 
     // Add an event with Chinese data
-    let output = Command::cargo_bin("intent-engine")
-        .unwrap()
+    let output = Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["event", "add", "--type", "decision", "--data-stdin"])
         .write_stdin("选择使用 HS256 算法因为不需要密钥轮换")
@@ -108,8 +104,7 @@ fn test_chinese_event_data() {
 fn test_mixed_languages() {
     let temp_dir = setup_test_env();
 
-    let output = Command::cargo_bin("intent-engine")
-        .unwrap()
+    let output = Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "Implement 用户认证 with JWT"])
         .output()
@@ -140,8 +135,7 @@ fn test_special_chinese_characters() {
     ];
 
     for test_case in special_chars {
-        let output = Command::cargo_bin("intent-engine")
-            .unwrap()
+        let output = Command::new(cargo::cargo_bin!("intent-engine"))
             .current_dir(temp_dir.path())
             .args(["task", "add", "--name", test_case])
             .output()
@@ -167,8 +161,7 @@ fn test_special_chinese_characters() {
 fn test_emoji_support() {
     let temp_dir = setup_test_env();
 
-    let output = Command::cargo_bin("intent-engine")
-        .unwrap()
+    let output = Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "测试任务 🎯 完成目标"])
         .output()
@@ -189,23 +182,20 @@ fn test_search_chinese_content() {
     let temp_dir = setup_test_env();
 
     // Create tasks with Chinese content
-    Command::cargo_bin("intent-engine")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "实现用户认证"])
         .output()
         .unwrap();
 
-    Command::cargo_bin("intent-engine")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "实现数据库迁移"])
         .output()
         .unwrap();
 
     // Search for Chinese keywords - verify it doesn't crash with Chinese input
-    let output = Command::cargo_bin("intent-engine")
-        .unwrap()
+    let output = Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "search", "用户"])
         .output()
@@ -230,8 +220,7 @@ fn test_report_with_chinese_tasks() {
     let temp_dir = setup_test_env();
 
     // Create and complete a task with Chinese name
-    let task_output = Command::cargo_bin("intent-engine")
-        .unwrap()
+    let task_output = Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "完成中文任务"])
         .output()
@@ -239,24 +228,21 @@ fn test_report_with_chinese_tasks() {
     assert!(task_output.status.success());
 
     // Start the task
-    Command::cargo_bin("intent-engine")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "start", "1"])
         .output()
         .unwrap();
 
     // Complete it
-    Command::cargo_bin("intent-engine")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["task", "done"])
         .output()
         .unwrap();
 
     // Generate full report (without --summary-only to get task details)
-    let output = Command::cargo_bin("intent-engine")
-        .unwrap()
+    let output = Command::new(cargo::cargo_bin!("intent-engine"))
         .current_dir(temp_dir.path())
         .args(["report"])
         .output()

@@ -1,3 +1,4 @@
+use assert_cmd::cargo;
 use assert_cmd::Command;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -5,7 +6,7 @@ use tempfile::TempDir;
 
 /// Helper to get the binary path
 fn intent_engine_cmd() -> Command {
-    Command::cargo_bin("intent-engine").unwrap()
+    Command::new(cargo::cargo_bin!("intent-engine"))
 }
 
 /// Helper to create a test project
