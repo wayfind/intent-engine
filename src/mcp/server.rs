@@ -380,7 +380,7 @@ async fn handle_task_update(args: Value) -> Result<Value, String> {
         .map(|v| v as i32);
     let priority = match args.get("priority").and_then(|v| v.as_str()) {
         Some(p) => Some(
-            crate::priority::PriorityLevel::from_str(p)
+            crate::priority::PriorityLevel::parse_to_int(p)
                 .map_err(|e| format!("Invalid priority: {}", e))?,
         ),
         None => None,

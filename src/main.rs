@@ -107,7 +107,7 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             // Convert priority string to integer
             let priority_int = match &priority {
-                Some(p) => Some(intent_engine::priority::PriorityLevel::from_str(p)?),
+                Some(p) => Some(intent_engine::priority::PriorityLevel::parse_to_int(p)?),
                 None => None,
             };
 

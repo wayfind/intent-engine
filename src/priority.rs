@@ -1,4 +1,5 @@
 use crate::error::{IntentError, Result};
+use std::str::FromStr;
 
 /// Priority levels mapped to integers for storage and sorting
 /// Lower number = Higher priority
@@ -10,19 +11,28 @@ pub enum PriorityLevel {
     Low = 4,
 }
 
-impl PriorityLevel {
-    /// Parse a priority string into integer value
-    pub fn from_str(s: &str) -> Result<i32> {
+impl FromStr for PriorityLevel {
+    type Err = IntentError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "critical" => Ok(Self::Critical as i32),
-            "high" => Ok(Self::High as i32),
-            "medium" => Ok(Self::Medium as i32),
-            "low" => Ok(Self::Low as i32),
+            "critical" => Ok(Self::Critical),
+            "high" => Ok(Self::High),
+            "medium" => Ok(Self::Medium),
+            "low" => Ok(Self::Low),
             _ => Err(IntentError::InvalidInput(format!(
                 "Invalid priority '{}'. Valid values: critical, high, medium, low",
                 s
             ))),
         }
+    }
+}
+
+impl PriorityLevel {
+    /// Parse a priority string into integer value
+    pub fn parse_to_int(s: &str) -> Result<i32> {
+        let level: PriorityLevel = s.parse()?;
+        Ok(level as i32)
     }
 
     /// Convert integer priority back to string
@@ -39,7 +49,7 @@ impl PriorityLevel {
     /// Parse optional priority string
     pub fn parse_optional(s: Option<&str>) -> Result<Option<i32>> {
         match s {
-            Some(priority_str) => Ok(Some(Self::from_str(priority_str)?)),
+            Some(priority_str) => Ok(Some(Self::parse_to_int(priority_str)?)),
             None => Ok(None),
         }
     }
@@ -51,17 +61,36 @@ mod tests {
 
     #[test]
     fn test_priority_from_str() {
-        assert_eq!(PriorityLevel::from_str("critical").unwrap(), 1);
-        assert_eq!(PriorityLevel::from_str("high").unwrap(), 2);
-        assert_eq!(PriorityLevel::from_str("medium").unwrap(), 3);
-        assert_eq!(PriorityLevel::from_str("low").unwrap(), 4);
-        assert_eq!(PriorityLevel::from_str("CRITICAL").unwrap(), 1); // case insensitive
+        assert_eq!(PriorityLevel::parse_to_int("critical").unwrap(), 1);
+        assert_eq!(PriorityLevel::parse_to_int("high").unwrap(), 2);
+        assert_eq!(PriorityLevel::parse_to_int("medium").unwrap(), 3);
+        assert_eq!(PriorityLevel::parse_to_int("low").unwrap(), 4);
+        assert_eq!(PriorityLevel::parse_to_int("CRITICAL").unwrap(), 1); // case insensitive
     }
 
     #[test]
     fn test_priority_from_str_invalid() {
+        assert!(PriorityLevel::parse_to_int("invalid").is_err());
+        assert!(PriorityLevel::parse_to_int("").is_err());
+    }
+
+    #[test]
+    fn test_standard_fromstr_trait() {
+        use std::str::FromStr;
+        assert_eq!(
+            PriorityLevel::from_str("critical").unwrap(),
+            PriorityLevel::Critical
+        );
+        assert_eq!(
+            PriorityLevel::from_str("high").unwrap(),
+            PriorityLevel::High
+        );
+        assert_eq!(
+            PriorityLevel::from_str("medium").unwrap(),
+            PriorityLevel::Medium
+        );
+        assert_eq!(PriorityLevel::from_str("low").unwrap(), PriorityLevel::Low);
         assert!(PriorityLevel::from_str("invalid").is_err());
-        assert!(PriorityLevel::from_str("").is_err());
     }
 
     #[test]
