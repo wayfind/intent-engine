@@ -218,6 +218,33 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             let results = task_mgr.search_tasks(&query).await?;
             println!("{}", serde_json::to_string_pretty(&results)?);
         },
+
+        TaskCommands::DependsOn {
+            blocked_task_id,
+            blocking_task_id,
+        } => {
+            let ctx = ProjectContext::load().await?;
+
+            let dependency = intent_engine::dependencies::add_dependency(
+                &ctx.pool,
+                blocking_task_id,
+                blocked_task_id,
+            )
+            .await?;
+
+            let response = serde_json::json!({
+                "dependency_id": dependency.id,
+                "blocking_task_id": dependency.blocking_task_id,
+                "blocked_task_id": dependency.blocked_task_id,
+                "created_at": dependency.created_at,
+                "message": format!(
+                    "Dependency added: Task {} now depends on Task {}",
+                    blocked_task_id, blocking_task_id
+                )
+            });
+
+            println!("{}", serde_json::to_string_pretty(&response)?);
+        },
     }
 
     Ok(())

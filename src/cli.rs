@@ -189,6 +189,22 @@ pub enum TaskCommands {
         /// Search query (supports FTS5 syntax like "bug AND NOT critical")
         query: String,
     },
+
+    /// Add a dependency between tasks
+    ///
+    /// Creates a dependency where BLOCKED_TASK depends on BLOCKING_TASK.
+    /// The BLOCKING_TASK must be completed before BLOCKED_TASK can be started.
+    ///
+    /// Example: `task depends-on 42 41` means Task 42 depends on Task 41
+    /// (Task 41 must be done before Task 42 can start)
+    #[command(name = "depends-on")]
+    DependsOn {
+        /// Task ID that has the dependency (blocked task)
+        blocked_task_id: i64,
+
+        /// Task ID that must be completed first (blocking task)
+        blocking_task_id: i64,
+    },
 }
 
 #[derive(Subcommand)]
