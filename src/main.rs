@@ -182,11 +182,6 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                     println!("{}", response.format_as_text());
                 },
             }
-
-            // Exit with code 1 if no recommendation found
-            if response.suggestion_type == "NONE" {
-                std::process::exit(1);
-            }
         },
 
         TaskCommands::SpawnSubtask { name, spec_stdin } => {

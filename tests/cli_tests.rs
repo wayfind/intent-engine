@@ -932,7 +932,7 @@ fn test_cli_pick_next_no_tasks() {
 
     pick_cmd
         .assert()
-        .failure() // Should exit with code 1
+        .success() // Returns success with NONE response
         .stdout(predicate::str::contains("\"suggestion_type\": \"NONE\""))
         .stdout(predicate::str::contains(
             "\"reason_code\": \"NO_TASKS_IN_PROJECT\"",
@@ -983,7 +983,7 @@ fn test_cli_pick_next_all_completed() {
 
     pick_cmd
         .assert()
-        .failure() // Should exit with code 1
+        .success() // Returns success with NONE response
         .stdout(predicate::str::contains("\"suggestion_type\": \"NONE\""))
         .stdout(predicate::str::contains(
             "\"reason_code\": \"ALL_TASKS_COMPLETED\"",

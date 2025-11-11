@@ -879,12 +879,19 @@ impl<'a> TaskManager<'a> {
         if let Some(current_id_str) = current_task_id {
             if let Ok(current_id) = current_id_str.parse::<i64>() {
                 // First priority: Get todo subtasks of current focused task
+                // Exclude tasks blocked by incomplete dependencies
                 let subtasks = sqlx::query_as::<_, Task>(
                     r#"
                     SELECT id, parent_id, name, spec, status, complexity, priority,
                            first_todo_at, first_doing_at, first_done_at
                     FROM tasks
                     WHERE parent_id = ? AND status = 'todo'
+                      AND NOT EXISTS (
+                        SELECT 1 FROM dependencies d
+                        JOIN tasks bt ON d.blocking_task_id = bt.id
+                        WHERE d.blocked_task_id = tasks.id
+                          AND bt.status != 'done'
+                      )
                     ORDER BY COALESCE(priority, 999999) ASC, id ASC
                     LIMIT 1
                     "#,
@@ -900,12 +907,19 @@ impl<'a> TaskManager<'a> {
         }
 
         // Step 2: Second priority - get top-level todo tasks
+        // Exclude tasks blocked by incomplete dependencies
         let top_level_task = sqlx::query_as::<_, Task>(
             r#"
             SELECT id, parent_id, name, spec, status, complexity, priority,
                    first_todo_at, first_doing_at, first_done_at
             FROM tasks
             WHERE parent_id IS NULL AND status = 'todo'
+              AND NOT EXISTS (
+                SELECT 1 FROM dependencies d
+                JOIN tasks bt ON d.blocking_task_id = bt.id
+                WHERE d.blocked_task_id = tasks.id
+                  AND bt.status != 'done'
+              )
             ORDER BY COALESCE(priority, 999999) ASC, id ASC
             LIMIT 1
             "#,
