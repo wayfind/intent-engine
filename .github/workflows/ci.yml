@@ -73,9 +73,21 @@ jobs:
       - name: Build
         run: cargo build --verbose
 
-      - name: Run tests
+      - name: Run unit and CLI tests
         if: ${{ !inputs.skip_tests }}
-        run: cargo test --verbose
+        run: cargo test --lib --bins --verbose
+
+      - name: Run integration tests (parallel safe)
+        if: ${{ !inputs.skip_tests }}
+        run: |
+          cargo test --test cli_tests --verbose
+          cargo test --test cli_special_chars_tests --verbose
+          cargo test --test integration_tests --verbose
+          cargo test --test interface_spec_test --verbose
+
+      - name: Run MCP integration tests (sequential - avoid race conditions)
+        if: ${{ !inputs.skip_tests }}
+        run: cargo test --test mcp_integration_test --verbose -- --test-threads=1
 
       - name: Test doctor command
         run: cargo run --bin intent-engine -- doctor
@@ -128,9 +140,21 @@ jobs:
       - name: Build
         run: cargo build --verbose
 
-      - name: Run tests
+      - name: Run unit and CLI tests
         if: ${{ !inputs.skip_tests }}
-        run: cargo test --verbose
+        run: cargo test --lib --bins --verbose
+
+      - name: Run integration tests (parallel safe)
+        if: ${{ !inputs.skip_tests }}
+        run: |
+          cargo test --test cli_tests --verbose
+          cargo test --test cli_special_chars_tests --verbose
+          cargo test --test integration_tests --verbose
+          cargo test --test interface_spec_test --verbose
+
+      - name: Run MCP integration tests (sequential - avoid race conditions)
+        if: ${{ !inputs.skip_tests }}
+        run: cargo test --test mcp_integration_test --verbose -- --test-threads=1
 
       - name: Build release
         run: cargo build --release --verbose
@@ -190,7 +214,14 @@ jobs:
           PKG_DIR=$(find target/package -maxdepth 1 -name "intent-engine-*" -type d | head -n 1)
           cd "$PKG_DIR"
           cargo build --release --verbose
-          cargo test --verbose
+
+          # Run tests with MCP integration tests sequentially
+          cargo test --lib --bins --verbose
+          cargo test --test cli_tests --verbose
+          cargo test --test cli_special_chars_tests --verbose
+          cargo test --test integration_tests --verbose
+          cargo test --test interface_spec_test --verbose
+          cargo test --test mcp_integration_test --verbose -- --test-threads=1
 
   # ============================================================================
   # Security & Dependencies (Daily Schedule)
