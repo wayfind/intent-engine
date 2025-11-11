@@ -4,12 +4,13 @@
 
 use serde_json::{json, Value};
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tempfile::tempdir;
 
-/// Get the path to the intent-engine binary
-fn get_binary_path() -> &'static str {
-    env!("CARGO_BIN_EXE_intent-engine")
+/// Get the path to the intent-engine binary built by cargo test
+fn get_binary_path() -> PathBuf {
+    assert_cmd::cargo::cargo_bin!("intent-engine").to_path_buf()
 }
 
 /// Helper function to send JSON-RPC request and get response
