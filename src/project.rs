@@ -1,5 +1,6 @@
 use crate::db::{create_pool, run_migrations};
 use crate::error::{IntentError, Result};
+use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 
@@ -26,7 +27,124 @@ pub struct ProjectContext {
     pub pool: SqlitePool,
 }
 
+/// Information about directory traversal for database location
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DirectoryTraversalInfo {
+    pub path: String,
+    pub has_intent_engine: bool,
+    pub is_selected: bool,
+}
+
+/// Detailed information about database path resolution
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DatabasePathInfo {
+    pub current_working_directory: String,
+    pub env_var_set: bool,
+    pub env_var_path: Option<String>,
+    pub env_var_valid: Option<bool>,
+    pub directories_checked: Vec<DirectoryTraversalInfo>,
+    pub home_directory: Option<String>,
+    pub home_has_intent_engine: bool,
+    pub final_database_path: Option<String>,
+    pub resolution_method: Option<String>,
+}
+
 impl ProjectContext {
+    /// Collect detailed information about database path resolution for diagnostics
+    ///
+    /// This function traces through all the steps of finding the database location,
+    /// showing which directories were checked and why a particular location was chosen.
+    pub fn get_database_path_info() -> DatabasePathInfo {
+        let cwd = std::env::current_dir()
+            .ok()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "<unable to determine>".to_string());
+
+        let mut info = DatabasePathInfo {
+            current_working_directory: cwd.clone(),
+            env_var_set: false,
+            env_var_path: None,
+            env_var_valid: None,
+            directories_checked: Vec::new(),
+            home_directory: None,
+            home_has_intent_engine: false,
+            final_database_path: None,
+            resolution_method: None,
+        };
+
+        // Check strategy 1: Environment variable
+        if let Ok(env_path) = std::env::var("INTENT_ENGINE_PROJECT_DIR") {
+            info.env_var_set = true;
+            info.env_var_path = Some(env_path.clone());
+
+            let path = PathBuf::from(&env_path);
+            let intent_dir = path.join(INTENT_DIR);
+            let has_intent_engine = intent_dir.exists() && intent_dir.is_dir();
+            info.env_var_valid = Some(has_intent_engine);
+
+            if has_intent_engine {
+                let db_path = intent_dir.join(DB_FILE);
+                info.final_database_path = Some(db_path.display().to_string());
+                info.resolution_method =
+                    Some("Environment Variable (INTENT_ENGINE_PROJECT_DIR)".to_string());
+                return info;
+            }
+        }
+
+        // Check strategy 2: Upward directory traversal
+        if let Ok(mut current) = std::env::current_dir() {
+            loop {
+                let intent_dir = current.join(INTENT_DIR);
+                let has_intent_engine = intent_dir.exists() && intent_dir.is_dir();
+
+                let is_selected = has_intent_engine && info.final_database_path.is_none();
+
+                info.directories_checked.push(DirectoryTraversalInfo {
+                    path: current.display().to_string(),
+                    has_intent_engine,
+                    is_selected,
+                });
+
+                if has_intent_engine && info.final_database_path.is_none() {
+                    let db_path = intent_dir.join(DB_FILE);
+                    info.final_database_path = Some(db_path.display().to_string());
+                    info.resolution_method = Some("Upward Directory Traversal".to_string());
+                    // Continue traversal to show all directories checked
+                }
+
+                if !current.pop() {
+                    break;
+                }
+            }
+        }
+
+        // Check strategy 3: Home directory
+        let home_path = std::env::var("HOME").ok().map(PathBuf::from).or_else(|| {
+            #[cfg(target_os = "windows")]
+            {
+                std::env::var("USERPROFILE").ok().map(PathBuf::from)
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                None
+            }
+        });
+
+        if let Some(home) = home_path {
+            info.home_directory = Some(home.display().to_string());
+            let intent_dir = home.join(INTENT_DIR);
+            info.home_has_intent_engine = intent_dir.exists() && intent_dir.is_dir();
+
+            if info.home_has_intent_engine && info.final_database_path.is_none() {
+                let db_path = intent_dir.join(DB_FILE);
+                info.final_database_path = Some(db_path.display().to_string());
+                info.resolution_method = Some("Home Directory Fallback".to_string());
+            }
+        }
+
+        info
+    }
+
     /// Find the project root by searching upwards for .intent-engine directory
     ///
     /// Search strategy (in priority order):

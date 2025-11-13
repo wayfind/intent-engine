@@ -515,6 +515,14 @@ async fn handle_doctor_command() -> Result<()> {
         "details": format!("v{}", env!("CARGO_PKG_VERSION"))
     }));
 
+    // Database path resolution diagnostics
+    let db_path_info = ProjectContext::get_database_path_info();
+    checks.push(json!({
+        "check": "Database Path Resolution",
+        "status": "✓ INFO",
+        "details": db_path_info
+    }));
+
     let result = json!({
         "summary": if all_passed { "✓ All checks passed" } else { "✗ Some checks failed" },
         "overall_status": if all_passed { "healthy" } else { "unhealthy" },
@@ -659,10 +667,10 @@ async fn handle_setup_mcp(
     force: bool,
     target: &str,
 ) -> Result<()> {
+    use serde_json::{json, Value};
     use std::env;
     use std::fs;
     use std::path::PathBuf;
-    use serde_json::{json, Value};
 
     println!("Intent-Engine MCP Setup");
     println!("=======================\n");
@@ -681,20 +689,24 @@ async fn handle_setup_mcp(
     println!("Config file: {}", config_file_path.display());
 
     // Find intent-engine binary
-    let binary_path = which::which("intent-engine")
-        .or_else(|_| {
-            let home = env::var("HOME")
-                .or_else(|_| env::var("USERPROFILE"))
-                .map_err(|_| IntentError::InvalidInput("Cannot determine home directory".to_string()))?;
-            let cargo_bin = PathBuf::from(home).join(".cargo").join("bin").join("intent-engine");
-            if cargo_bin.exists() {
-                Ok(cargo_bin)
-            } else {
-                Err(IntentError::InvalidInput(
-                    "intent-engine binary not found in PATH or ~/.cargo/bin".to_string()
-                ))
-            }
-        })?;
+    let binary_path = which::which("intent-engine").or_else(|_| {
+        let home = env::var("HOME")
+            .or_else(|_| env::var("USERPROFILE"))
+            .map_err(|_| {
+                IntentError::InvalidInput("Cannot determine home directory".to_string())
+            })?;
+        let cargo_bin = PathBuf::from(home)
+            .join(".cargo")
+            .join("bin")
+            .join("intent-engine");
+        if cargo_bin.exists() {
+            Ok(cargo_bin)
+        } else {
+            Err(IntentError::InvalidInput(
+                "intent-engine binary not found in PATH or ~/.cargo/bin".to_string(),
+            ))
+        }
+    })?;
 
     println!("Binary: {}", binary_path.display());
 
@@ -702,8 +714,7 @@ async fn handle_setup_mcp(
     let proj_dir = if let Some(dir) = project_dir {
         PathBuf::from(dir)
     } else {
-        env::current_dir()
-            .map_err(|e| IntentError::IoError(e))?
+        env::current_dir().map_err(|e| IntentError::IoError(e))?
     };
 
     println!("Project dir: {}", proj_dir.display());
@@ -719,10 +730,8 @@ async fn handle_setup_mcp(
 
     // Read or create config
     let mut config: Value = if config_exists {
-        let content = fs::read_to_string(&config_file_path)
-            .map_err(|e| IntentError::IoError(e))?;
-        serde_json::from_str(&content)
-            .unwrap_or_else(|_| json!({}))
+        let content = fs::read_to_string(&config_file_path).map_err(|e| IntentError::IoError(e))?;
+        serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
     } else {
         json!({})
     };
@@ -740,8 +749,7 @@ async fn handle_setup_mcp(
     if config_exists && !dry_run {
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
         let backup_path = config_file_path.with_extension(format!("json.backup.{}", timestamp));
-        fs::copy(&config_file_path, &backup_path)
-            .map_err(|e| IntentError::IoError(e))?;
+        fs::copy(&config_file_path, &backup_path).map_err(|e| IntentError::IoError(e))?;
         println!("✓ Backup created: {}", backup_path.display());
     }
 
@@ -765,8 +773,7 @@ async fn handle_setup_mcp(
     } else {
         // Ensure parent directory exists
         if let Some(parent) = config_file_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| IntentError::IoError(e))?;
+            fs::create_dir_all(parent).map_err(|e| IntentError::IoError(e))?;
         }
 
         // Write config file
@@ -816,9 +823,7 @@ fn get_default_config_path(os: &str, target: &str) -> Result<PathBuf> {
 
     match (os, target) {
         // Claude Code v2.0.37+ on Unix-like systems
-        ("linux" | "macos", "claude-code") => {
-            Ok(home_path.join(".claude.json"))
-        },
+        ("linux" | "macos", "claude-code") => Ok(home_path.join(".claude.json")),
         // Claude Code on Windows
         ("windows", "claude-code") => {
             let appdata = env::var("APPDATA")
@@ -826,26 +831,27 @@ fn get_default_config_path(os: &str, target: &str) -> Result<PathBuf> {
             Ok(PathBuf::from(appdata).join("Claude").join(".claude.json"))
         },
         // Claude Desktop on macOS
-        ("macos", "claude-desktop") => {
-            Ok(home_path.join("Library")
-                .join("Application Support")
-                .join("Claude")
-                .join("claude_desktop_config.json"))
-        },
+        ("macos", "claude-desktop") => Ok(home_path
+            .join("Library")
+            .join("Application Support")
+            .join("Claude")
+            .join("claude_desktop_config.json")),
         // Claude Desktop on Windows
         ("windows", "claude-desktop") => {
             let appdata = env::var("APPDATA")
                 .map_err(|_| IntentError::InvalidInput("APPDATA not set".to_string()))?;
-            Ok(PathBuf::from(appdata).join("Claude").join("claude_desktop_config.json"))
-        },
-        // Claude Desktop on Linux
-        ("linux", "claude-desktop") => {
-            Ok(home_path.join(".config")
+            Ok(PathBuf::from(appdata)
                 .join("Claude")
                 .join("claude_desktop_config.json"))
         },
-        _ => Err(IntentError::InvalidInput(
-            format!("Unsupported OS/target combination: {}/{}", os, target)
-        ))
+        // Claude Desktop on Linux
+        ("linux", "claude-desktop") => Ok(home_path
+            .join(".config")
+            .join("Claude")
+            .join("claude_desktop_config.json")),
+        _ => Err(IntentError::InvalidInput(format!(
+            "Unsupported OS/target combination: {}/{}",
+            os, target
+        ))),
     }
 }
