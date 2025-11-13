@@ -99,6 +99,36 @@ pub enum Commands {
         #[arg(long)]
         force: bool,
     },
+
+    /// Setup MCP server configuration for Claude Code/Desktop
+    ///
+    /// Automatically configures ~/.claude.json (or OS-specific equivalent)
+    /// to add intent-engine as an MCP server. This allows Claude Code/Desktop
+    /// to use intent-engine tools for task management.
+    ///
+    /// Run this after 'cargo install intent-engine' to complete the setup.
+    #[command(name = "setup-mcp")]
+    SetupMcp {
+        /// Show what would be done without actually doing it
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Custom config file path (default: auto-detect)
+        #[arg(long)]
+        config_path: Option<String>,
+
+        /// Project directory for INTENT_ENGINE_PROJECT_DIR env var
+        #[arg(long)]
+        project_dir: Option<String>,
+
+        /// Overwrite existing configuration
+        #[arg(long)]
+        force: bool,
+
+        /// Target application: claude-code or claude-desktop
+        #[arg(long, default_value = "claude-code")]
+        target: String,
+    },
 }
 
 #[derive(Subcommand)]
