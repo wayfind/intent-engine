@@ -316,6 +316,11 @@ impl ProjectContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::sync::{Mutex, OnceLock};
+    use tempfile::tempdir;
+
+    static ENV_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
 
     // Note: Tests that modify the current directory are intentionally limited
     // because they can interfere with other tests running in parallel.
@@ -1199,6 +1204,107 @@ mod tests {
                 info.env_var_valid.is_none(),
                 "env_var_valid should be None when env var is not set"
             );
+    #[test]
+    fn test_database_path_info_resolution_strategies() {
+        let _guard = ENV_GUARD.get_or_init(|| Mutex::new(())).lock().unwrap();
+
+        let original_env = std::env::var("INTENT_ENGINE_PROJECT_DIR").ok();
+        let original_home = std::env::var("HOME").ok();
+        let original_cwd = std::env::current_dir().ok();
+
+        // Scenario 1: Environment variable takes priority when valid
+        let env_dir = tempdir().expect("failed to create env dir");
+        let env_intent_dir = env_dir.path().join(INTENT_DIR);
+        fs::create_dir_all(&env_intent_dir).expect("failed to create env .intent-engine");
+        std::env::set_var("INTENT_ENGINE_PROJECT_DIR", env_dir.path());
+
+        let env_info = ProjectContext::get_database_path_info();
+        let expected_env_db = env_intent_dir.join(DB_FILE).display().to_string();
+        assert!(env_info.env_var_set);
+        assert_eq!(env_info.env_var_valid, Some(true));
+        assert_eq!(
+            env_info.final_database_path.as_deref(),
+            Some(expected_env_db.as_str())
+        );
+        assert_eq!(
+            env_info.resolution_method.as_deref(),
+            Some("Environment Variable (INTENT_ENGINE_PROJECT_DIR)")
+        );
+        assert!(env_info.directories_checked.is_empty());
+
+        std::env::remove_var("INTENT_ENGINE_PROJECT_DIR");
+
+        // Scenario 2: Upward traversal selects the first directory with .intent-engine
+        let traversal_root = tempdir().expect("failed to create traversal root");
+        let traversal_intent_dir = traversal_root.path().join(INTENT_DIR);
+        fs::create_dir_all(&traversal_intent_dir)
+            .expect("failed to create traversal .intent-engine");
+        let nested_dir = traversal_root.path().join("nested/inner");
+        fs::create_dir_all(&nested_dir).expect("failed to create nested directory");
+        std::env::set_current_dir(&nested_dir).expect("failed to change working directory");
+
+        let traversal_info = ProjectContext::get_database_path_info();
+        let expected_traversal_db = traversal_intent_dir.join(DB_FILE).display().to_string();
+        let root_path_str = traversal_root.path().display().to_string();
+        assert_eq!(
+            traversal_info.resolution_method.as_deref(),
+            Some("Upward Directory Traversal")
+        );
+        assert_eq!(
+            traversal_info.final_database_path.as_deref(),
+            Some(expected_traversal_db.as_str())
+        );
+        assert!(
+            traversal_info
+                .directories_checked
+                .iter()
+                .any(|entry| entry.is_selected
+                    && entry.has_intent_engine
+                    && entry.path == root_path_str),
+            "expected traversal to select the directory containing .intent-engine"
+        );
+
+        // Scenario 3: Home directory fallback when no other locations succeed
+        let fallback_dir = tempdir().expect("failed to create fallback dir");
+        std::env::set_current_dir(fallback_dir.path()).expect("failed to change working directory");
+
+        let home_dir = tempdir().expect("failed to create home dir");
+        let home_intent_dir = home_dir.path().join(INTENT_DIR);
+        fs::create_dir_all(&home_intent_dir).expect("failed to create home .intent-engine");
+        std::env::set_var("HOME", home_dir.path());
+
+        let home_info = ProjectContext::get_database_path_info();
+        let expected_home_db = home_intent_dir.join(DB_FILE).display().to_string();
+        let expected_home_dir = home_dir.path().display().to_string();
+        assert_eq!(
+            home_info.resolution_method.as_deref(),
+            Some("Home Directory Fallback")
+        );
+        assert!(home_info.home_has_intent_engine);
+        assert_eq!(
+            home_info.final_database_path.as_deref(),
+            Some(expected_home_db.as_str())
+        );
+        assert_eq!(
+            home_info.home_directory.as_deref(),
+            Some(expected_home_dir.as_str())
+        );
+
+        // Restore environment state
+        if let Some(value) = original_env {
+            std::env::set_var("INTENT_ENGINE_PROJECT_DIR", value);
+        } else {
+            std::env::remove_var("INTENT_ENGINE_PROJECT_DIR");
+        }
+
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        if let Some(cwd) = original_cwd {
+            std::env::set_current_dir(cwd).expect("failed to restore working directory");
         }
     }
 }
