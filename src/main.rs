@@ -49,6 +49,19 @@ async fn run() -> Result<()> {
             // io::Error is automatically converted to IntentError::IoError via #[from]
             intent_engine::mcp::run().await?;
         },
+        Commands::SessionRestore {
+            include_events,
+            workspace,
+        } => {
+            handle_session_restore(include_events, workspace).await?;
+        },
+        Commands::SetupClaudeCode {
+            dry_run,
+            claude_dir,
+            force,
+        } => {
+            handle_setup_claude_code(dry_run, claude_dir, force).await?;
+        },
     }
 
     Ok(())
@@ -502,6 +515,128 @@ async fn handle_doctor_command() -> Result<()> {
 
     if !all_passed {
         std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+async fn handle_session_restore(include_events: usize, workspace: Option<String>) -> Result<()> {
+    use intent_engine::session_restore::SessionRestoreManager;
+
+    // If workspace path is specified, change to that directory
+    if let Some(ws_path) = workspace {
+        std::env::set_current_dir(&ws_path)?;
+    }
+
+    // Try to load project context
+    let ctx = match ProjectContext::load().await {
+        Ok(ctx) => ctx,
+        Err(_) => {
+            // Workspace not found
+            let result = intent_engine::session_restore::SessionRestoreResult {
+                status: intent_engine::session_restore::SessionStatus::Error,
+                workspace_path: std::env::current_dir()
+                    .ok()
+                    .and_then(|p| p.to_str().map(String::from)),
+                current_task: None,
+                parent_task: None,
+                siblings: None,
+                children: None,
+                recent_events: None,
+                suggested_commands: Some(vec![
+                    "ie workspace init".to_string(),
+                    "ie help".to_string(),
+                ]),
+                stats: None,
+                error_type: Some(intent_engine::session_restore::ErrorType::WorkspaceNotFound),
+                message: Some("No Intent-Engine workspace found in current directory".to_string()),
+                recovery_suggestion: Some(
+                    "Run 'ie workspace init' to create a new workspace".to_string(),
+                ),
+            };
+            println!("{}", serde_json::to_string_pretty(&result)?);
+            return Ok(());
+        },
+    };
+
+    let restore_mgr = SessionRestoreManager::new(&ctx.pool);
+    let result = restore_mgr.restore(include_events).await?;
+
+    println!("{}", serde_json::to_string_pretty(&result)?);
+
+    Ok(())
+}
+
+async fn handle_setup_claude_code(
+    dry_run: bool,
+    claude_dir: Option<String>,
+    force: bool,
+) -> Result<()> {
+    use std::fs;
+    use std::path::PathBuf;
+
+    // Determine .claude directory
+    let claude_path = claude_dir
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("./.claude"));
+
+    // Check or create .claude directory
+    if !claude_path.exists() {
+        if dry_run {
+            println!("Would create: {}", claude_path.display());
+        } else {
+            fs::create_dir_all(&claude_path)?;
+            println!("✓ Created {}", claude_path.display());
+        }
+    } else if !dry_run {
+        println!("✓ Found .claude directory");
+    }
+
+    // Check or create hooks directory
+    let hooks_dir = claude_path.join("hooks");
+    if !hooks_dir.exists() {
+        if dry_run {
+            println!("Would create: {}", hooks_dir.display());
+        } else {
+            fs::create_dir_all(&hooks_dir)?;
+            println!("✓ Created {}", hooks_dir.display());
+        }
+    }
+
+    // Install hook script
+    let hook_path = hooks_dir.join("session-start.sh");
+    if hook_path.exists() && !force {
+        return Err(IntentError::InvalidInput(
+            "session-start.sh already exists. Use --force to overwrite".to_string(),
+        ));
+    }
+
+    if dry_run {
+        println!("Would write: {}", hook_path.display());
+    } else {
+        // Hook script content (we'll create the template file separately)
+        let hook_content = include_str!("../templates/session-start.sh");
+
+        fs::write(&hook_path, hook_content)?;
+        println!("✓ Installed session-start.sh");
+
+        // Set executable permissions (Unix only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&hook_path)?.permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&hook_path, perms)?;
+            println!("✓ Set executable permissions");
+        }
+    }
+
+    if !dry_run {
+        println!("\n✅ Setup complete!");
+        println!("\nNext steps:");
+        println!("1. Start a new Claude Code session");
+        println!("2. The session-start hook will automatically restore your focus");
+        println!("\nDocumentation: docs/integration/claude-code-setup.md");
     }
 
     Ok(())

@@ -1,6 +1,6 @@
 [package]
 name = "intent-engine"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 authors = ["Intent Engine Contributors"]
 description = "A command-line database service for tracking strategic intent, tasks, and events"
@@ -60,6 +60,10 @@ rand = "0.9"
 
 [[bin]]
 name = "intent-engine"
+path = "src/main.rs"
+
+[[bin]]
+name = "ie"
 path = "src/main.rs"
 
 [[bench]]

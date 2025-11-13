@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.2
-**Last Updated**: 2025-11-11
+**Version**: 0.3
+**Last Updated**: 2025-11-13
 **Status**: Experimental (Pre-1.0)
 
 ---
@@ -28,6 +28,35 @@
 ---
 
 ## Changelog
+
+### Version 0.3 (2025-11-13)
+
+**Theme**: "Focus Restoration & Session Continuity"
+
+**New Features:**
+- **Session Restoration**: `session-restore` command provides complete session context for AI agents
+- **Claude Code Integration**: `setup-claude-code` command automates SessionStart hook installation
+- **Phase 1 Guardian Protocol**: Automatic focus restoration via SessionStart hooks
+
+**CLI Commands Added:**
+- `session-restore`: Restore session context (current task, parent, siblings, children, events)
+- `setup-claude-code`: Install Claude Code integration hooks
+
+**New Capabilities:**
+- Rich context restoration with task hierarchy
+- Recent events replay (decisions, blockers, notes)
+- Context-aware command suggestions
+- Graceful error handling with recovery guidance
+- Automated hook installation with dry-run mode
+
+**Breaking Changes:**
+- None (all changes are backward-compatible additions)
+
+**Migration Notes:**
+- Optional: Run `ie setup-claude-code` to enable automatic focus restoration in Claude Code
+- Session restoration is opt-in via hook installation
+
+---
 
 ### Version 0.2 (2025-11-11)
 
@@ -679,6 +708,202 @@ intent-engine current --set <TASK_ID>
   }
 }
 ```
+
+---
+
+#### `session-restore`
+**Purpose**: Restore session context for AI agents (Phase 1 Focus Restoration)
+
+**Signature**:
+```bash
+intent-engine session-restore \
+  [--include-events <NUM>] \
+  [--workspace <PATH>]
+```
+
+**Parameters**:
+- `--include-events <NUM>` (optional, default: 3): Number of recent events to include
+- `--workspace <PATH>` (optional): Workspace path (defaults to current directory)
+
+**Output**: JSON with session context
+
+**Success scenario** (has active focus):
+```json
+{
+  "status": "success",
+  "workspace_path": "/home/user/project",
+  "current_task": {
+    "id": 42,
+    "name": "Implement authentication",
+    "status": "doing",
+    "spec": "Complete auth system with JWT...",
+    "spec_preview": "Complete auth system with JWT and sessions. Use HS256 algorithm for simplicity. Store tokens in h...",
+    "created_at": "2024-11-09T10:00:00Z",
+    "first_doing_at": "2024-11-09T10:15:00Z"
+  },
+  "parent_task": {
+    "id": 40,
+    "name": "User Management System",
+    "status": "doing"
+  },
+  "siblings": {
+    "total": 5,
+    "done": 2,
+    "doing": 1,
+    "todo": 2,
+    "done_list": [
+      {"id": 41, "name": "Design user schema"},
+      {"id": 39, "name": "Setup database"}
+    ]
+  },
+  "children": {
+    "total": 3,
+    "todo": 3,
+    "list": [
+      {"id": 43, "name": "JWT implementation", "status": "todo"},
+      {"id": 44, "name": "Session management", "status": "todo"},
+      {"id": 45, "name": "Password hashing", "status": "todo"}
+    ]
+  },
+  "recent_events": [
+    {
+      "type": "decision",
+      "data": "Chose HS256 algorithm for simplicity",
+      "timestamp": "2024-11-09T10:20:00Z"
+    },
+    {
+      "type": "blocker",
+      "data": "Need to decide on token storage location",
+      "timestamp": "2024-11-09T10:25:00Z"
+    },
+    {
+      "type": "note",
+      "data": "jsonwebtoken crate looks most mature",
+      "timestamp": "2024-11-09T10:30:00Z"
+    }
+  ],
+  "suggested_commands": [
+    "ie event add --type blocker",
+    "ie task spawn-subtask",
+    "ie task done"
+  ]
+}
+```
+
+**No focus scenario**:
+```json
+{
+  "status": "no_focus",
+  "workspace_path": "/home/user/project",
+  "stats": {
+    "total_tasks": 10,
+    "todo": 5,
+    "doing": 0,
+    "done": 5
+  },
+  "suggested_commands": [
+    "ie task pick-next",
+    "ie task list --status todo"
+  ]
+}
+```
+
+**Error scenario**:
+```json
+{
+  "status": "error",
+  "error_type": "workspace_not_found",
+  "message": "Current directory is not an Intent-Engine project",
+  "recovery_suggestion": "Run 'ie workspace init' to initialize a workspace",
+  "suggested_commands": [
+    "ie workspace init",
+    "ie help"
+  ]
+}
+```
+
+**Use Cases**:
+- AI agents restoring work context after session restart
+- SessionStart hooks in Claude Code
+- Debugging current workspace state
+- Context verification before starting work
+
+**Design Notes**:
+- Spec preview truncated to 100 chars with "..." suffix
+- Events limited to prevent prompt spam (configurable via `--include-events`)
+- Three-status model: success/no_focus/error
+- Context-aware command suggestions based on task state
+
+---
+
+#### `setup-claude-code`
+**Purpose**: Automated Claude Code integration setup (install SessionStart hook)
+
+**Signature**:
+```bash
+intent-engine setup-claude-code \
+  [--dry-run] \
+  [--force] \
+  [--claude-dir <PATH>]
+```
+
+**Parameters**:
+- `--dry-run` (optional): Show what would be done without actually doing it
+- `--force` (optional): Overwrite existing hook file
+- `--claude-dir <PATH>` (optional): Custom .claude directory location (default: `./.claude`)
+
+**Actions**:
+1. Creates `.claude/hooks/` directory structure
+2. Installs `session-start.sh` hook from template
+3. Sets executable permissions (Unix systems: chmod +x)
+
+**Output**: Status message
+
+Success:
+```
+✓ Created .claude/hooks directory
+✓ Installed session-start.sh hook
+✓ Set executable permissions
+
+Claude Code integration complete!
+
+The session-start hook will now run at the beginning of every Claude Code session,
+automatically restoring your Intent-Engine context.
+
+Next steps:
+  1. Start a new Claude Code session
+  2. The hook will display your current focus and recent decisions
+  3. Use suggested commands to continue your work
+```
+
+Dry-run mode:
+```
+[DRY RUN] Would create: .claude/hooks
+[DRY RUN] Would install: .claude/hooks/session-start.sh
+[DRY RUN] Would set permissions: 0755
+
+No changes made. Remove --dry-run to actually install.
+```
+
+**Exit Codes**:
+- `0`: Success
+- `1`: Hook already exists (use --force to overwrite)
+- `2`: Permission denied
+- `3`: Invalid directory
+
+**Hook Behavior**:
+The installed hook (`session-start.sh`) will:
+1. Call `ie session-restore --json`
+2. Parse JSON output with `jq`
+3. Format as `<system-reminder priority="high">` for AI consumption
+4. Display minimal style, high information density output
+5. Include focus, parent, siblings, children, recent events, blockers
+
+**Use Cases**:
+- One-time setup for Claude Code users
+- Workspace initialization automation
+- CI/CD environment configuration
+- Team onboarding scripts
 
 ---
 

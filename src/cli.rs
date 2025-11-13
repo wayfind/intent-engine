@@ -59,6 +59,46 @@ pub enum Commands {
     /// Start MCP server for AI assistants (JSON-RPC stdio)
     #[command(name = "mcp-server")]
     McpServer,
+
+    /// Restore session context for AI agents (Focus Restoration - Phase 1)
+    ///
+    /// This command returns all context needed to restore work continuity:
+    /// - Current focused task
+    /// - Parent task and siblings progress
+    /// - Child tasks status
+    /// - Recent events (decisions, blockers, notes)
+    /// - Suggested next commands
+    ///
+    /// Designed for SessionStart hooks to inject context at the beginning of new sessions.
+    #[command(name = "session-restore")]
+    SessionRestore {
+        /// Number of recent events to include (default: 3)
+        #[arg(long, default_value = "3")]
+        include_events: usize,
+
+        /// Workspace path (default: current directory)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+
+    /// Setup Claude Code integration (install SessionStart hook)
+    ///
+    /// Automatically configures .claude/hooks/session-start.sh to enable
+    /// focus restoration on every new Claude Code session.
+    #[command(name = "setup-claude-code")]
+    SetupClaudeCode {
+        /// Show what would be done without actually doing it
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Specify .claude directory location (default: ./.claude)
+        #[arg(long)]
+        claude_dir: Option<String>,
+
+        /// Overwrite existing hook
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand)]
