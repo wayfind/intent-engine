@@ -8,6 +8,7 @@ use intent_engine::tasks::TaskManager;
 use intent_engine::workspace::WorkspaceManager;
 use sqlx::Row;
 use std::io::{self, Read};
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() {
@@ -61,6 +62,15 @@ async fn run() -> Result<()> {
             force,
         } => {
             handle_setup_claude_code(dry_run, claude_dir, force).await?;
+        },
+        Commands::SetupMcp {
+            dry_run,
+            config_path,
+            project_dir,
+            force,
+            target,
+        } => {
+            handle_setup_mcp(dry_run, config_path, project_dir, force, &target).await?;
         },
     }
 
@@ -640,4 +650,202 @@ async fn handle_setup_claude_code(
     }
 
     Ok(())
+}
+
+async fn handle_setup_mcp(
+    dry_run: bool,
+    config_path: Option<String>,
+    project_dir: Option<String>,
+    force: bool,
+    target: &str,
+) -> Result<()> {
+    use std::env;
+    use std::fs;
+    use std::path::PathBuf;
+    use serde_json::{json, Value};
+
+    println!("Intent-Engine MCP Setup");
+    println!("=======================\n");
+
+    // Detect OS
+    let os = env::consts::OS;
+    println!("Detected OS: {}", os);
+
+    // Determine config file path
+    let config_file_path = if let Some(path) = config_path {
+        PathBuf::from(path)
+    } else {
+        get_default_config_path(os, target)?
+    };
+
+    println!("Config file: {}", config_file_path.display());
+
+    // Find intent-engine binary
+    let binary_path = which::which("intent-engine")
+        .or_else(|_| {
+            let home = env::var("HOME")
+                .or_else(|_| env::var("USERPROFILE"))
+                .map_err(|_| IntentError::InvalidInput("Cannot determine home directory".to_string()))?;
+            let cargo_bin = PathBuf::from(home).join(".cargo").join("bin").join("intent-engine");
+            if cargo_bin.exists() {
+                Ok(cargo_bin)
+            } else {
+                Err(IntentError::InvalidInput(
+                    "intent-engine binary not found in PATH or ~/.cargo/bin".to_string()
+                ))
+            }
+        })?;
+
+    println!("Binary: {}", binary_path.display());
+
+    // Determine project directory
+    let proj_dir = if let Some(dir) = project_dir {
+        PathBuf::from(dir)
+    } else {
+        env::current_dir()
+            .map_err(|e| IntentError::IoError(e))?
+    };
+
+    println!("Project dir: {}", proj_dir.display());
+    println!();
+
+    // Check if config file exists
+    let config_exists = config_file_path.exists();
+
+    if config_exists && !force {
+        println!("⚠️  Config file already exists");
+        println!("Checking for existing intent-engine configuration...\n");
+    }
+
+    // Read or create config
+    let mut config: Value = if config_exists {
+        let content = fs::read_to_string(&config_file_path)
+            .map_err(|e| IntentError::IoError(e))?;
+        serde_json::from_str(&content)
+            .unwrap_or_else(|_| json!({}))
+    } else {
+        json!({})
+    };
+
+    // Check if intent-engine already configured
+    if let Some(mcp_servers) = config.get("mcpServers") {
+        if mcp_servers.get("intent-engine").is_some() && !force {
+            println!("✓ intent-engine MCP server already configured");
+            println!("\nUse --force to overwrite existing configuration");
+            return Ok(());
+        }
+    }
+
+    // Create backup if exists
+    if config_exists && !dry_run {
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let backup_path = config_file_path.with_extension(format!("json.backup.{}", timestamp));
+        fs::copy(&config_file_path, &backup_path)
+            .map_err(|e| IntentError::IoError(e))?;
+        println!("✓ Backup created: {}", backup_path.display());
+    }
+
+    // Add intent-engine configuration
+    if !config.get("mcpServers").is_some() {
+        config["mcpServers"] = json!({});
+    }
+
+    config["mcpServers"]["intent-engine"] = json!({
+        "command": binary_path.to_string_lossy(),
+        "args": ["mcp-server"],
+        "env": {
+            "INTENT_ENGINE_PROJECT_DIR": proj_dir.to_string_lossy()
+        },
+        "description": "Strategic intent and task workflow management for human-AI collaboration"
+    });
+
+    if dry_run {
+        println!("\n[DRY RUN] Would write configuration:");
+        println!("{}", serde_json::to_string_pretty(&config)?);
+    } else {
+        // Ensure parent directory exists
+        if let Some(parent) = config_file_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| IntentError::IoError(e))?;
+        }
+
+        // Write config file
+        fs::write(&config_file_path, serde_json::to_string_pretty(&config)?)
+            .map_err(|e| IntentError::IoError(e))?;
+
+        println!("✓ Configuration updated");
+    }
+
+    if !dry_run {
+        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("✅ MCP Setup complete!");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+        println!("Configuration:");
+        println!("  File: {}", config_file_path.display());
+        println!("  Binary: {}", binary_path.display());
+        println!("  Project: {}", proj_dir.display());
+
+        println!("\n⚠️  Version note:");
+        println!("  This setup targets Claude Code v2.0.37+");
+        println!("  Earlier versions may use different config paths");
+
+        println!("\nNext steps:");
+        println!("  1. Restart Claude Code/Desktop to load MCP server");
+        println!("  2. Verify intent-engine tools are available");
+        println!("  3. Try: Ask Claude to create a task for you");
+
+        println!("\nTo test manually:");
+        println!("  echo '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}}' | \\");
+        println!("    INTENT_ENGINE_PROJECT_DIR={} \\", proj_dir.display());
+        println!("    {} mcp-server", binary_path.display());
+    }
+
+    Ok(())
+}
+
+fn get_default_config_path(os: &str, target: &str) -> Result<PathBuf> {
+    use std::env;
+    use std::path::PathBuf;
+
+    let home = env::var("HOME")
+        .or_else(|_| env::var("USERPROFILE"))
+        .map_err(|_| IntentError::InvalidInput("Cannot determine home directory".to_string()))?;
+
+    let home_path = PathBuf::from(home);
+
+    match (os, target) {
+        // Claude Code v2.0.37+ on Unix-like systems
+        ("linux" | "macos", "claude-code") => {
+            Ok(home_path.join(".claude.json"))
+        },
+        // Claude Code on Windows
+        ("windows", "claude-code") => {
+            let appdata = env::var("APPDATA")
+                .map_err(|_| IntentError::InvalidInput("APPDATA not set".to_string()))?;
+            Ok(PathBuf::from(appdata).join("Claude").join(".claude.json"))
+        },
+        // Claude Desktop on macOS
+        ("macos", "claude-desktop") => {
+            Ok(home_path.join("Library")
+                .join("Application Support")
+                .join("Claude")
+                .join("claude_desktop_config.json"))
+        },
+        // Claude Desktop on Windows
+        ("windows", "claude-desktop") => {
+            let appdata = env::var("APPDATA")
+                .map_err(|_| IntentError::InvalidInput("APPDATA not set".to_string()))?;
+            Ok(PathBuf::from(appdata).join("Claude").join("claude_desktop_config.json"))
+        },
+        // Claude Desktop on Linux
+        ("linux", "claude-desktop") => {
+            Ok(home_path.join(".config")
+                .join("Claude")
+                .join("claude_desktop_config.json"))
+        },
+        _ => Err(IntentError::InvalidInput(
+            format!("Unsupported OS/target combination: {}/{}", os, target)
+        ))
+    }
 }

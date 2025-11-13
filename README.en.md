@@ -169,6 +169,21 @@ Intent-Engine provides a **Rust-native MCP (Model Context Protocol) server**, en
 
 ### Quick Installation
 
+**Method 1: Automatic (Recommended)**
+
+```bash
+# Install from cargo
+cargo install intent-engine
+
+# Auto-configure MCP server for Claude Code
+intent-engine setup-mcp
+
+# Or for Claude Desktop
+intent-engine setup-mcp --target claude-desktop
+```
+
+**Method 2: From Source**
+
 ```bash
 # Clone the project
 git clone https://github.com/wayfind/intent-engine.git
@@ -178,8 +193,12 @@ cd intent-engine
 cargo install --path .
 
 # Auto-configure for Claude Code/Desktop
-./scripts/install/install-mcp-server.sh
+intent-engine setup-mcp
+# Or use the shell script:
+# ./scripts/install/install-mcp-server.sh
 ```
+
+> **Note**: The `setup-mcp` command automatically detects your OS and configures the correct file path. It targets Claude Code v2.0.37+ by default.
 
 ### Manual Configuration
 
