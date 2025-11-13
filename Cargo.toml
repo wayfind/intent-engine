@@ -62,6 +62,10 @@ rand = "0.9"
 name = "intent-engine"
 path = "src/main.rs"
 
+[[bin]]
+name = "ie"
+path = "src/main.rs"
+
 [[bench]]
 name = "performance"
 harness = false

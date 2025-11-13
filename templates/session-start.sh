@@ -5,6 +5,15 @@
 
 set -euo pipefail
 
+# 0. Ensure jq is available
+JQ_CMD=$(command -v jq || echo "/usr/bin/jq")
+if [ ! -x "$JQ_CMD" ]; then
+    echo "<system-reminder>"
+    echo "Intent-Engine: jq not found. Install: apt-get install jq"
+    echo "</system-reminder>"
+    exit 0
+fi
+
 # 1. Check if Intent-Engine is installed
 if ! command -v ie &> /dev/null; then
     echo "<system-reminder>"
@@ -17,34 +26,34 @@ fi
 WORKSPACE_DIR="${CLAUDE_WORKSPACE_ROOT:-$(pwd)}"
 
 # 3. Call session-restore
-RESTORE_OUTPUT=$(ie session-restore --json --workspace "$WORKSPACE_DIR" 2>&1)
+RESTORE_OUTPUT=$(ie session-restore --workspace "$WORKSPACE_DIR" 2>&1)
 RESTORE_EXIT_CODE=$?
 
 # 4. Parse JSON and generate reminder
 if [ $RESTORE_EXIT_CODE -eq 0 ]; then
-    STATUS=$(echo "$RESTORE_OUTPUT" | jq -r '.status')
+    STATUS=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.status')
 
     if [ "$STATUS" = "success" ]; then
         # === Has focus: Rich context ===
-        TASK_ID=$(echo "$RESTORE_OUTPUT" | jq -r '.current_task.id')
-        TASK_NAME=$(echo "$RESTORE_OUTPUT" | jq -r '.current_task.name')
-        TASK_SPEC=$(echo "$RESTORE_OUTPUT" | jq -r '.current_task.spec_preview // empty')
-        PARENT_NAME=$(echo "$RESTORE_OUTPUT" | jq -r '.parent_task.name // "None"')
+        TASK_ID=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.current_task.id')
+        TASK_NAME=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.current_task.name')
+        TASK_SPEC=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.current_task.spec_preview // empty')
+        PARENT_NAME=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.parent_task.name // "None"')
 
-        SIBLINGS_DONE=$(echo "$RESTORE_OUTPUT" | jq -r '.siblings.done // 0')
-        SIBLINGS_TOTAL=$(echo "$RESTORE_OUTPUT" | jq -r '.siblings.total // 0')
+        SIBLINGS_DONE=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.siblings.done // 0')
+        SIBLINGS_TOTAL=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.siblings.total // 0')
 
-        CHILDREN_TODO=$(echo "$RESTORE_OUTPUT" | jq -r '.children.todo // 0')
-        CHILDREN_TOTAL=$(echo "$RESTORE_OUTPUT" | jq -r '.children.total // 0')
+        CHILDREN_TODO=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.children.todo // 0')
+        CHILDREN_TOTAL=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.children.total // 0')
 
         # Recent decisions
-        RECENT_DECISIONS=$(echo "$RESTORE_OUTPUT" | jq -r '.recent_events[]? | select(.type == "decision") | "- " + .data' | head -3)
+        RECENT_DECISIONS=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '[.recent_events[]? | select(.type == "decision")] | .[:3][] | "- " + .data')
 
         # Current blockers
-        CURRENT_BLOCKERS=$(echo "$RESTORE_OUTPUT" | jq -r '.recent_events[]? | select(.type == "blocker") | "- " + .data')
+        CURRENT_BLOCKERS=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.recent_events[]? | select(.type == "blocker") | "- " + .data')
 
         # Done siblings (proof of progress)
-        DONE_SIBLINGS=$(echo "$RESTORE_OUTPUT" | jq -r '.siblings.done_list[]? | "- #" + (.id|tostring) + " " + .name')
+        DONE_SIBLINGS=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.siblings.done_list[]? | "- #" + (.id|tostring) + " " + .name')
 
         # === Minimal style output ===
         echo "<system-reminder priority=\"high\">"
@@ -92,7 +101,7 @@ if [ $RESTORE_EXIT_CODE -eq 0 ]; then
 
     elif [ "$STATUS" = "no_focus" ]; then
         # === No focus: Simple guidance ===
-        TODO_COUNT=$(echo "$RESTORE_OUTPUT" | jq -r '.stats.todo // 0')
+        TODO_COUNT=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.stats.todo // 0')
 
         echo "<system-reminder>"
         echo "Intent-Engine: No active focus"
@@ -104,8 +113,8 @@ if [ $RESTORE_EXIT_CODE -eq 0 ]; then
 
     elif [ "$STATUS" = "error" ]; then
         # === Error: Recovery guidance ===
-        ERROR_MSG=$(echo "$RESTORE_OUTPUT" | jq -r '.message // "Unknown error"')
-        RECOVERY=$(echo "$RESTORE_OUTPUT" | jq -r '.recovery_suggestion // "Check workspace state"')
+        ERROR_MSG=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.message // "Unknown error"')
+        RECOVERY=$(echo "$RESTORE_OUTPUT" | $JQ_CMD -r '.recovery_suggestion // "Check workspace state"')
 
         echo "<system-reminder>"
         echo "Intent-Engine: Issue detected"
