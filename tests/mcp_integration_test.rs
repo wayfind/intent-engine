@@ -6,69 +6,13 @@ use assert_cmd::cargo;
 use serde_json::{json, Value};
 use serial_test::serial;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tempfile::tempdir;
 
 /// Get the path to the intent-engine binary built by cargo test
 fn get_binary_path() -> PathBuf {
     cargo::cargo_bin!("intent-engine").to_path_buf()
-}
-
-/// Helper to initialize a test project with a .git marker
-///
-/// Returns the temp directory and project path. The temp directory must be kept
-/// alive for the duration of the test (returned as first element of tuple).
-///
-/// This helper:
-/// 1. Creates a temporary directory
-/// 2. Creates a .git directory to mark as project root
-/// 3. Optionally runs an initialization command
-///
-/// # Arguments
-/// * `init_task` - If true, creates an initial task to initialize the database
-fn setup_mcp_test_project(init_task: bool) -> (tempfile::TempDir, PathBuf) {
-    let temp_dir = tempdir().expect("Failed to create temp directory");
-    let project_path = temp_dir.path().to_path_buf();
-
-    // Create .git directory to mark as project root
-    std::fs::create_dir(project_path.join(".git")).expect("Failed to create .git directory");
-
-    if init_task {
-        let output = Command::new(get_binary_path())
-            .args(["task", "add", "--name", "__init_test__"])
-            .env("INTENT_ENGINE_PROJECT_DIR", &project_path)
-            .output()
-            .expect("Failed to execute task add command");
-
-        assert!(
-            output.status.success(),
-            "Failed to initialize project with task add. stderr: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-
-    (temp_dir, project_path)
-}
-
-/// Helper to run a command and assert it succeeds
-///
-/// Returns the command output for further inspection if needed.
-fn run_task_command_assert_success(args: &[&str], project_path: &Path) -> std::process::Output {
-    let output = Command::new(get_binary_path())
-        .args(args)
-        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
-        .output()
-        .expect("Failed to execute command");
-
-    assert!(
-        output.status.success(),
-        "Command {:?} failed. stderr: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    output
 }
 
 /// Helper function to send JSON-RPC request and get response
