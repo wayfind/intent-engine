@@ -316,11 +316,6 @@ impl ProjectContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::sync::{Mutex, OnceLock};
-    use tempfile::tempdir;
-
-    static ENV_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
 
     // Note: Tests that modify the current directory are intentionally limited
     // because they can interfere with other tests running in parallel.
