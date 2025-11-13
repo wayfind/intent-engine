@@ -58,6 +58,7 @@ assert_cmd = "2.0"
 predicates = "3.0"
 criterion = { version = "0.7", features = ["async_tokio"] }
 rand = "0.9"
+serial_test = "3.0"
 
 [[bin]]
 name = "intent-engine"

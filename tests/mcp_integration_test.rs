@@ -4,6 +4,7 @@
 
 use assert_cmd::cargo;
 use serde_json::{json, Value};
+use serial_test::serial;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -46,6 +47,7 @@ fn mcp_request(request: &Value) -> Value {
 }
 
 #[test]
+#[serial]
 fn test_initialize_returns_capabilities() {
     let request = json!({
         "jsonrpc": "2.0",
@@ -69,6 +71,7 @@ fn test_initialize_returns_capabilities() {
 }
 
 #[test]
+#[serial]
 fn test_ping_returns_empty_result() {
     let request = json!({
         "jsonrpc": "2.0",
@@ -84,6 +87,7 @@ fn test_ping_returns_empty_result() {
 }
 
 #[test]
+#[serial]
 fn test_tools_list_returns_16_tools() {
     // Load expected tools from mcp-server.json (single source of truth)
     let mcp_schema_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("mcp-server.json");
@@ -149,6 +153,7 @@ fn test_tools_list_returns_16_tools() {
 }
 
 #[test]
+#[serial]
 fn test_invalid_json_returns_parse_error() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
@@ -179,6 +184,7 @@ fn test_invalid_json_returns_parse_error() {
 }
 
 #[test]
+#[serial]
 fn test_unknown_method_returns_method_not_found() {
     let request = json!({
         "jsonrpc": "2.0",
@@ -196,10 +202,8 @@ fn test_unknown_method_returns_method_not_found() {
 }
 
 #[test]
+#[serial]
 fn test_task_search_with_fts5_query() {
-    // NOTE: This test modifies process-wide current directory and may be flaky when run
-    // in parallel with other tests. It passes consistently when run individually or sequentially.
-    // This is a known limitation of Rust tests that modify global state.
     use std::thread;
     use std::time::Duration;
 
@@ -321,6 +325,7 @@ fn test_task_search_with_fts5_query() {
 }
 
 #[test]
+#[serial]
 fn test_missing_required_parameter() {
     let request = json!({
         "jsonrpc": "2.0",
@@ -345,6 +350,7 @@ fn test_missing_required_parameter() {
 }
 
 #[test]
+#[serial]
 fn test_task_context_returns_family_tree() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
@@ -449,6 +455,7 @@ fn test_task_context_returns_family_tree() {
 }
 
 #[test]
+#[serial]
 fn test_task_context_uses_current_task_when_no_id_provided() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
@@ -526,6 +533,7 @@ fn test_task_context_uses_current_task_when_no_id_provided() {
 }
 
 #[test]
+#[serial]
 fn test_task_context_error_when_no_current_task_and_no_id() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
@@ -581,6 +589,7 @@ fn test_task_context_error_when_no_current_task_and_no_id() {
 }
 
 #[test]
+#[serial]
 fn test_task_context_nonexistent_task() {
     let temp_dir = tempdir().unwrap();
     let project_path = temp_dir.path();
