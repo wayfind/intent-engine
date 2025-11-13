@@ -6,6 +6,17 @@ use super::*;
 use crate::tasks::TaskManager;
 use crate::test_utils::test_helpers::TestContext;
 use serde_json::json;
+use serial_test::serial;
+
+/// Helper function to set up test environment with proper isolation
+async fn setup_test_env() -> TestContext {
+    let ctx = TestContext::new().await;
+    std::env::set_var(
+        "INTENT_ENGINE_PROJECT_DIR",
+        ctx.project_root().to_str().expect("Project root should be valid UTF-8"),
+    );
+    ctx
+}
 
 #[cfg(test)]
 mod json_rpc_tests {
@@ -117,11 +128,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_add_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let args = json!({
             "name": "Test Task",
@@ -149,11 +156,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_add_with_parent() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         // First create parent task
         let parent_args = json!({"name": "Parent Task"});
@@ -175,11 +178,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_start_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         // Create a task first
         let task_mgr = TaskManager::new(ctx.pool());
@@ -211,11 +210,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_start_nonexistent_task() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let args = json!({
             "task_id": 99999,
@@ -228,11 +223,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_done_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         // Create and start a task
         let task_mgr = TaskManager::new(ctx.pool());
@@ -256,11 +247,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_done_with_task_id() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         // Create and start a task
         let task_mgr = TaskManager::new(ctx.pool());
@@ -276,12 +263,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_list_all() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         // Create some tasks
         let task_mgr = TaskManager::new(ctx.pool());
@@ -298,12 +282,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_list_by_status() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         // Create tasks with different statuses
         let task_mgr = TaskManager::new(ctx.pool());
@@ -316,14 +297,7 @@ mod handler_tests {
         });
 
         let result = handle_task_list(args).await;
-        // TODO: Occasionally fails with database corruption in parallel CI runs
-        if result.is_err() {
-            eprintln!(
-                "Warning: test_handle_task_list_by_status failed with: {:?}",
-                result.err()
-            );
-            return;
-        }
+        assert!(result.is_ok(), "task_list should succeed");
 
         let value = result.unwrap();
         let tasks = value.as_array().unwrap();
@@ -332,12 +306,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_search_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         // Create a task with searchable content
         let task_mgr = TaskManager::new(ctx.pool());
@@ -368,11 +339,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_get_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr
@@ -395,11 +362,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_get_with_events() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -420,12 +383,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_update_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr
@@ -440,16 +400,7 @@ mod handler_tests {
         });
 
         let result = handle_task_update(args).await;
-        // TODO: This test occasionally fails with "database disk image is malformed"
-        // This appears to be a timing/locking issue with SQLite in test environment
-        // The handler itself works correctly in production
-        if result.is_err() {
-            eprintln!(
-                "Warning: test_handle_task_update_success failed with: {:?}",
-                result.err()
-            );
-            return;
-        }
+        assert!(result.is_ok(), "task_update should succeed");
 
         let updated = result.unwrap();
         assert_eq!(updated.get("name").unwrap(), "Updated Name");
@@ -469,11 +420,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_update_priority() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -492,11 +439,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_update_invalid_priority() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -513,11 +456,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_delete_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -546,12 +485,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_spawn_subtask_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         // Create and start parent task
         let task_mgr = TaskManager::new(ctx.pool());
@@ -587,12 +523,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_switch_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
@@ -607,14 +540,7 @@ mod handler_tests {
         });
 
         let result = handle_task_switch(args).await;
-        // TODO: Occasionally fails with database corruption - timing issue in test env
-        if result.is_err() {
-            eprintln!(
-                "Warning: test_handle_task_switch_success failed with: {:?}",
-                result.err()
-            );
-            return;
-        }
+        assert!(result.is_ok(), "task_switch should succeed");
 
         let response = result.unwrap();
         // SwitchTaskResponse has previous_task and current_task
@@ -640,26 +566,16 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_pick_next_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         task_mgr.add_task("Todo Task", None, None).await.unwrap();
 
         let args = json!({});
         let result = handle_task_pick_next(args).await;
-        // TODO: Occasionally fails with database corruption - timing issue in test env
-        if result.is_err() {
-            eprintln!(
-                "Warning: test_handle_task_pick_next_success failed with: {:?}",
-                result.err()
-            );
-            return;
-        }
+        assert!(result.is_ok(), "task_pick_next should succeed");
 
         let response = result.unwrap();
         // PickNextResponse has suggestion_type, task, reason_code, message
@@ -668,12 +584,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_event_add_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -694,11 +607,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_event_add_with_task_id() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -740,11 +649,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_event_list_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -774,11 +679,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_event_list_with_filters() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -819,11 +720,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_current_task_get_no_current() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let args = json!({});
         let result = handle_current_task_get(args).await;
@@ -834,12 +731,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_current_task_get_with_current() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -858,11 +752,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_report_generate_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         task_mgr.add_task("Task 1", None, None).await.unwrap();
@@ -881,11 +771,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_report_generate_with_filters() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let args = json!({
             "status": "todo",
@@ -899,11 +785,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_context_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -920,12 +802,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_context_uses_current_task() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -951,11 +830,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_add_dependency_success() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
@@ -997,11 +872,7 @@ mod handler_tests {
 
     #[tokio::test]
     async fn test_handle_task_find_deprecated_warning() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let args = json!({
             "status": "todo"
@@ -1159,12 +1030,9 @@ mod edge_case_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_list_parent_null() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         // Create top-level and child tasks
         let task_mgr = TaskManager::new(ctx.pool());
@@ -1193,11 +1061,7 @@ mod edge_case_tests {
 
     #[tokio::test]
     async fn test_handle_task_start_default_with_events() {
-        let ctx = TestContext::new().await;
-        std::env::set_var(
-            "INTENT_ENGINE_PROJECT_DIR",
-            ctx.project_root().to_str().unwrap(),
-        );
+        let ctx = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
