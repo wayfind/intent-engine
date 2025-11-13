@@ -51,8 +51,8 @@ sudo cp target/release/intent-engine /usr/local/bin/
 
 编辑 Claude Code 的 MCP 配置文件:
 
-- **macOS/Linux**: `~/.config/claude-code/mcp_servers.json`
-- **Windows**: `%APPDATA%\claude-code\mcp_servers.json`
+- **macOS/Linux**: `~/.claude/mcp_servers.json`
+- **Windows**: `%APPDATA%\Claude\mcp_servers.json`
 
 添加 Intent-Engine 服务器配置:
 
@@ -177,16 +177,16 @@ intent-engine mcp-server ─────> SQLite
 1. 确认 MCP 配置文件路径正确:
    ```bash
    # Linux/macOS
-   cat ~/.config/claude-code/mcp_servers.json
+   cat ~/.claude/mcp_servers.json
 
    # Windows PowerShell
-   Get-Content $env:APPDATA\claude-code\mcp_servers.json
+   Get-Content $env:APPDATA\Claude\mcp_servers.json
    ```
 
 2. 验证 JSON 语法有效:
    ```bash
    # 使用 jq 验证 JSON
-   jq . ~/.config/claude-code/mcp_servers.json
+   jq . ~/.claude/mcp_servers.json
    ```
 
 3. 检查二进制文件存在且可执行:
@@ -203,10 +203,10 @@ intent-engine mcp-server ─────> SQLite
 4. 查看 Claude Code 日志:
    ```bash
    # macOS/Linux
-   tail -f ~/.config/claude-code/logs/mcp.log
+   tail -f ~/.claude/logs/mcp.log
 
    # Windows
-   # 查看 %APPDATA%\claude-code\logs\
+   # 查看 %APPDATA%\Claude\logs\
    ```
 
 5. **重启 Claude Code** (必须!)
@@ -261,7 +261,7 @@ EOF
 
 ### 移除 MCP 服务器配置
 
-1. 编辑 `~/.config/claude-code/mcp_servers.json`
+1. 编辑 `~/.claude/mcp_servers.json`
 2. 删除 `"intent-engine"` 配置项
 3. 重启 Claude Code
 
