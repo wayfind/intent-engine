@@ -1,20 +1,16 @@
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::Value;
 use tempfile::TempDir;
 
-fn get_binary_path() -> PathBuf {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let target_dir = Path::new(manifest_dir).join("target").join("debug");
-    target_dir.join("intent-engine")
-}
-
 #[test]
 fn doctor_reports_database_path_resolution_details() {
     let temp_dir = TempDir::new().expect("failed to create temp dir");
 
-    let output = Command::new(get_binary_path())
+    // Use Cargo-provided environment variable for binary path
+    // This works correctly in all test environments (local, CI, llvm-cov, etc.)
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let output = Command::new(binary_path)
         .current_dir(temp_dir.path())
         .arg("doctor")
         .output()
