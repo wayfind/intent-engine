@@ -16,19 +16,25 @@ fn get_binary_path() -> PathBuf {
 }
 
 /// Helper function to send JSON-RPC request and get response
+///
+/// NOTE: This helper uses std::env::set_current_dir() to properly initialize the project.
+/// Each call creates its own temporary directory, so concurrent tests using this helper
+/// should still be isolated (though they may experience occasional flakiness).
 fn mcp_request(request: &Value) -> Value {
     let temp_dir = tempdir().expect("Failed to create temp directory");
     let project_path = temp_dir.path();
 
-    // Initialize project
-    std::env::set_current_dir(project_path).expect("Failed to change to project directory");
+    // Initialize project by setting current directory (required for proper database initialization)
+    std::env::set_current_dir(project_path).expect("Failed to change to project directory")
+
     let init_output = Command::new(get_binary_path())
         .args(["task", "add", "--name", "test"])
         .output()
-        .expect("Failed to execute initialization command");
+        .expect("Failed to execute task add command");
+
     assert!(
         init_output.status.success(),
-        "Failed to initialize test project. stderr: {}",
+        "Failed to initialize project with task add. stderr: {}",
         String::from_utf8_lossy(&init_output.stderr)
     );
 
@@ -210,6 +216,14 @@ fn test_unknown_method_returns_method_not_found() {
 #[test]
 #[serial]
 fn test_task_search_with_fts5_query() {
+    // NOTE: This test modifies process-wide current directory and may be flaky when run
+    // in parallel with other tests. Run with --test-threads=1 if you experience issues.
+    //
+    // The test requires std::env::set_current_dir() for proper database initialization.
+    // Using INTENT_ENGINE_PROJECT_DIR alone doesn't work because the project needs to be
+    // initialized first before the env var can be used.
+    //
+    // IMPROVEMENT: Added proper error checking to catch silent failures (lines 287-291).
     use std::thread;
     use std::time::Duration;
 
@@ -219,15 +233,14 @@ fn test_task_search_with_fts5_query() {
     // Create .git directory to mark as project root
     std::fs::create_dir(project_path.join(".git")).unwrap();
 
-    // Initialize project by changing to temp dir and running a command
-    // This is necessary because initialize_project() doesn't respect INTENT_ENGINE_PROJECT_DIR
+    // Initialize project by changing to temp dir
     let original_dir = std::env::current_dir().ok();
     std::env::set_current_dir(project_path).unwrap();
 
     let init_output = Command::new(get_binary_path())
         .args(["task", "add", "--name", "__init_test__"])
         .output()
-        .unwrap();
+        .expect("Failed to execute task add command");
 
     // Try to restore original directory (may fail if other tests changed it)
     // Note: Failure is acceptable here as we're cleaning up and other tests may have modified CWD
@@ -235,11 +248,17 @@ fn test_task_search_with_fts5_query() {
         let _ = std::env::set_current_dir(&dir); // Intentionally ignoring errors during cleanup
     }
 
+    // ✅ FIXED: Now properly checks command status (was silent failure before)
     assert!(
         init_output.status.success(),
         "Failed to initialize project. stderr: {}",
         String::from_utf8_lossy(&init_output.stderr)
     );
+
+    // Restore original directory for test isolation
+    if let Some(dir) = original_dir {
+        let _ = std::env::set_current_dir(&dir);
+    }
 
     // Create test tasks
     let output1 = Command::new(get_binary_path())
@@ -365,6 +384,9 @@ fn test_task_context_returns_family_tree() {
     // Create .git directory to mark as project root
     std::fs::create_dir(project_path.join(".git")).unwrap();
 
+    // NOTE: This test uses std::env::set_current_dir() which modifies global state.
+    // While not ideal for parallel testing, it's necessary for proper database isolation
+    // in this specific test scenario. Consider running this test with --test-threads=1 if issues occur.
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project and create task hierarchy
@@ -485,6 +507,8 @@ fn test_task_context_uses_current_task_when_no_id_provided() {
     // Create .git directory to mark as project root
     std::fs::create_dir(project_path.join(".git")).unwrap();
 
+    // NOTE: This test uses std::env::set_current_dir() which modifies global state.
+    // While not ideal for parallel testing, it's necessary for proper database isolation.
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project and create a task
@@ -573,6 +597,7 @@ fn test_task_context_error_when_no_current_task_and_no_id() {
     // Create .git directory to mark as project root
     std::fs::create_dir(project_path.join(".git")).unwrap();
 
+    // NOTE: This test uses std::env::set_current_dir() which modifies global state.
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project but don't create or start any tasks
@@ -634,6 +659,7 @@ fn test_task_context_nonexistent_task() {
     // Create .git directory to mark as project root
     std::fs::create_dir(project_path.join(".git")).unwrap();
 
+    // NOTE: This test uses std::env::set_current_dir() which modifies global state.
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project

@@ -95,8 +95,26 @@ fn test_task_update_priority_and_complexity() {
         .stdout(predicate::str::contains("\"complexity\": 6"));
 }
 
-// Test removed due to database concurrency issues in test environment
-// This functionality is covered by other update tests
+// NOTE: Test removed due to database concurrency issues in test environment
+//
+// ISSUE: SQLite has writer locking limitations - only one writer at a time.
+// When running tests in parallel (default with `cargo test`), multiple test
+// processes can attempt to write to SQLite databases simultaneously, causing
+// lock contention and flaky test failures.
+//
+// CURRENT MITIGATION: Each test uses its own temporary directory with an
+// isolated database, which should prevent most concurrency issues. However,
+// certain complex update scenarios may still experience race conditions.
+//
+// COVERAGE: This specific test functionality is covered by other update tests
+// that use simpler operations and avoid the problematic concurrency patterns.
+//
+// FUTURE IMPROVEMENTS:
+// - Consider using `#[serial]` attribute from `serial_test` crate for tests
+//   that are known to have concurrency issues
+// - Add explicit test synchronization for database operations
+// - Use WAL mode for SQLite to improve concurrent access (though this has
+//   limitations in test environments with short-lived temp directories)
 
 #[test]
 fn test_task_delete() {
@@ -538,7 +556,14 @@ fn test_spawn_subtask_workflow() {
         .stdout(predicate::str::contains("\"current_task_id\": 2"));
 }
 
-// Doctor command test removed - functionality tested separately
+// NOTE: Doctor command test removed from this integration test file
+//
+// REASON: The doctor command functionality is now tested in a dedicated
+// test file: `tests/doctor_command_tests.rs`
+//
+// RATIONALE: Separating doctor command tests improves test organization
+// and allows for more focused testing of diagnostic functionality without
+// cluttering the main integration test suite.
 
 #[test]
 fn test_task_get_nonexistent() {
