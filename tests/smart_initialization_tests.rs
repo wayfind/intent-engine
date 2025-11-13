@@ -3,16 +3,9 @@
 /// These tests verify that Intent-Engine correctly infers the project root
 /// directory based on common project markers, and initializes in the correct location.
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
-
-/// Helper to get the intent-engine binary path
-fn get_binary_path() -> PathBuf {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let target_dir = Path::new(manifest_dir).join("target").join("debug");
-    target_dir.join("intent-engine")
-}
 
 /// Helper to create a test directory structure and run a command in a subdirectory
 fn run_in_subdirectory<F>(temp_dir: &TempDir, subdir: &str, setup: F) -> std::process::Output
@@ -28,8 +21,12 @@ where
     let subdir_path = root.join(subdir);
     fs::create_dir_all(&subdir_path).expect("Failed to create subdirectory");
 
+    // Use Cargo-provided environment variable for binary path
+    // This works correctly in all test environments (local, CI, llvm-cov, etc.)
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+
     // Run task add command from subdirectory
-    Command::new(get_binary_path())
+    Command::new(binary_path)
         .current_dir(&subdir_path)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -322,8 +319,10 @@ fn test_existing_intent_engine_found_and_reused() {
     // Create .git marker at root
     fs::create_dir(root.join(".git")).expect("Failed to create .git");
 
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+
     // First command: initialize from root
-    let output1 = Command::new(get_binary_path())
+    let output1 = Command::new(binary_path)
         .current_dir(root)
         .args(["task", "add", "--name", "First task"])
         .output()
@@ -349,7 +348,7 @@ fn test_existing_intent_engine_found_and_reused() {
     let subdir = root.join("src/components");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let output2 = Command::new(get_binary_path())
+    let output2 = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Second task"])
         .output()
@@ -408,7 +407,8 @@ fn test_initialization_with_symlinked_git_directory() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let output = Command::new(get_binary_path())
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let output = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -444,7 +444,8 @@ fn test_initialization_with_git_as_file_submodule() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let output = Command::new(get_binary_path())
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let output = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -476,7 +477,8 @@ fn test_initialization_with_empty_marker_files() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let output = Command::new(get_binary_path())
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let output = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -520,8 +522,10 @@ fn test_initialization_in_nested_monorepo_structure() {
     )
     .expect("Failed to create frontend package.json");
 
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+
     // Test from backend: should find Cargo.toml in backend/ first (nearest marker)
-    let output_backend = Command::new(get_binary_path())
+    let output_backend = Command::new(binary_path)
         .current_dir(root.join("backend/src"))
         .args(["task", "add", "--name", "Backend task"])
         .output()
@@ -540,7 +544,7 @@ fn test_initialization_in_nested_monorepo_structure() {
     );
 
     // Test from frontend: should find package.json in frontend/ first
-    let output_frontend = Command::new(get_binary_path())
+    let output_frontend = Command::new(binary_path)
         .current_dir(root.join("frontend/src"))
         .args(["task", "add", "--name", "Frontend task"])
         .output()
@@ -583,8 +587,10 @@ fn test_initialization_with_multiple_markers_different_levels() {
     )
     .expect("Failed to create Cargo.toml");
 
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+
     // Run from deeply nested directory
-    let output = Command::new(get_binary_path())
+    let output = Command::new(binary_path)
         .current_dir(root.join("rust-project/nested/deep"))
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -627,10 +633,12 @@ fn test_concurrent_initialization_attempts() {
     let barrier = Arc::new(Barrier::new(3));
     let mut handles = vec![];
 
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+
     for i in 0..3 {
         let barrier_clone = Arc::clone(&barrier);
         let subdir_clone = subdir.clone();
-        let binary = get_binary_path();
+        let binary = binary_path.to_string();
 
         let handle = thread::spawn(move || {
             // Wait for all threads to be ready
@@ -690,7 +698,7 @@ fn test_concurrent_initialization_attempts() {
 
     // Verify database is accessible by trying to read from it
     // This ensures the concurrent operations didn't corrupt it
-    let output = Command::new(get_binary_path())
+    let output = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "find", "--status", "todo"])
         .output()
@@ -728,7 +736,8 @@ fn test_initialization_with_symlinked_marker_file() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let output = Command::new(get_binary_path())
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let output = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -762,8 +771,10 @@ fn test_partial_initialization_state_handling() {
     let db_path = intent_dir.join("project.db");
     assert!(!db_path.exists(), "Database should not exist initially");
 
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+
     // Run command - behavior depends on SQLite
-    let output = Command::new(get_binary_path())
+    let output = Command::new(binary_path)
         .current_dir(root)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -805,8 +816,10 @@ fn test_invalid_database_fails_appropriately() {
     fs::write(&db_path, "This is not a valid SQLite database")
         .expect("Failed to create invalid db");
 
+    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+
     // Run command - should fail with database error
-    let output = Command::new(get_binary_path())
+    let output = Command::new(binary_path)
         .current_dir(root)
         .args(["task", "add", "--name", "Test task"])
         .output()
