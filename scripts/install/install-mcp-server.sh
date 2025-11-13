@@ -17,17 +17,16 @@ esac
 echo "Detected OS: ${MACHINE}"
 echo
 
-# Set config directory based on OS
+# Set config file path based on OS
+# NOTE: Claude Code v2.0.37+ uses ~/.claude.json as primary config on Linux/macOS
 if [ "$MACHINE" = "Mac" ] || [ "$MACHINE" = "Linux" ]; then
-    CONFIG_DIR="$HOME/.claude"
+    MCP_CONFIG="$HOME/.claude.json"
 elif [ "$MACHINE" = "Windows" ]; then
-    CONFIG_DIR="$APPDATA/Claude"
+    MCP_CONFIG="$APPDATA/Claude/.claude.json"
 else
     echo "Unsupported OS: ${MACHINE}"
     exit 1
 fi
-
-MCP_CONFIG="$CONFIG_DIR/mcp_servers.json"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
@@ -64,7 +63,7 @@ echo "Project root: $PROJECT_ROOT"
 echo
 
 # Create config directory if it doesn't exist
-mkdir -p "$CONFIG_DIR"
+mkdir -p "$(dirname "$MCP_CONFIG")"
 
 # Create or update MCP config
 if [ -f "$MCP_CONFIG" ]; then
@@ -160,6 +159,11 @@ echo "Configuration:"
 echo "  Command: $MCP_BINARY mcp-server"
 echo "  Project: $PROJECT_ROOT"
 echo "  Config:  $MCP_CONFIG"
+echo
+echo "⚠️  Config file location notes:"
+echo "  - Claude Code v2.0.37+ uses ~/.claude.json (current default)"
+echo "  - If MCP tools don't appear, ensure you're using Claude Code v2.0.37+"
+echo "  - Config path behavior may vary across versions"
 echo
 echo "Next steps:"
 echo "  1. Restart Claude Code to load the MCP server"

@@ -186,9 +186,11 @@ cargo install --path .
 
 编辑 Claude 的 MCP 配置文件:
 
-**Claude Code**:
-- Linux/macOS: `~/.claude/mcp_servers.json`
-- Windows: `%APPDATA%\Claude\mcp_servers.json`
+**Claude Code** (v2.0.37+):
+- Linux/macOS/WSL: `~/.claude.json`
+- Windows: `%APPDATA%\Claude\.claude.json`
+
+> **注意**: 早期版本可能使用 `~/.claude/mcp_servers.json` 或 `~/.config/claude-code/mcp_servers.json`
 
 **Claude Desktop**:
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
