@@ -1046,7 +1046,7 @@ mod tests {
         if info
             .resolution_method
             .as_ref()
-            .map_or(false, |m| m.contains("Upward Directory"))
+            .is_some_and(|m| m.contains("Upward Directory"))
             && info.directories_checked.len() > 1
         {
             // Find all directories with .intent-engine
