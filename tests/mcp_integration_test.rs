@@ -25,7 +25,7 @@ fn mcp_request(request: &Value) -> Value {
     let project_path = temp_dir.path();
 
     // Initialize project by setting current directory (required for proper database initialization)
-    std::env::set_current_dir(project_path).expect("Failed to change to project directory")
+    std::env::set_current_dir(project_path).expect("Failed to change to project directory");
 
     let init_output = Command::new(get_binary_path())
         .args(["task", "add", "--name", "test"])
@@ -244,8 +244,8 @@ fn test_task_search_with_fts5_query() {
 
     // Try to restore original directory (may fail if other tests changed it)
     // Note: Failure is acceptable here as we're cleaning up and other tests may have modified CWD
-    if let Some(dir) = original_dir {
-        let _ = std::env::set_current_dir(&dir); // Intentionally ignoring errors during cleanup
+    if let Some(ref dir) = original_dir {
+        let _ = std::env::set_current_dir(dir); // Intentionally ignoring errors during cleanup
     }
 
     // ✅ FIXED: Now properly checks command status (was silent failure before)

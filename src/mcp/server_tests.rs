@@ -129,8 +129,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_add_success() {
-        let ctx = setup_test_env().await;
+        let _ctx = setup_test_env().await;
 
         let args = json!({
             "name": "Test Task",
@@ -157,8 +158,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_add_with_parent() {
-        let ctx = setup_test_env().await;
+        let _ctx = setup_test_env().await;
 
         // First create parent task
         let parent_args = json!({"name": "Parent Task"});
@@ -179,6 +181,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_start_success() {
         let ctx = setup_test_env().await;
 
@@ -211,8 +214,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_start_nonexistent_task() {
-        let ctx = setup_test_env().await;
+        let _ctx = setup_test_env().await;
 
         let args = json!({
             "task_id": 99999,
@@ -224,6 +228,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_done_success() {
         let ctx = setup_test_env().await;
 
@@ -248,6 +253,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_done_with_task_id() {
         let ctx = setup_test_env().await;
 
@@ -340,6 +346,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_get_success() {
         let ctx = setup_test_env().await;
 
@@ -363,6 +370,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_get_with_events() {
         let ctx = setup_test_env().await;
 
@@ -436,6 +444,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_update_priority() {
         let ctx = setup_test_env().await;
 
@@ -455,6 +464,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_update_invalid_priority() {
         let ctx = setup_test_env().await;
 
@@ -472,6 +482,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_delete_success() {
         let ctx = setup_test_env().await;
 
@@ -623,6 +634,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_event_add_with_task_id() {
         let ctx = setup_test_env().await;
 
@@ -665,6 +677,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_event_list_success() {
         let ctx = setup_test_env().await;
 
@@ -695,6 +708,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_event_list_with_filters() {
         let ctx = setup_test_env().await;
 
@@ -736,8 +750,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_current_task_get_no_current() {
-        let ctx = setup_test_env().await;
+        let _ctx = setup_test_env().await;
 
         let args = json!({});
         let result = handle_current_task_get(args).await;
@@ -768,6 +783,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_report_generate_success() {
         let ctx = setup_test_env().await;
 
@@ -787,8 +803,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_report_generate_with_filters() {
-        let ctx = setup_test_env().await;
+        let _ctx = setup_test_env().await;
 
         let args = json!({
             "status": "todo",
@@ -801,6 +818,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_context_success() {
         let ctx = setup_test_env().await;
 
@@ -846,6 +864,7 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_add_dependency_success() {
         let ctx = setup_test_env().await;
 
@@ -888,8 +907,9 @@ mod handler_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_find_deprecated_warning() {
-        let ctx = setup_test_env().await;
+        let _ctx = setup_test_env().await;
 
         let args = json!({
             "status": "todo"
@@ -1077,6 +1097,7 @@ mod edge_case_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_handle_task_start_default_with_events() {
         let ctx = setup_test_env().await;
 
