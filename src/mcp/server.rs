@@ -679,3 +679,7 @@ async fn handle_report_generate(args: Value) -> Result<Value, String> {
 
     serde_json::to_value(&report).map_err(|e| format!("Serialization error: {}", e))
 }
+
+#[cfg(test)]
+#[path = "server_tests.rs"]
+mod tests;
