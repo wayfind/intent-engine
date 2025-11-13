@@ -51,8 +51,8 @@ sudo cp target/release/intent-engine /usr/local/bin/
 
 Edit Claude Code's MCP settings file:
 
-- **macOS/Linux**: `~/.config/claude-code/mcp_servers.json`
-- **Windows**: `%APPDATA%\claude-code\mcp_servers.json`
+- **macOS/Linux**: `~/.claude/mcp_servers.json`
+- **Windows**: `%APPDATA%\Claude\mcp_servers.json`
 
 Add Intent-Engine server configuration:
 
@@ -177,16 +177,16 @@ intent-engine mcp-server ──────> SQLite
 1. Verify MCP config file path:
    ```bash
    # Linux/macOS
-   cat ~/.config/claude-code/mcp_servers.json
+   cat ~/.claude/mcp_servers.json
 
    # Windows PowerShell
-   Get-Content $env:APPDATA\claude-code\mcp_servers.json
+   Get-Content $env:APPDATA\Claude\mcp_servers.json
    ```
 
 2. Validate JSON syntax:
    ```bash
    # Using jq to validate JSON
-   jq . ~/.config/claude-code/mcp_servers.json
+   jq . ~/.claude/mcp_servers.json
    ```
 
 3. Check binary exists and is executable:
@@ -203,10 +203,10 @@ intent-engine mcp-server ──────> SQLite
 4. Check Claude Code logs:
    ```bash
    # macOS/Linux
-   tail -f ~/.config/claude-code/logs/mcp.log
+   tail -f ~/.claude/logs/mcp.log
 
    # Windows
-   # Check %APPDATA%\claude-code\logs\
+   # Check %APPDATA%\Claude\logs\
    ```
 
 5. **Restart Claude Code** (Required!)
@@ -261,7 +261,7 @@ EOF
 
 ### Remove MCP Server Configuration
 
-1. Edit `~/.config/claude-code/mcp_servers.json`
+1. Edit `~/.claude/mcp_servers.json`
 2. Delete the `"intent-engine"` entry
 3. Restart Claude Code
 

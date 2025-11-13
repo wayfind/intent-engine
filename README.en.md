@@ -186,8 +186,8 @@ cargo install --path .
 Edit Claude's MCP configuration file:
 
 **Claude Code**:
-- Linux/macOS: `~/.config/claude-code/mcp_servers.json`
-- Windows: `%APPDATA%\claude-code\mcp_servers.json`
+- Linux/macOS: `~/.claude/mcp_servers.json`
+- Windows: `%APPDATA%\Claude\mcp_servers.json`
 
 **Claude Desktop**:
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`

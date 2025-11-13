@@ -19,9 +19,9 @@ echo
 
 # Set config directory based on OS
 if [ "$MACHINE" = "Mac" ] || [ "$MACHINE" = "Linux" ]; then
-    CONFIG_DIR="$HOME/.config/claude-code"
+    CONFIG_DIR="$HOME/.claude"
 elif [ "$MACHINE" = "Windows" ]; then
-    CONFIG_DIR="$APPDATA/claude-code"
+    CONFIG_DIR="$APPDATA/Claude"
 else
     echo "Unsupported OS: ${MACHINE}"
     exit 1
