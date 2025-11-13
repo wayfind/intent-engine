@@ -377,4 +377,385 @@ mod tests {
         assert!(markers.contains(&"pom.xml")); // Java (Maven)
         assert!(markers.contains(&"build.gradle")); // Java/Kotlin (Gradle)
     }
+
+    /// Test DirectoryTraversalInfo structure
+    #[test]
+    fn test_directory_traversal_info_creation() {
+        let info = DirectoryTraversalInfo {
+            path: "/test/path".to_string(),
+            has_intent_engine: true,
+            is_selected: false,
+        };
+
+        assert_eq!(info.path, "/test/path");
+        assert!(info.has_intent_engine);
+        assert!(!info.is_selected);
+    }
+
+    /// Test DirectoryTraversalInfo Clone trait
+    #[test]
+    fn test_directory_traversal_info_clone() {
+        let info = DirectoryTraversalInfo {
+            path: "/test/path".to_string(),
+            has_intent_engine: true,
+            is_selected: true,
+        };
+
+        let cloned = info.clone();
+        assert_eq!(cloned.path, info.path);
+        assert_eq!(cloned.has_intent_engine, info.has_intent_engine);
+        assert_eq!(cloned.is_selected, info.is_selected);
+    }
+
+    /// Test DirectoryTraversalInfo Debug trait
+    #[test]
+    fn test_directory_traversal_info_debug() {
+        let info = DirectoryTraversalInfo {
+            path: "/test/path".to_string(),
+            has_intent_engine: false,
+            is_selected: true,
+        };
+
+        let debug_str = format!("{:?}", info);
+        assert!(debug_str.contains("DirectoryTraversalInfo"));
+        assert!(debug_str.contains("/test/path"));
+    }
+
+    /// Test DirectoryTraversalInfo serialization
+    #[test]
+    fn test_directory_traversal_info_serialization() {
+        let info = DirectoryTraversalInfo {
+            path: "/test/path".to_string(),
+            has_intent_engine: true,
+            is_selected: false,
+        };
+
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("path"));
+        assert!(json.contains("has_intent_engine"));
+        assert!(json.contains("is_selected"));
+        assert!(json.contains("/test/path"));
+    }
+
+    /// Test DirectoryTraversalInfo deserialization
+    #[test]
+    fn test_directory_traversal_info_deserialization() {
+        let json = r#"{"path":"/test/path","has_intent_engine":true,"is_selected":false}"#;
+        let info: DirectoryTraversalInfo = serde_json::from_str(json).unwrap();
+
+        assert_eq!(info.path, "/test/path");
+        assert!(info.has_intent_engine);
+        assert!(!info.is_selected);
+    }
+
+    /// Test DatabasePathInfo structure creation
+    #[test]
+    fn test_database_path_info_creation() {
+        let info = DatabasePathInfo {
+            current_working_directory: "/test/cwd".to_string(),
+            env_var_set: false,
+            env_var_path: None,
+            env_var_valid: None,
+            directories_checked: vec![],
+            home_directory: Some("/home/user".to_string()),
+            home_has_intent_engine: false,
+            final_database_path: Some("/test/db.db".to_string()),
+            resolution_method: Some("Test Method".to_string()),
+        };
+
+        assert_eq!(info.current_working_directory, "/test/cwd");
+        assert!(!info.env_var_set);
+        assert_eq!(info.env_var_path, None);
+        assert_eq!(info.home_directory, Some("/home/user".to_string()));
+        assert!(!info.home_has_intent_engine);
+        assert_eq!(info.final_database_path, Some("/test/db.db".to_string()));
+        assert_eq!(info.resolution_method, Some("Test Method".to_string()));
+    }
+
+    /// Test DatabasePathInfo with environment variable set
+    #[test]
+    fn test_database_path_info_with_env_var() {
+        let info = DatabasePathInfo {
+            current_working_directory: "/test/cwd".to_string(),
+            env_var_set: true,
+            env_var_path: Some("/env/path".to_string()),
+            env_var_valid: Some(true),
+            directories_checked: vec![],
+            home_directory: Some("/home/user".to_string()),
+            home_has_intent_engine: false,
+            final_database_path: Some("/env/path/.intent-engine/project.db".to_string()),
+            resolution_method: Some("Environment Variable".to_string()),
+        };
+
+        assert!(info.env_var_set);
+        assert_eq!(info.env_var_path, Some("/env/path".to_string()));
+        assert_eq!(info.env_var_valid, Some(true));
+        assert_eq!(
+            info.resolution_method,
+            Some("Environment Variable".to_string())
+        );
+    }
+
+    /// Test DatabasePathInfo with directories checked
+    #[test]
+    fn test_database_path_info_with_directories() {
+        let dirs = vec![
+            DirectoryTraversalInfo {
+                path: "/test/path1".to_string(),
+                has_intent_engine: false,
+                is_selected: false,
+            },
+            DirectoryTraversalInfo {
+                path: "/test/path2".to_string(),
+                has_intent_engine: true,
+                is_selected: true,
+            },
+        ];
+
+        let info = DatabasePathInfo {
+            current_working_directory: "/test/path1".to_string(),
+            env_var_set: false,
+            env_var_path: None,
+            env_var_valid: None,
+            directories_checked: dirs.clone(),
+            home_directory: Some("/home/user".to_string()),
+            home_has_intent_engine: false,
+            final_database_path: Some("/test/path2/.intent-engine/project.db".to_string()),
+            resolution_method: Some("Upward Directory Traversal".to_string()),
+        };
+
+        assert_eq!(info.directories_checked.len(), 2);
+        assert!(!info.directories_checked[0].has_intent_engine);
+        assert!(info.directories_checked[1].has_intent_engine);
+        assert!(info.directories_checked[1].is_selected);
+    }
+
+    /// Test DatabasePathInfo Debug trait
+    #[test]
+    fn test_database_path_info_debug() {
+        let info = DatabasePathInfo {
+            current_working_directory: "/test/cwd".to_string(),
+            env_var_set: false,
+            env_var_path: None,
+            env_var_valid: None,
+            directories_checked: vec![],
+            home_directory: Some("/home/user".to_string()),
+            home_has_intent_engine: false,
+            final_database_path: Some("/test/db.db".to_string()),
+            resolution_method: Some("Test".to_string()),
+        };
+
+        let debug_str = format!("{:?}", info);
+        assert!(debug_str.contains("DatabasePathInfo"));
+        assert!(debug_str.contains("/test/cwd"));
+    }
+
+    /// Test DatabasePathInfo serialization
+    #[test]
+    fn test_database_path_info_serialization() {
+        let info = DatabasePathInfo {
+            current_working_directory: "/test/cwd".to_string(),
+            env_var_set: true,
+            env_var_path: Some("/env/path".to_string()),
+            env_var_valid: Some(true),
+            directories_checked: vec![],
+            home_directory: Some("/home/user".to_string()),
+            home_has_intent_engine: false,
+            final_database_path: Some("/test/db.db".to_string()),
+            resolution_method: Some("Test Method".to_string()),
+        };
+
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("current_working_directory"));
+        assert!(json.contains("env_var_set"));
+        assert!(json.contains("env_var_path"));
+        assert!(json.contains("final_database_path"));
+        assert!(json.contains("/test/cwd"));
+        assert!(json.contains("/env/path"));
+    }
+
+    /// Test DatabasePathInfo deserialization
+    #[test]
+    fn test_database_path_info_deserialization() {
+        let json = r#"{
+            "current_working_directory": "/test/cwd",
+            "env_var_set": true,
+            "env_var_path": "/env/path",
+            "env_var_valid": true,
+            "directories_checked": [],
+            "home_directory": "/home/user",
+            "home_has_intent_engine": false,
+            "final_database_path": "/test/db.db",
+            "resolution_method": "Test Method"
+        }"#;
+
+        let info: DatabasePathInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.current_working_directory, "/test/cwd");
+        assert!(info.env_var_set);
+        assert_eq!(info.env_var_path, Some("/env/path".to_string()));
+        assert_eq!(info.env_var_valid, Some(true));
+        assert_eq!(info.home_directory, Some("/home/user".to_string()));
+        assert_eq!(info.final_database_path, Some("/test/db.db".to_string()));
+        assert_eq!(info.resolution_method, Some("Test Method".to_string()));
+    }
+
+    /// Test DatabasePathInfo with complete directory traversal data
+    #[test]
+    fn test_database_path_info_complete_structure() {
+        let dirs = vec![
+            DirectoryTraversalInfo {
+                path: "/home/user/project/src".to_string(),
+                has_intent_engine: false,
+                is_selected: false,
+            },
+            DirectoryTraversalInfo {
+                path: "/home/user/project".to_string(),
+                has_intent_engine: true,
+                is_selected: true,
+            },
+            DirectoryTraversalInfo {
+                path: "/home/user".to_string(),
+                has_intent_engine: false,
+                is_selected: false,
+            },
+        ];
+
+        let info = DatabasePathInfo {
+            current_working_directory: "/home/user/project/src".to_string(),
+            env_var_set: false,
+            env_var_path: None,
+            env_var_valid: None,
+            directories_checked: dirs,
+            home_directory: Some("/home/user".to_string()),
+            home_has_intent_engine: false,
+            final_database_path: Some("/home/user/project/.intent-engine/project.db".to_string()),
+            resolution_method: Some("Upward Directory Traversal".to_string()),
+        };
+
+        // Verify the complete structure
+        assert_eq!(info.directories_checked.len(), 3);
+        assert_eq!(info.directories_checked[0].path, "/home/user/project/src");
+        assert_eq!(info.directories_checked[1].path, "/home/user/project");
+        assert_eq!(info.directories_checked[2].path, "/home/user");
+
+        // Only the second directory should be selected
+        assert!(!info.directories_checked[0].is_selected);
+        assert!(info.directories_checked[1].is_selected);
+        assert!(!info.directories_checked[2].is_selected);
+
+        // Only the second directory has intent-engine
+        assert!(!info.directories_checked[0].has_intent_engine);
+        assert!(info.directories_checked[1].has_intent_engine);
+        assert!(!info.directories_checked[2].has_intent_engine);
+    }
+
+    /// Test get_database_path_info returns valid structure
+    #[test]
+    fn test_get_database_path_info_structure() {
+        let info = ProjectContext::get_database_path_info();
+
+        // Verify basic structure is populated
+        assert!(!info.current_working_directory.is_empty());
+
+        // Verify that we got some result for directories checked or home directory
+        let has_data = !info.directories_checked.is_empty()
+            || info.home_directory.is_some()
+            || info.env_var_set;
+
+        assert!(
+            has_data,
+            "get_database_path_info should return some directory information"
+        );
+    }
+
+    /// Test get_database_path_info with actual filesystem
+    #[test]
+    fn test_get_database_path_info_checks_current_dir() {
+        let info = ProjectContext::get_database_path_info();
+
+        // The current working directory should be set
+        assert!(!info.current_working_directory.is_empty());
+
+        // At minimum, it should check the current directory (unless env var is set and valid)
+        if !info.env_var_set || info.env_var_valid != Some(true) {
+            assert!(
+                !info.directories_checked.is_empty(),
+                "Should check at least the current directory"
+            );
+        }
+    }
+
+    /// Test get_database_path_info includes current directory in checked list
+    #[test]
+    fn test_get_database_path_info_includes_cwd() {
+        let info = ProjectContext::get_database_path_info();
+
+        // If env var is not set or invalid, should check directories
+        if !info.env_var_set || info.env_var_valid != Some(true) {
+            assert!(!info.directories_checked.is_empty());
+
+            // First checked directory should start with the CWD or be a parent
+            let cwd = &info.current_working_directory;
+            let first_checked = &info.directories_checked[0].path;
+
+            assert!(
+                cwd.starts_with(first_checked) || first_checked.starts_with(cwd),
+                "First checked directory should be related to CWD"
+            );
+        }
+    }
+
+    /// Test get_database_path_info resolution method is set when database found
+    #[test]
+    fn test_get_database_path_info_resolution_method() {
+        let info = ProjectContext::get_database_path_info();
+
+        // If a database path was found, resolution method should be set
+        if info.final_database_path.is_some() {
+            assert!(
+                info.resolution_method.is_some(),
+                "Resolution method should be set when database path is found"
+            );
+
+            let method = info.resolution_method.unwrap();
+            assert!(
+                method.contains("Environment Variable")
+                    || method.contains("Upward Directory Traversal")
+                    || method.contains("Home Directory"),
+                "Resolution method should be one of the known strategies"
+            );
+        }
+    }
+
+    /// Test get_database_path_info marks selected directory correctly
+    #[test]
+    fn test_get_database_path_info_selected_directory() {
+        let info = ProjectContext::get_database_path_info();
+
+        // If env var not used and directories were checked
+        if (!info.env_var_set || info.env_var_valid != Some(true))
+            && !info.directories_checked.is_empty()
+            && info.final_database_path.is_some()
+        {
+            // Exactly one directory should be marked as selected
+            let selected_count = info
+                .directories_checked
+                .iter()
+                .filter(|d| d.is_selected)
+                .count();
+
+            assert!(
+                selected_count <= 1,
+                "At most one directory should be marked as selected"
+            );
+
+            // If one is selected, it should have intent_engine
+            if let Some(selected) = info.directories_checked.iter().find(|d| d.is_selected) {
+                assert!(
+                    selected.has_intent_engine,
+                    "Selected directory should have .intent-engine"
+                );
+            }
+        }
+    }
 }
