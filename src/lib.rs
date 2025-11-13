@@ -7,6 +7,7 @@ pub mod mcp;
 pub mod priority;
 pub mod project;
 pub mod report;
+pub mod session_restore;
 pub mod tasks;
 pub mod windows_console;
 pub mod workspace;
