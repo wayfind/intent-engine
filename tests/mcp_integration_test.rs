@@ -21,11 +21,11 @@ fn get_binary_path() -> PathBuf {
 /// Each call creates its own temporary directory, so concurrent tests using this helper
 /// should still be isolated (though they may experience occasional flakiness).
 fn mcp_request(request: &Value) -> Value {
-    let temp_dir = tempdir().unwrap();
+    let temp_dir = tempdir().expect("Failed to create temp directory");
     let project_path = temp_dir.path();
 
     // Initialize project by setting current directory (required for proper database initialization)
-    std::env::set_current_dir(project_path).unwrap();
+    std::env::set_current_dir(project_path).expect("Failed to change to project directory")
 
     let init_output = Command::new(get_binary_path())
         .args(["task", "add", "--name", "test"])
@@ -242,6 +242,12 @@ fn test_task_search_with_fts5_query() {
         .output()
         .expect("Failed to execute task add command");
 
+    // Try to restore original directory (may fail if other tests changed it)
+    // Note: Failure is acceptable here as we're cleaning up and other tests may have modified CWD
+    if let Some(dir) = original_dir {
+        let _ = std::env::set_current_dir(&dir); // Intentionally ignoring errors during cleanup
+    }
+
     // ✅ FIXED: Now properly checks command status (was silent failure before)
     assert!(
         init_output.status.success(),
@@ -391,7 +397,7 @@ fn test_task_context_returns_family_tree() {
         .expect("Failed to execute task add for root task");
     assert!(
         output1.status.success(),
-        "Failed to create root task. stderr: {}",
+        "Failed to add root task. stderr: {}",
         String::from_utf8_lossy(&output1.stderr)
     );
 
@@ -402,7 +408,7 @@ fn test_task_context_returns_family_tree() {
         .expect("Failed to execute task add for child task");
     assert!(
         output2.status.success(),
-        "Failed to create child task. stderr: {}",
+        "Failed to add child task. stderr: {}",
         String::from_utf8_lossy(&output2.stderr)
     );
 
@@ -413,7 +419,7 @@ fn test_task_context_returns_family_tree() {
         .expect("Failed to execute task add for grandchild task");
     assert!(
         output3.status.success(),
-        "Failed to create grandchild task. stderr: {}",
+        "Failed to add grandchild task. stderr: {}",
         String::from_utf8_lossy(&output3.stderr)
     );
 
@@ -506,27 +512,27 @@ fn test_task_context_uses_current_task_when_no_id_provided() {
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project and create a task
-    let output1 = Command::new(get_binary_path())
+    let add_output = Command::new(get_binary_path())
         .current_dir(project_path)
         .args(["task", "add", "--name", "Test task"])
         .output()
         .expect("Failed to execute task add");
     assert!(
-        output1.status.success(),
-        "Failed to create test task. stderr: {}",
-        String::from_utf8_lossy(&output1.stderr)
+        add_output.status.success(),
+        "Failed to add task. stderr: {}",
+        String::from_utf8_lossy(&add_output.stderr)
     );
 
     // Start the task (sets it as current)
-    let output2 = Command::new(get_binary_path())
+    let start_output = Command::new(get_binary_path())
         .current_dir(project_path)
         .args(["task", "start", "1"])
         .output()
         .expect("Failed to execute task start");
     assert!(
-        output2.status.success(),
+        start_output.status.success(),
         "Failed to start task. stderr: {}",
-        String::from_utf8_lossy(&output2.stderr)
+        String::from_utf8_lossy(&start_output.stderr)
     );
 
     // Request context without providing task_id (should use current)
@@ -594,16 +600,16 @@ fn test_task_context_error_when_no_current_task_and_no_id() {
     // NOTE: This test uses std::env::set_current_dir() which modifies global state.
     std::env::set_current_dir(project_path).unwrap();
 
-    // Initialize project but don't start any tasks
-    let output = Command::new(get_binary_path())
+    // Initialize project but don't create or start any tasks
+    let add_output = Command::new(get_binary_path())
         .current_dir(project_path)
         .args(["task", "add", "--name", "Test task"])
         .output()
         .expect("Failed to execute task add");
     assert!(
-        output.status.success(),
-        "Failed to create test task. stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
+        add_output.status.success(),
+        "Failed to add task. stderr: {}",
+        String::from_utf8_lossy(&add_output.stderr)
     );
 
     // Request context without task_id and without current task
@@ -657,15 +663,15 @@ fn test_task_context_nonexistent_task() {
     std::env::set_current_dir(project_path).unwrap();
 
     // Initialize project
-    let output = Command::new(get_binary_path())
+    let add_output = Command::new(get_binary_path())
         .current_dir(project_path)
         .args(["task", "add", "--name", "Test task"])
         .output()
         .expect("Failed to execute task add");
     assert!(
-        output.status.success(),
-        "Failed to create test task. stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
+        add_output.status.success(),
+        "Failed to add task. stderr: {}",
+        String::from_utf8_lossy(&add_output.stderr)
     );
 
     // Request context for nonexistent task
