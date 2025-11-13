@@ -399,6 +399,10 @@ impl<'a> SessionRestoreManager<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::EventManager;
+    use crate::tasks::TaskManager;
+    use crate::test_utils::test_helpers::TestContext;
+    use crate::workspace::WorkspaceManager;
 
     #[test]
     fn test_truncate_spec() {
@@ -414,5 +418,310 @@ mod tests {
         let truncated = SessionRestoreManager::truncate_spec(spec, 100);
         assert_eq!(truncated, spec);
         assert!(!truncated.ends_with("..."));
+    }
+
+    #[tokio::test]
+    async fn test_restore_with_focus_minimal() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool();
+
+        // Create a task and set it as current
+        let task_mgr = TaskManager::new(pool);
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+
+        let workspace_mgr = WorkspaceManager::new(pool);
+        workspace_mgr.set_current_task(task.id).await.unwrap();
+
+        // Restore session
+        let restore_mgr = SessionRestoreManager::new(pool);
+        let result = restore_mgr.restore(3).await.unwrap();
+
+        // Verify
+        assert_eq!(result.status, SessionStatus::Success);
+        assert!(result.current_task.is_some());
+        let current_task = result.current_task.unwrap();
+        assert_eq!(current_task.id, task.id);
+        assert_eq!(current_task.name, "Test task");
+    }
+
+    #[tokio::test]
+    async fn test_restore_with_focus_rich_context() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool();
+
+        let task_mgr = TaskManager::new(pool);
+        let event_mgr = EventManager::new(pool);
+        let workspace_mgr = WorkspaceManager::new(pool);
+
+        // Create parent task
+        let parent = task_mgr
+            .add_task("Parent task", Some("Parent spec"), None)
+            .await
+            .unwrap();
+
+        // Create 3 siblings (1 done, 1 doing, 1 todo)
+        let sibling1 = task_mgr
+            .add_task("Sibling 1", None, Some(parent.id))
+            .await
+            .unwrap();
+        task_mgr
+            .update_task(sibling1.id, None, None, None, Some("done"), None, None)
+            .await
+            .unwrap();
+
+        let current = task_mgr
+            .add_task("Current task", Some("Current spec"), Some(parent.id))
+            .await
+            .unwrap();
+        task_mgr
+            .update_task(current.id, None, None, None, Some("doing"), None, None)
+            .await
+            .unwrap();
+        workspace_mgr.set_current_task(current.id).await.unwrap();
+
+        let _sibling3 = task_mgr
+            .add_task("Sibling 3", None, Some(parent.id))
+            .await
+            .unwrap();
+
+        // Add children to current task
+        let _child1 = task_mgr
+            .add_task("Child 1", None, Some(current.id))
+            .await
+            .unwrap();
+        let _child2 = task_mgr
+            .add_task("Child 2", None, Some(current.id))
+            .await
+            .unwrap();
+
+        // Add events
+        event_mgr
+            .add_event(current.id, "decision", "Decision 1")
+            .await
+            .unwrap();
+        event_mgr
+            .add_event(current.id, "blocker", "Blocker 1")
+            .await
+            .unwrap();
+        event_mgr
+            .add_event(current.id, "note", "Note 1")
+            .await
+            .unwrap();
+
+        // Restore session
+        let restore_mgr = SessionRestoreManager::new(pool);
+        let result = restore_mgr.restore(3).await.unwrap();
+
+        // Verify complete context
+        assert_eq!(result.status, SessionStatus::Success);
+
+        let task = result.current_task.unwrap();
+        assert_eq!(task.id, current.id);
+        assert_eq!(task.spec, Some("Current spec".to_string()));
+
+        // Verify parent
+        assert!(result.parent_task.is_some());
+        let parent_info = result.parent_task.unwrap();
+        assert_eq!(parent_info.id, parent.id);
+
+        // Verify siblings
+        assert!(result.siblings.is_some());
+        let siblings = result.siblings.unwrap();
+        assert_eq!(siblings.total, 3);
+        assert_eq!(siblings.done, 1);
+        assert_eq!(siblings.doing, 1);
+        assert_eq!(siblings.todo, 1);
+        assert_eq!(siblings.done_list.len(), 1);
+
+        // Verify children
+        assert!(result.children.is_some());
+        let children = result.children.unwrap();
+        assert_eq!(children.total, 2);
+        assert_eq!(children.todo, 2);
+
+        // Verify events
+        assert!(result.recent_events.is_some());
+        let events = result.recent_events.unwrap();
+        assert_eq!(events.len(), 3);
+
+        // Check event types
+        let event_types: Vec<&str> = events.iter().map(|e| e.event_type.as_str()).collect();
+        assert!(event_types.contains(&"decision"));
+        assert!(event_types.contains(&"blocker"));
+        assert!(event_types.contains(&"note"));
+    }
+
+    #[tokio::test]
+    async fn test_restore_with_spec_preview() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool();
+
+        let task_mgr = TaskManager::new(pool);
+        let workspace_mgr = WorkspaceManager::new(pool);
+
+        // Create task with long spec
+        let long_spec = "a".repeat(200);
+        let task = task_mgr
+            .add_task("Test task", Some(&long_spec), None)
+            .await
+            .unwrap();
+        workspace_mgr.set_current_task(task.id).await.unwrap();
+
+        // Restore
+        let restore_mgr = SessionRestoreManager::new(pool);
+        let result = restore_mgr.restore(3).await.unwrap();
+
+        // Verify spec preview is truncated
+        let current_task = result.current_task.unwrap();
+        assert_eq!(current_task.spec, Some(long_spec));
+        assert!(current_task.spec_preview.is_some());
+        let preview = current_task.spec_preview.unwrap();
+        assert_eq!(preview.len(), 103); // 100 + "..."
+        assert!(preview.ends_with("..."));
+    }
+
+    #[tokio::test]
+    async fn test_restore_no_focus() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool();
+
+        let task_mgr = TaskManager::new(pool);
+
+        // Create some tasks but no current task
+        task_mgr.add_task("Task 1", None, None).await.unwrap();
+        task_mgr.add_task("Task 2", None, None).await.unwrap();
+
+        // Restore
+        let restore_mgr = SessionRestoreManager::new(pool);
+        let result = restore_mgr.restore(3).await.unwrap();
+
+        // Verify no focus status
+        assert_eq!(result.status, SessionStatus::NoFocus);
+        assert!(result.current_task.is_none());
+        assert!(result.stats.is_some());
+
+        let stats = result.stats.unwrap();
+        assert_eq!(stats.total_tasks, 2);
+        assert_eq!(stats.todo, 2);
+    }
+
+    #[tokio::test]
+    async fn test_restore_recent_events_limit() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool();
+
+        let task_mgr = TaskManager::new(pool);
+        let event_mgr = EventManager::new(pool);
+        let workspace_mgr = WorkspaceManager::new(pool);
+
+        // Create task
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        workspace_mgr.set_current_task(task.id).await.unwrap();
+
+        // Add 10 events
+        for i in 0..10 {
+            event_mgr
+                .add_event(task.id, "note", &format!("Event {}", i))
+                .await
+                .unwrap();
+        }
+
+        // Restore with default limit (3)
+        let restore_mgr = SessionRestoreManager::new(pool);
+        let result = restore_mgr.restore(3).await.unwrap();
+
+        // Should only return 3 events (most recent)
+        let events = result.recent_events.unwrap();
+        assert_eq!(events.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_restore_custom_events_limit() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool();
+
+        let task_mgr = TaskManager::new(pool);
+        let event_mgr = EventManager::new(pool);
+        let workspace_mgr = WorkspaceManager::new(pool);
+
+        // Create task
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        workspace_mgr.set_current_task(task.id).await.unwrap();
+
+        // Add 10 events
+        for i in 0..10 {
+            event_mgr
+                .add_event(task.id, "note", &format!("Event {}", i))
+                .await
+                .unwrap();
+        }
+
+        // Restore with custom limit (5)
+        let restore_mgr = SessionRestoreManager::new(pool);
+        let result = restore_mgr.restore(5).await.unwrap();
+
+        // Should return 5 events
+        let events = result.recent_events.unwrap();
+        assert_eq!(events.len(), 5);
+    }
+
+    #[test]
+    fn test_suggest_commands_with_children() {
+        let current_task = CurrentTaskInfo {
+            id: 1,
+            name: "Test".to_string(),
+            status: "doing".to_string(),
+            spec: None,
+            spec_preview: None,
+            created_at: None,
+            first_doing_at: None,
+        };
+
+        let children = Some(ChildrenInfo {
+            total: 2,
+            todo: 1,
+            list: vec![],
+        });
+
+        let commands = SessionRestoreManager::suggest_commands(&current_task, children.as_ref());
+
+        assert!(!commands.is_empty());
+        assert!(commands.iter().any(|c| c.contains("blocker")));
+    }
+
+    #[test]
+    fn test_error_result_workspace_not_found() {
+        let result = SessionRestoreManager::error_result(
+            Some("/test/path".to_string()),
+            ErrorType::WorkspaceNotFound,
+            "Test message",
+            "Test recovery",
+        );
+
+        assert_eq!(result.status, SessionStatus::Error);
+        assert_eq!(result.error_type, Some(ErrorType::WorkspaceNotFound));
+        assert_eq!(result.message, Some("Test message".to_string()));
+        assert_eq!(
+            result.recovery_suggestion,
+            Some("Test recovery".to_string())
+        );
+        assert!(result.suggested_commands.is_some());
+
+        let commands = result.suggested_commands.unwrap();
+        assert!(commands.iter().any(|c| c.contains("init")));
+    }
+
+    #[test]
+    fn test_build_siblings_info_empty() {
+        let siblings: Vec<crate::db::models::Task> = vec![];
+        let result = SessionRestoreManager::build_siblings_info(&siblings);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_build_children_info_empty() {
+        let children: Vec<crate::db::models::Task> = vec![];
+        let result = SessionRestoreManager::build_children_info(&children);
+        assert!(result.is_none());
     }
 }
