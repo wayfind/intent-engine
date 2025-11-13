@@ -51,8 +51,12 @@ sudo cp target/release/intent-engine /usr/local/bin/
 
 编辑 Claude Code 的 MCP 配置文件:
 
-- **macOS/Linux**: `~/.claude/mcp_servers.json`
-- **Windows**: `%APPDATA%\Claude\mcp_servers.json`
+- **macOS/Linux/WSL**: `~/.claude.json`
+- **Windows**: `%APPDATA%\Claude\.claude.json`
+
+> **⚠️ 版本说明**: Claude Code v2.0.37+ 在 Linux/macOS/WSL 上使用 `~/.claude.json` 作为主配置文件。
+> 早期版本可能使用不同的路径，如 `~/.claude/mcp_servers.json` 或 `~/.config/claude-code/mcp_servers.json`。
+> 如果安装后 MCP 工具未显示，请验证您的 Claude Code 版本和配置文件位置。
 
 添加 Intent-Engine 服务器配置:
 
@@ -176,17 +180,21 @@ intent-engine mcp-server ─────> SQLite
 **检查清单**:
 1. 确认 MCP 配置文件路径正确:
    ```bash
-   # Linux/macOS
-   cat ~/.claude/mcp_servers.json
+   # Linux/macOS/WSL (Claude Code v2.0.37+)
+   cat ~/.claude.json
 
-   # Windows PowerShell
-   Get-Content $env:APPDATA\Claude\mcp_servers.json
+   # Windows PowerShell (Claude Code v2.0.37+)
+   Get-Content $env:APPDATA\Claude\.claude.json
+
+   # 注意: 早期版本可能使用不同的路径:
+   # - ~/.claude/mcp_servers.json
+   # - ~/.config/claude-code/mcp_servers.json
    ```
 
 2. 验证 JSON 语法有效:
    ```bash
    # 使用 jq 验证 JSON
-   jq . ~/.claude/mcp_servers.json
+   jq . ~/.claude.json
    ```
 
 3. 检查二进制文件存在且可执行:
@@ -261,8 +269,8 @@ EOF
 
 ### 移除 MCP 服务器配置
 
-1. 编辑 `~/.claude/mcp_servers.json`
-2. 删除 `"intent-engine"` 配置项
+1. 编辑 `~/.claude.json` (或您版本对应的配置文件)
+2. 从 `mcpServers` 部分删除 `"intent-engine"` 配置项
 3. 重启 Claude Code
 
 ### 卸载二进制文件
