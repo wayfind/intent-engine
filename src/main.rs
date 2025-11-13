@@ -714,7 +714,7 @@ async fn handle_setup_mcp(
     let proj_dir = if let Some(dir) = project_dir {
         PathBuf::from(dir)
     } else {
-        env::current_dir().map_err(|e| IntentError::IoError(e))?
+        env::current_dir().map_err(IntentError::IoError)?
     };
 
     println!("Project dir: {}", proj_dir.display());
@@ -730,7 +730,7 @@ async fn handle_setup_mcp(
 
     // Read or create config
     let mut config: Value = if config_exists {
-        let content = fs::read_to_string(&config_file_path).map_err(|e| IntentError::IoError(e))?;
+        let content = fs::read_to_string(&config_file_path).map_err(IntentError::IoError)?;
         serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
     } else {
         json!({})
@@ -749,12 +749,12 @@ async fn handle_setup_mcp(
     if config_exists && !dry_run {
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
         let backup_path = config_file_path.with_extension(format!("json.backup.{}", timestamp));
-        fs::copy(&config_file_path, &backup_path).map_err(|e| IntentError::IoError(e))?;
+        fs::copy(&config_file_path, &backup_path).map_err(IntentError::IoError)?;
         println!("✓ Backup created: {}", backup_path.display());
     }
 
     // Add intent-engine configuration
-    if !config.get("mcpServers").is_some() {
+    if config.get("mcpServers").is_none() {
         config["mcpServers"] = json!({});
     }
 
@@ -773,12 +773,12 @@ async fn handle_setup_mcp(
     } else {
         // Ensure parent directory exists
         if let Some(parent) = config_file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| IntentError::IoError(e))?;
+            fs::create_dir_all(parent).map_err(IntentError::IoError)?;
         }
 
         // Write config file
         fs::write(&config_file_path, serde_json::to_string_pretty(&config)?)
-            .map_err(|e| IntentError::IoError(e))?;
+            .map_err(IntentError::IoError)?;
 
         println!("✓ Configuration updated");
     }

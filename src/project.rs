@@ -119,16 +119,14 @@ impl ProjectContext {
         }
 
         // Check strategy 3: Home directory
-        let home_path = std::env::var("HOME").ok().map(PathBuf::from).or_else(|| {
-            #[cfg(target_os = "windows")]
-            {
-                std::env::var("USERPROFILE").ok().map(PathBuf::from)
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                None
-            }
-        });
+        #[cfg(not(target_os = "windows"))]
+        let home_path = std::env::var("HOME").ok().map(PathBuf::from);
+
+        #[cfg(target_os = "windows")]
+        let home_path = std::env::var("HOME")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from));
 
         if let Some(home) = home_path {
             info.home_directory = Some(home.display().to_string());
