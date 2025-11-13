@@ -219,132 +219,16 @@ impl ReminderTemplate {
 
 **彻底解决长上下文问题的方法：不要有长上下文。**
 
-每个 Intent-Engine 任务启动一个专属的 Sub-Agent：
-- **任务启动** → 创建新 Agent，注入任务上下文
-- **任务进行** → Agent 在短上下文中工作，不会衰减
-- **任务完成** → Agent 结束，状态持久化到 Intent-Engine
-- **下一个任务** → 启动新 Agent，全新上下文
+每个 Intent-Engine 任务启动一个专属的 Sub-Agent，每个 Agent 只工作 10-30 轮，从根本上避免记忆衰减问题。
 
-```
-┌─────────────────────────────────────────────────┐
-│  Main Agent (项目级协调者)                       │
-│  - 管理任务生命周期                               │
-│  - 创建和调度 Sub-Agent                          │
-│  - 不执行具体实现                                │
-└──────────────┬──────────────────────────────────┘
-               │
-               ├──→ [Sub-Agent #1: Task 42]
-               │    上下文: Task 42 的 spec + events
-               │    目标: 单一任务完成
-               │    生命周期: 10-20 轮对话
-               │
-               ├──→ [Sub-Agent #2: Task 43]
-               │    上下文: Task 43 的 spec + events
-               │    目标: 单一任务完成
-               │    生命周期: 15-30 轮对话
-               │
-               └──→ [Sub-Agent #3: Task 44]
-                    ...
-```
+**详细设计**: 参见 [`sub-agent-architecture.md`](./sub-agent-architecture.md)
 
-#### 2.9 工作流示例
+**核心特性**:
+- ✅ Main Agent 采用**混合模式**：简单任务自己处理，复杂任务分派 Sub-Agent
+- ✅ 每个 Sub-Agent 专注单一任务，生命周期 10-30 轮
+- ✅ 状态持久化在 Intent-Engine 中，支持跨会话
+- ✅ 对 Intent-Engine 本身零侵入
 
-**场景: 实现用户认证功能**
-
-```bash
-# 用户: "帮我实现用户认证"
-Main Agent:
-  → ie task add "Implement authentication" --spec "..."
-  → ie task spawn-subtask "JWT token generation"
-  → ie task spawn-subtask "Password hashing"
-  → ie task spawn-subtask "Session management"
-
-  → Launch Sub-Agent for Task #43 (JWT token generation)
-     Context:
-       - Task spec: "Implement JWT..."
-       - Parent context: "Part of auth system"
-       - Events: []
-
-Sub-Agent #43 (专注于JWT):
-  → 调研 JWT 库
-  → 设计 token 结构
-  → 实现生成逻辑
-  → 写测试
-  → ie event add --type decision "Chose jsonwebtoken crate because..."
-  → ie task done
-
-Sub-Agent #43 结束 ✓
-
-Main Agent:
-  → Receive completion signal
-  → ie task pick-next
-  → Launch Sub-Agent for Task #44 (Password hashing)
-
-Sub-Agent #44 (专注于密码哈希):
-  → 调研 hashing 算法
-  → ...
-```
-
-#### 2.10 技术要求
-
-需要宿主环境支持以下能力：
-
-1. **Agent 生命周期管理**
-   - 创建新 Agent 实例
-   - 为 Agent 注入初始上下文
-   - 监控 Agent 状态
-   - 回收已完成的 Agent
-
-2. **Agent 间通信**
-   - Main Agent 接收 Sub-Agent 的完成信号
-   - Sub-Agent 可以查询 Intent-Engine 状态
-   - 结果传递机制
-
-3. **上下文注入**
-   - 启动 Sub-Agent 时，注入任务的 spec 和 events
-   - 示例:
-     ```
-     Create Sub-Agent with context:
-     ---
-     You are working on Task #43: "JWT token generation"
-
-     Parent mission: "Implement authentication"
-
-     Specification:
-     {task.spec}
-
-     Decision history:
-     {events_summary}
-
-     Your goal: Complete this single task. When done, call `ie task done`.
-     ---
-     ```
-
-#### 2.11 优势
-
-- ✅ **彻底解决长上下文衰减**: 每个 Agent 只工作 10-30 轮
-- ✅ **专注力最强**: Agent 的整个上下文都是关于单一任务
-- ✅ **天然隔离**: 任务间不会互相干扰
-- ✅ **可并行**: 理论上可以同时运行多个 Sub-Agent
-- ✅ **对 Intent-Engine 零侵入**: 只是改变了使用方式
-
-#### 2.12 挑战
-
-- ⚠️ **宿主环境支持**: 需要 Claude Code 或类似平台提供 Agent 管理 API
-- ⚠️ **复杂度**: Main Agent 需要承担调度和协调职责
-- ⚠️ **用户体验**: 多个 Agent 切换可能让用户感到困惑
-- ⚠️ **成本**: 每个 Sub-Agent 都是独立的 API 调用
-
-#### 2.13 可行性探索
-
-**近期行动**:
-1. 调研 Claude Code 是否支持 Agent-in-Agent 模式
-2. 调研 MCP 是否有 Sub-Agent 管理协议
-3. 原型验证: 手动模拟 Sub-Agent 模式，测试效果
-
-**如果宿主环境不支持**:
-- 退回到 Phase 2 方案
-- 或考虑 Intent-Engine 自己提供一个 `ie agent` 命令来包装这个模式
 
 ---
 
