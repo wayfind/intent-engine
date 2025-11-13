@@ -13,7 +13,12 @@ pub mod test_helpers {
     impl TestContext {
         pub async fn new() -> Self {
             let temp_dir = TempDir::new().unwrap();
-            let db_path = temp_dir.path().join("test.db");
+
+            // Create proper project structure
+            let intent_dir = temp_dir.path().join(".intent-engine");
+            std::fs::create_dir_all(&intent_dir).unwrap();
+
+            let db_path = intent_dir.join("project.db");
 
             let pool = create_pool(&db_path).await.unwrap();
             run_migrations(&pool).await.unwrap();
@@ -26,6 +31,10 @@ pub mod test_helpers {
 
         pub fn pool(&self) -> &SqlitePool {
             &self.pool
+        }
+
+        pub fn project_root(&self) -> &std::path::Path {
+            self._temp_dir.path()
         }
     }
 
