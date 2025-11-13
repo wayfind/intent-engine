@@ -109,16 +109,10 @@ fn test_spec_documents_cli_commands() {
 #[test]
 fn test_cli_help_matches_spec() {
     // Test that `task add --help` contains key parameters
-    let output = Command::new("cargo")
-        .args([
-            "run",
-            "--bin",
-            "intent-engine",
-            "--",
-            "task",
-            "add",
-            "--help",
-        ])
+    // Use pre-compiled binary instead of cargo run for speed
+    let bin_path = env!("CARGO_BIN_EXE_intent-engine");
+    let output = Command::new(bin_path)
+        .args(["task", "add", "--help"])
         .output()
         .expect("Failed to run task add --help");
 
