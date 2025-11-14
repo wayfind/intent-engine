@@ -243,60 +243,89 @@ impl<'a> TaskManager<'a> {
             self.check_circular_dependency(id, pid).await?;
         }
 
-        // Build dynamic update query
-        let mut query = String::from("UPDATE tasks SET ");
-        let mut updates = Vec::new();
+        // Build dynamic update query using QueryBuilder for SQL injection safety
+        let mut builder: sqlx::QueryBuilder<sqlx::Sqlite> =
+            sqlx::QueryBuilder::new("UPDATE tasks SET ");
+        let mut has_updates = false;
 
         if let Some(n) = name {
-            updates.push(format!("name = '{}'", n.replace('\'', "''")));
+            if has_updates {
+                builder.push(", ");
+            }
+            builder.push("name = ").push_bind(n);
+            has_updates = true;
         }
 
         if let Some(s) = spec {
-            updates.push(format!("spec = '{}'", s.replace('\'', "''")));
+            if has_updates {
+                builder.push(", ");
+            }
+            builder.push("spec = ").push_bind(s);
+            has_updates = true;
         }
 
         if let Some(pid) = parent_id {
-            match pid {
-                Some(p) => updates.push(format!("parent_id = {}", p)),
-                None => updates.push("parent_id = NULL".to_string()),
+            if has_updates {
+                builder.push(", ");
             }
+            match pid {
+                Some(p) => {
+                    builder.push("parent_id = ").push_bind(p);
+                },
+                None => {
+                    builder.push("parent_id = NULL");
+                },
+            }
+            has_updates = true;
         }
 
         if let Some(c) = complexity {
-            updates.push(format!("complexity = {}", c));
+            if has_updates {
+                builder.push(", ");
+            }
+            builder.push("complexity = ").push_bind(c);
+            has_updates = true;
         }
 
         if let Some(p) = priority {
-            updates.push(format!("priority = {}", p));
+            if has_updates {
+                builder.push(", ");
+            }
+            builder.push("priority = ").push_bind(p);
+            has_updates = true;
         }
 
         if let Some(s) = status {
-            updates.push(format!("status = '{}'", s));
+            if has_updates {
+                builder.push(", ");
+            }
+            builder.push("status = ").push_bind(s);
+            has_updates = true;
 
             // Update timestamp fields based on status
             let now = Utc::now();
+            let timestamp = now.to_rfc3339();
             match s {
                 "todo" if task.first_todo_at.is_none() => {
-                    updates.push(format!("first_todo_at = '{}'", now.to_rfc3339()));
+                    builder.push(", first_todo_at = ").push_bind(timestamp);
                 },
                 "doing" if task.first_doing_at.is_none() => {
-                    updates.push(format!("first_doing_at = '{}'", now.to_rfc3339()));
+                    builder.push(", first_doing_at = ").push_bind(timestamp);
                 },
                 "done" if task.first_done_at.is_none() => {
-                    updates.push(format!("first_done_at = '{}'", now.to_rfc3339()));
+                    builder.push(", first_done_at = ").push_bind(timestamp);
                 },
                 _ => {},
             }
         }
 
-        if updates.is_empty() {
+        if !has_updates {
             return Ok(task);
         }
 
-        query.push_str(&updates.join(", "));
-        query.push_str(&format!(" WHERE id = {}", id));
+        builder.push(" WHERE id = ").push_bind(id);
 
-        sqlx::query(&query).execute(self.pool).await?;
+        builder.build().execute(self.pool).await?;
 
         self.get_task(id).await
     }
@@ -352,6 +381,31 @@ impl<'a> TaskManager<'a> {
     /// Search tasks using full-text search (FTS5)
     /// Returns tasks with match snippets showing highlighted keywords
     pub async fn search_tasks(&self, query: &str) -> Result<Vec<TaskSearchResult>> {
+        // Handle empty or whitespace-only queries
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Handle queries with no searchable content (only special characters)
+        // Check if query has at least one alphanumeric or CJK character
+        let has_searchable = query
+            .chars()
+            .any(|c| c.is_alphanumeric() || crate::search::is_cjk_char(c));
+        if !has_searchable {
+            return Ok(Vec::new());
+        }
+
+        // For short CJK queries (1-2 characters), trigram tokenizer won't work
+        // (requires 3+ chars), so we use LIKE fallback
+        if crate::search::needs_like_fallback(query) {
+            self.search_tasks_like(query).await
+        } else {
+            self.search_tasks_fts5(query).await
+        }
+    }
+
+    /// Search tasks using FTS5 trigram tokenizer
+    async fn search_tasks_fts5(&self, query: &str) -> Result<Vec<TaskSearchResult>> {
         // Escape special FTS5 characters in the query
         let escaped_query = self.escape_fts_query(query);
 
@@ -400,6 +454,73 @@ impl<'a> TaskManager<'a> {
                 first_done_at: row.get("first_done_at"),
             };
             let match_snippet: String = row.get("match_snippet");
+
+            search_results.push(TaskSearchResult {
+                task,
+                match_snippet,
+            });
+        }
+
+        Ok(search_results)
+    }
+
+    /// Search tasks using LIKE for short CJK queries
+    async fn search_tasks_like(&self, query: &str) -> Result<Vec<TaskSearchResult>> {
+        let pattern = format!("%{}%", query);
+
+        let results = sqlx::query(
+            r#"
+            SELECT
+                id,
+                parent_id,
+                name,
+                spec,
+                status,
+                complexity,
+                priority,
+                first_todo_at,
+                first_doing_at,
+                first_done_at
+            FROM tasks
+            WHERE name LIKE ? OR spec LIKE ?
+            ORDER BY name
+            "#,
+        )
+        .bind(&pattern)
+        .bind(&pattern)
+        .fetch_all(self.pool)
+        .await?;
+
+        let mut search_results = Vec::new();
+        for row in results {
+            let task = Task {
+                id: row.get("id"),
+                parent_id: row.get("parent_id"),
+                name: row.get("name"),
+                spec: row.get("spec"),
+                status: row.get("status"),
+                complexity: row.get("complexity"),
+                priority: row.get("priority"),
+                first_todo_at: row.get("first_todo_at"),
+                first_doing_at: row.get("first_doing_at"),
+                first_done_at: row.get("first_done_at"),
+            };
+
+            // Create a simple snippet showing the matched part
+            let name: String = row.get("name");
+            let spec: Option<String> = row.get("spec");
+
+            let match_snippet = if name.contains(query) {
+                format!("**{}**", name)
+            } else if let Some(ref s) = spec {
+                if s.contains(query) {
+                    format!("**{}**", s)
+                } else {
+                    name.clone()
+                }
+            } else {
+                name
+            };
 
             search_results.push(TaskSearchResult {
                 task,

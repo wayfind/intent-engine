@@ -47,14 +47,20 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // Create FTS5 virtual table for tasks
+    // Create FTS5 virtual table for tasks with trigram tokenizer for better CJK support
+    // For existing databases, we need to drop and recreate if tokenizer changed
+    let _ = sqlx::query("DROP TABLE IF EXISTS tasks_fts")
+        .execute(pool)
+        .await; // Ignore error if table doesn't exist
+
     sqlx::query(
         r#"
-        CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
+        CREATE VIRTUAL TABLE tasks_fts USING fts5(
             name,
             spec,
             content=tasks,
-            content_rowid=id
+            content_rowid=id,
+            tokenize='trigram'
         )
         "#,
     )
@@ -82,11 +88,29 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Recreate trigger with correct FTS5 syntax (drop and create for migration from buggy version)
+    // Note: We always drop first because SQLite doesn't support CREATE OR REPLACE TRIGGER,
+    // and we need to update existing databases that have the buggy trigger.
+    let _ = sqlx::query("DROP TRIGGER IF EXISTS tasks_au")
+        .execute(pool)
+        .await; // Ignore error if trigger doesn't exist
+
     sqlx::query(
         r#"
         CREATE TRIGGER IF NOT EXISTS tasks_au AFTER UPDATE ON tasks BEGIN
-            UPDATE tasks_fts SET name = new.name, spec = new.spec WHERE rowid = old.id;
+            INSERT INTO tasks_fts(tasks_fts, rowid, name, spec) VALUES('delete', old.id, old.name, old.spec);
+            INSERT INTO tasks_fts(rowid, name, spec) VALUES (new.id, new.name, new.spec);
         END
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Rebuild FTS index with existing data from tasks table
+    sqlx::query(
+        r#"
+        INSERT INTO tasks_fts(rowid, name, spec)
+        SELECT id, name, spec FROM tasks
         "#,
     )
     .execute(pool)
@@ -151,10 +175,16 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Recreate trigger with correct FTS5 syntax (drop and create for migration from buggy version)
+    let _ = sqlx::query("DROP TRIGGER IF EXISTS events_au")
+        .execute(pool)
+        .await; // Ignore error if trigger doesn't exist
+
     sqlx::query(
         r#"
         CREATE TRIGGER IF NOT EXISTS events_au AFTER UPDATE ON events BEGIN
-            UPDATE events_fts SET discussion_data = new.discussion_data WHERE rowid = old.id;
+            INSERT INTO events_fts(events_fts, rowid, discussion_data) VALUES('delete', old.id, old.discussion_data);
+            INSERT INTO events_fts(rowid, discussion_data) VALUES (new.id, new.discussion_data);
         END
         "#,
     )

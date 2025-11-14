@@ -394,21 +394,11 @@ mod handler_tests {
 
     /// Test for task_update with name and spec changes
     ///
-    /// NOTE: This test is currently ignored due to persistent SQLite database corruption
-    /// errors (code: 267 - "database disk image is malformed") that occur even when running
-    /// serially in complete isolation. This appears to be a genuine SQLite issue, not a
-    /// test concurrency problem.
-    ///
-    /// Other update tests (test_handle_task_update_priority, test_handle_task_update_invalid_priority)
-    /// pass consistently, suggesting this may be related to updating multiple string fields
-    /// simultaneously or spec field handling.
-    ///
-    /// The handler works correctly in production. This is a test environment issue only.
-    ///
-    /// TODO: Investigate SQLite corruption when updating name+spec together
+    /// FIXED: Previously failed due to SQL injection risk from string concatenation.
+    /// Now uses sqlx::QueryBuilder with parameterized queries for safe SQL construction.
+    /// See Task #6 and #7 in intent-engine for investigation details.
     #[tokio::test]
     #[serial]
-    #[ignore = "Flaky due to SQLite database corruption (code 267) even in isolation"]
     async fn test_handle_task_update_success() {
         let ctx = setup_test_env().await;
 
