@@ -208,6 +208,8 @@ impl ClaudeCodeSetup {
         if !opts.dry_run {
             fs::create_dir_all(&hooks_dir).map_err(IntentError::IoError)?;
             println!("✓ Created {}", hooks_dir.display());
+        } else {
+            println!("Would create: {}", hooks_dir.display());
         }
 
         // Install hook script
@@ -217,6 +219,8 @@ impl ClaudeCodeSetup {
             set_executable(&hook_script)?;
             files_modified.push(hook_script.clone());
             println!("✓ Installed {}", hook_script.display());
+        } else {
+            println!("Would write: {}", hook_script.display());
         }
 
         // Create settings.json with absolute path
@@ -238,6 +242,8 @@ impl ClaudeCodeSetup {
             write_json_config(&settings_file, &settings)?;
             files_modified.push(settings_file);
             println!("✓ Created settings.json");
+        } else {
+            println!("Would write: {}", settings_file.display());
         }
 
         // MCP config still goes to user-level

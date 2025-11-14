@@ -150,7 +150,11 @@ fn test_setup_claude_code_dry_run() {
 
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
-        .arg("setup-claude-code")
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
         .arg("--dry-run");
 
     cmd.assert()
@@ -163,11 +167,16 @@ fn test_setup_claude_code_creates_hook() {
     let temp_dir = setup_test_env();
 
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
-    cmd.current_dir(temp_dir.path()).arg("setup-claude-code");
+    cmd.current_dir(temp_dir.path())
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project");
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Setup complete"));
+        .stdout(predicate::str::contains("setup complete!"));
 
     // Verify hook was created
     let hook_path = temp_dir.path().join(".claude/hooks/session-start.sh");
@@ -200,7 +209,10 @@ fn test_setup_claude_code_refuses_to_overwrite_without_force() {
 
     // Try to setup without --force
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
-    cmd.current_dir(temp_dir.path()).arg("setup-claude-code");
+    cmd.current_dir(temp_dir.path())
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code");
 
     let output = cmd.output().unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -229,7 +241,11 @@ fn test_setup_claude_code_with_force_overwrites() {
     // Setup with --force
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
-        .arg("setup-claude-code")
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
         .arg("--force");
 
     cmd.assert().success();
@@ -240,13 +256,18 @@ fn test_setup_claude_code_with_force_overwrites() {
 }
 
 #[test]
+#[ignore] // Deprecated: --claude-dir removed in favor of unified setup
 fn test_setup_claude_code_with_custom_claude_dir() {
     let temp_dir = setup_test_env();
     let custom_dir = temp_dir.path().join("custom-claude");
 
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
-        .arg("setup-claude-code")
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
         .arg("--claude-dir")
         .arg(&custom_dir);
 
@@ -267,14 +288,18 @@ fn test_setup_mcp_dry_run() {
 
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
-        .arg("setup-mcp")
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
         .arg("--dry-run")
         .arg("--config-path")
         .arg(&config_file);
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("[DRY RUN]"));
+    cmd.assert().success().stdout(
+        predicate::str::contains("Would create:").or(predicate::str::contains("Would write:")),
+    );
 }
 
 #[test]
@@ -284,7 +309,11 @@ fn test_setup_mcp_creates_config() {
 
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
-        .arg("setup-mcp")
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
         .arg("--config-path")
         .arg(&config_file);
 
@@ -324,7 +353,11 @@ fn test_setup_mcp_refuses_to_overwrite_without_force() {
     // Try to setup without --force
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
-        .arg("setup-mcp")
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
         .arg("--config-path")
         .arg(&config_file);
 
@@ -355,7 +388,11 @@ fn test_setup_mcp_with_force_overwrites() {
     // Setup with --force
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
-        .arg("setup-mcp")
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
         .arg("--config-path")
         .arg(&config_file)
         .arg("--force");
@@ -387,14 +424,18 @@ fn test_setup_mcp_creates_backup() {
     // Setup with --force to trigger backup
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
-        .arg("setup-mcp")
+        .arg("setup")
+        .arg("--target")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
         .arg("--config-path")
         .arg(&config_file)
         .arg("--force");
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Backup created:"));
+        .stdout(predicate::str::contains("Backed up MCP config to"));
 
     // Verify backup exists
     let backup_files: Vec<_> = fs::read_dir(temp_dir.path())
@@ -414,29 +455,42 @@ fn test_setup_mcp_creates_backup() {
 fn test_setup_mcp_with_different_targets() {
     let temp_dir = setup_test_env();
 
-    // Test claude-code target
-    let config_claude_code = temp_dir.path().join("claude-code.json");
+    // Test setup with custom config path
+    let config_file1 = temp_dir.path().join("config1.json");
     Command::new(cargo::cargo_bin!("ie"))
         .current_dir(temp_dir.path())
-        .arg("setup-mcp")
-        .arg("--config-path")
-        .arg(&config_claude_code)
+        .arg("setup")
         .arg("--target")
         .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
+        .arg("--config-path")
+        .arg(&config_file1)
         .assert()
         .success();
 
-    // Test claude-desktop target
-    let config_claude_desktop = temp_dir.path().join("claude-desktop.json");
+    // Verify config was created
+    assert!(config_file1.exists(), "Config file should be created");
+
+    // Test setup with different config path
+    let config_file2 = temp_dir.path().join("config2.json");
     Command::new(cargo::cargo_bin!("ie"))
         .current_dir(temp_dir.path())
-        .arg("setup-mcp")
-        .arg("--config-path")
-        .arg(&config_claude_desktop)
+        .arg("setup")
         .arg("--target")
-        .arg("claude-desktop")
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project")
+        .arg("--config-path")
+        .arg(&config_file2)
         .assert()
         .success();
+
+    // Verify second config was created
+    assert!(
+        config_file2.exists(),
+        "Second config file should be created"
+    );
 }
 
 // ============================================================================
