@@ -24,7 +24,7 @@ jobs:
     with:
       os: ubuntu-latest
       target: x86_64-unknown-linux-gnu
-      artifact-name: intent-engine
+      artifact-name: ie
       asset-name: intent-engine-linux-x86_64
 
   build-linux-arm64:
@@ -32,7 +32,7 @@ jobs:
     with:
       os: ubuntu-latest
       target: aarch64-unknown-linux-gnu
-      artifact-name: intent-engine
+      artifact-name: ie
       asset-name: intent-engine-linux-aarch64
 
   build-macos-x64:
@@ -40,7 +40,7 @@ jobs:
     with:
       os: macos-latest
       target: x86_64-apple-darwin
-      artifact-name: intent-engine
+      artifact-name: ie
       asset-name: intent-engine-macos-x86_64
 
   build-macos-arm64:
@@ -48,7 +48,7 @@ jobs:
     with:
       os: macos-latest
       target: aarch64-apple-darwin
-      artifact-name: intent-engine
+      artifact-name: ie
       asset-name: intent-engine-macos-aarch64
 
   build-windows-x64:
@@ -56,7 +56,7 @@ jobs:
     with:
       os: windows-latest
       target: x86_64-pc-windows-msvc
-      artifact-name: intent-engine.exe
+      artifact-name: ie.exe
       asset-name: intent-engine-windows-x86_64.exe
 
   # Create GitHub Release
