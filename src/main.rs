@@ -799,17 +799,18 @@ async fn handle_doctor_command() -> Result<()> {
 
     // Check MCP configuration
     let mcp_check = check_mcp_configuration();
-    if !mcp_check["passed"].as_bool().unwrap_or(false) {
-        all_passed = false;
-    }
+    // MCP is optional, so don't fail overall status
+    // if !mcp_check["passed"].as_bool().unwrap_or(false) {
+    //     all_passed = false;
+    // }
     checks.push(mcp_check);
 
     // Check Hooks configuration
     let hooks_check = check_hooks_configuration();
-    if !hooks_check["passed"].as_bool().unwrap_or(false) {
-        // Hooks are optional, so don't fail overall status
-        // all_passed = false;
-    }
+    // Hooks are optional, so don't fail overall status
+    // if !hooks_check["passed"].as_bool().unwrap_or(false) {
+    //     all_passed = false;
+    // }
     checks.push(hooks_check);
 
     let result = json!({
