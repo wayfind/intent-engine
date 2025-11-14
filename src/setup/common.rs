@@ -86,7 +86,15 @@ pub fn write_json_config(path: &Path, config: &Value) -> Result<()> {
 
 /// Find the ie binary path
 pub fn find_ie_binary() -> Result<PathBuf> {
-    // First try to find `ie` in PATH
+    // First try CARGO_BIN_EXE_ie (set by cargo test)
+    if let Ok(path) = env::var("CARGO_BIN_EXE_ie") {
+        let binary = PathBuf::from(path);
+        if binary.exists() {
+            return Ok(binary);
+        }
+    }
+
+    // Try to find `ie` in PATH
     which::which("ie")
         .or_else(|_| {
             // Try ~/.cargo/bin/ie
@@ -99,6 +107,25 @@ pub fn find_ie_binary() -> Result<PathBuf> {
                     "ie binary not found in PATH or ~/.cargo/bin".to_string(),
                 ))
             }
+        })
+        .or_else(|_| {
+            // Try relative paths for development/testing
+            let candidate_paths = vec![
+                PathBuf::from("./target/debug/ie"),
+                PathBuf::from("./target/release/ie"),
+                PathBuf::from("../target/debug/ie"),
+                PathBuf::from("../target/release/ie"),
+            ];
+
+            for path in candidate_paths {
+                if path.exists() {
+                    return Ok(path);
+                }
+            }
+
+            Err(IntentError::InvalidInput(
+                "ie binary not found in relative paths".to_string(),
+            ))
         })
         .or_else(|_| {
             // Fallback: try old `intent-engine` name (for backward compatibility)
