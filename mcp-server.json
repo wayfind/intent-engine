@@ -137,7 +137,9 @@
             "description": "Priority of the task where LOWER number = HIGHER priority (1 is highest). Optional, defaults to medium priority."
           }
         },
-        "required": ["name"]
+        "required": [
+          "name"
+        ]
       }
     },
     {
@@ -155,7 +157,10 @@
             "description": "ID of the task that must be completed first (blocks the other task)."
           }
         },
-        "required": ["blocked_task_id", "blocking_task_id"]
+        "required": [
+          "blocked_task_id",
+          "blocking_task_id"
+        ]
       }
     },
     {
@@ -174,7 +179,9 @@
             "default": true
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -201,7 +208,9 @@
             "description": "Optional specification for the sub-task in markdown format. Include enough detail for context recovery."
           }
         },
-        "required": ["name"]
+        "required": [
+          "name"
+        ]
       }
     },
     {
@@ -220,7 +229,9 @@
             "default": false
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -240,7 +251,11 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["todo", "doing", "done"],
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
             "description": "Filter by task status (optional)."
           },
           "parent": {
@@ -271,7 +286,9 @@
             "default": 20
           }
         },
-        "required": ["query"]
+        "required": [
+          "query"
+        ]
       }
     },
     {
@@ -290,7 +307,9 @@
             "default": false
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -326,12 +345,21 @@
           },
           "status": {
             "type": "string",
-            "enum": ["todo", "doing", "done"],
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
             "description": "New status (optional). WARNING: Prefer atomic commands (task_start, task_done, task_switch) over direct status updates to maintain workspace consistency."
           },
           "priority": {
             "type": "string",
-            "enum": ["critical", "high", "medium", "low"],
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ],
             "description": "New priority level (optional). Values: 'critical' (highest), 'high', 'medium', 'low' (lowest). Internally mapped to integers for sorting."
           },
           "parent_id": {
@@ -339,7 +367,9 @@
             "description": "New parent task ID to reorganize hierarchy (optional). Use with caution."
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -353,7 +383,9 @@
             "description": "Task ID to delete"
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -368,7 +400,12 @@
           },
           "event_type": {
             "type": "string",
-            "enum": ["decision", "blocker", "milestone", "note"],
+            "enum": [
+              "decision",
+              "blocker",
+              "milestone",
+              "note"
+            ],
             "description": "Type of event. 'decision' for choices made, 'blocker' for problems, 'milestone' for progress markers, 'note' for general thoughts/docs/analysis."
           },
           "data": {
@@ -376,7 +413,10 @@
             "description": "Event content in markdown format. Can be a simple sentence or a full design document. Be as detailed as helpful for future context recovery."
           }
         },
-        "required": ["event_type", "data"]
+        "required": [
+          "event_type",
+          "data"
+        ]
       }
     },
     {
@@ -396,7 +436,12 @@
           "type": {
             "type": "string",
             "description": "Filter events by log_type (optional). Common types: 'decision', 'blocker', 'milestone', 'note'. Use this to focus on specific event categories and save tokens.",
-            "enum": ["decision", "blocker", "milestone", "note"]
+            "enum": [
+              "decision",
+              "blocker",
+              "milestone",
+              "note"
+            ]
           },
           "since": {
             "type": "string",
@@ -404,7 +449,9 @@
             "pattern": "^\\d+[dhms]$"
           }
         },
-        "required": ["task_id"]
+        "required": [
+          "task_id"
+        ]
       }
     },
     {
@@ -425,11 +472,21 @@
           "since": {
             "type": "string",
             "description": "Time range to analyze. Supports: '1h', '6h', '1d' (1 day), '7d' (7 days), '30d' (30 days). Optional - omit for all-time.",
-            "enum": ["1h", "6h", "1d", "7d", "30d"]
+            "enum": [
+              "1h",
+              "6h",
+              "1d",
+              "7d",
+              "30d"
+            ]
           },
           "status": {
             "type": "string",
-            "enum": ["todo", "doing", "done"],
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
             "description": "Filter by status (optional). Useful for 'show me all completed tasks'."
           },
           "summary_only": {
