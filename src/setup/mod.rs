@@ -10,6 +10,7 @@ use std::str::FromStr;
 
 pub mod claude_code;
 pub mod common;
+pub mod interactive;
 
 /// Installation scope for setup
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

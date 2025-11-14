@@ -903,17 +903,48 @@ async fn handle_setup(
 
     // Determine target (interactive if not specified)
     let target_tool = if let Some(t) = target {
+        // Direct mode: target specified via CLI
         t
     } else {
-        // TODO: Implement interactive selection
-        println!("⚠️  Interactive mode not yet implemented.");
-        println!("Please specify --target explicitly.\n");
-        println!("Available targets:");
-        println!("  - claude-code");
-        println!("\nExample: ie setup --target claude-code");
-        return Err(IntentError::InvalidInput(
-            "Target tool must be specified with --target".to_string(),
-        ));
+        // Interactive mode: launch wizard
+        use intent_engine::setup::interactive::SetupWizard;
+
+        let wizard = SetupWizard::new();
+        let result = wizard.run(&opts)?;
+
+        // Print result and exit
+        if result.success {
+            println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("✅ {}", result.message);
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+            if !result.files_modified.is_empty() {
+                println!("Files modified:");
+                for file in &result.files_modified {
+                    println!("  - {}", file.display());
+                }
+                println!();
+            }
+
+            if let Some(test) = result.connectivity_test {
+                if test.passed {
+                    println!("✓ Connectivity test: {}", test.details);
+                } else {
+                    println!("✗ Connectivity test: {}", test.details);
+                }
+                println!();
+            }
+
+            println!("Next steps:");
+            println!("  - Restart Claude Code to load MCP server");
+            println!("  - Run 'ie doctor' to verify configuration");
+            println!("  - Try 'ie task add --name \"Test task\"'");
+            println!();
+        } else {
+            println!("\n{}", result.message);
+        }
+
+        return Ok(());
     };
 
     // Diagnose mode
