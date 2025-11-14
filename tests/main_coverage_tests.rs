@@ -212,7 +212,9 @@ fn test_setup_claude_code_refuses_to_overwrite_without_force() {
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
-        .arg("claude-code");
+        .arg("claude-code")
+        .arg("--scope")
+        .arg("project");
 
     let output = cmd.output().unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -472,7 +474,7 @@ fn test_setup_mcp_with_different_targets() {
     // Verify config was created
     assert!(config_file1.exists(), "Config file should be created");
 
-    // Test setup with different config path
+    // Test setup with different config path (need --force since hooks already exist)
     let config_file2 = temp_dir.path().join("config2.json");
     Command::new(cargo::cargo_bin!("ie"))
         .current_dir(temp_dir.path())
@@ -483,6 +485,7 @@ fn test_setup_mcp_with_different_targets() {
         .arg("project")
         .arg("--config-path")
         .arg(&config_file2)
+        .arg("--force")
         .assert()
         .success();
 

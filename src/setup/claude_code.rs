@@ -212,6 +212,14 @@ impl ClaudeCodeSetup {
             println!("Would create: {}", hooks_dir.display());
         }
 
+        // Check if hook script already exists
+        if hook_script.exists() && !opts.force {
+            return Err(IntentError::InvalidInput(format!(
+                "Hook script already exists: {}. Use --force to overwrite",
+                hook_script.display()
+            )));
+        }
+
         // Install hook script
         let hook_content = include_str!("../../templates/session-start.sh");
         if !opts.dry_run {
@@ -226,6 +234,14 @@ impl ClaudeCodeSetup {
         // Create settings.json with absolute path
         let settings_file = claude_dir.join("settings.json");
         let hook_abs_path = resolve_absolute_path(&hook_script)?;
+
+        // Check if settings file already exists
+        if settings_file.exists() && !opts.force {
+            return Err(IntentError::InvalidInput(format!(
+                "Settings file already exists: {}. Use --force to overwrite",
+                settings_file.display()
+            )));
+        }
 
         let settings = json!({
             "hooks": {
