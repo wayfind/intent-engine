@@ -147,6 +147,7 @@ fn test_event_add_without_current_task_and_without_task_id() {
 #[test]
 fn test_setup_claude_code_dry_run() {
     let temp_dir = setup_test_env();
+    let config_file = temp_dir.path().join("test-config.json");
 
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
@@ -155,6 +156,8 @@ fn test_setup_claude_code_dry_run() {
         .arg("claude-code")
         .arg("--scope")
         .arg("project")
+        .arg("--config-path")
+        .arg(&config_file)
         .arg("--dry-run");
 
     cmd.assert()
@@ -165,6 +168,7 @@ fn test_setup_claude_code_dry_run() {
 #[test]
 fn test_setup_claude_code_creates_hook() {
     let temp_dir = setup_test_env();
+    let config_file = temp_dir.path().join("test-config.json");
 
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
@@ -172,7 +176,9 @@ fn test_setup_claude_code_creates_hook() {
         .arg("--target")
         .arg("claude-code")
         .arg("--scope")
-        .arg("project");
+        .arg("project")
+        .arg("--config-path")
+        .arg(&config_file);
 
     cmd.assert()
         .success()
@@ -200,6 +206,7 @@ fn test_setup_claude_code_creates_hook() {
 #[test]
 fn test_setup_claude_code_refuses_to_overwrite_without_force() {
     let temp_dir = setup_test_env();
+    let config_file = temp_dir.path().join("test-config.json");
 
     // Create hook first
     let hooks_dir = temp_dir.path().join(".claude/hooks");
@@ -214,7 +221,9 @@ fn test_setup_claude_code_refuses_to_overwrite_without_force() {
         .arg("--target")
         .arg("claude-code")
         .arg("--scope")
-        .arg("project");
+        .arg("project")
+        .arg("--config-path")
+        .arg(&config_file);
 
     let output = cmd.output().unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -233,6 +242,7 @@ fn test_setup_claude_code_refuses_to_overwrite_without_force() {
 #[test]
 fn test_setup_claude_code_with_force_overwrites() {
     let temp_dir = setup_test_env();
+    let config_file = temp_dir.path().join("test-config.json");
 
     // Create existing hook
     let hooks_dir = temp_dir.path().join(".claude/hooks");
@@ -248,6 +258,8 @@ fn test_setup_claude_code_with_force_overwrites() {
         .arg("claude-code")
         .arg("--scope")
         .arg("project")
+        .arg("--config-path")
+        .arg(&config_file)
         .arg("--force");
 
     cmd.assert().success();
