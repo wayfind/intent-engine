@@ -58,7 +58,7 @@ cargo install intent-engine
 # 访问 https://github.com/wayfind/intent-engine/releases
 
 # 验证安装
-intent-engine --version
+ie --version
 ```
 
 ### 5 分钟核心体验
@@ -66,21 +66,21 @@ intent-engine --version
 ```bash
 # 1. 添加任务（自动初始化项目）
 echo "使用 JWT 认证，支持刷新 Token" | \
-  intent-engine task add --name "实现用户认证" --spec-stdin
+  ie task add --name "实现用户认证" --spec-stdin
 
 # 2. 开始任务
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # 3. 发现子问题？创建子任务并自动切换
-intent-engine task spawn-subtask --name "配置 JWT 密钥"
+ie task spawn-subtask --name "配置 JWT 密钥"
 
 # 4. 记录决策
 echo "选择 HS256 算法，密钥存储在环境变量" | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 
 # 5. 完成子任务，获取下一步建议
-intent-engine task done
-intent-engine task pick-next
+ie task done
+ie task pick-next
 ```
 
 > 💡 **详细教程**: [Quickstart Guide](docs/zh-CN/guide/quickstart.md) | [The Intent-Engine Way](docs/zh-CN/guide/the-intent-engine-way.md)

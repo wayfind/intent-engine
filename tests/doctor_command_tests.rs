@@ -9,7 +9,7 @@ fn doctor_reports_database_path_resolution_details() {
 
     // Use Cargo-provided environment variable for binary path
     // This works correctly in all test environments (local, CI, llvm-cov, etc.)
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
     let output = Command::new(binary_path)
         .current_dir(temp_dir.path())
         .arg("doctor")

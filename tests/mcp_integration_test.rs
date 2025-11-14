@@ -12,7 +12,7 @@ use tempfile::tempdir;
 
 /// Get the path to the intent-engine binary built by cargo test
 fn get_binary_path() -> PathBuf {
-    cargo::cargo_bin!("intent-engine").to_path_buf()
+    cargo::cargo_bin!("ie").to_path_buf()
 }
 
 /// Helper function to send JSON-RPC request and get response

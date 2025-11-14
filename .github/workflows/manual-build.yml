@@ -81,8 +81,7 @@ jobs:
         with:
           name: intent-engine-${{ inputs.rust-version }}-linux-x64
           path: |
-            target/release/intent-engine
-            target/release/intent-engine-mcp-server
+            target/release/ie
           retention-days: 7
 
       - name: Summary

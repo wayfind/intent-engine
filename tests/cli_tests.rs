@@ -13,7 +13,7 @@ fn setup_test_env() -> TempDir {
 #[test]
 fn test_cli_task_add() {
     let temp_dir = setup_test_env();
-    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
 
     cmd.current_dir(temp_dir.path())
         .arg("task")
@@ -29,39 +29,11 @@ fn test_cli_task_add() {
 }
 
 #[test]
-fn test_cli_task_find() {
-    let temp_dir = setup_test_env();
-
-    // Add a task first
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
-    add_cmd
-        .current_dir(temp_dir.path())
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Test task")
-        .assert()
-        .success();
-
-    // Find tasks
-    let mut find_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
-    find_cmd
-        .current_dir(temp_dir.path())
-        .arg("task")
-        .arg("find");
-
-    find_cmd
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Test task"));
-}
-
-#[test]
 fn test_cli_task_start() {
     let temp_dir = setup_test_env();
 
     // Add a task
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -72,7 +44,7 @@ fn test_cli_task_start() {
         .success();
 
     // Start the task
-    let mut start_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut start_cmd = Command::new(cargo::cargo_bin!("ie"));
     start_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -90,7 +62,7 @@ fn test_cli_task_done() {
     let temp_dir = setup_test_env();
 
     // Add and start a task
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -101,7 +73,7 @@ fn test_cli_task_done() {
         .success();
 
     // Set task as current
-    let mut current_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut current_cmd = Command::new(cargo::cargo_bin!("ie"));
     current_cmd
         .current_dir(temp_dir.path())
         .arg("current")
@@ -111,7 +83,7 @@ fn test_cli_task_done() {
         .success();
 
     // Complete the task
-    let mut done_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut done_cmd = Command::new(cargo::cargo_bin!("ie"));
     done_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -128,7 +100,7 @@ fn test_cli_task_done_with_uncompleted_children() {
     let temp_dir = setup_test_env();
 
     // Add parent task
-    let mut add_parent = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_parent = Command::new(cargo::cargo_bin!("ie"));
     add_parent
         .current_dir(temp_dir.path())
         .arg("task")
@@ -139,7 +111,7 @@ fn test_cli_task_done_with_uncompleted_children() {
         .success();
 
     // Add child task
-    let mut add_child = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_child = Command::new(cargo::cargo_bin!("ie"));
     add_child
         .current_dir(temp_dir.path())
         .arg("task")
@@ -152,7 +124,7 @@ fn test_cli_task_done_with_uncompleted_children() {
         .success();
 
     // Set parent as current
-    let mut current_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut current_cmd = Command::new(cargo::cargo_bin!("ie"));
     current_cmd
         .current_dir(temp_dir.path())
         .arg("current")
@@ -162,7 +134,7 @@ fn test_cli_task_done_with_uncompleted_children() {
         .success();
 
     // Try to complete parent (should fail)
-    let mut done_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut done_cmd = Command::new(cargo::cargo_bin!("ie"));
     done_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -179,7 +151,7 @@ fn test_cli_current() {
     let temp_dir = setup_test_env();
 
     // Add and start a task
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -189,7 +161,7 @@ fn test_cli_current() {
         .assert()
         .success();
 
-    let mut start_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut start_cmd = Command::new(cargo::cargo_bin!("ie"));
     start_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -199,7 +171,7 @@ fn test_cli_current() {
         .success();
 
     // Get current task
-    let mut current_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut current_cmd = Command::new(cargo::cargo_bin!("ie"));
     current_cmd.current_dir(temp_dir.path()).arg("current");
 
     current_cmd
@@ -213,7 +185,7 @@ fn test_cli_event_add() {
     let temp_dir = setup_test_env();
 
     // Add a task
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -224,7 +196,7 @@ fn test_cli_event_add() {
         .success();
 
     // Add an event
-    let mut event_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut event_cmd = Command::new(cargo::cargo_bin!("ie"));
     event_cmd
         .current_dir(temp_dir.path())
         .arg("event")
@@ -248,7 +220,7 @@ fn test_cli_event_list() {
     let temp_dir = setup_test_env();
 
     // Add a task and event
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -258,7 +230,7 @@ fn test_cli_event_list() {
         .assert()
         .success();
 
-    let mut event_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut event_cmd = Command::new(cargo::cargo_bin!("ie"));
     event_cmd
         .current_dir(temp_dir.path())
         .arg("event")
@@ -273,7 +245,7 @@ fn test_cli_event_list() {
         .success();
 
     // List events
-    let mut list_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut list_cmd = Command::new(cargo::cargo_bin!("ie"));
     list_cmd
         .current_dir(temp_dir.path())
         .arg("event")
@@ -292,7 +264,7 @@ fn test_cli_report() {
     let temp_dir = setup_test_env();
 
     // Add some tasks
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -303,7 +275,7 @@ fn test_cli_report() {
         .success();
 
     // Generate report
-    let mut report_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut report_cmd = Command::new(cargo::cargo_bin!("ie"));
     report_cmd
         .current_dir(temp_dir.path())
         .arg("report")
@@ -321,7 +293,7 @@ fn test_cli_project_not_found() {
     let temp_dir = setup_test_env();
 
     // Try to get task in non-project directory (read operation)
-    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("get")
@@ -337,7 +309,7 @@ fn test_cli_lazy_init() {
     let temp_dir = setup_test_env();
 
     // Write operation should auto-initialize
-    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -359,7 +331,7 @@ fn test_cli_lazy_init() {
 fn test_cli_task_with_spec() {
     let temp_dir = setup_test_env();
 
-    let mut cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -378,7 +350,7 @@ fn test_cli_task_hierarchy() {
     let temp_dir = setup_test_env();
 
     // Add parent
-    let mut parent_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut parent_cmd = Command::new(cargo::cargo_bin!("ie"));
     parent_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -389,7 +361,7 @@ fn test_cli_task_hierarchy() {
         .success();
 
     // Add child
-    let mut child_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut child_cmd = Command::new(cargo::cargo_bin!("ie"));
     child_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -405,11 +377,11 @@ fn test_cli_task_hierarchy() {
         .stdout(predicate::str::contains("\"parent_id\": 1"));
 
     // Find children
-    let mut find_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut find_cmd = Command::new(cargo::cargo_bin!("ie"));
     find_cmd
         .current_dir(temp_dir.path())
         .arg("task")
-        .arg("find")
+        .arg("list")
         .arg("--parent")
         .arg("1");
 
@@ -424,7 +396,7 @@ fn test_cli_task_get_with_events() {
     let temp_dir = setup_test_env();
 
     // Add task and event
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -434,7 +406,7 @@ fn test_cli_task_get_with_events() {
         .assert()
         .success();
 
-    let mut event_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut event_cmd = Command::new(cargo::cargo_bin!("ie"));
     event_cmd
         .current_dir(temp_dir.path())
         .arg("event")
@@ -449,7 +421,7 @@ fn test_cli_task_get_with_events() {
         .success();
 
     // Get task with events
-    let mut get_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut get_cmd = Command::new(cargo::cargo_bin!("ie"));
     get_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -468,7 +440,7 @@ fn test_cli_project_awareness_from_subdirectory() {
     let temp_dir = setup_test_env();
 
     // Initialize in root directory
-    let mut init_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut init_cmd = Command::new(cargo::cargo_bin!("ie"));
     init_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -483,8 +455,8 @@ fn test_cli_project_awareness_from_subdirectory() {
     fs::create_dir_all(&subdir).unwrap();
 
     // Access from subdirectory (should find parent's database)
-    let mut find_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
-    find_cmd.current_dir(&subdir).arg("task").arg("find");
+    let mut find_cmd = Command::new(cargo::cargo_bin!("ie"));
+    find_cmd.current_dir(&subdir).arg("task").arg("list");
 
     find_cmd
         .assert()
@@ -501,7 +473,7 @@ fn test_cli_project_awareness_deep_nesting() {
     let temp_dir = setup_test_env();
 
     // Initialize in root directory
-    let mut init_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut init_cmd = Command::new(cargo::cargo_bin!("ie"));
     init_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -516,8 +488,8 @@ fn test_cli_project_awareness_deep_nesting() {
     fs::create_dir_all(&deep_dir).unwrap();
 
     // Access from deep directory (should traverse up and find root's database)
-    let mut find_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
-    find_cmd.current_dir(&deep_dir).arg("task").arg("find");
+    let mut find_cmd = Command::new(cargo::cargo_bin!("ie"));
+    find_cmd.current_dir(&deep_dir).arg("task").arg("list");
 
     find_cmd
         .assert()
@@ -534,7 +506,7 @@ fn test_cli_subdirectory_write_uses_parent_db() {
     let temp_dir = setup_test_env();
 
     // Initialize in root
-    let mut init_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut init_cmd = Command::new(cargo::cargo_bin!("ie"));
     init_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -549,7 +521,7 @@ fn test_cli_subdirectory_write_uses_parent_db() {
     fs::create_dir_all(&subdir).unwrap();
 
     // Write from subdirectory (should use parent's database, not create new one)
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(&subdir)
         .arg("task")
@@ -564,11 +536,11 @@ fn test_cli_subdirectory_write_uses_parent_db() {
     assert!(temp_dir.path().join(".intent-engine").exists());
 
     // Verify both tasks visible from root
-    let mut find_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut find_cmd = Command::new(cargo::cargo_bin!("ie"));
     let output = find_cmd
         .current_dir(temp_dir.path())
         .arg("task")
-        .arg("find")
+        .arg("list")
         .output()
         .unwrap();
 
@@ -577,11 +549,11 @@ fn test_cli_subdirectory_write_uses_parent_db() {
     assert!(stdout.contains("Task2"));
 
     // Verify both tasks also visible from subdirectory
-    let mut find_cmd2 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut find_cmd2 = Command::new(cargo::cargo_bin!("ie"));
     let output2 = find_cmd2
         .current_dir(&subdir)
         .arg("task")
-        .arg("find")
+        .arg("list")
         .output()
         .unwrap();
 
@@ -596,7 +568,7 @@ fn test_cli_isolated_projects() {
     let temp_dir2 = TempDir::new().unwrap();
 
     // Project 1: Add task
-    let mut cmd1 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut cmd1 = Command::new(cargo::cargo_bin!("ie"));
     cmd1.current_dir(temp_dir1.path())
         .arg("task")
         .arg("add")
@@ -606,7 +578,7 @@ fn test_cli_isolated_projects() {
         .success();
 
     // Project 2: Add task
-    let mut cmd2 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut cmd2 = Command::new(cargo::cargo_bin!("ie"));
     cmd2.current_dir(temp_dir2.path())
         .arg("task")
         .arg("add")
@@ -616,11 +588,11 @@ fn test_cli_isolated_projects() {
         .success();
 
     // Verify project 1 only sees its own task
-    let mut find1 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut find1 = Command::new(cargo::cargo_bin!("ie"));
     let output1 = find1
         .current_dir(temp_dir1.path())
         .arg("task")
-        .arg("find")
+        .arg("list")
         .output()
         .unwrap();
 
@@ -629,11 +601,11 @@ fn test_cli_isolated_projects() {
     assert!(!stdout1.contains("Project2 Task"));
 
     // Verify project 2 only sees its own task
-    let mut find2 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut find2 = Command::new(cargo::cargo_bin!("ie"));
     let output2 = find2
         .current_dir(temp_dir2.path())
         .arg("task")
-        .arg("find")
+        .arg("list")
         .output()
         .unwrap();
 
@@ -651,7 +623,7 @@ fn test_cli_task_update_with_complexity_priority() {
     let temp_dir = setup_test_env();
 
     // Add a task
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -662,7 +634,7 @@ fn test_cli_task_update_with_complexity_priority() {
         .success();
 
     // Update with complexity and priority
-    let mut update_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut update_cmd = Command::new(cargo::cargo_bin!("ie"));
     update_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -686,7 +658,7 @@ fn test_cli_pick_next_tasks() {
 
     // Add multiple tasks with different priorities
     for i in 1..=3 {
-        let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+        let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
         add_cmd
             .current_dir(temp_dir.path())
             .arg("task")
@@ -697,7 +669,7 @@ fn test_cli_pick_next_tasks() {
             .success();
 
         // Set priority (lower number = higher priority)
-        let mut update_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+        let mut update_cmd = Command::new(cargo::cargo_bin!("ie"));
         update_cmd
             .current_dir(temp_dir.path())
             .arg("task")
@@ -710,7 +682,7 @@ fn test_cli_pick_next_tasks() {
     }
 
     // Pick next should recommend task 2 (priority 1)
-    let mut pick_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut pick_cmd = Command::new(cargo::cargo_bin!("ie"));
     pick_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -733,7 +705,7 @@ fn test_cli_spawn_subtask() {
     let temp_dir = setup_test_env();
 
     // Add and start a parent task
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -743,7 +715,7 @@ fn test_cli_spawn_subtask() {
         .assert()
         .success();
 
-    let mut start_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut start_cmd = Command::new(cargo::cargo_bin!("ie"));
     start_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -753,7 +725,7 @@ fn test_cli_spawn_subtask() {
         .success();
 
     // Spawn subtask
-    let mut spawn_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut spawn_cmd = Command::new(cargo::cargo_bin!("ie"));
     spawn_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -772,7 +744,7 @@ fn test_cli_spawn_subtask() {
         .stdout(predicate::str::contains("\"status\": \"doing\""));
 
     // Verify current task was set to the child
-    let mut current_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut current_cmd = Command::new(cargo::cargo_bin!("ie"));
     current_cmd
         .current_dir(temp_dir.path())
         .arg("current")
@@ -786,7 +758,7 @@ fn test_cli_switch_task() {
     let temp_dir = setup_test_env();
 
     // Add two tasks
-    let mut add_cmd1 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd1 = Command::new(cargo::cargo_bin!("ie"));
     add_cmd1
         .current_dir(temp_dir.path())
         .arg("task")
@@ -796,7 +768,7 @@ fn test_cli_switch_task() {
         .assert()
         .success();
 
-    let mut add_cmd2 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd2 = Command::new(cargo::cargo_bin!("ie"));
     add_cmd2
         .current_dir(temp_dir.path())
         .arg("task")
@@ -807,7 +779,7 @@ fn test_cli_switch_task() {
         .success();
 
     // Switch to task 2 - should have current_task but no previous_task
-    let mut switch_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut switch_cmd = Command::new(cargo::cargo_bin!("ie"));
     switch_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -823,7 +795,7 @@ fn test_cli_switch_task() {
         .stdout(predicate::str::contains("\"status\": \"doing\""));
 
     // Verify current task was set
-    let mut current_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut current_cmd = Command::new(cargo::cargo_bin!("ie"));
     current_cmd
         .current_dir(temp_dir.path())
         .arg("current")
@@ -837,7 +809,7 @@ fn test_cli_pick_next_json_format() {
     let temp_dir = setup_test_env();
 
     // Create a parent task
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -848,7 +820,7 @@ fn test_cli_pick_next_json_format() {
         .success();
 
     // Start the parent task
-    let mut start_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut start_cmd = Command::new(cargo::cargo_bin!("ie"));
     start_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -858,7 +830,7 @@ fn test_cli_pick_next_json_format() {
         .success();
 
     // Create subtasks
-    let mut sub1_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut sub1_cmd = Command::new(cargo::cargo_bin!("ie"));
     sub1_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -871,7 +843,7 @@ fn test_cli_pick_next_json_format() {
         .success();
 
     // Pick next with JSON format
-    let mut pick_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut pick_cmd = Command::new(cargo::cargo_bin!("ie"));
     pick_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -893,7 +865,7 @@ fn test_cli_pick_next_text_format() {
     let temp_dir = setup_test_env();
 
     // Create a top-level task
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -904,7 +876,7 @@ fn test_cli_pick_next_text_format() {
         .success();
 
     // Pick next with text format (default)
-    let mut pick_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut pick_cmd = Command::new(cargo::cargo_bin!("ie"));
     pick_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -923,7 +895,7 @@ fn test_cli_pick_next_no_tasks() {
     let temp_dir = setup_test_env();
 
     // Pick next when no tasks exist
-    let mut pick_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut pick_cmd = Command::new(cargo::cargo_bin!("ie"));
     pick_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -946,7 +918,7 @@ fn test_cli_pick_next_all_completed() {
     let temp_dir = setup_test_env();
 
     // Create and complete a task
-    let mut add_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
     add_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -956,7 +928,7 @@ fn test_cli_pick_next_all_completed() {
         .assert()
         .success();
 
-    let mut start_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut start_cmd = Command::new(cargo::cargo_bin!("ie"));
     start_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -965,7 +937,7 @@ fn test_cli_pick_next_all_completed() {
         .assert()
         .success();
 
-    let mut done_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut done_cmd = Command::new(cargo::cargo_bin!("ie"));
     done_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -974,7 +946,7 @@ fn test_cli_pick_next_all_completed() {
         .success();
 
     // Pick next when all tasks are completed
-    let mut pick_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut pick_cmd = Command::new(cargo::cargo_bin!("ie"));
     pick_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -997,7 +969,7 @@ fn test_cli_pick_next_priority_ordering() {
     let temp_dir = setup_test_env();
 
     // Create multiple tasks with different priorities
-    let mut add1_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add1_cmd = Command::new(cargo::cargo_bin!("ie"));
     add1_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -1007,7 +979,7 @@ fn test_cli_pick_next_priority_ordering() {
         .assert()
         .success();
 
-    let mut add2_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add2_cmd = Command::new(cargo::cargo_bin!("ie"));
     add2_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -1018,7 +990,7 @@ fn test_cli_pick_next_priority_ordering() {
         .success();
 
     // Set priorities
-    let mut update1_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut update1_cmd = Command::new(cargo::cargo_bin!("ie"));
     update1_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -1029,7 +1001,7 @@ fn test_cli_pick_next_priority_ordering() {
         .assert()
         .success();
 
-    let mut update2_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut update2_cmd = Command::new(cargo::cargo_bin!("ie"));
     update2_cmd
         .current_dir(temp_dir.path())
         .arg("task")
@@ -1041,7 +1013,7 @@ fn test_cli_pick_next_priority_ordering() {
         .success();
 
     // Pick next should recommend high priority task (priority 1)
-    let mut pick_cmd = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut pick_cmd = Command::new(cargo::cargo_bin!("ie"));
     pick_cmd
         .current_dir(temp_dir.path())
         .arg("task")

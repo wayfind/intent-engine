@@ -90,7 +90,7 @@ jobs:
         run: cargo test --test mcp_integration_test --verbose -- --test-threads=1
 
       - name: Test doctor command
-        run: cargo run --bin intent-engine -- doctor
+        run: cargo run --bin ie -- doctor
 
   # ============================================================================
   # Main Branch - Full Test Suite

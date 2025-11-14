@@ -164,13 +164,13 @@ After installation, verify success:
 
 ```bash
 # Check version
-intent-engine --version
+ie --version
 
 # Run health check
-intent-engine doctor
+ie doctor
 
 # View help
-intent-engine --help
+ie --help
 ```
 
 ---
@@ -191,7 +191,7 @@ intent-engine --help
 
 ### Cargo
 ```bash
-cargo install intent-engine --force
+cargo install ie --force
 ```
 
 ### Homebrew
@@ -201,7 +201,7 @@ brew upgrade intent-engine
 
 ### cargo-binstall
 ```bash
-cargo binstall intent-engine --force
+cargo binstall ie --force
 ```
 
 ### Manual

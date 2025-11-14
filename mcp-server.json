@@ -1,16 +1,21 @@
 {
   "name": "intent-engine",
   "version": "0.3",
-  "description": "An MCP server that provides a persistent, intent-driven context layer for AI Agents, enabling them to maintain long-term memory and strategic clarity in complex projects. Think of it as your external brain for task management - one focused task at a time, with full decision history.",
+  "description": "An expert task management assistant that provides a persistent, intent-driven context layer. Use this toolset to maintain strategic clarity in complex projects—one focused task at a time, with complete decision history. Think of it as your external brain for project management.",
+  "cli_info": {
+    "primary_command": "intent-engine",
+    "alias": "ie",
+    "note": "When suggesting CLI usage to users, prefer the shorter 'ie' alias for better user experience. Example: 'ie task add' instead of 'intent-engine task add'."
+  },
   "usage_philosophy": {
-    "core_principle": "Focus-Driven Workflow - The system maintains a single current_task_id representing your focus. Most operations are atomic and operate on this focus to ensure consistency.",
+    "core_principle": "## Focus-Driven Workflow\nThe system maintains a single `current_task_id` representing your focus. Most operations are atomic and operate on this focus to ensure workflow consistency.",
     "when_to_use": [
       "Multi-session work requiring context persistence",
       "Complex problems needing hierarchical breakdown",
       "Decision tracking and project retrospectives",
       "Strategic intent management (not tactical todos)"
     ],
-    "mental_model": "Think: Notebook (persistence) + Focus Ring (current_task_id) + Memory (events) + Guide (pick-next) + Tree (hierarchy)"
+    "mental_model": "## Mental Model\nThink of it as: Notebook (persistence) + Spotlight (current_task_id) + Memory (events) + Navigator (pick-next) + Task Tree (hierarchy)"
   },
   "usage_examples": [
     {
@@ -18,7 +23,7 @@
       "workflow": [
         {
           "step": 1,
-          "thought": "First, discover the specific task. For content-based discovery without an ID, use task_search (not task_find, which is metadata-only).",
+          "thought": "For content-based discovery without an ID, use task_search for full-text search (not task_list, which is metadata-only).",
           "tool": "task_search",
           "arguments": {
             "query": "\"database performance\"",
@@ -27,15 +32,16 @@
         },
         {
           "step": 2,
-          "thought": "Search returned task ID 58. Now retrieve all events to understand the full decision history.",
+          "thought": "Search returned task ID 58. Now retrieve events to understand the decision history.",
           "tool": "event_list",
           "arguments": {
-            "task_id": 58
+            "task_id": 58,
+            "type": "decision"
           }
         },
         {
           "step": 3,
-          "thought": "Process the event log in my context, filter for 'decision' types, synthesize into a coherent summary, and present to the user."
+          "thought": "Process the decision events in context, synthesize into a coherent summary, and present to the user."
         }
       ],
       "pattern": "Discovery → Recall → Synthesize"
@@ -45,7 +51,7 @@
       "workflow": [
         {
           "step": 1,
-          "thought": "First, find the task. If I don't have the ID, search for it.",
+          "thought": "First locate the task by searching for it.",
           "tool": "task_search",
           "arguments": {
             "query": "authentication refactor"
@@ -53,7 +59,7 @@
         },
         {
           "step": 2,
-          "thought": "Found task ID 12. Now ACTIVATE it to set shared focus. ALWAYS use with_events: true to get full context including decision history.",
+          "thought": "Found task ID 12. Activate it to set focus. Always use with_events: true to get full context.",
           "tool": "task_start",
           "arguments": {
             "task_id": 12,
@@ -62,13 +68,13 @@
         },
         {
           "step": 3,
-          "thought": "With task started and events loaded, I can see the full context. Now check if there are subtasks using task_context to understand the strategic landscape.",
+          "thought": "Check task context to see subtasks and understand the strategic landscape.",
           "tool": "task_context",
           "arguments": {}
         },
         {
           "step": 4,
-          "thought": "I see the sub-tasks in the context. Use task_pick_next to identify the highest-priority sub-task to begin with.",
+          "thought": "Use task_pick_next to identify the highest-priority subtask to begin with.",
           "tool": "task_pick_next",
           "arguments": {}
         }
@@ -80,7 +86,7 @@
       "workflow": [
         {
           "step": 1,
-          "thought": "I'm currently focused on task 42 (implementing auth). I realize I need to set up JWT configuration first. Use the ATOMIC task_spawn_subtask to create and immediately switch to it.",
+          "thought": "I'm focused on task 42 (implementing auth). I realize I need JWT configuration first. Use task_spawn_subtask to create and immediately switch to the new subtask.",
           "tool": "task_spawn_subtask",
           "arguments": {
             "name": "Configure JWT secret and environment variables",
@@ -89,17 +95,17 @@
         },
         {
           "step": 2,
-          "thought": "Now I'm automatically focused on the new subtask. Work on it, and when done, call task_done."
+          "thought": "Now I'm automatically focused on the new subtask. Complete the work."
         },
         {
           "step": 3,
-          "thought": "The subtask is complete. Mark it done with task_done (no parameters - operates on current focus).",
+          "thought": "The subtask is complete. Call task_done (no parameters—operates on current focus).",
           "tool": "task_done",
           "arguments": {}
         },
         {
           "step": 4,
-          "thought": "After completing the subtask, the system has cleared the focus. Use task_pick_next to see what to do next. It will recommend returning to the parent or another subtask.",
+          "thought": "Use task_pick_next to decide what to do next. It will likely recommend returning to the parent or another subtask.",
           "tool": "task_pick_next",
           "arguments": {}
         }
@@ -110,7 +116,7 @@
   "tools": [
     {
       "name": "task_add",
-      "description": "Core Duty: Captures a new strategic intent.\n\nTactical Guide: Use this to convert a user's multi-step request into a durable, trackable task. AVOID for trivial, single-step actions. Think 'What + Why' rather than 'How'.\n\nWhen to use:\n- User describes a complex requirement\n- Work will span multiple sessions\n- Need to track decisions and context\n\nWhen NOT to use:\n- Simple one-liner tasks\n- Exploratory questions\n- Temporary context already in conversation\n\nExample: User says 'Let's refactor the auth module to use JWT' → Perfect for task_add.",
+      "description": "# Core Duty\nCaptures a new strategic intent.\n\n# Tactical Guide\nUse this to convert a user's multi-step request into a persistent, trackable task. Avoid using it for trivial, single-step actions. Think 'What + Why' rather than 'How'.\n\n**When to use:**\n- User describes a complex requirement\n- Work will span multiple sessions\n- Need to track decisions and context\n\n**When NOT to use:**\n- Simple one-liner tasks\n- Exploratory questions\n- Temporary context already in conversation",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -120,25 +126,23 @@
           },
           "spec": {
             "type": "string",
-            "description": "Detailed specification in markdown format (optional but highly recommended). This is the 'source of truth' for requirements. Include context, constraints, and acceptance criteria. For very long specs, suggest using CLI with stdin: echo 'spec...' | intent-engine task add --name 'X' --spec-stdin"
+            "description": "Detailed specification in markdown format (optional but highly recommended). This is the 'source of truth' for requirements. Include context, constraints, and acceptance criteria."
           },
           "parent_id": {
             "type": "integer",
-            "description": "ID of the parent intent, for hierarchical problem breakdown. Use this when creating subtasks explicitly (though task_spawn_subtask is preferred for active work)."
+            "description": "ID of the parent intent, for hierarchical problem breakdown. Use when creating subtasks explicitly (though task_spawn_subtask is preferred for active work)."
           },
           "priority": {
             "type": "integer",
             "description": "Priority of the task where LOWER number = HIGHER priority (1 is highest). Optional, defaults to medium priority."
           }
         },
-        "required": [
-          "name"
-        ]
+        "required": ["name"]
       }
     },
     {
       "name": "task_add_dependency",
-      "description": "Core Duty: Establishes a dependency relationship between two tasks.\n\nTactical Guide: Use this when one task must be completed before another can start. The blocked task cannot be started until all its blocking tasks are done.\n\nSemantics:\n- blocked_task_id: The task that has the dependency (cannot start until blocker is done)\n- blocking_task_id: The task that must be completed first (blocks the other task)\n\nExample: task_add_dependency({blocked_task_id: 42, blocking_task_id: 41}) means 'Task 42 depends on Task 41' or 'Task 41 must be done before Task 42 can start'.\n\nCircular Dependency Prevention: The system automatically checks for cycles and will reject dependencies that would create circular references.\n\nImpact on Workflow:\n- task_start will fail if task has incomplete dependencies\n- task_pick_next will filter out blocked tasks\n- task_context shows both blocking_tasks and blocked_by_tasks",
+      "description": "# Core Duty\nEstablishes a dependency relationship between two tasks.\n\n# Tactical Guide\nUse this when one task must be completed before another can start. The blocked task cannot be started until all its blocking tasks are done.\n\n**Semantics:**\n- `blocked_task_id`: The task that has the dependency (cannot start until blocker is done)\n- `blocking_task_id`: The task that must be completed first (blocks the other task)\n\n**Example:** `task_add_dependency({blocked_task_id: 42, blocking_task_id: 41})` means 'Task 42 depends on Task 41'\n\n**Impact:**\n- task_start will fail if task has incomplete dependencies\n- task_pick_next filters out blocked tasks\n- System automatically prevents circular dependencies",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -151,15 +155,12 @@
             "description": "ID of the task that must be completed first (blocks the other task)."
           }
         },
-        "required": [
-          "blocked_task_id",
-          "blocking_task_id"
-        ]
+        "required": ["blocked_task_id", "blocking_task_id"]
       }
     },
     {
       "name": "task_start",
-      "description": "Core Duty: Activates an intent and sets it as the current focus. This is the entry point to the focus-driven workflow.\n\nTactical Guide: ALWAYS call this before working on a task. This is an ATOMIC operation that:\n1. Sets task status to 'doing' (marks first_doing_at timestamp)\n2. Sets as current_task_id in workspace\n3. Returns full context including event history (if with_events: true)\n\nBest Practice: ALWAYS use with_events: true to get the complete decision history. This is crucial for resuming work.\n\nExample: Before starting any work, call task_start({task_id: 42, with_events: true}).",
+      "description": "# Core Duty\nActivates an intent and sets it as the current focus. This is the entry point to the focus-driven workflow.\n\n# Tactical Guide\nCall this before working on any task. This is an atomic operation that:\n1. Sets task status to 'doing'\n2. Sets as current_task_id in workspace\n3. Returns full context including event history (if with_events: true)\n\n**Best Practice:** Always use `with_events: true` to get the complete decision history, crucial for resuming work.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -169,18 +170,16 @@
           },
           "with_events": {
             "type": "boolean",
-            "description": "Include events summary in the response. HIGHLY RECOMMENDED to set this to true. Returns TaskWithEvents structure containing the full decision history, blockers, and milestones.",
+            "description": "Include events summary in the response. Highly recommended to set to true for complete decision history.",
             "default": true
           }
         },
-        "required": [
-          "task_id"
-        ]
+        "required": ["task_id"]
       }
     },
     {
       "name": "task_done",
-      "description": "Core Duty: Completes the CURRENT FOCUSED task. This is the exit point of the focus-driven workflow.\n\nTactical Guide: This is a strictly focus-driven ATOMIC command with NO ID parameter. It operates ONLY on the current_task_id. Call it only when:\n- All objectives in the task spec are fully met\n- All subtasks have status 'done'\n- You have verified completion\n\nThe operation:\n1. Verifies all subtasks are done (fails if not)\n2. Sets current task status to 'done' (marks first_done_at timestamp)\n3. Clears current_task_id (unfocuses)\n4. Returns next_step_suggestion to guide you\n\nPrerequisites:\n- A task MUST be set as current (via task_start or task_switch)\n- All subtasks MUST be done\n\nCommon Mistake: Do NOT try to pass a task_id parameter. This command has NO parameters.",
+      "description": "# Core Duty\nCompletes the CURRENTLY FOCUSED task. This is the exit point of the focus-driven workflow.\n\n# Tactical Guide\nThis is a strictly focus-driven atomic command with **NO ID parameter**. It operates ONLY on the current_task_id. Call it only when:\n- All objectives in the task spec are fully met\n- All subtasks have status 'done'\n- You have verified completion\n\n**The operation:**\n1. Verifies all subtasks are done (fails if not)\n2. Sets current task status to 'done'\n3. Clears current_task_id (unfocuses)\n4. Returns next_step_suggestion\n\n**Important:** Do NOT try to pass a task_id parameter. This command has NO parameters.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -189,7 +188,7 @@
     },
     {
       "name": "task_spawn_subtask",
-      "description": "Core Duty: Creates a sub-task under the CURRENT FOCUSED task and IMMEDIATELY switches focus to it.\n\nTactical Guide: This is a powerful ATOMIC workflow operation for 'on-the-fly' problem decomposition. Use when:\n- You identify a prerequisite that must be solved first\n- You discover a sub-problem while working\n- You need to break down current work into smaller steps\n\nThe operation:\n1. Creates subtask with parent_id = current task\n2. Switches focus to new subtask (sets as current)\n3. Sets new subtask status to 'doing'\n\nDesign Pattern: This enables depth-first work style - dive into sub-problems immediately, complete them, then return to parent.\n\nFor long specs, suggest CLI: echo 'spec...' | intent-engine task spawn-subtask --name 'X' --spec-stdin",
+      "description": "# Core Duty\nCreates a subtask under the CURRENT FOCUSED task and IMMEDIATELY switches focus to it.\n\n# Tactical Guide\nThis is a powerful atomic workflow operation for 'on-the-fly' problem decomposition. Use when:\n- You identify a prerequisite that must be solved first\n- You discover a sub-problem while working\n- You need to break down current work into smaller steps\n\n**The operation:**\n1. Creates subtask with parent_id = current task\n2. Switches focus to new subtask\n3. Sets new subtask status to 'doing'\n\n**Design Pattern:** Enables depth-first work style—dive into sub-problems immediately, complete them, then return to parent.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -202,14 +201,12 @@
             "description": "Optional specification for the sub-task in markdown format. Include enough detail for context recovery."
           }
         },
-        "required": [
-          "name"
-        ]
+        "required": ["name"]
       }
     },
     {
       "name": "task_switch",
-      "description": "Core Duty: Switches focus from the current task to a different one.\n\nTactical Guide: This is an ATOMIC 'pause-and-resume' operation. Use when:\n- Need to temporarily work on something else\n- Returning to a previously started task\n- User explicitly asks to switch context\n\nThe operation:\n1. If current task is 'doing', sets it back to 'todo' (pause)\n2. Sets new task status to 'doing' (resume/start)\n3. Updates current_task_id to new task\n4. Returns full context of new task\n\nBest Practice: Record a note event before switching to explain why you're pausing:\nevent_add({type: 'note', data: 'Pausing to handle urgent bug #123'})",
+      "description": "# Core Duty\nSwitches focus from the current task to a different one.\n\n# Tactical Guide\nThis is an atomic 'pause-and-resume' operation. Use when:\n- Need to temporarily work on something else\n- Returning to a previously started task\n- User explicitly asks to switch context\n\n**The operation:**\n1. If current task is 'doing', sets it back to 'todo' (pause)\n2. Sets new task status to 'doing' (resume/start)\n3. Updates current_task_id to new task\n4. Returns full context of new task\n\n**Best Practice:** Record a note event before switching to explain why you're pausing:\n`event_add({type: 'note', data: 'Pausing to handle urgent bug #123'})`",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -223,14 +220,12 @@
             "default": false
           }
         },
-        "required": [
-          "task_id"
-        ]
+        "required": ["task_id"]
       }
     },
     {
       "name": "task_pick_next",
-      "description": "Core Duty: Intelligently recommends the single BEST next task to work on.\n\nTactical Guide: This is your primary tool for deciding what to do next. It implements a smart 'depth-first' strategy:\n\nPriority 1: Subtasks of current focused task (complete the tree branch first)\nPriority 2: Top-level tasks (if no focused subtasks)\n\nWithin each priority, tasks are sorted by:\n- Priority value (1 = highest) ASC\n- Then by ID ASC (older tasks first)\n\nReturns: PickNextResult with recommended_task, reason, and context.\n\nUse this:\n- After completing task_done\n- When user asks 'what should I work on next?'\n- Starting a new work session\n- Unsure what to prioritize",
+      "description": "# Core Duty\nIntelligently recommends the single BEST next task to work on.\n\n# Tactical Guide\nThis is your primary tool for deciding what to do next. It implements a smart 'depth-first' strategy:\n\n**Priority 1:** Subtasks of current focused task (complete the tree branch first)\n**Priority 2:** Top-level tasks (if no focused subtasks)\n\nWithin each priority, tasks are sorted by:\n- Priority value (lower is higher priority)\n- Task ID (lower is older)\n\n**Use this:**\n- After completing task_done\n- When user asks 'what should I work on next?'\n- Starting a new work session\n- Unsure what to prioritize",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -239,39 +234,13 @@
     },
     {
       "name": "task_list",
-      "description": "Core Duty: Performs STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\nTactical Guide: Use this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\nNOT for text search:\n- ❌ task_list: For structured metadata filtering only\n- ✅ task_search: For searching by keywords, names, or spec content\n\nExamples:\n- List all in-progress work: {status: 'doing'}\n- List all top-level tasks: {parent: 'null'}\n- List subtasks of task 42: {parent: '42'}",
+      "description": "# Core Duty\nPerforms STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\n# Tactical Guide\nUse this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\n**NOT for text search:**\n- ❌ task_list: For structured metadata filtering only\n- ✅ task_search: For searching by keywords, names, or spec content\n\n**Examples:**\n- List all in-progress work: `{status: 'doing'}`\n- List all top-level tasks: `{parent: 'null'}`\n- List subtasks of task 42: `{parent: '42'}`",
       "inputSchema": {
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
-            "enum": [
-              "todo",
-              "doing",
-              "done"
-            ],
-            "description": "Filter by task status (optional)."
-          },
-          "parent": {
-            "type": "string",
-            "description": "Filter by parent ID. Use the string 'null' for top-level tasks, or a numeric string like '42' for subtasks of task 42 (optional)."
-          }
-        }
-      }
-    },
-    {
-      "name": "task_find",
-      "description": "⚠️  DEPRECATED: Use 'task_list' instead.\n\nCore Duty: Performs STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\nThis tool is deprecated and will be removed in a future version. Please use 'task_list' for the same functionality.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "todo",
-              "doing",
-              "done"
-            ],
+            "enum": ["todo", "doing", "done"],
             "description": "Filter by task status (optional)."
           },
           "parent": {
@@ -283,7 +252,7 @@
     },
     {
       "name": "task_search",
-      "description": "Core Duty: Performs powerful full-text search across all intents using SQLite FTS5.\n\nTactical Guide: This is your primary tool for DISCOVERY when you don't have a task ID. Searches both 'name' and 'spec' fields.\n\nUse this when:\n- User asks a question about a topic without providing ID\n- Looking for tasks by keywords or technical terms\n- Finding related work\n\nFTS5 Syntax Support:\n- AND: 'auth AND jwt'\n- OR: 'auth OR oauth'\n- NOT: 'auth NOT password'\n- Phrases: '\"user authentication\"'\n- NEAR: 'auth NEAR/5 token' (within 5 tokens)\n\nBest Practice: Use snippet: true to see highlighted matches in context.\n\nExample: User asks 'What did we decide about caching?' → task_search({query: 'caching decision', snippet: true})",
+      "description": "# Core Duty\nPerforms powerful full-text search across all intents using SQLite FTS5.\n\n# Tactical Guide\nThis is your primary tool for DISCOVERY when you don't have a task ID. Searches both 'name' and 'spec' fields.\n\n**Use this when:**\n- User asks a question about a topic without providing ID\n- Looking for tasks by keywords or technical terms\n- Finding related work\n\n**FTS5 Syntax Support:**\n- AND: 'auth AND jwt'\n- OR: 'auth OR oauth'\n- NOT: 'auth NOT password'\n- Phrases: '\"user authentication\"'\n- NEAR: 'auth NEAR/5 token' (within 5 tokens)\n\n**Best Practice:** Use `snippet: true` to see highlighted matches in context.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -298,18 +267,16 @@
           },
           "limit": {
             "type": "integer",
-            "description": "Maximum number of results to return (optional). Defaults to a reasonable limit.",
+            "description": "Maximum number of results to return (optional). Defaults to 20.",
             "default": 20
           }
         },
-        "required": [
-          "query"
-        ]
+        "required": ["query"]
       }
     },
     {
       "name": "task_get",
-      "description": "Core Duty: Retrieves the full details of a SINGLE, KNOWN task by its ID.\n\nTactical Guide: Use this after task_find or task_search to get complete information before starting work.\n\nReturns: Complete task object with all fields (name, spec, status, timestamps, etc.).\n\nBest Practice: If you need event history too, use with_events: true.",
+      "description": "# Core Duty\nRetrieves the full details of a SINGLE, KNOWN task by its ID.\n\n# Tactical Guide\nUse this after task_list or task_search to get complete information before starting work.\n\nReturns complete task object with all fields (name, spec, status, timestamps, etc.).\n\n**Best Practice:** If you need event history too, use `task_start({task_id: ID, with_events: true})` directly—it's more efficient than calling task_get and event_list separately.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -323,14 +290,12 @@
             "default": false
           }
         },
-        "required": [
-          "task_id"
-        ]
+        "required": ["task_id"]
       }
     },
     {
       "name": "task_context",
-      "description": "Core Duty: Retrieves the complete 'family tree' of an intent to understand its strategic context.\n\nTactical Guide: Call this after task_start on a complex task to get the full picture:\n- Ancestors: The 'Why' (parent chain up to root)\n- Siblings: The 'What else' (other tasks at same level)\n- Children: The 'How' (subtasks to be done)\n\nUse this to:\n- Understand how current task fits in larger goals\n- See related work at same level\n- Plan subtask breakdown\n\nReturns: TaskContext with ancestors[], siblings[], and children[] arrays.\n\nExample: After starting task 42, call task_context() to see parent goals and existing subtasks.",
+      "description": "# Core Duty\nRetrieves the complete 'family tree' of an intent to understand its strategic context.\n\n# Tactical Guide\nCall this after task_start on a complex task to get the full picture:\n- **Ancestors:** The 'Why' (parent chain up to root)\n- **Siblings:** The 'What else' (other tasks at same level)\n- **Children:** The 'How' (subtasks to be done)\n\n**Use this to:**\n- Understand how current task fits in larger goals\n- See related work at same level\n- Plan subtask breakdown\n\nReturns TaskContext with ancestors[], siblings[], and children[] arrays.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -343,7 +308,7 @@
     },
     {
       "name": "task_update",
-      "description": "Core Duty: A general-purpose tool to modify attributes of an existing task.\n\nTactical Guide: Use this for minor corrections:\n- Fixing a typo in a name\n- Updating priority\n- Refining the spec\n\nFor major status changes, STRONGLY prefer using the atomic commands:\n- ❌ task_update({task_id: 42, status: 'doing'})\n- ✅ task_start({task_id: 42})\n\nWhy? Atomic commands ensure consistency (e.g., task_start also sets current_task_id, task_done verifies subtasks).\n\nFor long specs, suggest CLI: echo 'new spec...' | intent-engine task update 42 --spec-stdin",
+      "description": "# Core Duty\nA general-purpose tool to modify attributes of an existing task.\n\n# Tactical Guide\nUse this for minor corrections:\n- Fixing a typo in a name\n- Updating priority\n- Refining the spec\n\n**For status changes, prefer atomic commands:**\n- ❌ `task_update({task_id: 42, status: 'doing'})`\n- ✅ `task_start({task_id: 42})`\n\n**Why?** Atomic commands ensure consistency (e.g., task_start also sets current_task_id, task_done verifies subtasks).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -361,21 +326,12 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "todo",
-              "doing",
-              "done"
-            ],
+            "enum": ["todo", "doing", "done"],
             "description": "New status (optional). WARNING: Prefer atomic commands (task_start, task_done, task_switch) over direct status updates to maintain workspace consistency."
           },
           "priority": {
             "type": "string",
-            "enum": [
-              "critical",
-              "high",
-              "medium",
-              "low"
-            ],
+            "enum": ["critical", "high", "medium", "low"],
             "description": "New priority level (optional). Values: 'critical' (highest), 'high', 'medium', 'low' (lowest). Internally mapped to integers for sorting."
           },
           "parent_id": {
@@ -383,14 +339,12 @@
             "description": "New parent task ID to reorganize hierarchy (optional). Use with caution."
           }
         },
-        "required": [
-          "task_id"
-        ]
+        "required": ["task_id"]
       }
     },
     {
       "name": "task_delete",
-      "description": "Delete a task. WARNING: This is a destructive operation. Only use when you're certain the task should be removed permanently. Cannot delete tasks with subtasks.",
+      "description": "# Core Duty\nDeletes a task.\n\n# Tactical Guide\n**WARNING:** This is a destructive operation. Only use when you're certain the task should be removed permanently. Cannot delete tasks with subtasks.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -399,14 +353,12 @@
             "description": "Task ID to delete"
           }
         },
-        "required": [
-          "task_id"
-        ]
+        "required": ["task_id"]
       }
     },
     {
       "name": "event_add",
-      "description": "Core Duty: Records a significant event to an intent's history. This is your long-term memory.\n\nTactical Guide: Use this RELENTLESSLY. Every key decision, blocker, milestone, or piece of human feedback is a candidate for an event. This is how you learn and avoid repeating mistakes.\n\nEvent Types:\n- 'decision': Choices made and reasoning ('Chose algorithm X because...')\n- 'blocker': Problems encountered ('API rate limit blocking feature Y')\n- 'milestone': Progress markers ('Completed MVP, ready for testing')\n- 'note': General thoughts, temporary docs, analysis results\n\nTwo Modes:\n1. During active work: Omit task_id → records for current focused task\n2. Cross-task: Include task_id → records for any task (e.g., project retrospectives)\n\nBest Practice: Record immediately after the decision/event. Don't batch them up.\n\nFor long content, suggest CLI: echo 'content...' | intent-engine event add --type note --data-stdin\n\nIMPORTANT: When you need to create design docs, summaries, or temporary documentation, prefer storing them as events (type: 'note' or 'milestone') rather than creating separate files. This keeps documentation tightly coupled with tasks.",
+      "description": "# Core Duty\nRecords a significant event to an intent's history. This is your long-term memory.\n\n# Tactical Guide\nUse this frequently. Every key decision, blocker, milestone, or piece of human feedback should be recorded. This is how you maintain context and avoid repeating mistakes.\n\n**Event Types:**\n- `decision`: Choices made and reasoning ('Chose algorithm X because...')\n- `blocker`: Problems encountered ('API rate limit blocking feature Y')\n- `milestone`: Progress markers ('Completed MVP, ready for testing')\n- `note`: General thoughts, temporary docs, analysis results\n\n**Two Modes:**\n1. During active work: Omit task_id → records for current focused task\n2. Cross-task: Include task_id → records for any task (e.g., project retrospectives)\n\n**Best Practice:** Record immediately after the decision/event. Don't batch them up.\n\n**Important:** When you need to create design docs, summaries, or temporary documentation, prefer storing them as events (type: 'note' or 'milestone') rather than creating separate files. This keeps documentation tightly coupled with tasks.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -416,12 +368,7 @@
           },
           "event_type": {
             "type": "string",
-            "enum": [
-              "decision",
-              "blocker",
-              "milestone",
-              "note"
-            ],
+            "enum": ["decision", "blocker", "milestone", "note"],
             "description": "Type of event. 'decision' for choices made, 'blocker' for problems, 'milestone' for progress markers, 'note' for general thoughts/docs/analysis."
           },
           "data": {
@@ -429,15 +376,12 @@
             "description": "Event content in markdown format. Can be a simple sentence or a full design document. Be as detailed as helpful for future context recovery."
           }
         },
-        "required": [
-          "event_type",
-          "data"
-        ]
+        "required": ["event_type", "data"]
       }
     },
     {
       "name": "event_list",
-      "description": "Core Duty: Retrieves the historical event stream for a task.\n\nTactical Guide: Use this to:\n- Review decision-making process\n- Recover context when resuming old work\n- Understand blockers and milestones\n- Prepare project retrospectives\n\nPerformance Optimization:\n- For tasks with hundreds of events, use filters to reduce token usage\n- Filter by type (e.g., 'decision') to focus on specific event categories\n- Filter by since (e.g., '7d') to get recent events only\n- Combine filters for maximum efficiency\n\nReturns: Array of events sorted by timestamp (newest first).\n\nBest Practice: When resuming work on a task, call task_start with with_events: true instead of separately calling event_list - it's more efficient.",
+      "description": "# Core Duty\nRetrieves the historical event stream for a task.\n\n# Tactical Guide\nUse this to:\n- Review decision-making process\n- Recover context when resuming old work\n- Understand blockers and milestones\n- Prepare project retrospectives\n\n**Performance Optimization:**\nFor tasks with hundreds of events, use filters to reduce token usage:\n- Filter by type (e.g., 'decision') to focus on specific event categories\n- Filter by since (e.g., '7d') to get recent events only\n- Combine filters for maximum efficiency\n\nReturns array of events sorted by timestamp (newest first).\n\n**Best Practice:** When resuming work on a task, call `task_start` with `with_events: true` instead of separately calling event_list—it's more efficient.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -452,12 +396,7 @@
           "type": {
             "type": "string",
             "description": "Filter events by log_type (optional). Common types: 'decision', 'blocker', 'milestone', 'note'. Use this to focus on specific event categories and save tokens.",
-            "enum": [
-              "decision",
-              "blocker",
-              "milestone",
-              "note"
-            ]
+            "enum": ["decision", "blocker", "milestone", "note"]
           },
           "since": {
             "type": "string",
@@ -465,14 +404,12 @@
             "pattern": "^\\d+[dhms]$"
           }
         },
-        "required": [
-          "task_id"
-        ]
+        "required": ["task_id"]
       }
     },
     {
       "name": "current_task_get",
-      "description": "Core Duty: Checks the current focus.\n\nTactical Guide: Returns the task object that is currently in 'doing' status and set as the workspace focus (current_task_id).\n\nReturns:\n- If focused: {current_task_id: 42, task: {...}}\n- If not focused: {current_task_id: null, task: null}\n\nUse this:\n- To check if you're free to pick a new task\n- Before calling task_done (to verify there's a current task)\n- To understand current workspace state",
+      "description": "# Core Duty\nChecks the current focus.\n\n# Tactical Guide\nReturns the task object that is currently in 'doing' status and set as the workspace focus (current_task_id).\n\n**Returns:**\n- If focused: `{current_task_id: 42, task: {...}}`\n- If not focused: `{current_task_id: null, task: null}`\n\n**Use this:**\n- To check if you're free to pick a new task\n- Before calling task_done (to verify there's a current task)\n- To understand current workspace state",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -481,33 +418,23 @@
     },
     {
       "name": "report_generate",
-      "description": "Core Duty: Generates an analytical summary of project activity.\n\nTactical Guide: Use this for status reports, standups, retrospectives.\n\nIMPORTANT: To save tokens, ALWAYS use summary_only: true unless the user explicitly asks for the full task list.\n\nReturns:\n- summary: Aggregated statistics (counts by status, date ranges)\n- tasks: Full task list (only if summary_only: false)\n- events: Event list (only if summary_only: false)\n\nTime ranges: '1h', '6h', '1d', '7d', '30d'\n\nExample: Weekly standup → report_generate({since: '7d', summary_only: true})",
+      "description": "# Core Duty\nGenerates an analytical summary of project activity.\n\n# Tactical Guide\nUse this for status reports, standups, retrospectives.\n\n**Important:** To save tokens, use `summary_only: true` unless the user explicitly asks for the full task list.\n\n**Returns:**\n- summary: Aggregated statistics (counts by status, date ranges)\n- tasks: Full task list (only if summary_only: false)\n- events: Event list (only if summary_only: false)\n\n**Time ranges:** '1h', '6h', '1d', '7d', '30d'",
       "inputSchema": {
         "type": "object",
         "properties": {
           "since": {
             "type": "string",
             "description": "Time range to analyze. Supports: '1h', '6h', '1d' (1 day), '7d' (7 days), '30d' (30 days). Optional - omit for all-time.",
-            "enum": [
-              "1h",
-              "6h",
-              "1d",
-              "7d",
-              "30d"
-            ]
+            "enum": ["1h", "6h", "1d", "7d", "30d"]
           },
           "status": {
             "type": "string",
-            "enum": [
-              "todo",
-              "doing",
-              "done"
-            ],
+            "enum": ["todo", "doing", "done"],
             "description": "Filter by status (optional). Useful for 'show me all completed tasks'."
           },
           "summary_only": {
             "type": "boolean",
-            "description": "If true, returns only aggregated statistics without full task/event lists. HIGHLY RECOMMENDED to set this to true for efficiency. Only set to false if user explicitly needs the full list.",
+            "description": "If true, returns only aggregated statistics without full task/event lists. Highly recommended to set this to true for efficiency. Only set to false if user explicitly needs the full list.",
             "default": true
           }
         }
@@ -515,11 +442,11 @@
     }
   ],
   "important_patterns": {
-    "focus_driven_workflow": "Most operations are focus-driven, operating on current_task_id. Always establish focus with task_start before working. Clear focus with task_done when complete.",
-    "atomic_operations": "Commands like task_start, task_done, task_spawn_subtask, and task_switch are ATOMIC - they combine multiple state changes to ensure consistency. Prefer these over manual task_update for status changes.",
-    "depth_first_strategy": "task_pick_next prioritizes subtasks of current work. This encourages completing branches before starting new trees.",
-    "event_history_is_memory": "Events are your persistent memory. Record decisions, blockers, and milestones liberally. Use with_events: true when starting tasks to recover context.",
-    "hierarchy_for_complexity": "Break down complex tasks using parent_id (via task_add) or task_spawn_subtask. Keep hierarchy shallow (2-3 levels max) for manageability."
+    "focus_driven_workflow": "## Focus-Driven Workflow\nMost operations revolve around current_task_id. Always establish focus with task_start before working, and clear it with task_done when complete.",
+    "atomic_operations": "## Atomic Operations\nCommands like task_start, task_done, task_spawn_subtask, and task_switch are atomic—they combine multiple state changes to ensure consistency. Prefer these over manual task_update for status changes.",
+    "depth_first_strategy": "## Depth-First Strategy\ntask_pick_next prioritizes subtasks of current work. This encourages completing branches before starting new trees.",
+    "event_history_is_memory": "## Event History is Memory\nEvents are your persistent memory. Record decisions, blockers, and milestones liberally. Use with_events: true when starting tasks to recover context.",
+    "hierarchy_for_complexity": "## Hierarchy for Complexity\nBreak down complex tasks using parent_id (via task_add) or task_spawn_subtask. Keep hierarchy shallow (2-3 levels max) for manageability."
   },
   "common_mistakes": {
     "mistake_1": {
@@ -528,21 +455,16 @@
       "reason": "task_done has NO parameters - it's strictly focus-driven"
     },
     "mistake_2": {
-      "wrong": "task_find({query: 'JWT'})",
+      "wrong": "task_list({query: 'JWT'})",
       "right": "task_search({query: 'JWT', snippet: true})",
-      "reason": "task_find is for metadata filtering only. Use task_search for text search"
+      "reason": "task_list is for metadata filtering only. Use task_search for text search"
     },
     "mistake_3": {
-      "wrong": "event_add({task_id: 42, event_type: 'decision', data: '...'})",
-      "right": "/* If task 42 is current: */ event_add({event_type: 'decision', data: '...'})",
-      "reason": "Leverage focus-driven defaults. Only specify task_id for cross-task events"
-    },
-    "mistake_4": {
       "wrong": "task_update({task_id: 42, status: 'doing'})",
       "right": "task_start({task_id: 42})",
       "reason": "Use atomic commands for status changes to maintain consistency"
     },
-    "mistake_5": {
+    "mistake_4": {
       "wrong": "task_start({task_id: 42}); task_done({}); /* parent has undone subtasks */",
       "right": "/* Complete all subtasks first, then parent */",
       "reason": "task_done enforces all subtasks must be done. Complete leaves before branches"

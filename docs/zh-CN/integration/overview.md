@@ -125,7 +125,7 @@ cargo install intent-engine
 # https://github.com/wayfind/intent-engine/releases
 
 # 验证安装
-intent-engine --version
+ie --version
 ```
 
 详细安装说明请参见 [安装指南](../guide/installation.md)。
@@ -145,7 +145,7 @@ intent-engine --version
 ```bash
 # 创建测试任务
 echo "测试 Intent-Engine 集成" | \
-  intent-engine task add --name "集成测试" --spec-stdin
+  ie task add --name "集成测试" --spec-stdin
 
 # 在 AI 工具中要求查看任务
 # 例如在 Claude Code 中：

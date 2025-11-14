@@ -23,7 +23,7 @@ where
 
     // Use Cargo-provided environment variable for binary path
     // This works correctly in all test environments (local, CI, llvm-cov, etc.)
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
 
     // Run task add command from subdirectory
     Command::new(binary_path)
@@ -319,7 +319,7 @@ fn test_existing_intent_engine_found_and_reused() {
     // Create .git marker at root
     fs::create_dir(root.join(".git")).expect("Failed to create .git");
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
 
     // First command: initialize from root
     let output1 = Command::new(binary_path)
@@ -407,7 +407,7 @@ fn test_initialization_with_symlinked_git_directory() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
     let output = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
@@ -444,7 +444,7 @@ fn test_initialization_with_git_as_file_submodule() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
     let output = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
@@ -477,7 +477,7 @@ fn test_initialization_with_empty_marker_files() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
     let output = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
@@ -522,7 +522,7 @@ fn test_initialization_in_nested_monorepo_structure() {
     )
     .expect("Failed to create frontend package.json");
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
 
     // Test from backend: should find Cargo.toml in backend/ first (nearest marker)
     let output_backend = Command::new(binary_path)
@@ -587,7 +587,7 @@ fn test_initialization_with_multiple_markers_different_levels() {
     )
     .expect("Failed to create Cargo.toml");
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
 
     // Run from deeply nested directory
     let output = Command::new(binary_path)
@@ -633,7 +633,7 @@ fn test_concurrent_initialization_attempts() {
     let barrier = Arc::new(Barrier::new(3));
     let mut handles = vec![];
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
 
     for i in 0..3 {
         let barrier_clone = Arc::clone(&barrier);
@@ -700,7 +700,7 @@ fn test_concurrent_initialization_attempts() {
     // This ensures the concurrent operations didn't corrupt it
     let output = Command::new(binary_path)
         .current_dir(&subdir)
-        .args(["task", "find", "--status", "todo"])
+        .args(["task", "list", "--status", "todo"])
         .output()
         .expect("Failed to execute find command");
 
@@ -736,7 +736,7 @@ fn test_initialization_with_symlinked_marker_file() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
     let output = Command::new(binary_path)
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
@@ -771,7 +771,7 @@ fn test_partial_initialization_state_handling() {
     let db_path = intent_dir.join("project.db");
     assert!(!db_path.exists(), "Database should not exist initially");
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
 
     // Run command - behavior depends on SQLite
     let output = Command::new(binary_path)
@@ -816,7 +816,7 @@ fn test_invalid_database_fails_appropriately() {
     fs::write(&db_path, "This is not a valid SQLite database")
         .expect("Failed to create invalid db");
 
-    let binary_path = env!("CARGO_BIN_EXE_intent-engine");
+    let binary_path = env!("CARGO_BIN_EXE_ie");
 
     // Run command - should fail with database error
     let output = Command::new(binary_path)

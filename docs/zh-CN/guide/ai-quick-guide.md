@@ -14,43 +14,43 @@ Create a task when work requires:
 
 ### Start Work
 ```bash
-intent-engine task start <ID> --with-events  # ATOMIC: status→doing + set current + get context
+ie task start <ID> --with-events  # ATOMIC: status→doing + set current + get context
 ```
 
 ### Create & Switch to Subtask
 ```bash
-intent-engine task spawn-subtask --name "X"  # ATOMIC: create + status→doing + switch
+ie task spawn-subtask --name "X"  # ATOMIC: create + status→doing + switch
 ```
 
 ### Switch Tasks
 ```bash
-intent-engine task switch <ID>  # ATOMIC: status→doing + set current + get events
+ie task switch <ID>  # ATOMIC: status→doing + set current + get events
 ```
 
 ### Smart Batch Selection
 ```bash
-intent-engine task pick-next --max-count 3  # ATOMIC: query + sort + batch transition
+ie task pick-next --max-count 3  # ATOMIC: query + sort + batch transition
 ```
 
 ### Record Critical Moments
 ```bash
 # To current task (concise)
 echo "Decision/blocker/milestone..." | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 
 # To specific task (flexible)
 echo "Decision/blocker/milestone..." | \
-  intent-engine event add --task-id <ID> --type decision --data-stdin
+  ie event add --task-id <ID> --type decision --data-stdin
 ```
 
 ### Complete (Enforces Hierarchy)
 ```bash
-intent-engine task done  # Completes current focused task, fails if subtasks incomplete
+ie task done  # Completes current focused task, fails if subtasks incomplete
 ```
 
 ### Get Summary (Token-Efficient)
 ```bash
-intent-engine report --since 7d --summary-only  # Returns stats only, not full tasks
+ie report --since 7d --summary-only  # Returns stats only, not full tasks
 ```
 
 ## Workflow Pattern
@@ -58,24 +58,24 @@ intent-engine report --since 7d --summary-only  # Returns stats only, not full t
 ```bash
 # 1. Create task with rich spec
 echo "Multi-line markdown spec..." | \
-  intent-engine task add --name "Implement OAuth2" --spec-stdin
+  ie task add --name "Implement OAuth2" --spec-stdin
 
 # 2. Start & load context (returns spec + event history)
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # 3. Execute + record key decisions (to current task)
 echo "Chose Passport.js for OAuth strategies" | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 
 # 4. Hit sub-problem? Create & auto-switch
-intent-engine task spawn-subtask --name "Configure Google OAuth app"
+ie task spawn-subtask --name "Configure Google OAuth app"
 
 # 5. Complete child (child is now focused after spawn-subtask), switch back to parent
-intent-engine task done
-intent-engine task switch 1
+ie task done
+ie task switch 1
 
 # 6. Complete parent
-intent-engine task done
+ie task done
 ```
 
 ## Batch Problem Handling
@@ -83,16 +83,16 @@ intent-engine task done
 ```bash
 # Discovered 5 bugs? Create all, then smartly select:
 for bug in A B C D E; do
-  intent-engine task add --name "Fix bug $bug"
+  ie task add --name "Fix bug $bug"
 done
 
 # Evaluate each
-intent-engine task update 1 --complexity 3 --priority 10  # Simple+urgent
-intent-engine task update 2 --complexity 8 --priority 10  # Complex+urgent
-intent-engine task update 3 --complexity 2 --priority 5   # Simple+normal
+ie task update 1 --complexity 3 --priority 10  # Simple+urgent
+ie task update 2 --complexity 8 --priority 10  # Complex+urgent
+ie task update 3 --complexity 2 --priority 5   # Simple+normal
 
 # Auto-select by: priority DESC, complexity ASC
-intent-engine task pick-next --max-count 3
+ie task pick-next --max-count 3
 # → Selects: #1 (P10/C3), #3 (P5/C2), #2 (P10/C8)
 ```
 
@@ -133,7 +133,7 @@ echo "通过浏览器控制台发现：
 1. 按钮点击没有触发网络请求
 2. Console 报错: TypeError...
 3. 初步判断是事件绑定失效" | \
-  intent-engine event add --type note --data-stdin  # 使用当前任务
+  ie event add --type note --data-stdin  # 使用当前任务
 ```
 
 ### 实例：技术方案
@@ -146,7 +146,7 @@ EOF
 
 # ✅ 新方式：创建子任务，方案即规格
 cat design_v2.md | \
-  intent-engine task spawn-subtask --name "执行 V2 重构" --spec-stdin
+  ie task spawn-subtask --name "执行 V2 重构" --spec-stdin
 # 自动切换到新任务，方案已加载
 ```
 
@@ -196,11 +196,11 @@ todo → (start/pick-next/spawn-subtask) → doing → (done) → done
 ## Quick Checks
 
 ```bash
-intent-engine current                          # What am I working on?
-intent-engine task find --status doing         # All active tasks
-intent-engine task search "keyword"            # Search tasks by content (FTS5)
-intent-engine event list --task-id <ID> --limit 5  # Recent context
-intent-engine report --since 1d --summary-only     # Today's summary
+ie current                          # What am I working on?
+ie task find --status doing         # All active tasks
+ie task search "keyword"            # Search tasks by content (FTS5)
+ie event list --task-id <ID> --limit 5  # Recent context
+ie report --since 1d --summary-only     # Today's summary
 ```
 
 ## Anti-Patterns

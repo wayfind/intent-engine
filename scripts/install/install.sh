@@ -80,19 +80,19 @@ fi
 
 # Verify installation
 print_info "Verifying installation..."
-if command -v intent-engine &> /dev/null; then
-    VERSION=$(intent-engine --version 2>&1 || echo "unknown")
-    print_info "intent-engine is installed: ${VERSION}"
+if command -v ie &> /dev/null; then
+    VERSION=$(ie --version 2>&1 || echo "unknown")
+    print_info "ie is installed: ${VERSION}"
 
     # Run doctor command to check system health
     print_info "Running system health check..."
-    intent-engine doctor
+    ie doctor
 
     if [ $? -eq 0 ]; then
         echo ""
         print_info "Installation complete! 🎉"
-        print_info "You can now use 'intent-engine' command"
-        print_info "Try: intent-engine --help"
+        print_info "You can now use 'ie' command"
+        print_info "Try: ie --help"
     else
         print_warning "Installation succeeded but health check failed"
         print_info "You may need to troubleshoot your environment"

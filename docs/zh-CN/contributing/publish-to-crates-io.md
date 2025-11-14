@@ -164,7 +164,7 @@ on:
    # 等待几分钟后验证
    cargo search intent-engine
    cargo install intent-engine
-   intent-engine --version
+   ie --version
    ```
 
 ---

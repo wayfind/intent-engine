@@ -25,7 +25,7 @@ cargo install intent-engine
 # Download the version for your platform
 
 # Verify installation
-intent-engine --version
+ie --version
 ```
 
 > 💡 **Tip**: For detailed installation options, see [INSTALLATION.md](docs/en/guide/installation.md)
@@ -41,7 +41,7 @@ echo "Implement JWT authentication
 - Token validity: 7 days
 - Support token refresh
 - Use HS256 algorithm" | \
-  intent-engine task add --name "Implement user authentication" --spec-stdin
+  ie task add --name "Implement user authentication" --spec-stdin
 
 # Example output:
 # {
@@ -66,7 +66,7 @@ echo "Implement JWT authentication
 
 ```bash
 # Start task and get complete context
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # Example output:
 # {
@@ -89,7 +89,7 @@ intent-engine task start 1 --with-events
 
 ```bash
 # During implementation, discover need to configure JWT secret first
-intent-engine task spawn-subtask --name "Configure JWT secret storage"
+ie task spawn-subtask --name "Configure JWT secret storage"
 
 # Example output:
 # {
@@ -117,7 +117,7 @@ Reasons:
 1. Avoid hardcoding secrets in code
 2. Easy to use different secrets in different environments
 3. Complies with 12-Factor App principles" | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 
 # Example output:
 # {
@@ -140,10 +140,10 @@ Reasons:
 
 ```bash
 # Complete subtask
-intent-engine task done
+ie task done
 
 # Switch back to parent task
-intent-engine task switch 1
+ie task switch 1
 
 # Output includes complete context of parent task
 ```
@@ -154,7 +154,7 @@ intent-engine task switch 1
 
 ```bash
 # Complete parent task
-intent-engine task done
+ie task done
 
 # If there are incomplete subtasks, system will error:
 # Error: Cannot complete task 1: it has incomplete subtasks
@@ -168,7 +168,7 @@ intent-engine task done
 
 ```bash
 # Generate concise work summary (recommended, saves tokens)
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 
 # Example output:
 # {
@@ -181,7 +181,7 @@ intent-engine report --since 1d --summary-only
 # }
 
 # Generate detailed report
-intent-engine report --since 1d
+ie report --since 1d
 ```
 
 ---
@@ -206,23 +206,23 @@ You've completed Intent-Engine's core workflow:
 1. **Smart Task Selection**: Batch process multiple tasks
    ```bash
    # Create multiple tasks
-   intent-engine task add --name "Task A"
-   intent-engine task add --name "Task B"
-   intent-engine task add --name "Task C"
+   ie task add --name "Task A"
+   ie task add --name "Task B"
+   ie task add --name "Task C"
 
    # Set priority and complexity
-   intent-engine task update 1 --priority 10 --complexity 3
-   intent-engine task update 2 --priority 8 --complexity 7
-   intent-engine task update 3 --priority 5 --complexity 2
+   ie task update 1 --priority 10 --complexity 3
+   ie task update 2 --priority 8 --complexity 7
+   ie task update 3 --priority 5 --complexity 2
 
    # Smart selection (by priority DESC, complexity ASC)
-   intent-engine task pick-next --max-count 3
+   ie task pick-next --max-count 3
    ```
 
 2. **Full-text Search**: Quickly find tasks
    ```bash
-   intent-engine report --filter-name "authentication" --summary-only
-   intent-engine report --filter-spec "JWT" --summary-only
+   ie report --filter-name "authentication" --summary-only
+   ie report --filter-spec "JWT" --summary-only
    ```
 
 3. **Event Types**: Record different types of events

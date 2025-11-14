@@ -35,8 +35,8 @@ echo ""
 ie workspace init
 assert_success "workspace init"
 
-ie setup-claude-code
-assert_success "setup-claude-code"
+ie setup --target claude-code
+assert_success "setup for claude-code"
 
 # Verify hook file exists
 if [ ! -f ".claude/hooks/session-start.sh" ]; then

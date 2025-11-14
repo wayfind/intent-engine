@@ -48,7 +48,7 @@
 #### 场景 1: 输出乱码
 ```bash
 # Windows cmd (CP936) 下运行
-intent-engine task add --name "测试任务"
+ie task add --name "测试任务"
 # 输出的 JSON 中中文显示为 ��� 或 ???
 ```
 
@@ -57,7 +57,7 @@ intent-engine task add --name "测试任务"
 #### 场景 2: 输入乱码
 ```bash
 # 从 stdin 读取包含中文的数据
-echo "这是中文规格说明" | intent-engine task add --name "任务" --spec-stdin
+echo "这是中文规格说明" | ie task add --name "任务" --spec-stdin
 # 数据库中存储的是乱码
 ```
 
@@ -66,7 +66,7 @@ echo "这是中文规格说明" | intent-engine task add --name "任务" --spec-
 #### 场景 3: JSON 解析失败
 ```bash
 # 输入包含无效 UTF-8 序列
-echo 无效字节 | intent-engine event add --type decision --data-stdin
+echo 无效字节 | ie event add --type decision --data-stdin
 # 报错: InvalidInput: Invalid UTF-8 in input
 ```
 
@@ -82,7 +82,7 @@ REM 切换到 UTF-8 (代码页 65001)
 chcp 65001
 
 REM 使用 intent-engine
-intent-engine task add --name "测试任务"
+ie task add --name "测试任务"
 ```
 
 **PowerShell 5.x**:
@@ -92,13 +92,13 @@ intent-engine task add --name "测试任务"
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
 # 使用 intent-engine
-intent-engine task add --name "测试任务"
+ie task add --name "测试任务"
 ```
 
 **PowerShell 7+**:
 ```powershell
 # 默认已是 UTF-8，无需配置
-intent-engine task add --name "测试任务"
+ie task add --name "测试任务"
 ```
 
 #### A2. 永久配置（推荐日常使用）
@@ -307,7 +307,7 @@ notepad $PROFILE
 
 运行以下命令测试:
 ```bash
-intent-engine task add --name "测试中文" --spec-stdin
+ie task add --name "测试中文" --spec-stdin
 ```
 
 输入:
@@ -396,7 +396,7 @@ fn test_chinese_stdin() {
 
 **症状**：
 ```powershell
-PS> echo "实现 JWT 认证，支持刷新 Token，有效期 7 天" | intent-engine task add --name "测试" --spec-stdin
+PS> echo "实现 JWT 认证，支持刷新 Token，有效期 7 天" | ie task add --name "测试" --spec-stdin
 # spec 显示为: "?? JWT ??????? Token???? 7 ?"
 ```
 
@@ -408,7 +408,7 @@ PS> echo "实现 JWT 认证，支持刷新 Token，有效期 7 天" | intent-eng
 ```powershell
 # PowerShell 7 默认 UTF-8，无需配置
 pwsh  # 启动 PowerShell 7
-echo "实现 JWT 认证" | intent-engine task add --name "测试" --spec-stdin
+echo "实现 JWT 认证" | ie task add --name "测试" --spec-stdin
 ```
 
 **解决方法 2：在 PowerShell 5.x 中设置编码**
@@ -417,14 +417,14 @@ echo "实现 JWT 认证" | intent-engine task add --name "测试" --spec-stdin
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-echo "实现 JWT 认证" | intent-engine task add --name "测试" --spec-stdin
+echo "实现 JWT 认证" | ie task add --name "测试" --spec-stdin
 ```
 
 **解决方法 3：使用 Out-File + Get-Content**
 ```powershell
 # 写入临时文件
 "实现 JWT 认证" | Out-File -Encoding utf8 temp.txt
-Get-Content temp.txt | intent-engine task add --name "测试" --spec-stdin
+Get-Content temp.txt | ie task add --name "测试" --spec-stdin
 Remove-Item temp.txt
 ```
 
@@ -432,7 +432,7 @@ Remove-Item temp.txt
 ```powershell
 @"
 实现 JWT 认证，支持刷新 Token，有效期 7 天
-"@ | intent-engine task add --name "测试" --spec-stdin
+"@ | ie task add --name "测试" --spec-stdin
 ```
 
 **最佳实践**：
@@ -445,7 +445,7 @@ Remove-Item temp.txt
 
 1. 确认版本是否为 v0.1.13+：
 ```bash
-intent-engine --version
+ie --version
 ```
 
 2. 检查控制台编码是否已设置：
@@ -462,7 +462,7 @@ chcp  # 应该显示 "活动代码页: 65001"
 
 3. 测试简单命令（不使用管道）：
 ```bash
-intent-engine task add --name "测试中文"
+ie task add --name "测试中文"
 ```
 
 如果不使用管道能正常显示，说明是管道编码问题，请参考上面的 PowerShell 管道解决方法。

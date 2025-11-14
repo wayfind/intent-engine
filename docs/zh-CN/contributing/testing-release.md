@@ -102,7 +102,7 @@ gh run view <run-id> --log
 ### 检查 crates.io
 ```bash
 # 搜索你的包
-cargo search intent-engine --limit 1
+cargo search ie --limit 1
 
 # 或访问 Web
 # https://crates.io/crates/intent-engine
@@ -114,7 +114,7 @@ cargo search intent-engine --limit 1
 cargo install intent-engine
 
 # 验证版本
-intent-engine --version
+ie --version
 ```
 
 ### 检查 GitHub Release

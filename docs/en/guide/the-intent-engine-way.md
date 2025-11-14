@@ -27,7 +27,7 @@ A smart AI Agent should be trained to recognize these signals and proactively su
 
 ### How
 
-Use `intent-engine task add`. The key is the quality of the `spec`.
+Use `ie task add`. The key is the quality of the `spec`.
 
 ```bash
 # Pass detailed, structured requirements via pipe to --spec-stdin
@@ -40,7 +40,7 @@ echo "# Goal: Implement OAuth2 login
 
 ## Technical Constraints:
 - Use OAuth2 PKCE flow
-- Frontend-backend separation architecture" | intent-engine task add --name "Implement OAuth2 login" --spec-stdin
+- Frontend-backend separation architecture" | ie task add --name "Implement OAuth2 login" --spec-stdin
 ```
 
 ### Why
@@ -57,11 +57,11 @@ When you or AI decide to officially begin working on a captured intent. This is 
 
 ### How
 
-Always use `intent-engine task start <ID> --with-events`.
+Always use `ie task start <ID> --with-events`.
 
 ```bash
 # AI decides to start task #42
-intent-engine task start 42 --with-events
+ie task start 42 --with-events
 ```
 
 ### Why
@@ -90,21 +90,21 @@ First create tasks and evaluate them, then use `pick-next` for smart selection:
 
 ```bash
 # 1. AI discovers 5 issues in code review
-intent-engine task add --name "Fix null pointer exception"
-intent-engine task add --name "Optimize database query"
-intent-engine task add --name "Fix memory leak"
-intent-engine task add --name "Update outdated dependencies"
-intent-engine task add --name "Add error logging"
+ie task add --name "Fix null pointer exception"
+ie task add --name "Optimize database query"
+ie task add --name "Fix memory leak"
+ie task add --name "Update outdated dependencies"
+ie task add --name "Add error logging"
 
 # 2. AI evaluates complexity (1-10) and priority for each task
-intent-engine task update 1 --complexity 3 --priority 10  # Null pointer: simple but urgent
-intent-engine task update 2 --complexity 7 --priority 8   # Database: complex and important
-intent-engine task update 3 --complexity 9 --priority 10  # Memory: complex but urgent
-intent-engine task update 4 --complexity 5 --priority 5   # Dependencies: medium
-intent-engine task update 5 --complexity 2 --priority 3   # Logging: simple not urgent
+ie task update 1 --complexity 3 --priority 10  # Null pointer: simple but urgent
+ie task update 2 --complexity 7 --priority 8   # Database: complex and important
+ie task update 3 --complexity 9 --priority 10  # Memory: complex but urgent
+ie task update 4 --complexity 5 --priority 5   # Dependencies: medium
+ie task update 5 --complexity 2 --priority 3   # Logging: simple not urgent
 
 # 3. Smart select top 3 tasks (by priority DESC, complexity ASC)
-intent-engine task pick-next --max-count 3 --capacity 5
+ie task pick-next --max-count 3 --capacity 5
 # Result: Will select task 1 (P10/C3), 3 (P10/C9), 2 (P8/C7)
 ```
 
@@ -124,7 +124,7 @@ This is the core of the Intent-Engine pattern. When AI executes tasks, it enters
 
 ### When (When to record events)
 
-At every key node in the execution loop, you must use `intent-engine event add` to record. Key nodes include:
+At every key node in the execution loop, you must use `ie event add` to record. Key nodes include:
 
 - **Making important decisions** (`--type decision`): "I chose library A over library B because..."
 - **Encountering obstacles** (`--type blocker`): "I need API key, cannot continue"
@@ -152,7 +152,7 @@ Reason: Original logic did not properly handle expired tokens.
 Improvements:
 - Added token expiration time check
 - Implemented auto-refresh mechanism
-- Increased unit test coverage" | intent-engine event add --task-id 42 --type decision --data-stdin
+- Increased unit test coverage" | ie event add --task-id 42 --type decision --data-stdin
 ```
 
 ### Why
@@ -182,10 +182,10 @@ Use `spawn-subtask` to create and switch to a subtask under current task:
 
 ```bash
 # AI is working on task #42: Implement OAuth2 login
-intent-engine task start 42 --with-events
+ie task start 42 --with-events
 
 # During implementation, discovers need to configure OAuth app first
-intent-engine task spawn-subtask --name "Configure OAuth app on Google and GitHub"
+ie task spawn-subtask --name "Configure OAuth app on Google and GitHub"
 
 # This automatically:
 # 1. Creates subtask (parent_id = 42)
@@ -195,20 +195,20 @@ intent-engine task spawn-subtask --name "Configure OAuth app on Google and GitHu
 
 # While configuring OAuth app, discovers need to apply for domain verification first
 echo "Need to complete domain ownership verification before creating OAuth app" | \
-  intent-engine event add --task-id <child-task-id> --type blocker --data-stdin
+  ie event add --task-id <child-task-id> --type blocker --data-stdin
 
-intent-engine task spawn-subtask --name "Complete domain ownership verification"
+ie task spawn-subtask --name "Complete domain ownership verification"
 
 # Complete deepest subtask (it's now focused after spawn-subtask)
-intent-engine task done
+ie task done
 
 # Switch back to parent task and continue
-intent-engine task switch <child-task-id>
-intent-engine task done
+ie task switch <child-task-id>
+ie task done
 
 # Finally complete root task
-intent-engine task switch 42
-intent-engine task done
+ie task switch 42
+ie task done
 ```
 
 ### Why
@@ -237,10 +237,10 @@ Use `switch` to quickly switch between tasks and get complete context:
 
 ```bash
 # Currently working on frontend task #5
-intent-engine task switch 5
+ie task switch 5
 
 # Suddenly discover backend API has issue, need to fix first
-intent-engine task switch 12  # Switch to backend task
+ie task switch 12  # Switch to backend task
 
 # switch will automatically:
 # 1. Update task #12 status to doing (if not already)
@@ -251,7 +251,7 @@ intent-engine task switch 12  # Switch to backend task
 # Output includes events_summary, helps AI quickly recover memory
 
 # Fix complete, switch back to frontend task
-intent-engine task switch 5
+ie task switch 5
 ```
 
 ### Why
@@ -272,10 +272,10 @@ When all goals defined in `spec` have been achieved, and all subtasks (if any) a
 
 ### How
 
-Always use `intent-engine task done`.
+Always use `ie task done`.
 
 ```bash
-intent-engine task done
+ie task done
 ```
 
 If the task still has incomplete subtasks, system will return error:
@@ -302,11 +302,11 @@ When you need to generate periodic reports (e.g., weekly reports), conduct proje
 
 ### How
 
-Use `intent-engine report`, and **prefer `--summary-only`**.
+Use `ie report`, and **prefer `--summary-only`**.
 
 ```bash
 # AI needs to generate summary for weekly report
-intent-engine report --since 7d --status done --summary-only
+ie report --since 7d --status done --summary-only
 
 # Example output (compact JSON summary):
 # {
@@ -325,16 +325,16 @@ More query examples:
 
 ```bash
 # View all tasks from last 1 day (with details)
-intent-engine report --since 1d
+ie report --since 1d
 
 # View all in-progress tasks
-intent-engine report --status doing --summary-only
+ie report --status doing --summary-only
 
 # Search completed tasks related to "authentication"
-intent-engine report --filter-name "authentication" --status done --summary-only
+ie report --filter-name "authentication" --status done --summary-only
 
 # Combined query: database optimization work completed in last 30 days
-intent-engine report --since 30d --status done --filter-spec "database" --summary-only
+ie report --since 30d --status done --filter-spec "database" --summary-only
 ```
 
 ### Why
@@ -355,59 +355,59 @@ Letting Intent-Engine efficiently complete all statistical calculations internal
 
 ```bash
 # 1. Capture intent - AI discovers 5 issues
-intent-engine task add --name "Fix null pointer exception in UserService"
-intent-engine task add --name "Optimize database query performance"
-intent-engine task add --name "Fix memory leak issue"
-intent-engine task add --name "Update outdated dependency packages"
-intent-engine task add --name "Add error logging"
+ie task add --name "Fix null pointer exception in UserService"
+ie task add --name "Optimize database query performance"
+ie task add --name "Fix memory leak issue"
+ie task add --name "Update outdated dependency packages"
+ie task add --name "Add error logging"
 
 # 2. Evaluate - AI analyzes complexity and priority for each issue
-intent-engine task update 1 --complexity 3 --priority 10
-intent-engine task update 2 --complexity 7 --priority 8
-intent-engine task update 3 --complexity 9 --priority 10
-intent-engine task update 4 --complexity 5 --priority 5
-intent-engine task update 5 --complexity 2 --priority 3
+ie task update 1 --complexity 3 --priority 10
+ie task update 2 --complexity 7 --priority 8
+ie task update 3 --complexity 9 --priority 10
+ie task update 4 --complexity 5 --priority 5
+ie task update 5 --complexity 2 --priority 3
 
 # 3. Smart planning - automatically select optimal task order
-intent-engine task pick-next --max-count 3 --capacity 5
+ie task pick-next --max-count 3 --capacity 5
 # System selects: task 1(P10/C3), 3(P10/C9), 2(P8/C7)
 
 # 4. Execute first task
-intent-engine task switch 1
+ie task switch 1
 
 # 4.1 Record decision
 echo "Problem cause: UserService.getUser() did not check if return value is null
 Fix solution: Add Optional wrapping and null check
 Impact scope: 3 call sites" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  ie event add --task-id 1 --type decision --data-stdin
 
 # 4.2 Execute fix
 # ... modify code ...
 
 # 4.3 Complete task
-intent-engine task done
+ie task done
 
 # 5. Handle second task (includes subtask)
-intent-engine task switch 3
+ie task switch 3
 
 # 5.1 Discover need to diagnose problem first
 echo "Need to use profiler to locate memory leak source" | \
-  intent-engine event add --task-id 3 --type blocker --data-stdin
+  ie event add --task-id 3 --type blocker --data-stdin
 
-intent-engine task spawn-subtask --name "Analyze memory usage with Valgrind"
+ie task spawn-subtask --name "Analyze memory usage with Valgrind"
 
 # 5.2 Complete diagnosis (subtask is now focused, complete it)
 echo "Problem found: WebSocket connections not properly closed" | \
-  intent-engine event add --task-id <subtask-id> --type milestone --data-stdin
-intent-engine task done
+  ie event add --task-id <subtask-id> --type milestone --data-stdin
+ie task done
 
 # 5.3 Switch back and complete main task
-intent-engine task switch 3
+ie task switch 3
 # ... fix code ...
-intent-engine task done
+ie task done
 
 # 6. Generate work report
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 ```
 
 ---
@@ -439,15 +439,15 @@ Use `--summary-only`, atomic operations, smart selection, and other mechanisms t
 ### ❌ Don't: Directly manipulate status
 ```bash
 # Wrong: Manually combine multiple operations
-intent-engine task update 42 --status doing
-intent-engine current --set 42
-intent-engine task get 42 --with-events
+ie task update 42 --status doing
+ie current --set 42
+ie task get 42 --with-events
 ```
 
 ### ✅ Should: Use atomic operations
 ```bash
 # Correct: One step
-intent-engine task start 42 --with-events
+ie task start 42 --with-events
 ```
 
 ---
@@ -455,25 +455,25 @@ intent-engine task start 42 --with-events
 ### ❌ Don't: Flatten all tasks
 ```bash
 # Wrong: All sub-problems created as independent root tasks
-intent-engine task add --name "Implement OAuth2"
-intent-engine task add --name "Configure Google OAuth"
-intent-engine task add --name "Configure GitHub OAuth"
-intent-engine task add --name "Implement token refresh"
+ie task add --name "Implement OAuth2"
+ie task add --name "Configure Google OAuth"
+ie task add --name "Configure GitHub OAuth"
+ie task add --name "Implement token refresh"
 ```
 
 ### ✅ Should: Use hierarchical structure
 ```bash
 # Correct: Use parent-child relationship
-intent-engine task add --name "Implement OAuth2"
-intent-engine task start 1
-intent-engine task spawn-subtask --name "Configure Google OAuth"
-intent-engine task done
-intent-engine task spawn-subtask --name "Configure GitHub OAuth"
-intent-engine task done
-intent-engine task spawn-subtask --name "Implement token refresh"
-intent-engine task done
-intent-engine task switch 1
-intent-engine task done
+ie task add --name "Implement OAuth2"
+ie task start 1
+ie task spawn-subtask --name "Configure Google OAuth"
+ie task done
+ie task spawn-subtask --name "Configure GitHub OAuth"
+ie task done
+ie task spawn-subtask --name "Implement token refresh"
+ie task done
+ie task switch 1
+ie task done
 ```
 
 ---
@@ -498,7 +498,7 @@ Reasons:
 Trade-offs:
 - Increases dependencies
 - Need to learn its API" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  ie event add --task-id 1 --type decision --data-stdin
 ```
 
 ---

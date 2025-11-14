@@ -23,7 +23,7 @@ Intent-Engine interacts with AI tools via **CLI + JSON**:
 
 1. **Intent-Engine installed and in PATH**
    ```bash
-   intent-engine --version
+   ie --version
    ```
 
 2. **AI tool supports executing Shell commands**
@@ -57,31 +57,31 @@ Create a task when work requires:
 
 ### Start Working
 \`\`\`bash
-intent-engine task start <ID> --with-events
+ie task start <ID> --with-events
 # Returns: task details + event history + spec
 \`\`\`
 
 ### Create Subtask
 \`\`\`bash
-intent-engine task spawn-subtask --name "Subtask name"
+ie task spawn-subtask --name "Subtask name"
 # Atomic: create + start + switch
 \`\`\`
 
 ### Record Decision
 \`\`\`bash
 echo "Decision details..." | \
-  intent-engine event add --task-id <ID> --type decision --data-stdin
+  ie event add --task-id <ID> --type decision --data-stdin
 \`\`\`
 
 ### Complete Task
 \`\`\`bash
-intent-engine task done
+ie task done
 # Enforces: all subtasks must be done first
 \`\`\`
 
 ### Generate Report
 \`\`\`bash
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 # Token-efficient summary
 \`\`\`
 
@@ -127,7 +127,7 @@ echo "Refactor database query layer
 - Add connection pool management
 - Implement query caching
 - Add slow query logging" | \
-  intent-engine task add --name "Refactor database query layer" --spec-stdin
+  ie task add --name "Refactor database query layer" --spec-stdin
 
 [Output]
 {
@@ -140,7 +140,7 @@ echo "Refactor database query layer
 AI: Task created (ID: 1). Let me start this task and view the context.
 
 [Executes command]
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 [AI continues working...]
 ```
@@ -202,7 +202,7 @@ Implement JWT-based user authentication system
 # References
 - RFC 7519 (JWT)
 - https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html" | \
-  intent-engine task add --name "Implement JWT authentication" --spec-stdin
+  ie task add --name "Implement JWT authentication" --spec-stdin
 ```
 
 ### 3. Event Recording Strategy
@@ -246,32 +246,32 @@ Root task (strategic goal)
 
 ```bash
 # 1. AI discovers 5 issues, batch create tasks
-intent-engine task add --name "Fix null pointer exception"
-intent-engine task add --name "Optimize database query"
-intent-engine task add --name "Fix memory leak"
-intent-engine task add --name "Update outdated dependencies"
-intent-engine task add --name "Add error logging"
+ie task add --name "Fix null pointer exception"
+ie task add --name "Optimize database query"
+ie task add --name "Fix memory leak"
+ie task add --name "Update outdated dependencies"
+ie task add --name "Add error logging"
 
 # 2. AI evaluates priority and complexity
-intent-engine task update 1 --priority 10 --complexity 3  # Urgent and simple
-intent-engine task update 2 --priority 8 --complexity 7   # Important but complex
-intent-engine task update 3 --priority 10 --complexity 9  # Urgent and complex
-intent-engine task update 4 --priority 5 --complexity 5   # Medium
-intent-engine task update 5 --priority 3 --complexity 2   # Not urgent and simple
+ie task update 1 --priority 10 --complexity 3  # Urgent and simple
+ie task update 2 --priority 8 --complexity 7   # Important but complex
+ie task update 3 --priority 10 --complexity 9  # Urgent and complex
+ie task update 4 --priority 5 --complexity 5   # Medium
+ie task update 5 --priority 3 --complexity 2   # Not urgent and simple
 
 # 3. Smart task selection (by priority DESC, complexity ASC)
-intent-engine task pick-next --max-count 3
+ie task pick-next --max-count 3
 # Will select: task 1 (P10/C3), task 3 (P10/C9), task 2 (P8/C7)
 
 # 4. Process one by one
-intent-engine task switch 1
+ie task switch 1
 # ... fix ...
 echo "Cause: Did not check for null return value" | \
-  intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done
+  ie event add --task-id 1 --type note --data-stdin
+ie task done
 
 # 5. Generate report
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 ```
 
 ### Scenario 2: Recursive Problem Decomposition
@@ -279,25 +279,25 @@ intent-engine report --since 1d --summary-only
 ```bash
 # 1. Start major task
 echo "Implement complete payment system..." | \
-  intent-engine task add --name "Implement payment system" --spec-stdin
-intent-engine task start 1 --with-events
+  ie task add --name "Implement payment system" --spec-stdin
+ie task start 1 --with-events
 
 # 2. Discover sub-problem
-intent-engine task spawn-subtask --name "Integrate Stripe API"
+ie task spawn-subtask --name "Integrate Stripe API"
 
 # 3. Discover even finer problem
-intent-engine task spawn-subtask --name "Configure webhook callback"
+ie task spawn-subtask --name "Configure webhook callback"
 
 # 4. Complete deepest task
 echo "Webhook endpoint configured" | \
-  intent-engine event add --task-id 3 --type milestone --data-stdin
-intent-engine task done
+  ie event add --task-id 3 --type milestone --data-stdin
+ie task done
 
 # 5. Complete layer by layer
-intent-engine task switch 2
-intent-engine task done
-intent-engine task switch 1
-intent-engine task done
+ie task switch 2
+ie task done
+ie task switch 1
+ie task done
 ```
 
 ---
@@ -311,7 +311,7 @@ intent-engine task done
 ```markdown
 IMPORTANT: For all complex, multi-step tasks, you MUST use Intent-Engine
 to track strategic intent. Before starting any significant work, create
-a task with `intent-engine task add`.
+a task with `ie task add`.
 ```
 
 ### Q: How to make AI automatically record decisions?
@@ -322,7 +322,7 @@ a task with `intent-engine task add`.
 Whenever you make a key technical decision, record it immediately:
 
 echo "Your decision and reasoning..." | \
-  intent-engine event add --task-id <current-task-id> --type decision --data-stdin
+  ie event add --task-id <current-task-id> --type decision --data-stdin
 ```
 
 ### Q: JSON output too long, affecting context?
@@ -331,13 +331,13 @@ echo "Your decision and reasoning..." | \
 
 ```bash
 # Get summary only
-intent-engine report --summary-only
+ie report --summary-only
 
 # Extract only needed fields
-intent-engine task get 1 | jq '{id, name, status, spec}'
+ie task get 1 | jq '{id, name, status, spec}'
 
 # View only recent 5 events
-intent-engine event list --task-id 1 --limit 5
+ie event list --task-id 1 --limit 5
 ```
 
 ### Q: How to share Intent-Engine data in a team?
@@ -390,7 +390,7 @@ Create dedicated prompt templates for your AI tool:
 # auto-task-report.sh
 
 # Auto-generate daily work report
-intent-engine report --since 1d --summary-only > /tmp/daily-report.json
+ie report --since 1d --summary-only > /tmp/daily-report.json
 
 # Send to AI to generate natural language summary
 cat /tmp/daily-report.json | your-ai-cli summarize
@@ -401,11 +401,11 @@ cat /tmp/daily-report.json | your-ai-cli summarize
 ```bash
 # Project A
 cd /path/to/project-a
-intent-engine task add --name "Feature X"
+ie task add --name "Feature X"
 
 # Project B
 cd /path/to/project-b
-intent-engine task add --name "Feature Y"
+ie task add --name "Feature Y"
 
 # Each project has independent .intent-engine/ database
 ```

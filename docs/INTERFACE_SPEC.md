@@ -252,7 +252,7 @@ Result: .intent-engine created at /home/user/project/ (.git has higher priority)
 
 **Signature**:
 ```bash
-intent-engine task add \
+ie task add \
   --name <NAME> \
   [--spec-stdin] \
   [--parent <PARENT_ID>]
@@ -286,7 +286,7 @@ intent-engine task add \
 
 **Signature**:
 ```bash
-intent-engine task start <TASK_ID> [--with-events]
+ie task start <TASK_ID> [--with-events]
 ```
 
 **Parameters**:
@@ -322,7 +322,7 @@ intent-engine task start <TASK_ID> [--with-events]
 
 **Signature**:
 ```bash
-intent-engine task done
+ie task done
 ```
 
 **No Parameters** - This command is **strictly focus-driven** and operates only on `current_task_id`.
@@ -362,7 +362,7 @@ intent-engine task done
 
 **Signature**:
 ```bash
-intent-engine task spawn-subtask \
+ie task spawn-subtask \
   --name <NAME> \
   [--spec-stdin]
 ```
@@ -401,7 +401,7 @@ intent-engine task spawn-subtask \
 
 **Signature**:
 ```bash
-intent-engine task switch <TASK_ID>
+ie task switch <TASK_ID>
 ```
 
 **Parameters**:
@@ -434,7 +434,7 @@ intent-engine task switch <TASK_ID>
 
 **Signature**:
 ```bash
-intent-engine task pick-next [--format <FORMAT>]
+ie task pick-next [--format <FORMAT>]
 ```
 
 **Parameters**:
@@ -469,7 +469,7 @@ IF Priority 1 returns empty:
   Parent: #42 Implement authentication
 
 🎯 Reason: Subtask of current focused task
-💡 To start: intent-engine task start 43
+💡 To start: ie task start 43
 ```
 
 **Output** (json format):
@@ -505,7 +505,7 @@ IF Priority 1 returns empty:
 
 **Signature**:
 ```bash
-intent-engine task find \
+ie task find \
   [--status <STATUS>] \
   [--parent <PARENT_ID>]
 ```
@@ -536,7 +536,7 @@ intent-engine task find \
 
 **Signature**:
 ```bash
-intent-engine task search <QUERY> \
+ie task search <QUERY> \
   [--limit <N>] \
   [--snippet]
 ```
@@ -573,7 +573,7 @@ intent-engine task search <QUERY> \
 
 **Signature**:
 ```bash
-intent-engine task get <TASK_ID>
+ie task get <TASK_ID>
 ```
 
 **Output**: JSON (single task with full details)
@@ -585,7 +585,7 @@ intent-engine task get <TASK_ID>
 
 **Signature**:
 ```bash
-intent-engine task update <TASK_ID> \
+ie task update <TASK_ID> \
   [--name <NAME>] \
   [--status <STATUS>] \
   [--spec-stdin]
@@ -600,7 +600,7 @@ intent-engine task update <TASK_ID> \
 
 **Signature**:
 ```bash
-intent-engine event add \
+ie event add \
   --type <TYPE> \
   [--task-id <TASK_ID>] \
   [--data-stdin]
@@ -635,7 +635,7 @@ intent-engine event add \
 
 **Signature**:
 ```bash
-intent-engine event list <TASK_ID>
+ie event list <TASK_ID>
 ```
 
 **Output**: JSON (array of events)
@@ -649,7 +649,7 @@ intent-engine event list <TASK_ID>
 
 **Signature**:
 ```bash
-intent-engine report \
+ie report \
   [--since <DURATION>] \
   [--status <STATUS>] \
   [--summary-only]
@@ -691,10 +691,10 @@ intent-engine report \
 **Signature**:
 ```bash
 # Get current task
-intent-engine current
+ie current
 
 # Set current task
-intent-engine current --set <TASK_ID>
+ie current --set <TASK_ID>
 ```
 
 **Output** (get):
@@ -716,7 +716,7 @@ intent-engine current --set <TASK_ID>
 
 **Signature**:
 ```bash
-intent-engine session-restore \
+ie session-restore \
   [--include-events <NUM>] \
   [--workspace <PATH>]
 ```
@@ -841,7 +841,7 @@ intent-engine session-restore \
 
 **Signature**:
 ```bash
-intent-engine setup-claude-code \
+ie setup-claude-code \
   [--dry-run] \
   [--force] \
   [--claude-dir <PATH>]

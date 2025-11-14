@@ -163,8 +163,8 @@ Rust版本: stable
 
 **产物包含**:
 - `intent-engine` - 统一二进制（包含CLI和MCP服务器）
-  - CLI模式: `intent-engine task add ...`
-  - MCP服务器模式: `intent-engine mcp-server`
+  - CLI模式: `ie task add ...`
+  - MCP服务器模式: `ie mcp-server`
 
 **保留期**: 7天
 

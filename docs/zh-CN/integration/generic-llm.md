@@ -23,7 +23,7 @@ Intent-Engine 通过 **CLI + JSON** 的方式与 AI 工具交互：
 
 1. **Intent-Engine 已安装并在 PATH 中**
    ```bash
-   intent-engine --version
+   ie --version
    ```
 
 2. **AI 工具支持执行 Shell 命令**
@@ -57,25 +57,25 @@ Create a task when work requires:
 
 ### Start Working
 \`\`\`bash
-intent-engine task start <ID> --with-events
+ie task start <ID> --with-events
 # Returns: task details + event history + spec
 \`\`\`
 
 ### Create Subtask
 \`\`\`bash
-intent-engine task spawn-subtask --name "Subtask name"
+ie task spawn-subtask --name "Subtask name"
 # Atomic: create + start + switch
 \`\`\`
 
 ### Record Decision
 \`\`\`bash
 echo "Decision details..." | \
-  intent-engine event add --task-id <ID> --type decision --data-stdin
+  ie event add --task-id <ID> --type decision --data-stdin
 \`\`\`
 
 ### Complete Task
 \`\`\`bash
-intent-engine task done
+ie task done
 # Completes the current focused task
 # Enforces: all subtasks must be done first
 # Prerequisite: task must be set as current
@@ -83,7 +83,7 @@ intent-engine task done
 
 ### Generate Report
 \`\`\`bash
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 # Token-efficient summary
 \`\`\`
 
@@ -129,7 +129,7 @@ echo "重构数据库查询层
 - 添加连接池管理
 - 实现查询缓存
 - 添加慢查询日志" | \
-  intent-engine task add --name "重构数据库查询层" --spec-stdin
+  ie task add --name "重构数据库查询层" --spec-stdin
 
 [输出]
 {
@@ -142,7 +142,7 @@ echo "重构数据库查询层
 AI: 任务已创建（ID: 1）。让我开始这个任务并查看上下文。
 
 [执行命令]
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 [AI 继续工作...]
 ```
@@ -204,7 +204,7 @@ echo "# 目标
 # 参考资料
 - RFC 7519 (JWT)
 - https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html" | \
-  intent-engine task add --name "实现 JWT 认证" --spec-stdin
+  ie task add --name "实现 JWT 认证" --spec-stdin
 ```
 
 ### 3. 事件记录策略
@@ -248,32 +248,32 @@ echo "# 目标
 
 ```bash
 # 1. AI 发现 5 个问题，批量创建任务
-intent-engine task add --name "修复空指针异常"
-intent-engine task add --name "优化数据库查询"
-intent-engine task add --name "修复内存泄漏"
-intent-engine task add --name "更新过期依赖"
-intent-engine task add --name "添加错误日志"
+ie task add --name "修复空指针异常"
+ie task add --name "优化数据库查询"
+ie task add --name "修复内存泄漏"
+ie task add --name "更新过期依赖"
+ie task add --name "添加错误日志"
 
 # 2. AI 评估优先级和复杂度
-intent-engine task update 1 --priority 10 --complexity 3  # 紧急且简单
-intent-engine task update 2 --priority 8 --complexity 7   # 重要但复杂
-intent-engine task update 3 --priority 10 --complexity 9  # 紧急且复杂
-intent-engine task update 4 --priority 5 --complexity 5   # 中等
-intent-engine task update 5 --priority 3 --complexity 2   # 不紧急且简单
+ie task update 1 --priority 10 --complexity 3  # 紧急且简单
+ie task update 2 --priority 8 --complexity 7   # 重要但复杂
+ie task update 3 --priority 10 --complexity 9  # 紧急且复杂
+ie task update 4 --priority 5 --complexity 5   # 中等
+ie task update 5 --priority 3 --complexity 2   # 不紧急且简单
 
 # 3. 智能选择任务（按优先级降序、复杂度升序）
-intent-engine task pick-next --max-count 3
+ie task pick-next --max-count 3
 # 会选择：任务1 (P10/C3)、任务3 (P10/C9)、任务2 (P8/C7)
 
 # 4. 逐个处理
-intent-engine task switch 1
+ie task switch 1
 # ... 修复 ...
 echo "原因：未检查 null 返回值" | \
-  intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done  # 完成当前焦点任务（task 1）
+  ie event add --task-id 1 --type note --data-stdin
+ie task done  # 完成当前焦点任务（task 1）
 
 # 5. 生成报告
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 ```
 
 ### 场景 2：递归问题分解
@@ -281,25 +281,25 @@ intent-engine report --since 1d --summary-only
 ```bash
 # 1. 开始大任务
 echo "实现完整的支付系统..." | \
-  intent-engine task add --name "实现支付系统" --spec-stdin
-intent-engine task start 1 --with-events
+  ie task add --name "实现支付系统" --spec-stdin
+ie task start 1 --with-events
 
 # 2. 发现子问题
-intent-engine task spawn-subtask --name "集成 Stripe API"
+ie task spawn-subtask --name "集成 Stripe API"
 
 # 3. 又发现更细的问题
-intent-engine task spawn-subtask --name "配置 Webhook 回调"
+ie task spawn-subtask --name "配置 Webhook 回调"
 
 # 4. 完成最深层任务
 echo "已配置 webhook endpoint" | \
-  intent-engine event add --task-id 3 --type milestone --data-stdin
-intent-engine task done  # 完成任务3（当前焦点）
+  ie event add --task-id 3 --type milestone --data-stdin
+ie task done  # 完成任务3（当前焦点）
 
 # 5. 逐层完成
-intent-engine task switch 2
-intent-engine task done  # 完成任务2
-intent-engine task switch 1
-intent-engine task done  # 完成任务1
+ie task switch 2
+ie task done  # 完成任务2
+ie task switch 1
+ie task done  # 完成任务1
 ```
 
 ---
@@ -313,7 +313,7 @@ intent-engine task done  # 完成任务1
 ```markdown
 IMPORTANT: For all complex, multi-step tasks, you MUST use Intent-Engine
 to track strategic intent. Before starting any significant work, create
-a task with `intent-engine task add`.
+a task with `ie task add`.
 ```
 
 ### Q: 如何让 AI 自动记录决策？
@@ -324,7 +324,7 @@ a task with `intent-engine task add`.
 Whenever you make a key technical decision, record it immediately:
 
 echo "Your decision and reasoning..." | \
-  intent-engine event add --task-id <current-task-id> --type decision --data-stdin
+  ie event add --task-id <current-task-id> --type decision --data-stdin
 ```
 
 ### Q: JSON 输出太长，影响上下文怎么办？
@@ -333,13 +333,13 @@ echo "Your decision and reasoning..." | \
 
 ```bash
 # 只获取摘要
-intent-engine report --summary-only
+ie report --summary-only
 
 # 只提取需要的字段
-intent-engine task get 1 | jq '{id, name, status, spec}'
+ie task get 1 | jq '{id, name, status, spec}'
 
 # 只看最近 5 个事件
-intent-engine event list --task-id 1 --limit 5
+ie event list --task-id 1 --limit 5
 ```
 
 ### Q: 如何在团队中共享 Intent-Engine 数据？
@@ -392,7 +392,7 @@ git commit -m "Update task database"
 # auto-task-report.sh
 
 # 每天自动生成工作报告
-intent-engine report --since 1d --summary-only > /tmp/daily-report.json
+ie report --since 1d --summary-only > /tmp/daily-report.json
 
 # 发送到 AI 生成自然语言总结
 cat /tmp/daily-report.json | your-ai-cli summarize
@@ -403,11 +403,11 @@ cat /tmp/daily-report.json | your-ai-cli summarize
 ```bash
 # 项目 A
 cd /path/to/project-a
-intent-engine task add --name "Feature X"
+ie task add --name "Feature X"
 
 # 项目 B
 cd /path/to/project-b
-intent-engine task add --name "Feature Y"
+ie task add --name "Feature Y"
 
 # 每个项目独立的 .intent-engine/ 数据库
 ```

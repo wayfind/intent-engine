@@ -148,8 +148,8 @@ jobs:
 
           After installation, verify with:
           ```bash
-          intent-engine --version
-          intent-engine doctor
+          ie --version
+          ie doctor
           ```
 
           ## 📚 Documentation

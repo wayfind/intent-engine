@@ -22,7 +22,7 @@
    - 必须在 `blocking_task_id` 和 `blocked_task_id` 上建立索引。
 
 2. **新增 CLI 命令**:
-   - `intent-engine task depends-on <BLOCKED_ID> <BLOCKING_ID>`: 创建一条依赖关系，意为"任务 BLOCKED_ID 依赖于 任务 BLOCKING_ID"。
+   - `ie task depends-on <BLOCKED_ID> <BLOCKING_ID>`: 创建一条依赖关系，意为"任务 BLOCKED_ID 依赖于 任务 BLOCKING_ID"。
    - 命令必须进行**循环依赖检测**。如果添加此依赖会造成循环（例如 A->B->C->A），命令必须失败并返回错误。
 
 3. **核心逻辑变更**:
@@ -44,7 +44,7 @@
 
 1. **CLI 命令增强**: `event list` 命令的签名变更为：
    ```bash
-   intent-engine event list <TASK_ID> [--type <TYPE>] [--since <DURATION>]
+   ie event list <TASK_ID> [--type <TYPE>] [--since <DURATION>]
    ```
 
 2. **参数行为**:
@@ -83,7 +83,7 @@
 **需求规格**:
 
 1. **全局重命名**:
-   - CLI 命令 `intent-engine task find` 更名为 `intent-engine task list`。
+   - CLI 命令 `ie task find` 更名为 `ie task list`。
    - MCP 工具 `task_find` 更名为 `task_list`。
 
 2. **文档更新**: 所有文档、示例和 `README.md` 中的 `find` 都必须同步更新为 `list`。

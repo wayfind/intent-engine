@@ -271,14 +271,14 @@ search: "实现用户认证功能" // ✅ 可以找到（完整匹配）
 
 ```bash
 # 正确
-intent-engine task add --name "Task with spaces"
-intent-engine task add --name 'Task with "quotes"'
+ie task add --name "Task with spaces"
+ie task add --name 'Task with "quotes"'
 
 # Unicode
-intent-engine task add --name "实现功能"
+ie task add --name "实现功能"
 
 # Emoji
-intent-engine task add --name "🚀 Deploy"
+ie task add --name "🚀 Deploy"
 ```
 
 ### stdin 输入 ✅
@@ -287,7 +287,7 @@ intent-engine task add --name "🚀 Deploy"
 
 ```bash
 echo "Multi-line\nspecification\nwith special chars" | \
-  intent-engine task add --name "Task" --spec-stdin
+  ie task add --name "Task" --spec-stdin
 ```
 
 ## 测试覆盖统计
@@ -325,15 +325,15 @@ echo "Multi-line\nspecification\nwith special chars" | \
 1. **Shell 引号使用**
    ```bash
    # 单引号保护大部分特殊字符
-   intent-engine task add --name 'Task with $var'
+   ie task add --name 'Task with $var'
 
    # 双引号允许变量展开
-   intent-engine task add --name "Task for $USER"
+   ie task add --name "Task for $USER"
    ```
 
 2. **复杂内容使用 stdin**
    ```bash
-   cat spec.md | intent-engine task add --name "Task" --spec-stdin
+   cat spec.md | ie task add --name "Task" --spec-stdin
    ```
 
 3. **CJK 搜索提示**

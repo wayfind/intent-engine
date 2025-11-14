@@ -7,7 +7,7 @@ use tempfile::TempDir;
 
 /// Helper to get the binary path
 fn intent_engine_cmd() -> Command {
-    Command::new(cargo::cargo_bin!("intent-engine"))
+    Command::new(cargo::cargo_bin!("ie"))
 }
 
 /// Helper to create a test project
@@ -363,74 +363,4 @@ fn test_task_list_command() {
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     let tasks: Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(tasks.as_array().unwrap().len(), 2);
-}
-
-#[test]
-fn test_task_find_deprecated() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
-
-    // Add a task
-    add_task(&dir.to_path_buf(), "Test Task");
-
-    // Use deprecated 'find' command
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("find")
-        .arg("--status")
-        .arg("todo")
-        .assert()
-        .success();
-
-    // Check that deprecation warning is shown in stderr
-    let stderr = String::from_utf8_lossy(&output.get_output().stderr);
-    assert!(stderr.contains("Warning"));
-    assert!(stderr.contains("deprecated"));
-    assert!(stderr.contains("task list"));
-
-    // Verify that it still works (returns data in stdout)
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(tasks.as_array().unwrap().len(), 1);
-}
-
-#[test]
-fn test_task_list_vs_find_same_results() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
-
-    // Add some tasks
-    add_task(&dir.to_path_buf(), "Task 1");
-    add_task(&dir.to_path_buf(), "Task 2");
-
-    // Use 'list' command
-    let list_output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("list")
-        .arg("--status")
-        .arg("todo")
-        .assert()
-        .success();
-
-    let list_stdout = String::from_utf8_lossy(&list_output.get_output().stdout);
-    let list_tasks: Value = serde_json::from_str(&list_stdout).unwrap();
-
-    // Use deprecated 'find' command
-    let find_output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("find")
-        .arg("--status")
-        .arg("todo")
-        .assert()
-        .success();
-
-    let find_stdout = String::from_utf8_lossy(&find_output.get_output().stdout);
-    let find_tasks: Value = serde_json::from_str(&find_stdout).unwrap();
-
-    // Both should return the same results
-    assert_eq!(list_tasks, find_tasks);
-    assert_eq!(list_tasks.as_array().unwrap().len(), 2);
 }

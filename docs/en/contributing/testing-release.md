@@ -102,7 +102,7 @@ After release completes, verify:
 ### Check crates.io
 ```bash
 # Search for your package
-cargo search intent-engine --limit 1
+cargo search ie --limit 1
 
 # Or visit Web
 # https://crates.io/crates/intent-engine
@@ -114,7 +114,7 @@ cargo search intent-engine --limit 1
 cargo install intent-engine
 
 # Verify version
-intent-engine --version
+ie --version
 ```
 
 ### Check GitHub Release

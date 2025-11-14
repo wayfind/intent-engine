@@ -7,17 +7,17 @@ Strategic intent and task workflow management for human-AI collaboration.
 ```bash
 # Create a task to capture intent
 echo "Implement OAuth2 login with Google and GitHub support" | \
-  intent-engine task add --name "OAuth2 Login" --spec-stdin
+  ie task add --name "OAuth2 Login" --spec-stdin
 
 # Start working on it
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # Record a decision
 echo "Using Passport.js for OAuth strategy implementation" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  ie event add --task-id 1 --type decision --data-stdin
 
 # Complete the task (task 1 is currently focused)
-intent-engine task done
+ie task done
 ```
 
 ## Core Workflow
@@ -27,10 +27,10 @@ intent-engine task done
 When a requirement is complex enough (multi-step, needs context, long-term):
 
 ```bash
-intent-engine task add --name "Task Name" [--parent PARENT_ID]
+ie task add --name "Task Name" [--parent PARENT_ID]
 # With specification:
 echo "Detailed spec in markdown..." | \
-  intent-engine task add --name "Task Name" --spec-stdin
+  ie task add --name "Task Name" --spec-stdin
 ```
 
 ### 2. Activate & Get Context (ATOMIC)
@@ -38,7 +38,7 @@ echo "Detailed spec in markdown..." | \
 Always use this to start work:
 
 ```bash
-intent-engine task start <ID> --with-events
+ie task start <ID> --with-events
 ```
 
 This single call:
@@ -52,11 +52,11 @@ When you have multiple tasks and need to optimize order:
 
 ```bash
 # First, evaluate tasks
-intent-engine task update 1 --complexity 7 --priority 10
-intent-engine task update 2 --complexity 3 --priority 8
+ie task update 1 --complexity 7 --priority 10
+ie task update 2 --complexity 3 --priority 8
 
 # Then intelligently pick next batch
-intent-engine task pick-next --max-count 3 --capacity 5
+ie task pick-next --max-count 3 --capacity 5
 ```
 
 Selects by: priority DESC, complexity ASC (do important+simple first)
@@ -66,10 +66,10 @@ Selects by: priority DESC, complexity ASC (do important+simple first)
 When you discover a blocking sub-problem:
 
 ```bash
-intent-engine task spawn-subtask --name "Subtask Name"
+ie task spawn-subtask --name "Subtask Name"
 # With spec:
 echo "Subtask details..." | \
-  intent-engine task spawn-subtask --name "Subtask Name" --spec-stdin
+  ie task spawn-subtask --name "Subtask Name" --spec-stdin
 ```
 
 This single call:
@@ -82,7 +82,7 @@ This single call:
 When juggling multiple tasks:
 
 ```bash
-intent-engine task switch <ID>
+ie task switch <ID>
 ```
 
 This single call:
@@ -97,15 +97,15 @@ Log every critical decision, blocker, or milestone:
 ```bash
 # Decision
 echo "Chose library A over B because..." | \
-  intent-engine event add --task-id <ID> --type decision --data-stdin
+  ie event add --task-id <ID> --type decision --data-stdin
 
 # Blocker
 echo "Need API key from team lead" | \
-  intent-engine event add --task-id <ID> --type blocker --data-stdin
+  ie event add --task-id <ID> --type blocker --data-stdin
 
 # Milestone
 echo "Database migration complete" | \
-  intent-engine event add --task-id <ID> --type milestone --data-stdin
+  ie event add --task-id <ID> --type milestone --data-stdin
 ```
 
 Event types: `decision`, `blocker`, `milestone`, `discussion`, `note`
@@ -115,11 +115,11 @@ Event types: `decision`, `blocker`, `milestone`, `discussion`, `note`
 Only when all objectives achieved and all subtasks done:
 
 ```bash
-intent-engine task done
+ie task done
 ```
 
 **Important**: This command operates on the current focused task only. It does not accept an ID parameter.
-- If you need to complete a non-current task, first switch to it: `intent-engine task switch <ID>` or `intent-engine current --set <ID>`
+- If you need to complete a non-current task, first switch to it: `ie task switch <ID>` or `ie current --set <ID>`
 - System enforces: parent can't complete until all children are done.
 
 ### 8. Generate Reports (Token-Efficient)
@@ -128,13 +128,13 @@ Always use `--summary-only` unless you need full details:
 
 ```bash
 # Weekly summary (recommended)
-intent-engine report --since 7d --summary-only
+ie report --since 7d --summary-only
 
 # Full details for specific status
-intent-engine report --status done --since 7d
+ie report --status done --since 7d
 
 # Search with FTS5
-intent-engine report --filter-name "auth" --summary-only
+ie report --filter-name "auth" --summary-only
 ```
 
 ## Common Patterns
@@ -143,50 +143,50 @@ intent-engine report --filter-name "auth" --summary-only
 
 ```bash
 # Create todos
-intent-engine task add --name "Fix bug A"
-intent-engine task add --name "Fix bug B"
-intent-engine task add --name "Fix bug C"
+ie task add --name "Fix bug A"
+ie task add --name "Fix bug B"
+ie task add --name "Fix bug C"
 
 # Evaluate
-intent-engine task update 1 --complexity 3 --priority 10
-intent-engine task update 2 --complexity 7 --priority 8
-intent-engine task update 3 --complexity 2 --priority 5
+ie task update 1 --complexity 3 --priority 10
+ie task update 2 --complexity 7 --priority 8
+ie task update 3 --complexity 2 --priority 5
 
 # Auto-select optimal order
-intent-engine task pick-next --max-count 3
+ie task pick-next --max-count 3
 ```
 
 ### Pattern 2: Recursive Problem Decomposition
 
 ```bash
 # Start parent task
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # Discover sub-problem
-intent-engine task spawn-subtask --name "Sub-problem A"
+ie task spawn-subtask --name "Sub-problem A"
 
 # Discover nested sub-problem
-intent-engine task spawn-subtask --name "Sub-sub-problem"
+ie task spawn-subtask --name "Sub-sub-problem"
 
 # Complete from deepest to shallowest (each spawn-subtask auto-focuses the subtask)
-intent-engine task done  # Completes current (sub-sub-problem)
-intent-engine task switch 2  # Switch to parent
-intent-engine task done  # Completes current (sub-problem A)
-intent-engine task switch 1  # Switch to root
-intent-engine task done  # Completes current (parent task)
+ie task done  # Completes current (sub-sub-problem)
+ie task switch 2  # Switch to parent
+ie task done  # Completes current (sub-problem A)
+ie task switch 1  # Switch to root
+ie task done  # Completes current (parent task)
 ```
 
 ### Pattern 3: Recover Context After Interruption
 
 ```bash
 # Get current task
-intent-engine current
+ie current
 
 # Get full context
-intent-engine task get <ID> --with-events
+ie task get <ID> --with-events
 
 # Review recent events
-intent-engine event list --task-id <ID> --limit 10
+ie event list --task-id <ID> --limit 10
 ```
 
 ## Why Use Atomic Commands?

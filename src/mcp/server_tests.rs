@@ -895,20 +895,6 @@ mod handler_tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("blocked_task_id"));
     }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_handle_task_find_deprecated_warning() {
-        let _ctx = setup_test_env().await;
-
-        let args = json!({
-            "status": "todo"
-        });
-
-        // This test mainly verifies the function works, the warning is printed to stderr
-        let result = handle_task_find(args).await;
-        assert!(result.is_ok());
-    }
 }
 
 #[cfg(test)]

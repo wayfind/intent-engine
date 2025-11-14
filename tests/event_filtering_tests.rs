@@ -8,7 +8,7 @@ use tempfile::TempDir;
 
 /// Helper to get the binary path
 fn intent_engine_cmd() -> Command {
-    Command::new(cargo::cargo_bin!("intent-engine"))
+    Command::new(cargo::cargo_bin!("ie"))
 }
 
 /// Helper to create a test project

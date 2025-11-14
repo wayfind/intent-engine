@@ -38,7 +38,7 @@ Intent-Engine 是一个极简的、项目专属的命令行数据库服务，专
 cargo install intent-engine
 
 # 验证安装
-intent-engine --version
+ie --version
 ```
 
 **没有 Rust？** 先安装 Rust：
@@ -79,7 +79,7 @@ tar xzf intent-engine-*.tar.gz
 sudo mv intent-engine /usr/local/bin/
 
 # 验证安装
-intent-engine --version
+ie --version
 ```
 
 ### 方式 5: 从源码构建
@@ -126,29 +126,29 @@ Intent-Engine 可以作为 MCP (Model Context Protocol) server 集成到 Claude 
 
 ```bash
 # 1. 添加主任务
-intent-engine task add --name "实现用户认证功能" | jq -r '.id'
+ie task add --name "实现用户认证功能" | jq -r '.id'
 # 输出: 1
 
 # 2. 开始任务并查看详情
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # 3. 发现问题，创建子任务
-intent-engine task spawn-subtask --name "修复密码验证 bug"
+ie task spawn-subtask --name "修复密码验证 bug"
 
 # 4. 记录关键决策
-echo "决定使用 bcrypt 替代 MD5" | intent-engine event add --task-id 2 --type decision --data-stdin
+echo "决定使用 bcrypt 替代 MD5" | ie event add --task-id 2 --type decision --data-stdin
 
 # 5. 完成子任务（子任务已是焦点，直接完成）
-intent-engine task done
+ie task done
 
 # 6. 切换回父任务
-intent-engine task switch 1
+ie task switch 1
 
 # 7. 完成父任务（父任务现在是焦点，直接完成）
-intent-engine task done
+ie task done
 
 # 8. 生成工作报告
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 ```
 
 ## 命令参考
@@ -161,7 +161,7 @@ intent-engine report --since 1d --summary-only
 
 **用法:**
 ```bash
-intent-engine task add --name <NAME> [OPTIONS]
+ie task add --name <NAME> [OPTIONS]
 ```
 
 **参数:**
@@ -172,17 +172,17 @@ intent-engine task add --name <NAME> [OPTIONS]
 **示例:**
 ```bash
 # 添加简单任务
-intent-engine task add --name "实现用户登录"
+ie task add --name "实现用户登录"
 
 # 添加带规格说明的任务
 echo "使用 JWT token，有效期 7 天，支持刷新" | \
-  intent-engine task add --name "JWT 认证" --spec-stdin
+  ie task add --name "JWT 认证" --spec-stdin
 
 # 添加子任务
-intent-engine task add --name "编写单元测试" --parent 1
+ie task add --name "编写单元测试" --parent 1
 
 # 从文件读取规格
-cat design.md | intent-engine task add --name "设计评审" --spec-stdin
+cat design.md | ie task add --name "设计评审" --spec-stdin
 ```
 
 **输出示例:**
@@ -207,7 +207,7 @@ cat design.md | intent-engine task add --name "设计评审" --spec-stdin
 
 **用法:**
 ```bash
-intent-engine task find [OPTIONS]
+ie task find [OPTIONS]
 ```
 
 **参数:**
@@ -217,22 +217,22 @@ intent-engine task find [OPTIONS]
 **示例:**
 ```bash
 # 查找所有任务
-intent-engine task find
+ie task find
 
 # 查找正在进行的任务
-intent-engine task find --status doing
+ie task find --status doing
 
 # 查找已完成的任务
-intent-engine task find --status done
+ie task find --status done
 
 # 查找特定父任务的所有子任务
-intent-engine task find --parent 1
+ie task find --parent 1
 
 # 查找所有根任务（无父任务）
-intent-engine task find --parent null
+ie task find --parent null
 
 # 组合查询：查找任务 1 下正在进行的子任务
-intent-engine task find --parent 1 --status doing
+ie task find --parent 1 --status doing
 ```
 
 **输出示例:**
@@ -270,7 +270,7 @@ intent-engine task find --parent 1 --status doing
 
 **用法:**
 ```bash
-intent-engine task get <ID> [OPTIONS]
+ie task get <ID> [OPTIONS]
 ```
 
 **参数:**
@@ -280,14 +280,14 @@ intent-engine task get <ID> [OPTIONS]
 **示例:**
 ```bash
 # 获取基本信息
-intent-engine task get 1
+ie task get 1
 
 # 获取包含事件摘要的完整信息
-intent-engine task get 1 --with-events
+ie task get 1 --with-events
 
 # 使用 jq 提取特定字段
-intent-engine task get 1 | jq -r '.name'
-intent-engine task get 1 --with-events | jq '.events_summary'
+ie task get 1 | jq -r '.name'
+ie task get 1 --with-events | jq '.events_summary'
 ```
 
 **输出示例（不带事件）:**
@@ -341,7 +341,7 @@ intent-engine task get 1 --with-events | jq '.events_summary'
 
 **用法:**
 ```bash
-intent-engine task update <ID> [OPTIONS]
+ie task update <ID> [OPTIONS]
 ```
 
 **参数:**
@@ -356,23 +356,23 @@ intent-engine task update <ID> [OPTIONS]
 **示例:**
 ```bash
 # 更新任务名称
-intent-engine task update 1 --name "实现 OAuth2 登录"
+ie task update 1 --name "实现 OAuth2 登录"
 
 # 设置任务复杂度和优先级
-intent-engine task update 1 --complexity 8 --priority 10
+ie task update 1 --complexity 8 --priority 10
 
 # 更新任务状态
-intent-engine task update 1 --status doing
+ie task update 1 --status doing
 
 # 更改父任务
-intent-engine task update 3 --parent 2
+ie task update 3 --parent 2
 
 # 更新规格说明
 echo "新的实现方案：使用 OAuth2 + PKCE" | \
-  intent-engine task update 1 --spec-stdin
+  ie task update 1 --spec-stdin
 
 # 组合更新
-intent-engine task update 1 \
+ie task update 1 \
   --name "优化登录性能" \
   --complexity 5 \
   --priority 8 \
@@ -402,7 +402,7 @@ intent-engine task update 1 \
 
 **用法:**
 ```bash
-intent-engine task start <ID> [OPTIONS]
+ie task start <ID> [OPTIONS]
 ```
 
 **参数:**
@@ -412,13 +412,13 @@ intent-engine task start <ID> [OPTIONS]
 **示例:**
 ```bash
 # 开始任务
-intent-engine task start 1
+ie task start 1
 
 # 开始任务并获取历史上下文
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # 典型 AI 工作流：开始任务前了解背景
-intent-engine task start 1 --with-events | jq '.events_summary.recent_events'
+ie task start 1 --with-events | jq '.events_summary.recent_events'
 ```
 
 **输出示例:**
@@ -440,7 +440,7 @@ intent-engine task start 1 --with-events | jq '.events_summary.recent_events'
 
 **用法:**
 ```bash
-intent-engine task done
+ie task done
 ```
 
 **参数:**
@@ -459,21 +459,21 @@ intent-engine task done
 **工作流:**
 完成一个非焦点任务的标准流程：
 ```bash
-intent-engine current --set <ID>  # 设置焦点
-intent-engine task done           # 完成焦点任务
+ie current --set <ID>  # 设置焦点
+ie task done           # 完成焦点任务
 ```
 
 **示例:**
 ```bash
 # 1. 设置任务为焦点
-intent-engine current --set 1
+ie current --set 1
 
 # 2. 完成任务
-intent-engine task done
+ie task done
 
 # 3. 如果有未完成的子任务，会返回错误
-intent-engine current --set 2
-intent-engine task done
+ie current --set 2
+ie task done
 # 错误: UNCOMPLETED_CHILDREN
 ```
 
@@ -514,7 +514,7 @@ intent-engine task done
 
 **用法:**
 ```bash
-intent-engine task del <ID>
+ie task del <ID>
 ```
 
 **参数:**
@@ -523,10 +523,10 @@ intent-engine task del <ID>
 **示例:**
 ```bash
 # 删除任务
-intent-engine task del 1
+ie task del 1
 
 # 删除会级联到所有子任务
-intent-engine task del 1  # 同时删除任务 1 及其所有子任务
+ie task del 1  # 同时删除任务 1 及其所有子任务
 ```
 
 **输出示例:**
@@ -547,7 +547,7 @@ intent-engine task del 1  # 同时删除任务 1 及其所有子任务
 
 **用法:**
 ```bash
-intent-engine task pick-next [--format <FORMAT>]
+ie task pick-next [--format <FORMAT>]
 ```
 
 **参数:**
@@ -568,7 +568,7 @@ intent-engine task pick-next [--format <FORMAT>]
 
 ```bash
 # Text 格式（默认）- 人类友好
-intent-engine task pick-next
+ie task pick-next
 
 # 输出示例：
 # Based on your current focus, the recommended next task is:
@@ -580,7 +580,7 @@ intent-engine task pick-next
 #   ie task start 43
 
 # JSON 格式 - AI Agent 友好
-intent-engine task pick-next --format json
+ie task pick-next --format json
 ```
 
 **JSON 输出示例（有推荐）:**
@@ -642,7 +642,7 @@ intent-engine task pick-next --format json
 
 **用法:**
 ```bash
-intent-engine task spawn-subtask --name <NAME> [OPTIONS]
+ie task spawn-subtask --name <NAME> [OPTIONS]
 ```
 
 **参数:**
@@ -661,24 +661,24 @@ intent-engine task spawn-subtask --name <NAME> [OPTIONS]
 **示例:**
 ```bash
 # 1. 先开始一个父任务
-intent-engine task start 1
+ie task start 1
 
 # 2. 在工作中发现需要处理子问题
-intent-engine task spawn-subtask --name "修复依赖版本冲突"
+ie task spawn-subtask --name "修复依赖版本冲突"
 
 # 3. 带规格说明的子任务
 echo "需要升级 tokio 到 1.35" | \
-  intent-engine task spawn-subtask --name "升级依赖" --spec-stdin
+  ie task spawn-subtask --name "升级依赖" --spec-stdin
 
 # 典型场景：递归问题分解
-intent-engine task start 1  # 开始：实现用户认证（自动成为焦点）
-intent-engine task spawn-subtask --name "实现密码加密"  # 发现子问题（自动切换为焦点）
-intent-engine task spawn-subtask --name "选择加密算法"  # 又发现更细的子问题（自动切换为焦点）
-intent-engine task done  # 完成：选择加密算法（当前焦点）
-intent-engine task switch 2  # 切回：实现密码加密
-intent-engine task done  # 完成：实现密码加密（当前焦点）
-intent-engine task switch 1  # 切回：实现用户认证
-intent-engine task done  # 完成：实现用户认证（当前焦点）
+ie task start 1  # 开始：实现用户认证（自动成为焦点）
+ie task spawn-subtask --name "实现密码加密"  # 发现子问题（自动切换为焦点）
+ie task spawn-subtask --name "选择加密算法"  # 又发现更细的子问题（自动切换为焦点）
+ie task done  # 完成：选择加密算法（当前焦点）
+ie task switch 2  # 切回：实现密码加密
+ie task done  # 完成：实现密码加密（当前焦点）
+ie task switch 1  # 切回：实现用户认证
+ie task done  # 完成：实现用户认证（当前焦点）
 ```
 
 **输出示例:**
@@ -708,7 +708,7 @@ intent-engine task done  # 完成：实现用户认证（当前焦点）
 
 **用法:**
 ```bash
-intent-engine task switch <ID>
+ie task switch <ID>
 ```
 
 **参数:**
@@ -723,18 +723,18 @@ intent-engine task switch <ID>
 **示例:**
 ```bash
 # 切换到任务 2
-intent-engine task switch 2
+ie task switch 2
 
 # 在多个任务间切换
-intent-engine task start 1
-intent-engine task spawn-subtask --name "子任务 A"
-intent-engine task spawn-subtask --name "子任务 B"
-intent-engine task switch 2  # 切回子任务 A
-intent-engine task done  # 完成当前焦点任务（子任务 A）
-intent-engine task switch 3  # 切到子任务 B
+ie task start 1
+ie task spawn-subtask --name "子任务 A"
+ie task spawn-subtask --name "子任务 B"
+ie task switch 2  # 切回子任务 A
+ie task done  # 完成当前焦点任务（子任务 A）
+ie task switch 3  # 切到子任务 B
 
 # 查看切换后的上下文
-intent-engine task switch 5 | jq '.events_summary'
+ie task switch 5 | jq '.events_summary'
 ```
 
 **输出示例:**
@@ -772,7 +772,7 @@ intent-engine task switch 5 | jq '.events_summary'
 
 **用法:**
 ```bash
-intent-engine task search <QUERY>
+ie task search <QUERY>
 ```
 
 **参数:**
@@ -795,31 +795,31 @@ intent-engine task search <QUERY>
 **示例:**
 ```bash
 # 简单搜索
-intent-engine task search "authentication"
+ie task search "authentication"
 
 # 搜索包含 JWT 的任务
-intent-engine task search "JWT"
+ie task search "JWT"
 
 # 高级搜索：同时包含两个关键词
-intent-engine task search "authentication AND bug"
+ie task search "authentication AND bug"
 
 # 搜索任一关键词
-intent-engine task search "JWT OR OAuth"
+ie task search "JWT OR OAuth"
 
 # 排除特定关键词
-intent-engine task search "bug NOT critical"
+ie task search "bug NOT critical"
 
 # 前缀匹配
-intent-engine task search "auth*"
+ie task search "auth*"
 
 # 精确短语搜索
-intent-engine task search '"user login flow"'
+ie task search '"user login flow"'
 
 # 组合使用 jq 查看结果
-intent-engine task search "authentication" | jq '.[].task | {id, name, status}'
+ie task search "authentication" | jq '.[].task | {id, name, status}'
 
 # 查看匹配片段
-intent-engine task search "JWT" | jq '.[].match_snippet'
+ie task search "JWT" | jq '.[].match_snippet'
 ```
 
 **输出示例:**
@@ -880,7 +880,7 @@ intent-engine task search "JWT" | jq '.[].match_snippet'
 
 **用法:**
 ```bash
-intent-engine event add [--task-id <ID>] --type <TYPE> --data-stdin
+ie event add [--task-id <ID>] --type <TYPE> --data-stdin
 ```
 
 **参数:**
@@ -897,19 +897,19 @@ intent-engine event add [--task-id <ID>] --type <TYPE> --data-stdin
 ```bash
 # 记录到当前任务（简洁工作流）
 echo "决定使用 bcrypt 而不是 MD5 进行密码加密" | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 
 # 记录到指定任务（灵活工作流）
 echo "发现 bcrypt 库在 Windows 上编译失败，需要寻找替代方案" | \
-  intent-engine event add --task-id 1 --type blocker --data-stdin
+  ie event add --task-id 1 --type blocker --data-stdin
 
 # 记录里程碑到当前任务
 echo "完成核心加密逻辑，通过所有单元测试" | \
-  intent-engine event add --type milestone --data-stdin
+  ie event add --type milestone --data-stdin
 
 # 从文件记录到指定任务
 cat discussion_notes.md | \
-  intent-engine event add --task-id 1 --type discussion --data-stdin
+  ie event add --task-id 1 --type discussion --data-stdin
 
 # 记录长文本到当前任务
 echo "经过调研，比较了以下方案：
@@ -918,7 +918,7 @@ echo "经过调研，比较了以下方案：
 3. scrypt - 平衡方案
 
 最终决定：使用 argon2，接受性能开销" | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 ```
 
 **输出示例:**
@@ -940,7 +940,7 @@ echo "经过调研，比较了以下方案：
 
 **用法:**
 ```bash
-intent-engine event list --task-id <ID> [OPTIONS]
+ie event list --task-id <ID> [OPTIONS]
 ```
 
 **参数:**
@@ -950,20 +950,20 @@ intent-engine event list --task-id <ID> [OPTIONS]
 **示例:**
 ```bash
 # 列出所有事件
-intent-engine event list --task-id 1
+ie event list --task-id 1
 
 # 只看最近 5 条
-intent-engine event list --task-id 1 --limit 5
+ie event list --task-id 1 --limit 5
 
 # 只看决策类型的事件
-intent-engine event list --task-id 1 | jq '.[] | select(.log_type == "decision")'
+ie event list --task-id 1 | jq '.[] | select(.log_type == "decision")'
 
 # 查看最新的决策
-intent-engine event list --task-id 1 --limit 10 | \
+ie event list --task-id 1 --limit 10 | \
   jq '.[] | select(.log_type == "decision") | .discussion_data' | head -1
 
 # AI 恢复上下文时使用
-intent-engine event list --task-id 1 --limit 10 | \
+ie event list --task-id 1 --limit 10 | \
   jq '[.[] | {type: .log_type, data: .discussion_data, time: .timestamp}]'
 ```
 
@@ -1005,10 +1005,10 @@ intent-engine event list --task-id 1 --limit 10 | \
 **用法:**
 ```bash
 # 查看当前任务
-intent-engine current
+ie current
 
 # 设置当前任务
-intent-engine current --set <ID>
+ie current --set <ID>
 ```
 
 **参数:**
@@ -1017,16 +1017,16 @@ intent-engine current --set <ID>
 **示例:**
 ```bash
 # 查看当前任务
-intent-engine current
+ie current
 
 # 设置当前任务
-intent-engine current --set 2
+ie current --set 2
 
 # 查看当前任务名称
-intent-engine current | jq -r '.task.name'
+ie current | jq -r '.task.name'
 
 # 检查是否有当前任务
-intent-engine current &>/dev/null && echo "有当前任务" || echo "无当前任务"
+ie current &>/dev/null && echo "有当前任务" || echo "无当前任务"
 
 # 清除当前任务（目前需要手动操作数据库）
 # 注意：通常不需要清除，start/switch/spawn-subtask 会自动更新
@@ -1064,7 +1064,7 @@ intent-engine current &>/dev/null && echo "有当前任务" || echo "无当前�
 
 **用法:**
 ```bash
-intent-engine report [OPTIONS]
+ie report [OPTIONS]
 ```
 
 **参数:**
@@ -1077,38 +1077,38 @@ intent-engine report [OPTIONS]
 **示例:**
 ```bash
 # 生成完整报告
-intent-engine report
+ie report
 
 # 仅生成摘要（推荐）
-intent-engine report --summary-only
+ie report --summary-only
 
 # 查看最近 1 天的工作
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 
 # 查看最近 7 天的工作
-intent-engine report --since 7d --summary-only
+ie report --since 7d --summary-only
 
 # 查看已完成的任务
-intent-engine report --status done --summary-only
+ie report --status done --summary-only
 
 # 查看正在进行的任务
-intent-engine report --status doing --summary-only
+ie report --status doing --summary-only
 
 # 搜索包含"认证"的任务
-intent-engine report --filter-name "认证" --summary-only
+ie report --filter-name "认证" --summary-only
 
 # 搜索规格中包含"JWT"的任务
-intent-engine report --filter-spec "JWT" --summary-only
+ie report --filter-spec "JWT" --summary-only
 
 # 组合查询：最近 7 天完成的认证相关任务
-intent-engine report --since 7d --status done --filter-name "认证" --summary-only
+ie report --since 7d --status done --filter-name "认证" --summary-only
 
 # AI 生成日报
-intent-engine report --since 1d --summary-only | \
+ie report --since 1d --summary-only | \
   jq -r '.summary | "今日完成 \(.done_count) 个任务，进行中 \(.doing_count) 个"'
 
 # 查看任务详情
-intent-engine report --since 7d | jq '.tasks[] | {name, status, started: .first_doing_at}'
+ie report --since 7d | jq '.tasks[] | {name, status, started: .first_doing_at}'
 ```
 
 **输出示例（summary-only）:**
@@ -1179,100 +1179,100 @@ intent-engine report --since 7d | jq '.tasks[] | {name, status, started: .first_
 
 ```bash
 # 1. AI 在代码审查中发现 5 个问题
-intent-engine task add --name "修复空指针异常"
-intent-engine task add --name "优化数据库查询"
-intent-engine task add --name "更新过期依赖"
-intent-engine task add --name "修复内存泄漏"
-intent-engine task add --name "添加错误日志"
+ie task add --name "修复空指针异常"
+ie task add --name "优化数据库查询"
+ie task add --name "更新过期依赖"
+ie task add --name "修复内存泄漏"
+ie task add --name "添加错误日志"
 
 # 2. AI 评估每个任务的优先级（数字越小越优先）
-intent-engine task update 1 --priority 1   # 空指针：最紧急
-intent-engine task update 2 --priority 2   # 数据库：第二优先
-intent-engine task update 3 --priority 5   # 依赖：中等
-intent-engine task update 4 --priority 1   # 内存：最紧急
-intent-engine task update 5 --priority 10  # 日志：不紧急
+ie task update 1 --priority 1   # 空指针：最紧急
+ie task update 2 --priority 2   # 数据库：第二优先
+ie task update 3 --priority 5   # 依赖：中等
+ie task update 4 --priority 1   # 内存：最紧急
+ie task update 5 --priority 10  # 日志：不紧急
 
 # 3. 获取智能推荐
-intent-engine task pick-next --format json
+ie task pick-next --format json
 # 结果：会推荐任务 1（priority=1，ID 最小）
 
 # 4. 开始处理推荐的任务
-intent-engine task start 1
-echo "原因：未检查 null 返回值" | intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done
+ie task start 1
+echo "原因：未检查 null 返回值" | ie event add --task-id 1 --type note --data-stdin
+ie task done
 
 # 5. 继续获取下一个推荐
-intent-engine task pick-next --format json
+ie task pick-next --format json
 # 结果：推荐任务 4（priority=1，ID 第二小）
 
-intent-engine task start 4
-echo "决定使用智能指针避免内存泄漏" | intent-engine event add --task-id 4 --type decision --data-stdin
-intent-engine task done
+ie task start 4
+echo "决定使用智能指针避免内存泄漏" | ie event add --task-id 4 --type decision --data-stdin
+ie task done
 
 # 6. 生成报告
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 ```
 
 ### 场景 2：递归任务分解
 
 ```bash
 # 1. 开始一个大任务
-intent-engine task add --name "实现支付系统"
-intent-engine task start 1 --with-events
+ie task add --name "实现支付系统"
+ie task start 1 --with-events
 
 # 2. 发现需要先做认证
-intent-engine task spawn-subtask --name "集成第三方支付 API"
+ie task spawn-subtask --name "集成第三方支付 API"
 # 当前任务自动切换到任务 2
 
 # 3. 在集成 API 时发现需要先配置密钥
-intent-engine task spawn-subtask --name "配置支付密钥和回调地址"
+ie task spawn-subtask --name "配置支付密钥和回调地址"
 # 当前任务自动切换到任务 3
 
 # 4. 完成最深层的子任务（子任务 3 当前是焦点）
-echo "已在后台配置 Stripe API 密钥" | intent-engine event add --task-id 3 --type milestone --data-stdin
-intent-engine task done
+echo "已在后台配置 Stripe API 密钥" | ie event add --task-id 3 --type milestone --data-stdin
+ie task done
 
 # 5. 切回父任务继续
-intent-engine task switch 2
-echo "API 集成完成，测试通过" | intent-engine event add --task-id 2 --type milestone --data-stdin
-intent-engine task done
+ie task switch 2
+echo "API 集成完成，测试通过" | ie event add --task-id 2 --type milestone --data-stdin
+ie task done
 
 # 6. 完成根任务
-intent-engine task switch 1
-intent-engine task done
+ie task switch 1
+ie task done
 
 # 7. 查看任务层级
-intent-engine task find --parent null  # 根任务
-intent-engine task find --parent 1     # 子任务
+ie task find --parent null  # 根任务
+ie task find --parent 1     # 子任务
 ```
 
 ### 场景 3：并行任务管理
 
 ```bash
 # 1. 创建多个独立任务
-intent-engine task add --name "前端：实现登录页面"
-intent-engine task add --name "后端：实现 API 接口"
-intent-engine task add --name "文档：更新 API 文档"
+ie task add --name "前端：实现登录页面"
+ie task add --name "后端：实现 API 接口"
+ie task add --name "文档：更新 API 文档"
 
 # 2. 获取推荐并开始第一个任务
-intent-engine task pick-next --format json
+ie task pick-next --format json
 # 推荐：任务 1
-intent-engine task start 1
+ie task start 1
 
 # 3. 在任务间切换
 # ... 做一些前端工作 ...
-echo "完成 UI 布局" | intent-engine event add --task-id 1 --type milestone --data-stdin
+echo "完成 UI 布局" | ie event add --task-id 1 --type milestone --data-stdin
 
-intent-engine task switch 2
+ie task switch 2
 # ... 做一些后端工作 ...
-echo "完成数据库模型" | intent-engine event add --task-id 2 --type milestone --data-stdin
+echo "完成数据库模型" | ie event add --task-id 2 --type milestone --data-stdin
 
-intent-engine task switch 3
+ie task switch 3
 # ... 更新文档 ...
-intent-engine task done
+ie task done
 
 # 4. 查看进度
-intent-engine report --status doing
+ie report --status doing
 ```
 
 ## 项目结构

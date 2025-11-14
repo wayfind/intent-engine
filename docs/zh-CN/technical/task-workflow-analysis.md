@@ -1395,50 +1395,50 @@ pub async fn get_last_checkpoint(
 
 ```bash
 # 任务管理
-intent-engine task add <name> [--spec] [--parent-id]
-intent-engine task get <id>
-intent-engine task update <id> [--name] [--spec] [--status] [--parent-id]
-intent-engine task del <id>
-intent-engine task find [--status] [--parent-id]
-intent-engine task start <id>
-intent-engine task done  # 完成当前焦点任务（无需 ID 参数）
+ie task add <name> [--spec] [--parent-id]
+ie task get <id>
+ie task update <id> [--name] [--spec] [--status] [--parent-id]
+ie task del <id>
+ie task find [--status] [--parent-id]
+ie task start <id>
+ie task done  # 完成当前焦点任务（无需 ID 参数）
 
 # 工作区管理
-intent-engine current [--set <ID>]
+ie current [--set <ID>]
 
 # 事件管理
-intent-engine event add <task-id> <type> [--data]
-intent-engine event list <task-id>
+ie event add <task-id> <type> [--data]
+ie event list <task-id>
 ```
 
 ### 建议新增命令
 
 ```bash
 # 批量操作
-intent-engine task batch-transition <id1,id2,id3> <status>
+ie task batch-transition <id1,id2,id3> <status>
 
 # 智能选择
-intent-engine task pick [--max-count] [--capacity-limit]
+ie task pick [--max-count] [--capacity-limit]
 
 # 任务切换
-intent-engine task switch <id>
+ie task switch <id>
 
 # 子任务创建
-intent-engine task spawn <name> [--spec]
+ie task spawn <name> [--spec]
 
 # 任务栈
-intent-engine task stack push <id> [--context]
-intent-engine task stack pop
-intent-engine task stack list
+ie task stack push <id> [--context]
+ie task stack pop
+ie task stack list
 
 # 状态管理
-intent-engine task block <id> <reason>
-intent-engine task unblock <id>
-intent-engine task fail <id> <error>
-intent-engine task retry <id>
+ie task block <id> <reason>
+ie task unblock <id>
+ie task fail <id> <error>
+ie task retry <id>
 
 # 任务树
-intent-engine task tree <id>
+ie task tree <id>
 ```
 
 ---

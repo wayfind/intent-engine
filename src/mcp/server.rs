@@ -190,7 +190,6 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
         "task_done" => handle_task_done(params.arguments).await,
         "task_update" => handle_task_update(params.arguments).await,
         "task_list" => handle_task_list(params.arguments).await,
-        "task_find" => handle_task_find(params.arguments).await,
         "task_search" => handle_task_search(params.arguments).await,
         "task_get" => handle_task_get(params.arguments).await,
         "task_context" => handle_task_context(params.arguments).await,
@@ -421,32 +420,6 @@ async fn handle_task_list(args: Value) -> Result<Value, String> {
         .find_tasks(status, parent_opt)
         .await
         .map_err(|e| format!("Failed to list tasks: {}", e))?;
-
-    serde_json::to_value(&tasks).map_err(|e| format!("Serialization error: {}", e))
-}
-
-async fn handle_task_find(args: Value) -> Result<Value, String> {
-    eprintln!("⚠️  Warning: 'task_find' is deprecated. Please use 'task_list' instead.");
-    let status = args.get("status").and_then(|v| v.as_str());
-    let parent = args.get("parent").and_then(|v| v.as_str());
-
-    let parent_opt = parent.map(|p| {
-        if p == "null" {
-            None
-        } else {
-            p.parse::<i64>().ok()
-        }
-    });
-
-    let ctx = ProjectContext::load()
-        .await
-        .map_err(|e| format!("Failed to load project context: {}", e))?;
-
-    let task_mgr = TaskManager::new(&ctx.pool);
-    let tasks = task_mgr
-        .find_tasks(status, parent_opt)
-        .await
-        .map_err(|e| format!("Failed to find tasks: {}", e))?;
 
     serde_json::to_value(&tasks).map_err(|e| format!("Serialization error: {}", e))
 }

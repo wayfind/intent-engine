@@ -271,14 +271,14 @@ Use quotes in command line to protect special characters:
 
 ```bash
 # Correct
-intent-engine task add --name "Task with spaces"
-intent-engine task add --name 'Task with "quotes"'
+ie task add --name "Task with spaces"
+ie task add --name 'Task with "quotes"'
 
 # Unicode
-intent-engine task add --name "实现功能"
+ie task add --name "实现功能"
 
 # Emoji
-intent-engine task add --name "🚀 Deploy"
+ie task add --name "🚀 Deploy"
 ```
 
 ### stdin Input ✅
@@ -287,7 +287,7 @@ Pass complex content via stdin:
 
 ```bash
 echo "Multi-line\nspecification\nwith special chars" | \
-  intent-engine task add --name "Task" --spec-stdin
+  ie task add --name "Task" --spec-stdin
 ```
 
 ## Test Coverage Statistics
@@ -325,15 +325,15 @@ echo "Multi-line\nspecification\nwith special chars" | \
 1. **Shell Quote Usage**
    ```bash
    # Single quotes protect most special characters
-   intent-engine task add --name 'Task with $var'
+   ie task add --name 'Task with $var'
 
    # Double quotes allow variable expansion
-   intent-engine task add --name "Task for $USER"
+   ie task add --name "Task for $USER"
    ```
 
 2. **Use stdin for Complex Content**
    ```bash
-   cat spec.md | intent-engine task add --name "Task" --spec-stdin
+   cat spec.md | ie task add --name "Task" --spec-stdin
    ```
 
 3. **CJK Search Tips**

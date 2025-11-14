@@ -25,7 +25,7 @@ cargo install intent-engine
 # 下载适合你平台的版本
 
 # 验证安装
-intent-engine --version
+ie --version
 ```
 
 > 💡 **提示**: 详细安装选项请参见 [INSTALLATION.md](docs/zh-CN/guide/installation.md)
@@ -41,7 +41,7 @@ echo "实现 JWT 认证功能
 - token 有效期 7 天
 - 支持刷新 token
 - 使用 HS256 算法" | \
-  intent-engine task add --name "实现用户认证" --spec-stdin
+  ie task add --name "实现用户认证" --spec-stdin
 
 # 输出示例：
 # {
@@ -66,7 +66,7 @@ echo "实现 JWT 认证功能
 
 ```bash
 # 开始任务并获取完整上下文
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # 输出示例：
 # {
@@ -89,7 +89,7 @@ intent-engine task start 1 --with-events
 
 ```bash
 # 在实现过程中发现需要先配置 JWT 密钥
-intent-engine task spawn-subtask --name "配置 JWT 密钥存储"
+ie task spawn-subtask --name "配置 JWT 密钥存储"
 
 # 输出示例：
 # {
@@ -117,7 +117,7 @@ echo "决定将 JWT 密钥存储在环境变量中
 1. 避免密钥硬编码到代码中
 2. 便于不同环境使用不同密钥
 3. 符合 12-Factor App 原则" | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 
 # 输出示例：
 # {
@@ -140,10 +140,10 @@ echo "决定将 JWT 密钥存储在环境变量中
 
 ```bash
 # 完成子任务
-intent-engine task done
+ie task done
 
 # 切换回父任务
-intent-engine task switch 1
+ie task switch 1
 
 # 输出包含父任务的完整上下文
 ```
@@ -154,7 +154,7 @@ intent-engine task switch 1
 
 ```bash
 # 完成父任务
-intent-engine task done
+ie task done
 
 # 如果还有未完成的子任务，系统会报错：
 # Error: Cannot complete task 1: it has incomplete subtasks
@@ -168,7 +168,7 @@ intent-engine task done
 
 ```bash
 # 生成简洁的工作摘要（推荐，节省 Token）
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 
 # 输出示例：
 # {
@@ -181,7 +181,7 @@ intent-engine report --since 1d --summary-only
 # }
 
 # 生成详细报告
-intent-engine report --since 1d
+ie report --since 1d
 ```
 
 ---
@@ -206,23 +206,23 @@ intent-engine report --since 1d
 1. **智能任务选择**：批量处理多个任务
    ```bash
    # 创建多个任务
-   intent-engine task add --name "任务 A"
-   intent-engine task add --name "任务 B"
-   intent-engine task add --name "任务 C"
+   ie task add --name "任务 A"
+   ie task add --name "任务 B"
+   ie task add --name "任务 C"
 
    # 设置优先级和复杂度
-   intent-engine task update 1 --priority 10 --complexity 3
-   intent-engine task update 2 --priority 8 --complexity 7
-   intent-engine task update 3 --priority 5 --complexity 2
+   ie task update 1 --priority 10 --complexity 3
+   ie task update 2 --priority 8 --complexity 7
+   ie task update 3 --priority 5 --complexity 2
 
    # 智能选择（按优先级降序、复杂度升序）
-   intent-engine task pick-next --max-count 3
+   ie task pick-next --max-count 3
    ```
 
 2. **全文搜索**：快速查找任务
    ```bash
-   intent-engine report --filter-name "认证" --summary-only
-   intent-engine report --filter-spec "JWT" --summary-only
+   ie report --filter-name "认证" --summary-only
+   ie report --filter-spec "JWT" --summary-only
    ```
 
 3. **事件类型**：记录不同类型的事件

@@ -30,23 +30,23 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Find intent-engine binary
-if command -v intent-engine &> /dev/null; then
-    MCP_BINARY="$(which intent-engine)"
+# Find ie binary
+if command -v ie &> /dev/null; then
+    MCP_BINARY="$(which ie)"
     INSTALL_TYPE="System-wide (in PATH)"
-elif [ -f "$HOME/.cargo/bin/intent-engine" ]; then
-    MCP_BINARY="$HOME/.cargo/bin/intent-engine"
+elif [ -f "$HOME/.cargo/bin/ie" ]; then
+    MCP_BINARY="$HOME/.cargo/bin/ie"
     INSTALL_TYPE="Cargo install"
-elif [ -f "/usr/local/bin/intent-engine" ]; then
-    MCP_BINARY="/usr/local/bin/intent-engine"
+elif [ -f "/usr/local/bin/ie" ]; then
+    MCP_BINARY="/usr/local/bin/ie"
     INSTALL_TYPE="System-wide (/usr/local/bin)"
-elif [ -f "$PROJECT_ROOT/target/release/intent-engine" ]; then
-    MCP_BINARY="$PROJECT_ROOT/target/release/intent-engine"
+elif [ -f "$PROJECT_ROOT/target/release/ie" ]; then
+    MCP_BINARY="$PROJECT_ROOT/target/release/ie"
     INSTALL_TYPE="Local build"
 else
-    echo "❌ Error: intent-engine binary not found!"
+    echo "❌ Error: ie binary not found!"
     echo
-    echo "Please build and install intent-engine first:"
+    echo "Please build and install ie first:"
     echo "  cd $PROJECT_ROOT"
     echo "  cargo build --release"
     echo "  cargo install --path ."
@@ -56,7 +56,7 @@ else
     exit 1
 fi
 
-echo "Found intent-engine: $MCP_BINARY"
+echo "Found ie: $MCP_BINARY"
 echo "Install type: $INSTALL_TYPE"
 echo "Config file: $MCP_CONFIG"
 echo "Project root: $PROJECT_ROOT"

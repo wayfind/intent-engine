@@ -97,11 +97,11 @@ sudo cp target/release/intent-engine /usr/local/bin/
 # 测试 JSON-RPC 接口 (从项目目录运行)
 cd /path/to/your/project
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  intent-engine mcp-server
+  ie mcp-server
 
 # 或者使用环境变量指定项目目录
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
+  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project ie mcp-server
 
 # 应该返回包含 13 个工具的 JSON 响应
 ```
@@ -169,7 +169,7 @@ Claude Code (客户端)
       ├─ JSON-RPC 2.0 over stdio ─┐
       │                           │
       ▼                           ▼
-intent-engine mcp-server ─────> SQLite
+ie mcp-server ─────> SQLite
   (Rust 原生,单一二进制)     (.intent-engine/project.db)
 ```
 
@@ -205,7 +205,7 @@ intent-engine mcp-server ─────> SQLite
    # 测试运行 (需要指定项目目录)
    cd /path/to/your/project
    echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-     intent-engine mcp-server
+     ie mcp-server
    ```
 
 4. 查看 Claude Code 日志:
@@ -252,12 +252,12 @@ chmod +x /usr/local/bin/intent-engine
 ```bash
 # 完整的测试命令 (从项目目录运行)
 cd /path/to/your/project
-cat << 'EOF' | intent-engine mcp-server
+cat << 'EOF' | ie mcp-server
 {"jsonrpc":"2.0","id":1,"method":"tools/list"}
 EOF
 
 # 或者使用环境变量
-cat << 'EOF' | INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
+cat << 'EOF' | INTENT_ENGINE_PROJECT_DIR=/path/to/your/project ie mcp-server
 {"jsonrpc":"2.0","id":1,"method":"tools/list"}
 EOF
 

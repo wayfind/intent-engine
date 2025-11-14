@@ -157,16 +157,16 @@ gh run watch
 
 ```bash
 # 1. Check crates.io
-cargo search intent-engine --limit 1
+cargo search ie --limit 1
 
 # Should see new version:
 # intent-engine = "0.1.4"    # A command-line database service...
 
 # 2. Test installation
-cargo install intent-engine --force
+cargo install ie --force
 
 # 3. Verify version
-intent-engine --version
+ie --version
 # Should output: intent-engine 0.1.4
 
 # 4. Check GitHub Release
@@ -180,7 +180,7 @@ intent-engine --version
 ./scripts/update-homebrew-formula.sh 0.1.4
 
 # 2. Test cargo-binstall
-cargo binstall intent-engine --force
+cargo binstall ie --force
 
 # 3. Publish announcement (optional)
 # - Publish in GitHub Discussions

@@ -125,7 +125,7 @@ cargo install intent-engine
 # https://github.com/wayfind/intent-engine/releases
 
 # Verify installation
-intent-engine --version
+ie --version
 ```
 
 For detailed installation instructions, see [Installation Guide](../guide/installation.md).
@@ -145,7 +145,7 @@ After completing integration, verify with:
 ```bash
 # Create test task
 echo "Test Intent-Engine integration" | \
-  intent-engine task add --name "Integration Test" --spec-stdin
+  ie task add --name "Integration Test" --spec-stdin
 
 # Ask AI tool to view tasks
 # For example in Claude Code:

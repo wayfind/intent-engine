@@ -14,7 +14,7 @@ fn test_depends_on_success() {
     let temp_dir = setup_test_env();
 
     // Add two tasks
-    let mut add1 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add1 = Command::new(cargo::cargo_bin!("ie"));
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -23,7 +23,7 @@ fn test_depends_on_success() {
         .assert()
         .success();
 
-    let mut add2 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add2 = Command::new(cargo::cargo_bin!("ie"));
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -33,7 +33,7 @@ fn test_depends_on_success() {
         .success();
 
     // Add dependency: Task 2 depends on Task 1
-    let mut depends = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut depends = Command::new(cargo::cargo_bin!("ie"));
     depends
         .current_dir(temp_dir.path())
         .arg("task")
@@ -55,7 +55,7 @@ fn test_depends_on_direct_cycle() {
     let temp_dir = setup_test_env();
 
     // Add two tasks
-    let mut add1 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add1 = Command::new(cargo::cargo_bin!("ie"));
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -64,7 +64,7 @@ fn test_depends_on_direct_cycle() {
         .assert()
         .success();
 
-    let mut add2 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add2 = Command::new(cargo::cargo_bin!("ie"));
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -74,7 +74,7 @@ fn test_depends_on_direct_cycle() {
         .success();
 
     // Add dependency: Task 1 depends on Task 2
-    let mut depends1 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut depends1 = Command::new(cargo::cargo_bin!("ie"));
     depends1
         .current_dir(temp_dir.path())
         .arg("task")
@@ -85,7 +85,7 @@ fn test_depends_on_direct_cycle() {
         .success();
 
     // Try to add reverse dependency: Task 2 depends on Task 1 (would create cycle)
-    let mut depends2 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut depends2 = Command::new(cargo::cargo_bin!("ie"));
     depends2
         .current_dir(temp_dir.path())
         .arg("task")
@@ -106,7 +106,7 @@ fn test_depends_on_transitive_cycle() {
 
     // Add three tasks
     for i in 1..=3 {
-        let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
+        let mut add = Command::new(cargo::cargo_bin!("ie"));
         add.current_dir(temp_dir.path())
             .arg("task")
             .arg("add")
@@ -117,7 +117,7 @@ fn test_depends_on_transitive_cycle() {
     }
 
     // Create chain: Task 1 depends on Task 2
-    let mut dep1 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut dep1 = Command::new(cargo::cargo_bin!("ie"));
     dep1.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")
@@ -127,7 +127,7 @@ fn test_depends_on_transitive_cycle() {
         .success();
 
     // Task 2 depends on Task 3
-    let mut dep2 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut dep2 = Command::new(cargo::cargo_bin!("ie"));
     dep2.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")
@@ -137,7 +137,7 @@ fn test_depends_on_transitive_cycle() {
         .success();
 
     // Try to create cycle: Task 3 depends on Task 1
-    let mut dep3 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut dep3 = Command::new(cargo::cargo_bin!("ie"));
     dep3.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")
@@ -154,7 +154,7 @@ fn test_depends_on_self_dependency() {
     let temp_dir = setup_test_env();
 
     // Add a task
-    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add = Command::new(cargo::cargo_bin!("ie"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -164,7 +164,7 @@ fn test_depends_on_self_dependency() {
         .success();
 
     // Try to make task depend on itself
-    let mut depends = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut depends = Command::new(cargo::cargo_bin!("ie"));
     depends
         .current_dir(temp_dir.path())
         .arg("task")
@@ -183,7 +183,7 @@ fn test_depends_on_nonexistent_blocking_task() {
     let temp_dir = setup_test_env();
 
     // Add one task
-    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add = Command::new(cargo::cargo_bin!("ie"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -193,7 +193,7 @@ fn test_depends_on_nonexistent_blocking_task() {
         .success();
 
     // Try to add dependency with nonexistent blocking task
-    let mut depends = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut depends = Command::new(cargo::cargo_bin!("ie"));
     depends
         .current_dir(temp_dir.path())
         .arg("task")
@@ -213,7 +213,7 @@ fn test_depends_on_nonexistent_blocked_task() {
     let temp_dir = setup_test_env();
 
     // Add one task
-    let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut add = Command::new(cargo::cargo_bin!("ie"));
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -223,7 +223,7 @@ fn test_depends_on_nonexistent_blocked_task() {
         .success();
 
     // Try to add dependency with nonexistent blocked task
-    let mut depends = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut depends = Command::new(cargo::cargo_bin!("ie"));
     depends
         .current_dir(temp_dir.path())
         .arg("task")
@@ -244,7 +244,7 @@ fn test_depends_on_deep_chain() {
 
     // Create a chain of 5 tasks
     for i in 1..=5 {
-        let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
+        let mut add = Command::new(cargo::cargo_bin!("ie"));
         add.current_dir(temp_dir.path())
             .arg("task")
             .arg("add")
@@ -256,7 +256,7 @@ fn test_depends_on_deep_chain() {
 
     // Build chain: 1->2->3->4->5
     for i in 1..5 {
-        let mut dep = Command::new(cargo::cargo_bin!("intent-engine"));
+        let mut dep = Command::new(cargo::cargo_bin!("ie"));
         dep.current_dir(temp_dir.path())
             .arg("task")
             .arg("depends-on")
@@ -267,7 +267,7 @@ fn test_depends_on_deep_chain() {
     }
 
     // Try to close the loop: 5->1
-    let mut dep = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut dep = Command::new(cargo::cargo_bin!("ie"));
     dep.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")
@@ -285,7 +285,7 @@ fn test_depends_on_multiple_dependencies() {
 
     // Add three tasks
     for i in 1..=3 {
-        let mut add = Command::new(cargo::cargo_bin!("intent-engine"));
+        let mut add = Command::new(cargo::cargo_bin!("ie"));
         add.current_dir(temp_dir.path())
             .arg("task")
             .arg("add")
@@ -296,7 +296,7 @@ fn test_depends_on_multiple_dependencies() {
     }
 
     // Task 1 depends on both Task 2 and Task 3
-    let mut dep1 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut dep1 = Command::new(cargo::cargo_bin!("ie"));
     dep1.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")
@@ -305,7 +305,7 @@ fn test_depends_on_multiple_dependencies() {
         .assert()
         .success();
 
-    let mut dep2 = Command::new(cargo::cargo_bin!("intent-engine"));
+    let mut dep2 = Command::new(cargo::cargo_bin!("ie"));
     dep2.current_dir(temp_dir.path())
         .arg("task")
         .arg("depends-on")

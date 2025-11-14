@@ -97,11 +97,11 @@ Restart Claude Code to load the new MCP server.
 # Test JSON-RPC interface (from project directory)
 cd /path/to/your/project
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  intent-engine mcp-server
+  ie mcp-server
 
 # Or using environment variable
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
+  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project ie mcp-server
 
 # Should return JSON response with 13 tools
 ```
@@ -169,7 +169,7 @@ Claude Code (Client)
       ├─ JSON-RPC 2.0 over stdio ─┐
       │                           │
       ▼                           ▼
-intent-engine mcp-server ──────> SQLite
+ie mcp-server ──────> SQLite
   (Rust Native, unified binary) (.intent-engine/project.db)
 ```
 
@@ -205,7 +205,7 @@ intent-engine mcp-server ──────> SQLite
    # Test run (requires project directory)
    cd /path/to/your/project
    echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-     intent-engine mcp-server
+     ie mcp-server
    ```
 
 4. Check Claude Code logs:
@@ -252,12 +252,12 @@ If relative paths or `~` symbols don't work, use **absolute paths**:
 ```bash
 # Complete test command (from project directory)
 cd /path/to/your/project
-cat << 'EOF' | intent-engine mcp-server
+cat << 'EOF' | ie mcp-server
 {"jsonrpc":"2.0","id":1,"method":"tools/list"}
 EOF
 
 # Or using environment variable
-cat << 'EOF' | INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
+cat << 'EOF' | INTENT_ENGINE_PROJECT_DIR=/path/to/your/project ie mcp-server
 {"jsonrpc":"2.0","id":1,"method":"tools/list"}
 EOF
 

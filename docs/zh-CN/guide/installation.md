@@ -164,13 +164,13 @@ sudo cp target/release/intent-engine /usr/local/bin/
 
 ```bash
 # 检查版本
-intent-engine --version
+ie --version
 
 # 运行健康检查
-intent-engine doctor
+ie doctor
 
 # 查看帮助
-intent-engine --help
+ie --help
 ```
 
 ---
@@ -191,7 +191,7 @@ intent-engine --help
 
 ### Cargo
 ```bash
-cargo install intent-engine --force
+cargo install ie --force
 ```
 
 ### Homebrew
@@ -201,7 +201,7 @@ brew upgrade intent-engine
 
 ### cargo-binstall
 ```bash
-cargo binstall intent-engine --force
+cargo binstall ie --force
 ```
 
 ### 手动

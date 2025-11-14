@@ -38,7 +38,7 @@ If you already have Rust and Cargo installed, this is the simplest installation 
 cargo install intent-engine
 
 # Verify installation
-intent-engine --version
+ie --version
 ```
 
 **Don't have Rust?** Install Rust first:
@@ -79,7 +79,7 @@ tar xzf intent-engine-*.tar.gz
 sudo mv intent-engine /usr/local/bin/
 
 # Verify installation
-intent-engine --version
+ie --version
 ```
 
 ### Method 5: Build from Source
@@ -126,29 +126,29 @@ For lightweight integration, configure Intent-Engine as a Claude Code skill:
 
 ```bash
 # 1. Add main task
-intent-engine task add --name "Implement user authentication feature" | jq -r '.id'
+ie task add --name "Implement user authentication feature" | jq -r '.id'
 # Output: 1
 
 # 2. Start task and view details
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # 3. Discover problem, create subtask
-intent-engine task spawn-subtask --name "Fix password validation bug"
+ie task spawn-subtask --name "Fix password validation bug"
 
 # 4. Record key decision
-echo "Decided to use bcrypt instead of MD5" | intent-engine event add --task-id 2 --type decision --data-stdin
+echo "Decided to use bcrypt instead of MD5" | ie event add --task-id 2 --type decision --data-stdin
 
 # 5. Complete subtask
-intent-engine task done
+ie task done
 
 # 6. Switch back to parent task
-intent-engine task switch 1
+ie task switch 1
 
 # 7. Complete parent task
-intent-engine task done
+ie task done
 
 # 8. Generate work report
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 ```
 
 ## Command Reference
@@ -161,7 +161,7 @@ Create new task, supporting parent task and specification.
 
 **Usage:**
 ```bash
-intent-engine task add --name <NAME> [OPTIONS]
+ie task add --name <NAME> [OPTIONS]
 ```
 
 **Parameters:**
@@ -172,17 +172,17 @@ intent-engine task add --name <NAME> [OPTIONS]
 **Examples:**
 ```bash
 # Add simple task
-intent-engine task add --name "Implement user login"
+ie task add --name "Implement user login"
 
 # Add task with specification
 echo "Use JWT token, valid for 7 days, support refresh" | \
-  intent-engine task add --name "JWT authentication" --spec-stdin
+  ie task add --name "JWT authentication" --spec-stdin
 
 # Add subtask
-intent-engine task add --name "Write unit tests" --parent 1
+ie task add --name "Write unit tests" --parent 1
 
 # Read specification from file
-cat design.md | intent-engine task add --name "Design review" --spec-stdin
+cat design.md | ie task add --name "Design review" --spec-stdin
 ```
 
 **Output Example:**
@@ -207,7 +207,7 @@ Find tasks, supporting filtering by status and parent.
 
 **Usage:**
 ```bash
-intent-engine task find [OPTIONS]
+ie task find [OPTIONS]
 ```
 
 **Parameters:**
@@ -217,22 +217,22 @@ intent-engine task find [OPTIONS]
 **Examples:**
 ```bash
 # Find all tasks
-intent-engine task find
+ie task find
 
 # Find tasks in progress
-intent-engine task find --status doing
+ie task find --status doing
 
 # Find completed tasks
-intent-engine task find --status done
+ie task find --status done
 
 # Find all subtasks of specific parent task
-intent-engine task find --parent 1
+ie task find --parent 1
 
 # Find all root tasks (no parent)
-intent-engine task find --parent null
+ie task find --parent null
 
 # Combined query: find subtasks of task 1 that are in progress
-intent-engine task find --parent 1 --status doing
+ie task find --parent 1 --status doing
 ```
 
 **Output Example:**
@@ -270,7 +270,7 @@ Get detailed information for a single task, optionally including associated even
 
 **Usage:**
 ```bash
-intent-engine task get <ID> [OPTIONS]
+ie task get <ID> [OPTIONS]
 ```
 
 **Parameters:**
@@ -280,14 +280,14 @@ intent-engine task get <ID> [OPTIONS]
 **Examples:**
 ```bash
 # Get basic information
-intent-engine task get 1
+ie task get 1
 
 # Get complete information with event summary
-intent-engine task get 1 --with-events
+ie task get 1 --with-events
 
 # Extract specific fields using jq
-intent-engine task get 1 | jq -r '.name'
-intent-engine task get 1 --with-events | jq '.events_summary'
+ie task get 1 | jq -r '.name'
+ie task get 1 --with-events | jq '.events_summary'
 ```
 
 **Output Example (without events):**
@@ -341,7 +341,7 @@ Update task properties, including name, parent, status, complexity and priority.
 
 **Usage:**
 ```bash
-intent-engine task update <ID> [OPTIONS]
+ie task update <ID> [OPTIONS]
 ```
 
 **Parameters:**
@@ -356,23 +356,23 @@ intent-engine task update <ID> [OPTIONS]
 **Examples:**
 ```bash
 # Update task name
-intent-engine task update 1 --name "Implement OAuth2 login"
+ie task update 1 --name "Implement OAuth2 login"
 
 # Set task complexity and priority
-intent-engine task update 1 --complexity 8 --priority 10
+ie task update 1 --complexity 8 --priority 10
 
 # Update task status
-intent-engine task update 1 --status doing
+ie task update 1 --status doing
 
 # Change parent task
-intent-engine task update 3 --parent 2
+ie task update 3 --parent 2
 
 # Update specification
 echo "New implementation: use OAuth2 + PKCE" | \
-  intent-engine task update 1 --spec-stdin
+  ie task update 1 --spec-stdin
 
 # Combined update
-intent-engine task update 1 \
+ie task update 1 \
   --name "Optimize login performance" \
   --complexity 5 \
   --priority 8 \
@@ -402,7 +402,7 @@ Atomic operation: update task status to "doing" and set as current task.
 
 **Usage:**
 ```bash
-intent-engine task start <ID> [OPTIONS]
+ie task start <ID> [OPTIONS]
 ```
 
 **Parameters:**
@@ -412,13 +412,13 @@ intent-engine task start <ID> [OPTIONS]
 **Examples:**
 ```bash
 # Start task
-intent-engine task start 1
+ie task start 1
 
 # Start task and get historical context
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # Typical AI workflow: understand background before starting
-intent-engine task start 1 --with-events | jq '.events_summary.recent_events'
+ie task start 1 --with-events | jq '.events_summary.recent_events'
 ```
 
 **Output Example:**
@@ -442,7 +442,7 @@ This command does not accept any ID parameter. It operates on the current focuse
 
 **Usage:**
 ```bash
-intent-engine task done
+ie task done
 ```
 
 **Parameters:**
@@ -451,10 +451,10 @@ intent-engine task done
 **Examples:**
 ```bash
 # Complete task
-intent-engine task done
+ie task done
 
 # If there are incomplete subtasks, returns error
-intent-engine task done
+ie task done
 # Error: Cannot complete task 1: it has incomplete subtasks
 ```
 
@@ -477,7 +477,7 @@ Delete task and all its subtasks (cascade delete).
 
 **Usage:**
 ```bash
-intent-engine task del <ID>
+ie task del <ID>
 ```
 
 **Parameters:**
@@ -486,10 +486,10 @@ intent-engine task del <ID>
 **Examples:**
 ```bash
 # Delete task
-intent-engine task del 1
+ie task del 1
 
 # Deletion cascades to all subtasks
-intent-engine task del 1  # Deletes task 1 and all its subtasks
+ie task del 1  # Deletes task 1 and all its subtasks
 ```
 
 **Output Example:**
@@ -510,7 +510,7 @@ Based on a context-aware priority model, intelligently recommends the single mos
 
 **Usage:**
 ```bash
-intent-engine task pick-next [--format <FORMAT>]
+ie task pick-next [--format <FORMAT>]
 ```
 
 **Parameters:**
@@ -531,7 +531,7 @@ intent-engine task pick-next [--format <FORMAT>]
 
 ```bash
 # Text format (default) - Human-friendly
-intent-engine task pick-next
+ie task pick-next
 
 # Output example:
 # Based on your current focus, the recommended next task is:
@@ -543,7 +543,7 @@ intent-engine task pick-next
 #   ie task start 43
 
 # JSON format - AI Agent friendly
-intent-engine task pick-next --format json
+ie task pick-next --format json
 ```
 
 **JSON Output Example (with recommendation):**
@@ -605,7 +605,7 @@ Create subtask under current task and automatically switch to new subtask (atomi
 
 **Usage:**
 ```bash
-intent-engine task spawn-subtask --name <NAME> [OPTIONS]
+ie task spawn-subtask --name <NAME> [OPTIONS]
 ```
 
 **Parameters:**
@@ -624,24 +624,24 @@ intent-engine task spawn-subtask --name <NAME> [OPTIONS]
 **Examples:**
 ```bash
 # 1. First start a parent task
-intent-engine task start 1
+ie task start 1
 
 # 2. Discover need to handle sub-problem during work
-intent-engine task spawn-subtask --name "Fix dependency version conflict"
+ie task spawn-subtask --name "Fix dependency version conflict"
 
 # 3. Subtask with specification
 echo "Need to upgrade tokio to 1.35" | \
-  intent-engine task spawn-subtask --name "Upgrade dependencies" --spec-stdin
+  ie task spawn-subtask --name "Upgrade dependencies" --spec-stdin
 
 # Typical scenario: recursive problem decomposition
-intent-engine task start 1  # Start: implement user authentication
-intent-engine task spawn-subtask --name "Implement password encryption"  # Discover sub-problem
-intent-engine task spawn-subtask --name "Choose encryption algorithm"  # Discover even finer sub-problem
-intent-engine task done  # Complete: choose encryption algorithm
-intent-engine task switch 2  # Switch back: implement password encryption
-intent-engine task done  # Complete: implement password encryption
-intent-engine task switch 1  # Switch back: implement user authentication
-intent-engine task done  # Complete: implement user authentication
+ie task start 1  # Start: implement user authentication
+ie task spawn-subtask --name "Implement password encryption"  # Discover sub-problem
+ie task spawn-subtask --name "Choose encryption algorithm"  # Discover even finer sub-problem
+ie task done  # Complete: choose encryption algorithm
+ie task switch 2  # Switch back: implement password encryption
+ie task done  # Complete: implement password encryption
+ie task switch 1  # Switch back: implement user authentication
+ie task done  # Complete: implement user authentication
 ```
 
 **Output Example:**
@@ -671,7 +671,7 @@ Atomic operation: update task status to doing (if not already) and set as curren
 
 **Usage:**
 ```bash
-intent-engine task switch <ID>
+ie task switch <ID>
 ```
 
 **Parameters:**
@@ -686,18 +686,18 @@ intent-engine task switch <ID>
 **Examples:**
 ```bash
 # Switch to task 2
-intent-engine task switch 2
+ie task switch 2
 
 # Switch between multiple tasks
-intent-engine task start 1
-intent-engine task spawn-subtask --name "Subtask A"
-intent-engine task spawn-subtask --name "Subtask B"
-intent-engine task switch 2  # Switch back to subtask A
-intent-engine task done
-intent-engine task switch 3  # Switch to subtask B
+ie task start 1
+ie task spawn-subtask --name "Subtask A"
+ie task spawn-subtask --name "Subtask B"
+ie task switch 2  # Switch back to subtask A
+ie task done
+ie task switch 3  # Switch to subtask B
 
 # View context after switching
-intent-engine task switch 5 | jq '.events_summary'
+ie task switch 5 | jq '.events_summary'
 ```
 
 **Output Example:**
@@ -735,7 +735,7 @@ Use FTS5 full-text search to find content in all tasks' name and spec fields, re
 
 **Usage:**
 ```bash
-intent-engine task search <QUERY>
+ie task search <QUERY>
 ```
 
 **Parameters:**
@@ -758,31 +758,31 @@ intent-engine task search <QUERY>
 **Examples:**
 ```bash
 # Simple search
-intent-engine task search "authentication"
+ie task search "authentication"
 
 # Search for tasks containing JWT
-intent-engine task search "JWT"
+ie task search "JWT"
 
 # Advanced search: contains both keywords
-intent-engine task search "authentication AND bug"
+ie task search "authentication AND bug"
 
 # Search for either keyword
-intent-engine task search "JWT OR OAuth"
+ie task search "JWT OR OAuth"
 
 # Exclude specific keyword
-intent-engine task search "bug NOT critical"
+ie task search "bug NOT critical"
 
 # Prefix matching
-intent-engine task search "auth*"
+ie task search "auth*"
 
 # Exact phrase search
-intent-engine task search '"user login flow"'
+ie task search '"user login flow"'
 
 # Combine with jq to view results
-intent-engine task search "authentication" | jq '.[].task | {id, name, status}'
+ie task search "authentication" | jq '.[].task | {id, name, status}'
 
 # View match snippets
-intent-engine task search "JWT" | jq '.[].match_snippet'
+ie task search "JWT" | jq '.[].match_snippet'
 ```
 
 **Output Example:**
@@ -843,7 +843,7 @@ Record event for task (decisions, blockers, milestones, etc.).
 
 **Usage:**
 ```bash
-intent-engine event add [--task-id <ID>] --type <TYPE> --data-stdin
+ie event add [--task-id <ID>] --type <TYPE> --data-stdin
 ```
 
 **Parameters:**
@@ -860,19 +860,19 @@ intent-engine event add [--task-id <ID>] --type <TYPE> --data-stdin
 ```bash
 # Record to current task (concise workflow)
 echo "Decided to use bcrypt instead of MD5 for password encryption" | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 
 # Record to specific task (flexible workflow)
 echo "Found bcrypt library fails to compile on Windows, need alternative" | \
-  intent-engine event add --task-id 1 --type blocker --data-stdin
+  ie event add --task-id 1 --type blocker --data-stdin
 
 # Record milestone to current task
 echo "Completed core encryption logic, all unit tests passing" | \
-  intent-engine event add --type milestone --data-stdin
+  ie event add --type milestone --data-stdin
 
 # Record from file to specific task
 cat discussion_notes.md | \
-  intent-engine event add --task-id 1 --type discussion --data-stdin
+  ie event add --task-id 1 --type discussion --data-stdin
 
 # Record long text to current task
 echo "After research, compared the following options:
@@ -881,7 +881,7 @@ echo "After research, compared the following options:
 3. scrypt - Balanced approach
 
 Final decision: Use argon2, accept performance overhead" | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 ```
 
 **Output Example:**
@@ -903,7 +903,7 @@ List event history for specified task.
 
 **Usage:**
 ```bash
-intent-engine event list --task-id <ID> [OPTIONS]
+ie event list --task-id <ID> [OPTIONS]
 ```
 
 **Parameters:**
@@ -913,20 +913,20 @@ intent-engine event list --task-id <ID> [OPTIONS]
 **Examples:**
 ```bash
 # List all events
-intent-engine event list --task-id 1
+ie event list --task-id 1
 
 # View only most recent 5
-intent-engine event list --task-id 1 --limit 5
+ie event list --task-id 1 --limit 5
 
 # View only decision type events
-intent-engine event list --task-id 1 | jq '.[] | select(.log_type == "decision")'
+ie event list --task-id 1 | jq '.[] | select(.log_type == "decision")'
 
 # View latest decision
-intent-engine event list --task-id 1 --limit 10 | \
+ie event list --task-id 1 --limit 10 | \
   jq '.[] | select(.log_type == "decision") | .discussion_data' | head -1
 
 # Used when AI recovers context
-intent-engine event list --task-id 1 --limit 10 | \
+ie event list --task-id 1 --limit 10 | \
   jq '[.[] | {type: .log_type, data: .discussion_data, time: .timestamp}]'
 ```
 
@@ -968,10 +968,10 @@ View or set currently active task.
 **Usage:**
 ```bash
 # View current task
-intent-engine current
+ie current
 
 # Set current task
-intent-engine current --set <ID>
+ie current --set <ID>
 ```
 
 **Parameters:**
@@ -980,16 +980,16 @@ intent-engine current --set <ID>
 **Examples:**
 ```bash
 # View current task
-intent-engine current
+ie current
 
 # Set current task
-intent-engine current --set 2
+ie current --set 2
 
 # View current task name
-intent-engine current | jq -r '.task.name'
+ie current | jq -r '.task.name'
 
 # Check if there is current task
-intent-engine current &>/dev/null && echo "Has current task" || echo "No current task"
+ie current &>/dev/null && echo "Has current task" || echo "No current task"
 
 # Clear current task (currently requires manual database operation)
 # Note: Usually not needed, start/switch/spawn-subtask will auto-update
@@ -1027,7 +1027,7 @@ Generate task work report, supporting time range, status filtering and full-text
 
 **Usage:**
 ```bash
-intent-engine report [OPTIONS]
+ie report [OPTIONS]
 ```
 
 **Parameters:**
@@ -1040,38 +1040,38 @@ intent-engine report [OPTIONS]
 **Examples:**
 ```bash
 # Generate complete report
-intent-engine report
+ie report
 
 # Generate summary only (recommended)
-intent-engine report --summary-only
+ie report --summary-only
 
 # View last 1 day of work
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 
 # View last 7 days of work
-intent-engine report --since 7d --summary-only
+ie report --since 7d --summary-only
 
 # View completed tasks
-intent-engine report --status done --summary-only
+ie report --status done --summary-only
 
 # View tasks in progress
-intent-engine report --status doing --summary-only
+ie report --status doing --summary-only
 
 # Search for tasks containing "authentication"
-intent-engine report --filter-name "authentication" --summary-only
+ie report --filter-name "authentication" --summary-only
 
 # Search for tasks with "JWT" in specification
-intent-engine report --filter-spec "JWT" --summary-only
+ie report --filter-spec "JWT" --summary-only
 
 # Combined query: authentication-related tasks completed in last 7 days
-intent-engine report --since 7d --status done --filter-name "authentication" --summary-only
+ie report --since 7d --status done --filter-name "authentication" --summary-only
 
 # AI generate daily report
-intent-engine report --since 1d --summary-only | \
+ie report --since 1d --summary-only | \
   jq -r '.summary | "Completed \(.done_count) tasks today, \(.doing_count) in progress"'
 
 # View task details
-intent-engine report --since 7d | jq '.tasks[] | {name, status, started: .first_doing_at}'
+ie report --since 7d | jq '.tasks[] | {name, status, started: .first_doing_at}'
 ```
 
 **Output Example (summary-only):**
@@ -1142,100 +1142,100 @@ intent-engine report --since 7d | jq '.tasks[] | {name, status, started: .first_
 
 ```bash
 # 1. AI discovers 5 issues during code review
-intent-engine task add --name "Fix null pointer exception"
-intent-engine task add --name "Optimize database query"
-intent-engine task add --name "Update outdated dependencies"
-intent-engine task add --name "Fix memory leak"
-intent-engine task add --name "Add error logging"
+ie task add --name "Fix null pointer exception"
+ie task add --name "Optimize database query"
+ie task add --name "Update outdated dependencies"
+ie task add --name "Fix memory leak"
+ie task add --name "Add error logging"
 
 # 2. AI evaluates priority for each task (lower number = higher priority)
-intent-engine task update 1 --priority 1   # Null pointer: most urgent
-intent-engine task update 2 --priority 2   # Database: second priority
-intent-engine task update 3 --priority 5   # Dependencies: medium
-intent-engine task update 4 --priority 1   # Memory: most urgent
-intent-engine task update 5 --priority 10  # Logging: not urgent
+ie task update 1 --priority 1   # Null pointer: most urgent
+ie task update 2 --priority 2   # Database: second priority
+ie task update 3 --priority 5   # Dependencies: medium
+ie task update 4 --priority 1   # Memory: most urgent
+ie task update 5 --priority 10  # Logging: not urgent
 
 # 3. Get smart recommendation
-intent-engine task pick-next --format json
+ie task pick-next --format json
 # Result: Recommends task 1 (priority=1, smallest ID)
 
 # 4. Start processing recommended task
-intent-engine task start 1
-echo "Cause: Did not check for null return value" | intent-engine event add --task-id 1 --type note --data-stdin
-intent-engine task done  # Complete current focused task
+ie task start 1
+echo "Cause: Did not check for null return value" | ie event add --task-id 1 --type note --data-stdin
+ie task done  # Complete current focused task
 
 # 5. Get next recommendation
-intent-engine task pick-next --format json
+ie task pick-next --format json
 # Result: Recommends task 4 (priority=1, second smallest ID)
 
-intent-engine task start 4
-echo "Decision: Use smart pointers to avoid memory leak" | intent-engine event add --task-id 4 --type decision --data-stdin
-intent-engine task done
+ie task start 4
+echo "Decision: Use smart pointers to avoid memory leak" | ie event add --task-id 4 --type decision --data-stdin
+ie task done
 
 # 6. Generate report
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 ```
 
 ### Scenario 2: Recursive Task Decomposition
 
 ```bash
 # 1. Start a major task
-intent-engine task add --name "Implement payment system"
-intent-engine task start 1 --with-events
+ie task add --name "Implement payment system"
+ie task start 1 --with-events
 
 # 2. Discover need to do authentication first
-intent-engine task spawn-subtask --name "Integrate third-party payment API"
+ie task spawn-subtask --name "Integrate third-party payment API"
 # Current task automatically switches to task 2
 
 # 3. While integrating API, discover need to configure keys first
-intent-engine task spawn-subtask --name "Configure payment keys and callback URL"
+ie task spawn-subtask --name "Configure payment keys and callback URL"
 # Current task automatically switches to task 3
 
 # 4. Complete deepest subtask
-echo "Configured Stripe API keys in backend" | intent-engine event add --task-id 3 --type milestone --data-stdin
-intent-engine task done
+echo "Configured Stripe API keys in backend" | ie event add --task-id 3 --type milestone --data-stdin
+ie task done
 
 # 5. Switch back to parent task and continue
-intent-engine task switch 2
-echo "API integration complete, tests passing" | intent-engine event add --task-id 2 --type milestone --data-stdin
-intent-engine task done
+ie task switch 2
+echo "API integration complete, tests passing" | ie event add --task-id 2 --type milestone --data-stdin
+ie task done
 
 # 6. Complete root task
-intent-engine task switch 1
-intent-engine task done
+ie task switch 1
+ie task done
 
 # 7. View task hierarchy
-intent-engine task find --parent null  # Root tasks
-intent-engine task find --parent 1     # Subtasks
+ie task find --parent null  # Root tasks
+ie task find --parent 1     # Subtasks
 ```
 
 ### Scenario 3: Parallel Task Management
 
 ```bash
 # 1. Create multiple independent tasks
-intent-engine task add --name "Frontend: Implement login page"
-intent-engine task add --name "Backend: Implement API endpoints"
-intent-engine task add --name "Docs: Update API documentation"
+ie task add --name "Frontend: Implement login page"
+ie task add --name "Backend: Implement API endpoints"
+ie task add --name "Docs: Update API documentation"
 
 # 2. Get recommendation and start first task
-intent-engine task pick-next --format json
+ie task pick-next --format json
 # Recommends: task 1
-intent-engine task start 1
+ie task start 1
 
 # 3. Switch between tasks
 # ... do some frontend work ...
-echo "Completed UI layout" | intent-engine event add --task-id 1 --type milestone --data-stdin
+echo "Completed UI layout" | ie event add --task-id 1 --type milestone --data-stdin
 
-intent-engine task switch 2
+ie task switch 2
 # ... do some backend work ...
-echo "Completed database models" | intent-engine event add --task-id 2 --type milestone --data-stdin
+echo "Completed database models" | ie event add --task-id 2 --type milestone --data-stdin
 
-intent-engine task switch 3
+ie task switch 3
 # ... update docs ...
-intent-engine task done
+ie task done
 
 # 4. View progress
-intent-engine report --status doing
+ie report --status doing
 ```
 
 ## Project Structure

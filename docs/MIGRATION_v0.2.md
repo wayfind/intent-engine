@@ -21,7 +21,7 @@ Version 0.2 introduces powerful new features for task dependencies and smart eve
 **New CLI Command:**
 ```bash
 # Make task 43 depend on task 42 (43 cannot start until 42 is done)
-intent-engine task depends-on 43 42
+ie task depends-on 43 42
 ```
 
 **New MCP Tool:**
@@ -43,23 +43,23 @@ intent-engine task depends-on 43 42
 **Example Workflow:**
 ```bash
 # Create two tasks
-intent-engine task add --name "Implement authentication"  # Returns ID 1
-intent-engine task add --name "Implement API client"      # Returns ID 2
+ie task add --name "Implement authentication"  # Returns ID 1
+ie task add --name "Implement API client"      # Returns ID 2
 
 # API client depends on auth
-intent-engine task depends-on 2 1
+ie task depends-on 2 1
 
 # Try to start API client (will fail because auth not done)
-intent-engine task start 2
+ie task start 2
 # Error: Task 2 is blocked by incomplete tasks: [1]
 
 # Complete auth first
-intent-engine task start 1
+ie task start 1
 # ... do the work ...
-intent-engine task done
+ie task done
 
 # Now API client can start
-intent-engine task start 2  # ✅ Success
+ie task start 2  # ✅ Success
 ```
 
 ---
@@ -71,12 +71,12 @@ intent-engine task start 2  # ✅ Success
 **CLI Enhancement:**
 ```bash
 # Old way (still works)
-intent-engine event list 42
+ie event list 42
 
 # New filters
-intent-engine event list 42 --type decision
-intent-engine event list 42 --since 7d
-intent-engine event list 42 --type blocker --since 24h
+ie event list 42 --type decision
+ie event list 42 --since 7d
+ie event list 42 --type blocker --since 24h
 ```
 
 **MCP Enhancement:**
@@ -111,15 +111,15 @@ intent-engine event list 42 --type blocker --since 24h
 
 **Old Way (still works internally):**
 ```bash
-intent-engine task update 1 --priority 1  # Low-level integers
+ie task update 1 --priority 1  # Low-level integers
 ```
 
 **New Way (recommended):**
 ```bash
-intent-engine task update 1 --priority critical
-intent-engine task update 1 --priority high
-intent-engine task update 1 --priority medium
-intent-engine task update 1 --priority low
+ie task update 1 --priority critical
+ie task update 1 --priority high
+ie task update 1 --priority medium
+ie task update 1 --priority low
 ```
 
 **Mapping:**
@@ -152,13 +152,13 @@ intent-engine task update 1 --priority low
 
 **Old Command (deprecated but still works):**
 ```bash
-intent-engine task find --status todo
+ie task find --status todo
 # ⚠️  Warning: 'task find' is deprecated. Please use 'task list' instead.
 ```
 
 **New Command:**
 ```bash
-intent-engine task list --status todo
+ie task list --status todo
 ```
 
 **MCP Rename:**
@@ -208,7 +208,7 @@ intent-engine task list --status todo
 **Solution**: Review dependency graph, remove circular relationships
 ```bash
 # This will fail if it creates a cycle
-intent-engine task depends-on 1 3  # Error if 3→2→1 exists
+ie task depends-on 1 3  # Error if 3→2→1 exists
 ```
 
 ### Issue: Cannot Start Task
@@ -220,11 +220,11 @@ intent-engine task depends-on 1 3  # Error if 3→2→1 exists
 **Solution**: Complete blocking tasks first, or remove dependency
 ```bash
 # Check dependencies
-intent-engine task context 42  # View dependencies section
+ie task context 42  # View dependencies section
 
 # Complete blockers first
-intent-engine task start <blocking_task_id>
-intent-engine task done
+ie task start <blocking_task_id>
+ie task done
 ```
 
 ---

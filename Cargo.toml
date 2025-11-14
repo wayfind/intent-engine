@@ -11,7 +11,7 @@ documentation = "https://docs.rs/intent-engine"
 readme = "README.md"
 keywords = ["cli", "task-management", "intent", "database", "workflow"]
 categories = ["command-line-utilities", "database"]
-default-run = "intent-engine"
+default-run = "ie"
 
 # cargo-binstall configuration
 # Helps cargo-binstall automatically download the right binary for your platform
@@ -59,10 +59,6 @@ predicates = "3.0"
 criterion = { version = "0.7", features = ["async_tokio"] }
 rand = "0.9"
 serial_test = "3.0"
-
-[[bin]]
-name = "intent-engine"
-path = "src/main.rs"
 
 [[bin]]
 name = "ie"

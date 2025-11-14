@@ -63,49 +63,49 @@
 
 #### `task add`
 *   **用途**: 捕获一个新的战略意图。
-*   **签名**: `intent-engine task add --name <NAME> [--parent <ID>] [--priority <1-5>] [--spec-stdin]`
+*   **签名**: `ie task add --name <NAME> [--parent <ID>] [--priority <1-5>] [--spec-stdin]`
 
 #### `task start`
 *   **用途**: 激活一个意图并设置为当前焦点。
-*   **签名**: `intent-engine task start <TASK_ID>`
+*   **签名**: `ie task start <TASK_ID>`
 *   **原子行为**: 1. 任务状态 -> `doing`；2. 设置为 `current_task_id`。
 
 #### `task done`
 *   **用途**: 完成当前焦点任务。
-*   **签名**: `intent-engine task done`  **(无参数)**
+*   **签名**: `ie task done`  **(无参数)**
 *   **原子行为**: 1. 校验子任务；2. 任务状态 -> `done`；3. 清空 `current_task_id`。
 *   **JSON 输出**: 包含 `completed_task`, `workspace_status`, `next_step_suggestion`。
 
 #### `task find`
 *   **用途**: 根据结构化元数据**过滤**任务。
-*   **签名**: `intent-engine task find [--status <STATUS>] [--parent <ID|"null">]`
+*   **签名**: `ie task find [--status <STATUS>] [--parent <ID|"null">]`
 *   **输出**: 任务摘要对象数组（不含 `spec`）。
 
 #### `task search`
 *   **用途**: 在 `name` 和 `spec` 中进行全文**搜索**。
-*   **签名**: `intent-engine task search <QUERY> [--limit <N>]`
+*   **签名**: `ie task search <QUERY> [--limit <N>]`
 *   **实现**: **必须**使用 FTS5 索引。
 *   **JSON 输出**: 任务摘要对象数组，并额外包含 `spec_snippet` (高亮匹配) 和 `rank`。
 
 #### `task context`
 *   **用途**: 获取一个任务完整的“家族树”（祖先、兄弟、子任务）。
-*   **签名**: `intent-engine task context [<TASK_ID>]` (ID 可选，默认使用当前焦点)
+*   **签名**: `ie task context [<TASK_ID>]` (ID 可选，默认使用当前焦点)
 *   **输出**: 包含 `focus_task`, `ancestors`, `siblings`, `children` 的结构化 JSON 对象。
 
 #### `task pick-next`
 *   **用途**: 智能推荐下一个最应该处理的任务。
-*   **签名**: `intent-engine task pick-next`
+*   **签名**: `ie task pick-next`
 *   **逻辑**: 1. 优先推荐当前焦点任务的 `todo` 子任务；2. 其次推荐顶级的 `todo` 任务。均按 `priority` 排序。
 *   **JSON 输出**: 包含 `recommended_task` 和 `reason` 的对象。空状态下 `recommended_task` 为 `null`。
 
 #### `task spawn-subtask`
 *   **用途**: 在当前焦点下创建子任务，并立即切换到该子任务。
-*   **签名**: `intent-engine task spawn-subtask --name <NAME> [...]`
+*   **签名**: `ie task spawn-subtask --name <NAME> [...]`
 *   **原子行为**: 1. `task add`；2. `task start`。
 
 #### `task switch`
 *   **用途**: 暂停当前任务，并切换到新任务。
-*   **签名**: `intent-engine task switch <TASK_ID>`
+*   **签名**: `ie task switch <TASK_ID>`
 *   **原子行为**: 1. 原 `doing` 任务 -> `todo`；2. `task start` 新任务。
 
 #### `task get`, `task update`, `task del`
@@ -115,28 +115,28 @@
 
 #### `event add`
 *   **用途**: 为任务记录一个关键事件（决策、障碍、里程碑等）。
-*   **签名**: `intent-engine event add --type <TYPE> [--task-id <ID>] [--data-stdin]`
+*   **签名**: `ie event add --type <TYPE> [--task-id <ID>] [--data-stdin]`
 *   **逻辑**: `--task-id` 可选。若省略，则自动作用于当前焦点任务。
 
 #### `event list`
 *   **用途**: 查看一个任务的完整历史事件流。
-*   **签名**: `intent-engine event list <TASK_ID>`
+*   **签名**: `ie event list <TASK_ID>`
 
 ### 5.3 `current` - 工作区焦点
 
 #### `current`
 *   **用途**: 查看当前焦点任务。
-*   **签名**: `intent-engine current`
+*   **签名**: `ie current`
 
 #### `current --set`
 *   **用途**: 设置当前焦点任务。
-*   **签名**: `intent-engine current --set <TASK_ID>`
+*   **签名**: `ie current --set <TASK_ID>`
 
 ### 5.4 `report` - 分析与洞察
 
 #### `report`
 *   **用途**: 生成项目活动报告。
-*   **签名**: `intent-engine report [--since <DURATION>] [--summary-only]`
+*   **签名**: `ie report [--since <DURATION>] [--summary-only]`
 *   **核心功能**: `--summary-only` 标志将在服务端完成聚合计算，极大节省 Token。
 
 ## 6. MCP 接口与 Rust API

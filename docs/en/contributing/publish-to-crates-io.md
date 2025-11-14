@@ -164,7 +164,7 @@ Then you can manually trigger on GitHub Actions page.
    # Verify after a few minutes
    cargo search intent-engine
    cargo install intent-engine
-   intent-engine --version
+   ie --version
    ```
 
 ---

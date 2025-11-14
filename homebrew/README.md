@@ -80,7 +80,7 @@ brew install --build-from-source intent-engine
 
 # Test the binary
 intent-engine --version
-intent-engine doctor
+ie doctor
 ```
 
 ## Formula Template

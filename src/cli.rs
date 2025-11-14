@@ -81,53 +81,45 @@ pub enum Commands {
         workspace: Option<String>,
     },
 
-    /// Setup Claude Code integration (install SessionStart hook)
+    /// Unified setup command for AI tool integrations
     ///
-    /// Automatically configures .claude/hooks/session-start.sh to enable
-    /// focus restoration on every new Claude Code session.
-    #[command(name = "setup-claude-code")]
-    SetupClaudeCode {
+    /// This command provides a unified interface for setting up intent-engine integration
+    /// with various AI assistant tools. It handles both hook installation and MCP server
+    /// configuration in one step.
+    ///
+    /// Features:
+    /// - User-level or project-level installation
+    /// - Atomic setup with rollback on failure
+    /// - Built-in connectivity testing
+    /// - Diagnosis mode for troubleshooting
+    Setup {
+        /// Target tool to configure (claude-code, gemini-cli, codex)
+        #[arg(long)]
+        target: Option<String>,
+
+        /// Installation scope: user (default, recommended), project, or both
+        #[arg(long, default_value = "user")]
+        scope: String,
+
         /// Show what would be done without actually doing it
         #[arg(long)]
         dry_run: bool,
 
-        /// Specify .claude directory location (default: ./.claude)
-        #[arg(long)]
-        claude_dir: Option<String>,
-
-        /// Overwrite existing hook
+        /// Overwrite existing configuration
         #[arg(long)]
         force: bool,
-    },
 
-    /// Setup MCP server configuration for Claude Code/Desktop
-    ///
-    /// Automatically configures ~/.claude.json (or OS-specific equivalent)
-    /// to add intent-engine as an MCP server. This allows Claude Code/Desktop
-    /// to use intent-engine tools for task management.
-    ///
-    /// Run this after 'cargo install intent-engine' to complete the setup.
-    #[command(name = "setup-mcp")]
-    SetupMcp {
-        /// Show what would be done without actually doing it
+        /// Run diagnosis on existing setup instead of installing
         #[arg(long)]
-        dry_run: bool,
+        diagnose: bool,
 
-        /// Custom config file path (default: auto-detect)
+        /// Custom config file path (advanced)
         #[arg(long)]
         config_path: Option<String>,
 
         /// Project directory for INTENT_ENGINE_PROJECT_DIR env var
         #[arg(long)]
         project_dir: Option<String>,
-
-        /// Overwrite existing configuration
-        #[arg(long)]
-        force: bool,
-
-        /// Target application: claude-code or claude-desktop
-        #[arg(long, default_value = "claude-code")]
-        target: String,
     },
 }
 
@@ -196,18 +188,6 @@ pub enum TaskCommands {
 
     /// List tasks with filters
     List {
-        /// Filter by status
-        #[arg(long)]
-        status: Option<String>,
-
-        /// Filter by parent ID (use "null" for no parent)
-        #[arg(long)]
-        parent: Option<String>,
-    },
-
-    /// Find tasks with filters (deprecated: use 'list' instead)
-    #[command(hide = true)]
-    Find {
         /// Filter by status
         #[arg(long)]
         status: Option<String>,

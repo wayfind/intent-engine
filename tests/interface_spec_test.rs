@@ -87,7 +87,7 @@ fn test_spec_documents_cli_commands() {
         "task done",
         "task spawn-subtask",
         "task pick-next",
-        "task find",
+        "task list",
         "task search",
         "event add",
         "event list",
@@ -110,7 +110,7 @@ fn test_spec_documents_cli_commands() {
 fn test_cli_help_matches_spec() {
     // Test that `task add --help` contains key parameters
     // Use pre-compiled binary instead of cargo run for speed
-    let bin_path = env!("CARGO_BIN_EXE_intent-engine");
+    let bin_path = env!("CARGO_BIN_EXE_ie");
     let output = Command::new(bin_path)
         .args(["task", "add", "--help"])
         .output()

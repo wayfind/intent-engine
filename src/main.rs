@@ -9,6 +9,7 @@ use intent_engine::workspace::WorkspaceManager;
 use sqlx::Row;
 use std::io::{self, Read};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 #[tokio::main]
 async fn main() {
@@ -56,21 +57,25 @@ async fn run() -> Result<()> {
         } => {
             handle_session_restore(include_events, workspace).await?;
         },
-        Commands::SetupClaudeCode {
+        Commands::Setup {
+            target,
+            scope,
             dry_run,
-            claude_dir,
             force,
-        } => {
-            handle_setup_claude_code(dry_run, claude_dir, force).await?;
-        },
-        Commands::SetupMcp {
-            dry_run,
+            diagnose,
             config_path,
             project_dir,
-            force,
-            target,
         } => {
-            handle_setup_mcp(dry_run, config_path, project_dir, force, &target).await?;
+            handle_setup(
+                target,
+                &scope,
+                dry_run,
+                force,
+                diagnose,
+                config_path,
+                project_dir,
+            )
+            .await?;
         },
     }
 
@@ -164,23 +169,6 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
         },
 
         TaskCommands::List { status, parent } => {
-            let ctx = ProjectContext::load().await?;
-            let task_mgr = TaskManager::new(&ctx.pool);
-
-            let parent_opt = parent.map(|p| {
-                if p == "null" {
-                    None
-                } else {
-                    p.parse::<i64>().ok()
-                }
-            });
-
-            let tasks = task_mgr.find_tasks(status.as_deref(), parent_opt).await?;
-            println!("{}", serde_json::to_string_pretty(&tasks)?);
-        },
-
-        TaskCommands::Find { status, parent } => {
-            eprintln!("⚠️  Warning: 'task find' is deprecated. Please use 'task list' instead.");
             let ctx = ProjectContext::load().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 
@@ -436,6 +424,292 @@ fn read_stdin() -> Result<String> {
     }
 }
 
+/// Check MCP server configuration in ~/.claude.json
+fn check_mcp_configuration() -> serde_json::Value {
+    use intent_engine::setup::common::get_home_dir;
+    use serde_json::json;
+    use std::fs;
+    use std::path::PathBuf;
+
+    let home = match get_home_dir() {
+        Ok(h) => h,
+        Err(_) => {
+            return json!({
+                "check": "MCP Configuration",
+                "status": "⚠ WARNING",
+                "passed": false,
+                "details": {
+                    "error": "Unable to determine home directory",
+                    "config_file": "~/.claude.json",
+                    "config_exists": false
+                }
+            });
+        },
+    };
+
+    let config_path = home.join(".claude.json");
+
+    if !config_path.exists() {
+        return json!({
+            "check": "MCP Configuration",
+            "status": "⚠ WARNING",
+            "passed": false,
+            "details": {
+                "config_file": config_path.display().to_string(),
+                "config_exists": false,
+                "mcp_configured": false,
+                "message": "MCP not configured. Run 'ie setup --target claude-code' to configure",
+                "setup_command": "ie setup --target claude-code"
+            }
+        });
+    }
+
+    // Read and parse config
+    let config_content = match fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            return json!({
+                "check": "MCP Configuration",
+                "status": "✗ FAIL",
+                "passed": false,
+                "details": {
+                    "config_file": config_path.display().to_string(),
+                    "config_exists": true,
+                    "error": format!("Failed to read config: {}", e)
+                }
+            });
+        },
+    };
+
+    let config: serde_json::Value = match serde_json::from_str(&config_content) {
+        Ok(c) => c,
+        Err(e) => {
+            return json!({
+                "check": "MCP Configuration",
+                "status": "✗ FAIL",
+                "passed": false,
+                "details": {
+                    "config_file": config_path.display().to_string(),
+                    "config_exists": true,
+                    "error": format!("Invalid JSON: {}", e)
+                }
+            });
+        },
+    };
+
+    // Check if intent-engine is configured
+    let mcp_servers = config.get("mcpServers");
+    let ie_config = mcp_servers.and_then(|s| s.get("intent-engine"));
+
+    if ie_config.is_none() {
+        return json!({
+            "check": "MCP Configuration",
+            "status": "⚠ WARNING",
+            "passed": false,
+            "details": {
+                "config_file": config_path.display().to_string(),
+                "config_exists": true,
+                "mcp_configured": false,
+                "message": "intent-engine not configured in MCP servers",
+                "setup_command": "ie setup --target claude-code"
+            }
+        });
+    }
+
+    let ie_config = ie_config.unwrap();
+    let binary_path = ie_config
+        .get("command")
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+    let binary_path_buf = PathBuf::from(binary_path);
+    let binary_exists = binary_path_buf.exists();
+    let binary_executable = if binary_exists {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::metadata(&binary_path_buf)
+                .map(|m| m.permissions().mode() & 0o111 != 0)
+                .unwrap_or(false)
+        }
+        #[cfg(not(unix))]
+        {
+            true // On Windows, assume executable if exists
+        }
+    } else {
+        false
+    };
+
+    let env_config = ie_config.get("env");
+    let project_dir = env_config
+        .and_then(|e| e.get("INTENT_ENGINE_PROJECT_DIR"))
+        .and_then(|p| p.as_str())
+        .unwrap_or("");
+
+    let status = if binary_exists && binary_executable {
+        "✓ PASS"
+    } else if binary_exists {
+        "⚠ WARNING"
+    } else {
+        "✗ FAIL"
+    };
+
+    let passed = binary_exists && binary_executable;
+
+    json!({
+        "check": "MCP Configuration",
+        "status": status,
+        "passed": passed,
+        "details": {
+            "config_file": config_path.display().to_string(),
+            "config_exists": true,
+            "mcp_configured": true,
+            "binary_path": binary_path,
+            "binary_exists": binary_exists,
+            "binary_executable": binary_executable,
+            "project_dir": project_dir,
+            "message": if passed {
+                "MCP server configured correctly"
+            } else if !binary_exists {
+                "Binary not found at configured path"
+            } else {
+                "Binary not executable"
+            }
+        }
+    })
+}
+
+/// Check hooks configuration in ~/.claude/ or ./.claude/
+fn check_hooks_configuration() -> serde_json::Value {
+    use intent_engine::setup::common::get_home_dir;
+    use serde_json::json;
+    use std::fs;
+    use std::path::PathBuf;
+
+    let home = match get_home_dir() {
+        Ok(h) => h,
+        Err(_) => {
+            return json!({
+                "check": "Hooks Configuration",
+                "status": "⚠ WARNING",
+                "passed": false,
+                "details": {
+                    "error": "Unable to determine home directory"
+                }
+            });
+        },
+    };
+
+    // Check both user-level and project-level
+    let user_hook = home.join(".claude/hooks/session-start.sh");
+    let user_settings = home.join(".claude/settings.json");
+    let project_hook = PathBuf::from(".claude/hooks/session-start.sh");
+    let project_settings = PathBuf::from(".claude/settings.json");
+
+    let mut details = json!({
+        "user_level": {
+            "hook_script": user_hook.display().to_string(),
+            "script_exists": user_hook.exists(),
+            "script_executable": false,
+            "settings_file": user_settings.display().to_string(),
+            "settings_exists": user_settings.exists(),
+            "settings_configured": false
+        },
+        "project_level": {
+            "hook_script": project_hook.display().to_string(),
+            "script_exists": project_hook.exists(),
+            "script_executable": false,
+            "settings_file": project_settings.display().to_string(),
+            "settings_exists": project_settings.exists(),
+            "settings_configured": false
+        }
+    });
+
+    let mut any_configured = false;
+
+    // Check user-level
+    if user_hook.exists() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = fs::metadata(&user_hook) {
+                details["user_level"]["script_executable"] =
+                    json!(metadata.permissions().mode() & 0o111 != 0);
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            details["user_level"]["script_executable"] = json!(true);
+        }
+
+        if user_settings.exists() {
+            if let Ok(content) = fs::read_to_string(&user_settings) {
+                if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
+                    let has_session_start = settings
+                        .get("hooks")
+                        .and_then(|h| h.get("SessionStart"))
+                        .is_some();
+                    details["user_level"]["settings_configured"] = json!(has_session_start);
+                    if has_session_start {
+                        any_configured = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // Check project-level
+    if project_hook.exists() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = fs::metadata(&project_hook) {
+                details["project_level"]["script_executable"] =
+                    json!(metadata.permissions().mode() & 0o111 != 0);
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            details["project_level"]["script_executable"] = json!(true);
+        }
+
+        if project_settings.exists() {
+            if let Ok(content) = fs::read_to_string(&project_settings) {
+                if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
+                    let has_session_start = settings
+                        .get("hooks")
+                        .and_then(|h| h.get("SessionStart"))
+                        .is_some();
+                    details["project_level"]["settings_configured"] = json!(has_session_start);
+                    if has_session_start {
+                        any_configured = true;
+                    }
+                }
+            }
+        }
+    }
+
+    let status = if any_configured {
+        "✓ PASS"
+    } else {
+        "⚠ WARNING"
+    };
+
+    details["message"] = if any_configured {
+        json!("Hooks configured correctly")
+    } else {
+        json!("Hooks not configured. Run 'ie setup --target claude-code' to configure")
+    };
+
+    details["setup_command"] = json!("ie setup --target claude-code");
+
+    json!({
+        "check": "Hooks Configuration",
+        "status": status,
+        "passed": any_configured,
+        "details": details
+    })
+}
+
 async fn handle_doctor_command() -> Result<()> {
     use serde_json::json;
 
@@ -523,6 +797,21 @@ async fn handle_doctor_command() -> Result<()> {
         "details": db_path_info
     }));
 
+    // Check MCP configuration
+    let mcp_check = check_mcp_configuration();
+    if !mcp_check["passed"].as_bool().unwrap_or(false) {
+        all_passed = false;
+    }
+    checks.push(mcp_check);
+
+    // Check Hooks configuration
+    let hooks_check = check_hooks_configuration();
+    if !hooks_check["passed"].as_bool().unwrap_or(false) {
+        // Hooks are optional, so don't fail overall status
+        // all_passed = false;
+    }
+    checks.push(hooks_check);
+
     let result = json!({
         "summary": if all_passed { "✓ All checks passed" } else { "✗ Some checks failed" },
         "overall_status": if all_passed { "healthy" } else { "unhealthy" },
@@ -585,273 +874,159 @@ async fn handle_session_restore(include_events: usize, workspace: Option<String>
     Ok(())
 }
 
-async fn handle_setup_claude_code(
+async fn handle_setup(
+    target: Option<String>,
+    scope: &str,
     dry_run: bool,
-    claude_dir: Option<String>,
     force: bool,
-) -> Result<()> {
-    use std::fs;
-    use std::path::PathBuf;
-
-    // Determine .claude directory
-    let claude_path = claude_dir
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("./.claude"));
-
-    // Check or create .claude directory
-    if !claude_path.exists() {
-        if dry_run {
-            println!("Would create: {}", claude_path.display());
-        } else {
-            fs::create_dir_all(&claude_path)?;
-            println!("✓ Created {}", claude_path.display());
-        }
-    } else if !dry_run {
-        println!("✓ Found .claude directory");
-    }
-
-    // Check or create hooks directory
-    let hooks_dir = claude_path.join("hooks");
-    if !hooks_dir.exists() {
-        if dry_run {
-            println!("Would create: {}", hooks_dir.display());
-        } else {
-            fs::create_dir_all(&hooks_dir)?;
-            println!("✓ Created {}", hooks_dir.display());
-        }
-    }
-
-    // Install hook script
-    let hook_path = hooks_dir.join("session-start.sh");
-    if hook_path.exists() && !force {
-        return Err(IntentError::InvalidInput(
-            "session-start.sh already exists. Use --force to overwrite".to_string(),
-        ));
-    }
-
-    if dry_run {
-        println!("Would write: {}", hook_path.display());
-    } else {
-        // Hook script content (we'll create the template file separately)
-        let hook_content = include_str!("../templates/session-start.sh");
-
-        fs::write(&hook_path, hook_content)?;
-        println!("✓ Installed session-start.sh");
-
-        // Set executable permissions (Unix only)
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&hook_path)?.permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&hook_path, perms)?;
-            println!("✓ Set executable permissions");
-        }
-    }
-
-    if !dry_run {
-        println!("\n✅ Setup complete!");
-        println!("\nNext steps:");
-        println!("1. Start a new Claude Code session");
-        println!("2. The session-start hook will automatically restore your focus");
-        println!("\nDocumentation: docs/integration/claude-code-setup.md");
-    }
-
-    Ok(())
-}
-
-async fn handle_setup_mcp(
-    dry_run: bool,
+    diagnose: bool,
     config_path: Option<String>,
     project_dir: Option<String>,
-    force: bool,
-    target: &str,
 ) -> Result<()> {
-    use serde_json::{json, Value};
-    use std::env;
-    use std::fs;
-    use std::path::PathBuf;
+    use intent_engine::setup::claude_code::ClaudeCodeSetup;
+    use intent_engine::setup::{SetupModule, SetupOptions, SetupScope};
 
-    println!("Intent-Engine MCP Setup");
-    println!("=======================\n");
+    println!("Intent-Engine Unified Setup");
+    println!("============================\n");
 
-    // Detect OS
-    let os = env::consts::OS;
-    println!("Detected OS: {}", os);
+    // Parse scope
+    let setup_scope = SetupScope::from_str(scope)?;
 
-    // Determine config file path
-    let config_file_path = if let Some(path) = config_path {
-        PathBuf::from(path)
-    } else {
-        get_default_config_path(os, target)?
+    // Build options
+    let opts = SetupOptions {
+        scope: setup_scope,
+        dry_run,
+        force,
+        config_path: config_path.map(PathBuf::from),
+        project_dir: project_dir.map(PathBuf::from),
     };
 
-    println!("Config file: {}", config_file_path.display());
-
-    // Find intent-engine binary
-    let binary_path = which::which("intent-engine").or_else(|_| {
-        let home = env::var("HOME")
-            .or_else(|_| env::var("USERPROFILE"))
-            .map_err(|_| {
-                IntentError::InvalidInput("Cannot determine home directory".to_string())
-            })?;
-        let cargo_bin = PathBuf::from(home)
-            .join(".cargo")
-            .join("bin")
-            .join("intent-engine");
-        if cargo_bin.exists() {
-            Ok(cargo_bin)
-        } else {
-            Err(IntentError::InvalidInput(
-                "intent-engine binary not found in PATH or ~/.cargo/bin".to_string(),
-            ))
-        }
-    })?;
-
-    println!("Binary: {}", binary_path.display());
-
-    // Determine project directory
-    let proj_dir = if let Some(dir) = project_dir {
-        PathBuf::from(dir)
+    // Determine target (interactive if not specified)
+    let target_tool = if let Some(t) = target {
+        t
     } else {
-        env::current_dir().map_err(IntentError::IoError)?
+        // TODO: Implement interactive selection
+        println!("⚠️  Interactive mode not yet implemented.");
+        println!("Please specify --target explicitly.\n");
+        println!("Available targets:");
+        println!("  - claude-code");
+        println!("\nExample: ie setup --target claude-code");
+        return Err(IntentError::InvalidInput(
+            "Target tool must be specified with --target".to_string(),
+        ));
     };
 
-    println!("Project dir: {}", proj_dir.display());
-    println!();
-
-    // Check if config file exists
-    let config_exists = config_file_path.exists();
-
-    if config_exists && !force {
-        println!("⚠️  Config file already exists");
-        println!("Checking for existing intent-engine configuration...\n");
+    // Diagnose mode
+    if diagnose {
+        return handle_setup_diagnose(&target_tool);
     }
 
-    // Read or create config
-    let mut config: Value = if config_exists {
-        let content = fs::read_to_string(&config_file_path).map_err(IntentError::IoError)?;
-        serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
-    } else {
-        json!({})
-    };
+    // Setup mode
+    match target_tool.as_str() {
+        "claude-code" => {
+            let setup = ClaudeCodeSetup;
+            let result = setup.setup(&opts)?;
 
-    // Check if intent-engine already configured
-    if let Some(mcp_servers) = config.get("mcpServers") {
-        if mcp_servers.get("intent-engine").is_some() && !force {
-            println!("✓ intent-engine MCP server already configured");
-            println!("\nUse --force to overwrite existing configuration");
-            return Ok(());
-        }
-    }
+            if !dry_run {
+                println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                println!("✅ {}", result.message);
+                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-    // Create backup if exists
-    if config_exists && !dry_run {
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let backup_path = config_file_path.with_extension(format!("json.backup.{}", timestamp));
-        fs::copy(&config_file_path, &backup_path).map_err(IntentError::IoError)?;
-        println!("✓ Backup created: {}", backup_path.display());
-    }
+                println!("Files modified:");
+                for file in &result.files_modified {
+                    println!("  - {}", file.display());
+                }
 
-    // Add intent-engine configuration
-    if config.get("mcpServers").is_none() {
-        config["mcpServers"] = json!({});
-    }
+                if let Some(conn_test) = result.connectivity_test {
+                    println!("\nConnectivity test:");
+                    if conn_test.passed {
+                        println!("  ✅ {}", conn_test.details);
+                    } else {
+                        println!("  ⚠️  {}", conn_test.details);
+                    }
+                }
 
-    config["mcpServers"]["intent-engine"] = json!({
-        "command": binary_path.to_string_lossy(),
-        "args": ["mcp-server"],
-        "env": {
-            "INTENT_ENGINE_PROJECT_DIR": proj_dir.to_string_lossy()
+                println!("\nNext steps:");
+                println!("  1. Restart Claude Code completely");
+                println!("  2. Open a new session in a project directory");
+                println!("  3. You should see Intent-Engine context restored");
+                println!("\nTo verify setup:");
+                println!("  ie setup --target claude-code --diagnose");
+            }
+
+            Ok(())
         },
-        "description": "Strategic intent and task workflow management for human-AI collaboration"
-    });
-
-    if dry_run {
-        println!("\n[DRY RUN] Would write configuration:");
-        println!("{}", serde_json::to_string_pretty(&config)?);
-    } else {
-        // Ensure parent directory exists
-        if let Some(parent) = config_file_path.parent() {
-            fs::create_dir_all(parent).map_err(IntentError::IoError)?;
-        }
-
-        // Write config file
-        fs::write(&config_file_path, serde_json::to_string_pretty(&config)?)
-            .map_err(IntentError::IoError)?;
-
-        println!("✓ Configuration updated");
+        "gemini-cli" | "codex" => {
+            println!("⚠️  Target '{}' is not yet supported.", target_tool);
+            println!("Currently supported: claude-code");
+            Err(IntentError::InvalidInput(format!(
+                "Unsupported target: {}",
+                target_tool
+            )))
+        },
+        _ => Err(IntentError::InvalidInput(format!(
+            "Unknown target: {}. Available: claude-code, gemini-cli, codex",
+            target_tool
+        ))),
     }
-
-    if !dry_run {
-        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("✅ MCP Setup complete!");
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-
-        println!("Configuration:");
-        println!("  File: {}", config_file_path.display());
-        println!("  Binary: {}", binary_path.display());
-        println!("  Project: {}", proj_dir.display());
-
-        println!("\n⚠️  Version note:");
-        println!("  This setup targets Claude Code v2.0.37+");
-        println!("  Earlier versions may use different config paths");
-
-        println!("\nNext steps:");
-        println!("  1. Restart Claude Code/Desktop to load MCP server");
-        println!("  2. Verify intent-engine tools are available");
-        println!("  3. Try: Ask Claude to create a task for you");
-
-        println!("\nTo test manually:");
-        println!("  echo '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}}' | \\");
-        println!("    INTENT_ENGINE_PROJECT_DIR={} \\", proj_dir.display());
-        println!("    {} mcp-server", binary_path.display());
-    }
-
-    Ok(())
 }
 
-fn get_default_config_path(os: &str, target: &str) -> Result<PathBuf> {
-    use std::env;
-    use std::path::PathBuf;
+fn handle_setup_diagnose(target: &str) -> Result<()> {
+    use intent_engine::setup::claude_code::ClaudeCodeSetup;
+    use intent_engine::setup::SetupModule;
 
-    let home = env::var("HOME")
-        .or_else(|_| env::var("USERPROFILE"))
-        .map_err(|_| IntentError::InvalidInput("Cannot determine home directory".to_string()))?;
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("🔍 Setup Diagnosis for '{}'", target);
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-    let home_path = PathBuf::from(home);
+    match target {
+        "claude-code" => {
+            let setup = ClaudeCodeSetup;
+            let report = setup.diagnose()?;
 
-    match (os, target) {
-        // Claude Code v2.0.37+ on Unix-like systems
-        ("linux" | "macos", "claude-code") => Ok(home_path.join(".claude.json")),
-        // Claude Code on Windows
-        ("windows", "claude-code") => {
-            let appdata = env::var("APPDATA")
-                .map_err(|_| IntentError::InvalidInput("APPDATA not set".to_string()))?;
-            Ok(PathBuf::from(appdata).join("Claude").join(".claude.json"))
+            println!("Check results:\n");
+            for check in &report.checks {
+                let status = if check.passed { "✅" } else { "❌" };
+                println!("{} {}", status, check.name);
+                println!("   {}", check.details);
+            }
+
+            println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            if report.overall_status {
+                println!("✅ All checks passed!");
+                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+                // Run connectivity test
+                println!("Running connectivity test...\n");
+                match setup.test_connectivity() {
+                    Ok(result) => {
+                        if result.passed {
+                            println!("✅ {}", result.details);
+                        } else {
+                            println!("⚠️  {}", result.details);
+                        }
+                    },
+                    Err(e) => {
+                        println!("❌ Connectivity test failed: {}", e);
+                    },
+                }
+            } else {
+                println!("❌ Some checks failed");
+                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+                if !report.suggested_fixes.is_empty() {
+                    println!("Suggested fixes:");
+                    for fix in &report.suggested_fixes {
+                        println!("  • {}", fix);
+                    }
+                }
+            }
+
+            Ok(())
         },
-        // Claude Desktop on macOS
-        ("macos", "claude-desktop") => Ok(home_path
-            .join("Library")
-            .join("Application Support")
-            .join("Claude")
-            .join("claude_desktop_config.json")),
-        // Claude Desktop on Windows
-        ("windows", "claude-desktop") => {
-            let appdata = env::var("APPDATA")
-                .map_err(|_| IntentError::InvalidInput("APPDATA not set".to_string()))?;
-            Ok(PathBuf::from(appdata)
-                .join("Claude")
-                .join("claude_desktop_config.json"))
-        },
-        // Claude Desktop on Linux
-        ("linux", "claude-desktop") => Ok(home_path
-            .join(".config")
-            .join("Claude")
-            .join("claude_desktop_config.json")),
         _ => Err(IntentError::InvalidInput(format!(
-            "Unsupported OS/target combination: {}/{}",
-            os, target
+            "Diagnosis not supported for target: {}",
+            target
         ))),
     }
 }

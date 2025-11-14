@@ -114,7 +114,7 @@ cargo install intent-engine
 # Visit https://github.com/wayfind/intent-engine/releases
 
 # Verify Installation
-intent-engine --version
+ie --version
 ```
 
 > 📖 **Detailed Installation Guide**: See [INSTALLATION.md](docs/en/guide/installation.md) for all installation methods, troubleshooting, and integration options.
@@ -124,27 +124,27 @@ intent-engine --version
 ```bash
 # 1. Add a strategic task
 echo "Implement JWT authentication with token refresh, 7-day validity" | \
-  intent-engine task add --name "Implement user authentication" --spec-stdin
+  ie task add --name "Implement user authentication" --spec-stdin
 
 # 2. Start task and view context
-intent-engine task start 1 --with-events
+ie task start 1 --with-events
 
 # 3. Discover sub-problem during work? Create subtask and auto-switch
-intent-engine task spawn-subtask --name "Configure JWT secret key"
+ie task spawn-subtask --name "Configure JWT secret key"
 
 # 4. Record key decision (subtask is now current task)
 echo "Chose HS256 algorithm, store secret in environment variables" | \
-  intent-engine event add --type decision --data-stdin
+  ie event add --type decision --data-stdin
 
 # 5. Complete subtask
-intent-engine task done
+ie task done
 
 # 6. Switch back to parent task and complete
-intent-engine task switch 1
-intent-engine task done
+ie task switch 1
+ie task done
 
 # 7. Generate work report
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 ```
 
 > 💡 **More Detailed Tutorial**: See [QUICKSTART.md](QUICKSTART.en.md)
@@ -176,10 +176,10 @@ Intent-Engine provides a **Rust-native MCP (Model Context Protocol) server**, en
 cargo install intent-engine
 
 # Auto-configure MCP server for Claude Code
-intent-engine setup-mcp
+ie setup-mcp
 
 # Or for Claude Desktop
-intent-engine setup-mcp --target claude-desktop
+ie setup-mcp --target claude-desktop
 ```
 
 **Method 2: From Source**
@@ -193,7 +193,7 @@ cd intent-engine
 cargo install --path .
 
 # Auto-configure for Claude Code/Desktop
-intent-engine setup-mcp
+ie setup-mcp
 # Or use the shell script:
 # ./scripts/install/install-mcp-server.sh
 ```
@@ -302,11 +302,11 @@ Intent-Engine's MCP server uses **Rust native implementation**, compared to trad
 # Manually test MCP server (from project directory)
 cd /path/to/your/project
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  intent-engine mcp-server
+  ie mcp-server
 
 # Or using environment variable
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project intent-engine mcp-server
+  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project ie mcp-server
 
 # Should return JSON response with 13 tools
 ```

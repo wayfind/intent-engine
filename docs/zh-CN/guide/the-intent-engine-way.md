@@ -27,7 +27,7 @@
 
 ### 方法 (How)
 
-使用 `intent-engine task add`。关键在于 `spec` 的质量。
+使用 `ie task add`。关键在于 `spec` 的质量。
 
 ```bash
 # 将详细的、结构化的需求通过管道传递给 --spec-stdin
@@ -40,7 +40,7 @@ echo "# 目标: 实现 OAuth2 登录
 
 ## 技术约束:
 - 使用 OAuth2 PKCE 流程
-- 前后端分离架构" | intent-engine task add --name "实现 OAuth2 登录" --spec-stdin
+- 前后端分离架构" | ie task add --name "实现 OAuth2 登录" --spec-stdin
 ```
 
 ### 原因 (Why)
@@ -57,11 +57,11 @@ echo "# 目标: 实现 OAuth2 登录
 
 ### 方法 (How)
 
-永远使用 `intent-engine task start <ID> --with-events`。
+永远使用 `ie task start <ID> --with-events`。
 
 ```bash
 # AI 决定开始处理任务 #42
-intent-engine task start 42 --with-events
+ie task start 42 --with-events
 ```
 
 ### 原因 (Why)
@@ -90,21 +90,21 @@ intent-engine task start 42 --with-events
 
 ```bash
 # 1. AI 在代码审查中发现 5 个问题
-intent-engine task add --name "修复空指针异常"
-intent-engine task add --name "优化数据库查询"
-intent-engine task add --name "修复内存泄漏"
-intent-engine task add --name "更新过期依赖"
-intent-engine task add --name "添加错误日志"
+ie task add --name "修复空指针异常"
+ie task add --name "优化数据库查询"
+ie task add --name "修复内存泄漏"
+ie task add --name "更新过期依赖"
+ie task add --name "添加错误日志"
 
 # 2. AI 评估每个任务的复杂度（1-10）和优先级
-intent-engine task update 1 --complexity 3 --priority 10  # 空指针：简单但紧急
-intent-engine task update 2 --complexity 7 --priority 8   # 数据库：复杂且重要
-intent-engine task update 3 --complexity 9 --priority 10  # 内存：复杂但紧急
-intent-engine task update 4 --complexity 5 --priority 5   # 依赖：中等
-intent-engine task update 5 --complexity 2 --priority 3   # 日志：简单不紧急
+ie task update 1 --complexity 3 --priority 10  # 空指针：简单但紧急
+ie task update 2 --complexity 7 --priority 8   # 数据库：复杂且重要
+ie task update 3 --complexity 9 --priority 10  # 内存：复杂但紧急
+ie task update 4 --complexity 5 --priority 5   # 依赖：中等
+ie task update 5 --complexity 2 --priority 3   # 日志：简单不紧急
 
 # 3. 智能选择前 3 个任务（按优先级降序，复杂度升序）
-intent-engine task pick-next --max-count 3 --capacity 5
+ie task pick-next --max-count 3 --capacity 5
 # 结果：会选择任务 1（P10/C3）、3（P10/C9）、2（P8/C7）
 ```
 
@@ -124,7 +124,7 @@ intent-engine task pick-next --max-count 3 --capacity 5
 
 ### 时机 (When to record events)
 
-在执行循环中的每一个关键节点，都必须使用 `intent-engine event add` 进行记录。关键节点包括：
+在执行循环中的每一个关键节点，都必须使用 `ie event add` 进行记录。关键节点包括：
 
 - **做出重要决策时** (`--type decision`): "我选择了库 A 而不是库 B，原因是..."
 - **遇到障碍时** (`--type blocker`): "我需要 API 密钥，无法继续"
@@ -152,7 +152,7 @@ echo "重构了 token 验证逻辑。
 改进：
 - 添加了 token 过期时间检查
 - 实现了自动刷新机制
-- 增加了单元测试覆盖" | intent-engine event add --task-id 42 --type decision --data-stdin
+- 增加了单元测试覆盖" | ie event add --task-id 42 --type decision --data-stdin
 ```
 
 ### 原因 (Why)
@@ -182,10 +182,10 @@ Intent-Engine 是 AI 的**外部长时记忆**。AI 的上下文窗口是有限�
 
 ```bash
 # AI 正在处理任务 #42: 实现 OAuth2 登录
-intent-engine task start 42 --with-events
+ie task start 42 --with-events
 
 # 在实现过程中发现需要先配置 OAuth 应用
-intent-engine task spawn-subtask --name "在 Google 和 GitHub 配置 OAuth 应用"
+ie task spawn-subtask --name "在 Google 和 GitHub 配置 OAuth 应用"
 
 # 这会自动：
 # 1. 创建子任务（parent_id = 42）
@@ -195,20 +195,20 @@ intent-engine task spawn-subtask --name "在 Google 和 GitHub 配置 OAuth 应�
 
 # 在配置 OAuth 应用时，又发现需要先申请域名验证
 echo "需要先完成域名所有权验证才能创建 OAuth 应用" | \
-  intent-engine event add --task-id <child-task-id> --type blocker --data-stdin
+  ie event add --task-id <child-task-id> --type blocker --data-stdin
 
-intent-engine task spawn-subtask --name "完成域名所有权验证"
+ie task spawn-subtask --name "完成域名所有权验证"
 
 # 完成最深层的子任务（spawn-subtask 后该任务已是焦点）
-intent-engine task done
+ie task done
 
 # 切回父任务继续
-intent-engine task switch <child-task-id>
-intent-engine task done  # 完成当前焦点任务
+ie task switch <child-task-id>
+ie task done  # 完成当前焦点任务
 
 # 最终完成根任务
-intent-engine task switch 42
-intent-engine task done  # 完成任务42
+ie task switch 42
+ie task done  # 完成任务42
 ```
 
 ### 原因 (Why)
@@ -237,10 +237,10 @@ intent-engine task done  # 完成任务42
 
 ```bash
 # 正在处理前端任务 #5
-intent-engine task switch 5
+ie task switch 5
 
 # 突然发现后端 API 有问题，需要先修复
-intent-engine task switch 12  # 切换到后端任务
+ie task switch 12  # 切换到后端任务
 
 # switch 会自动：
 # 1. 将任务 #12 状态更新为 doing（如果不是）
@@ -251,7 +251,7 @@ intent-engine task switch 12  # 切换到后端任务
 # 输出会包含 events_summary，帮助 AI 快速恢复记忆
 
 # 修复完成，切回前端任务
-intent-engine task switch 5
+ie task switch 5
 ```
 
 ### 原因 (Why)
@@ -272,17 +272,17 @@ intent-engine task switch 5
 
 ### 方法 (How)
 
-使用 `intent-engine task done`（不需要 ID 参数，自动完成当前焦点任务）。
+使用 `ie task done`（不需要 ID 参数，自动完成当前焦点任务）。
 
 **工作流:**
 ```bash
 # 方式 1: 使用 switch/start 命令（自动设置焦点）
-intent-engine task switch 42
-intent-engine task done
+ie task switch 42
+ie task done
 
 # 方式 2: 手动设置焦点
-intent-engine current --set 42
-intent-engine task done
+ie current --set 42
+ie task done
 ```
 
 **新的响应格式:**
@@ -334,11 +334,11 @@ intent-engine task done
 
 ### 方法 (How)
 
-使用 `intent-engine report`，并**优先使用 `--summary-only`**。
+使用 `ie report`，并**优先使用 `--summary-only`**。
 
 ```bash
 # AI 需要为周报生成摘要
-intent-engine report --since 7d --status done --summary-only
+ie report --since 7d --status done --summary-only
 
 # 输出示例（小巧的 JSON 摘要）:
 # {
@@ -357,16 +357,16 @@ intent-engine report --since 7d --status done --summary-only
 
 ```bash
 # 查看最近 1 天的所有任务（含详情）
-intent-engine report --since 1d
+ie report --since 1d
 
 # 查看所有进行中的任务
-intent-engine report --status doing --summary-only
+ie report --status doing --summary-only
 
 # 搜索与"认证"相关的已完成任务
-intent-engine report --filter-name "认证" --status done --summary-only
+ie report --filter-name "认证" --status done --summary-only
 
 # 组合查询：最近 30 天完成的数据库优化工作
-intent-engine report --since 30d --status done --filter-spec "数据库" --summary-only
+ie report --since 30d --status done --filter-spec "数据库" --summary-only
 ```
 
 ### 原因 (Why)
@@ -387,59 +387,59 @@ intent-engine report --since 30d --status done --filter-spec "数据库" --summa
 
 ```bash
 # 1. 捕获意图 - AI 发现 5 个问题
-intent-engine task add --name "修复空指针异常 in UserService"
-intent-engine task add --name "优化数据库查询性能"
-intent-engine task add --name "修复内存泄漏问题"
-intent-engine task add --name "更新过期的依赖包"
-intent-engine task add --name "添加错误日志记录"
+ie task add --name "修复空指针异常 in UserService"
+ie task add --name "优化数据库查询性能"
+ie task add --name "修复内存泄漏问题"
+ie task add --name "更新过期的依赖包"
+ie task add --name "添加错误日志记录"
 
 # 2. 评估 - AI 分析每个问题的复杂度和优先级
-intent-engine task update 1 --complexity 3 --priority 10
-intent-engine task update 2 --complexity 7 --priority 8
-intent-engine task update 3 --complexity 9 --priority 10
-intent-engine task update 4 --complexity 5 --priority 5
-intent-engine task update 5 --complexity 2 --priority 3
+ie task update 1 --complexity 3 --priority 10
+ie task update 2 --complexity 7 --priority 8
+ie task update 3 --complexity 9 --priority 10
+ie task update 4 --complexity 5 --priority 5
+ie task update 5 --complexity 2 --priority 3
 
 # 3. 智能规划 - 自动选择最优任务顺序
-intent-engine task pick-next --max-count 3 --capacity 5
+ie task pick-next --max-count 3 --capacity 5
 # 系统选择：任务 1(P10/C3)、3(P10/C9)、2(P8/C7)
 
 # 4. 执行第一个任务
-intent-engine task switch 1
+ie task switch 1
 
 # 4.1 记录决策
 echo "问题原因：UserService.getUser() 未检查返回值是否为 null
 修复方案：添加 Optional 包装和空值检查
 影响范围：3 个调用点" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  ie event add --task-id 1 --type decision --data-stdin
 
 # 4.2 执行修复
 # ... 修改代码 ...
 
 # 4.3 完成任务（任务1当前是焦点，直接完成）
-intent-engine task done
+ie task done
 
 # 5. 处理第二个任务（包含子任务）
-intent-engine task switch 3
+ie task switch 3
 
 # 5.1 发现需要先诊断问题
 echo "需要先使用 profiler 定位内存泄漏源" | \
-  intent-engine event add --task-id 3 --type blocker --data-stdin
+  ie event add --task-id 3 --type blocker --data-stdin
 
-intent-engine task spawn-subtask --name "使用 Valgrind 分析内存使用"
+ie task spawn-subtask --name "使用 Valgrind 分析内存使用"
 
 # 5.2 完成诊断（子任务当前是焦点，直接完成）
 echo "发现问题：WebSocket 连接未正确关闭" | \
-  intent-engine event add --task-id <subtask-id> --type milestone --data-stdin
-intent-engine task done
+  ie event add --task-id <subtask-id> --type milestone --data-stdin
+ie task done
 
 # 5.3 切回并完成主任务
-intent-engine task switch 3
+ie task switch 3
 # ... 修复代码 ...
-intent-engine task done
+ie task done
 
 # 6. 生成工作报告
-intent-engine report --since 1d --summary-only
+ie report --since 1d --summary-only
 ```
 
 ---
@@ -471,15 +471,15 @@ AI 的记忆会消失，但 Intent-Engine 不会。每个重要决策都应该�
 ### ❌ 不要：直接操作状态
 ```bash
 # 错误：手动组合多个操作
-intent-engine task update 42 --status doing
-intent-engine current --set 42
-intent-engine task get 42 --with-events
+ie task update 42 --status doing
+ie current --set 42
+ie task get 42 --with-events
 ```
 
 ### ✅ 应该：使用原子操作
 ```bash
 # 正确：一步到位
-intent-engine task start 42 --with-events
+ie task start 42 --with-events
 ```
 
 ---
@@ -487,25 +487,25 @@ intent-engine task start 42 --with-events
 ### ❌ 不要：平铺所有任务
 ```bash
 # 错误：所有子问题都创建为独立的根任务
-intent-engine task add --name "实现 OAuth2"
-intent-engine task add --name "配置 Google OAuth"
-intent-engine task add --name "配置 GitHub OAuth"
-intent-engine task add --name "实现 token 刷新"
+ie task add --name "实现 OAuth2"
+ie task add --name "配置 Google OAuth"
+ie task add --name "配置 GitHub OAuth"
+ie task add --name "实现 token 刷新"
 ```
 
 ### ✅ 应该：使用层级结构
 ```bash
 # 正确：使用父子关系
-intent-engine task add --name "实现 OAuth2"
-intent-engine task start 1
-intent-engine task spawn-subtask --name "配置 Google OAuth"
-intent-engine task done  # spawn-subtask 后子任务自动成为焦点
-intent-engine task spawn-subtask --name "配置 GitHub OAuth"
-intent-engine task done  # 完成当前焦点任务
-intent-engine task spawn-subtask --name "实现 token 刷新"
-intent-engine task done  # 完成当前焦点任务
-intent-engine task switch 1  # 切回父任务
-intent-engine task done  # 完成父任务
+ie task add --name "实现 OAuth2"
+ie task start 1
+ie task spawn-subtask --name "配置 Google OAuth"
+ie task done  # spawn-subtask 后子任务自动成为焦点
+ie task spawn-subtask --name "配置 GitHub OAuth"
+ie task done  # 完成当前焦点任务
+ie task spawn-subtask --name "实现 token 刷新"
+ie task done  # 完成当前焦点任务
+ie task switch 1  # 切回父任务
+ie task done  # 完成父任务
 ```
 
 ---
@@ -530,7 +530,7 @@ echo "选择使用 Passport.js 而不是手写 OAuth 逻辑
 权衡：
 - 增加依赖
 - 需要学习其 API" | \
-  intent-engine event add --task-id 1 --type decision --data-stdin
+  ie event add --task-id 1 --type decision --data-stdin
 ```
 
 ---
