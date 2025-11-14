@@ -136,8 +136,8 @@ fn test_event_list_filter_by_since() {
     add_event(&dir.to_path_buf(), task_id, "note", "Old event 1");
     add_event(&dir.to_path_buf(), task_id, "note", "Old event 2");
 
-    // Wait a bit
-    sleep(Duration::from_secs(2));
+    // Wait longer than the filter window to ensure old events are excluded
+    sleep(Duration::from_secs(6));
 
     // Add some recent events
     add_event(&dir.to_path_buf(), task_id, "note", "Recent event 1");
@@ -157,7 +157,8 @@ fn test_event_list_filter_by_since() {
     let all_events: Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(all_events.as_array().unwrap().len(), 4);
 
-    // Filter by since: 1s (should get only the recent 2 events)
+    // Filter by since: 5s (should get only the recent 2 events)
+    // Use 5s to allow for slower CI environments
     let output = intent_engine_cmd()
         .current_dir(dir)
         .arg("event")
@@ -165,7 +166,7 @@ fn test_event_list_filter_by_since() {
         .arg("--task-id")
         .arg(task_id.to_string())
         .arg("--since")
-        .arg("1s")
+        .arg("5s")
         .assert()
         .success();
 
@@ -186,13 +187,15 @@ fn test_event_list_filter_combined() {
     add_event(&dir.to_path_buf(), task_id, "decision", "Old decision");
     add_event(&dir.to_path_buf(), task_id, "blocker", "Old blocker");
 
-    sleep(Duration::from_secs(2));
+    // Wait longer than the filter window to ensure old events are excluded
+    sleep(Duration::from_secs(6));
 
     add_event(&dir.to_path_buf(), task_id, "decision", "Recent decision");
     add_event(&dir.to_path_buf(), task_id, "blocker", "Recent blocker");
     add_event(&dir.to_path_buf(), task_id, "milestone", "Recent milestone");
 
-    // Filter by both type=decision AND since=1s
+    // Filter by both type=decision AND since=5s
+    // Use 5s to allow for slower CI environments
     let output = intent_engine_cmd()
         .current_dir(dir)
         .arg("event")
@@ -202,7 +205,7 @@ fn test_event_list_filter_combined() {
         .arg("--type")
         .arg("decision")
         .arg("--since")
-        .arg("1s")
+        .arg("5s")
         .assert()
         .success();
 
