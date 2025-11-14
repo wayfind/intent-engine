@@ -1,19 +1,21 @@
-# Intent-Engine
-**为人机协作，编织清晰的思路**
-
-> AI 的外部长时记忆 + 战略任务管理系统
->
-> 将您和 AI 伙伴短暂、易失的协作瞬间，沉淀为项目可追溯、可恢复的永恒智慧
-
-**中文 | [English](README.en.md)**
-
+# Intent-Engine 
+  
+   **中文 | [English](README.en.md)**
+  
 [![CI](https://github.com/wayfind/intent-engine/workflows/CI/badge.svg)](https://github.com/wayfind/intent-engine/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/wayfind/intent-engine/branch/main/graph/badge.svg)](https://codecov.io/gh/wayfind/intent-engine)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
 [![Documentation](https://docs.rs/intent-engine/badge.svg)](https://docs.rs/intent-engine)
 
----
+
+**为人机协作，编织清晰的思路**
+
+> AI 的外部长时记忆 + 战略任务管理系统
+>
+> 将您和 AI 伙伴短暂、易失的协作瞬间，沉淀为项目可追溯、可恢复的永恒智慧
+
+
 
 ## 🎯 这是什么？
 
