@@ -86,7 +86,23 @@ pub fn write_json_config(path: &Path, config: &Value) -> Result<()> {
 
 /// Find the ie binary path
 pub fn find_ie_binary() -> Result<PathBuf> {
-    // First try CARGO_BIN_EXE_ie (set by cargo test)
+    // First, try to use the current executable path (most reliable in test/dev environments)
+    // When setup is called, it's running inside the `ie` binary, so current_exe() returns the ie path
+    if let Ok(current_exe) = env::current_exe() {
+        // Verify the binary name ends with 'ie' or 'intent-engine'
+        if let Some(file_name) = current_exe.file_name() {
+            let name = file_name.to_string_lossy();
+            if name == "ie"
+                || name.starts_with("ie.")
+                || name == "intent-engine"
+                || name.starts_with("intent-engine.")
+            {
+                return Ok(current_exe);
+            }
+        }
+    }
+
+    // Try CARGO_BIN_EXE_ie environment variable (set by cargo test in some cases)
     if let Ok(path) = env::var("CARGO_BIN_EXE_ie") {
         let binary = PathBuf::from(path);
         if binary.exists() {
