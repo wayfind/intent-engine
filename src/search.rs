@@ -1,14 +1,14 @@
-/// CJK (Chinese, Japanese, Korean) search utilities
-///
-/// This module provides utilities for detecting CJK characters and determining
-/// when to use LIKE fallback vs FTS5 trigram search.
-///
-/// **Background**: SQLite FTS5 with trigram tokenizer requires at least 3 consecutive
-/// characters to match. This is problematic for CJK languages where single-character
-/// or two-character searches are common (e.g., "用户", "认证").
-///
-/// **Solution**: For short CJK queries, we fallback to LIKE search which supports
-/// any length substring matching, albeit slower.
+//! CJK (Chinese, Japanese, Korean) search utilities
+//!
+//! This module provides utilities for detecting CJK characters and determining
+//! when to use LIKE fallback vs FTS5 trigram search.
+//!
+//! **Background**: SQLite FTS5 with trigram tokenizer requires at least 3 consecutive
+//! characters to match. This is problematic for CJK languages where single-character
+//! or two-character searches are common (e.g., "用户", "认证").
+//!
+//! **Solution**: For short CJK queries, we fallback to LIKE search which supports
+//! any length substring matching, albeit slower.
 
 /// Check if a character is a CJK character
 pub fn is_cjk_char(c: char) -> bool {

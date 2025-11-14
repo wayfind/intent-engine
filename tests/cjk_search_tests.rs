@@ -235,7 +235,7 @@ async fn test_edge_cases() {
         .await
         .unwrap();
     let results = task_mgr.search_tasks("用户").await.unwrap();
-    assert!(results.len() >= 1, "应该能处理空格");
+    assert!(!results.is_empty(), "应该能处理空格");
 
     // Spec中的搜索
     task_mgr
@@ -243,7 +243,7 @@ async fn test_edge_cases() {
         .await
         .unwrap();
     let results = task_mgr.search_tasks("用户").await.unwrap();
-    assert!(results.len() >= 1, "应该能搜索spec字段");
+    assert!(!results.is_empty(), "应该能搜索spec字段");
 }
 
 // ================================
