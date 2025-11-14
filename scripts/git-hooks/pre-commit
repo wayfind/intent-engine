@@ -1,0 +1,40 @@
+#!/bin/sh
+# Auto-format Rust code and check version sync before commit
+
+echo "Running cargo fmt..."
+cargo fmt --all
+
+# Check if any files were modified
+if ! git diff --quiet; then
+    echo "✓ Code formatted. Adding changes to commit..."
+    git diff --name-only | grep '\.rs$' | xargs -r git add
+fi
+
+# Run clippy checks
+echo ""
+echo "Running cargo clippy..."
+if ! cargo clippy --all-targets --all-features -- -D warnings; then
+    echo "❌ Clippy checks failed. Please fix the warnings above."
+    exit 1
+fi
+echo "✓ Clippy checks passed"
+
+# Check version consistency
+echo ""
+echo "Checking version sync..."
+if ! ./scripts/check-version-sync.sh; then
+    echo "❌ Version sync check failed. Commit aborted."
+    exit 1
+fi
+
+# Replace version placeholders in documentation
+echo ""
+./scripts/replace-version-placeholders.sh
+
+# Check if any documentation files were modified
+if ! git diff --quiet docs/; then
+    echo "✓ Version placeholders replaced. Adding doc changes to commit..."
+    git diff --name-only docs/ | grep '\.md$' | xargs -r git add
+fi
+
+echo "✓ Pre-commit hook completed"
