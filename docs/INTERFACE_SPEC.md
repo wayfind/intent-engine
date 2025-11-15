@@ -537,12 +537,12 @@ IF Priority 1 returns empty:
 
 ---
 
-#### `task find`
+#### `task list`
 **Purpose**: Filter tasks by structured metadata
 
 **Signature**:
 ```bash
-ie task find \
+ie task list \
   [--status <STATUS>] \
   [--parent <PARENT_ID>]
 ```
@@ -551,7 +551,7 @@ ie task find \
 - `--status <STATUS>` (optional): Filter by status (`todo`, `doing`, `done`)
 - `--parent <PARENT_ID>` (optional): Filter by parent ID (use `"null"` for root tasks)
 
-**Design Note**: `task find` handles **structured filtering only**. For text search, use `search` (unified search across tasks and events).
+**Design Note**: `task list` handles **structured filtering only**. For text search, use `search` (unified search across tasks and events).
 
 **Output**: JSON (array of tasks)
 ```json

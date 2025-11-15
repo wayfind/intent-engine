@@ -201,13 +201,13 @@ cat design.md | ie task add --name "设计评审" --spec-stdin
 
 ---
 
-#### `task find` - 查找任务
+#### `task list` - 查找任务
 
 查找任务，支持按状态、父任务筛选。
 
 **用法:**
 ```bash
-ie task find [OPTIONS]
+ie task list [OPTIONS]
 ```
 
 **参数:**
@@ -217,22 +217,22 @@ ie task find [OPTIONS]
 **示例:**
 ```bash
 # 查找所有任务
-ie task find
+ie task list
 
 # 查找正在进行的任务
-ie task find --status doing
+ie task list --status doing
 
 # 查找已完成的任务
-ie task find --status done
+ie task list --status done
 
 # 查找特定父任务的所有子任务
-ie task find --parent 1
+ie task list --parent 1
 
 # 查找所有根任务（无父任务）
-ie task find --parent null
+ie task list --parent null
 
 # 组合查询：查找任务 1 下正在进行的子任务
-ie task find --parent 1 --status doing
+ie task list --parent 1 --status doing
 ```
 
 **输出示例:**
@@ -866,9 +866,57 @@ ie task search "JWT" | jq '.[].match_snippet'
 - AI 查找相关上下文时使用
 - 代码审查时查找相关任务
 
-**与 `task find` 的区别:**
-- `task find`: 精确过滤（按 status、parent），返回完整任务列表
+**与 `task search` 的区别:**
+- `task list`: 精确过滤（按 status、parent），返回完整任务列表
 - `task search`: 全文搜索（按内容关键词），返回带匹配片段的结果，按相关性排序
+
+---
+
+#### `task depends-on` - 添加任务依赖
+
+在两个任务之间创建依赖关系。
+
+**用法:**
+```bash
+ie task depends-on <BLOCKED_TASK_ID> <BLOCKING_TASK_ID>
+```
+
+**参数:**
+- `<BLOCKED_TASK_ID>` - 有依赖的任务（被阻塞的任务）
+- `<BLOCKING_TASK_ID>` - 必须先完成的任务（阻塞任务）
+
+**逻辑**: `depends-on A B` 表示任务 A 依赖任务 B（任务 B 必须完成后任务 A 才能开始）
+
+**示例:**
+```bash
+# 任务 42 依赖任务 41（41 完成后 42 才能开始）
+ie task depends-on 42 41
+
+# 实际场景：实现 API 客户端依赖认证完成
+ie task add --name "实现认证系统"      # 任务 1
+ie task add --name "实现 API 客户端"   # 任务 2
+ie task depends-on 2 1                # 任务 2 依赖任务 1
+
+# 验证依赖关系
+ie task start 2  # 如果任务 1 未完成，会报错
+```
+
+**输出示例:**
+```json
+{
+  "success": true,
+  "dependency": {
+    "blocked_task_id": 42,
+    "blocking_task_id": 41,
+    "message": "Task 42 now depends on Task 41"
+  }
+}
+```
+
+**使用场景:**
+- 定义任务完成顺序
+- 确保前置条件满足
+- 项目依赖管理
 
 ---
 
@@ -1052,6 +1100,96 @@ ie current &>/dev/null && echo "有当前任务" || echo "无当前任务"
   "current_task_id": null,
   "message": "No current task"
 }
+```
+
+---
+
+## 系统工具命令
+
+#### `setup` - 统一配置命令
+
+为 AI 工具集成提供统一的配置接口，支持 hook 安装和 MCP 服务器配置。
+
+**用法:**
+```bash
+ie setup [OPTIONS]
+```
+
+**选项:**
+- `--target <TARGET>` - 目标工具：claude-code, gemini-cli, codex
+- `--scope <SCOPE>` - 安装范围：user（默认推荐）, project, 或 both
+- `--dry-run` - 预览模式，显示将要执行的操作但不实际执行
+- `--force` - 强制覆盖现有配置
+- `--diagnose` - 诊断现有设置而不安装
+- `--config-path <CONFIG_PATH>` - 自定义配置文件路径（高级用法）
+- `--project-dir <PROJECT_DIR>` - 为 INTENT_ENGINE_PROJECT_DIR 环境变量指定项目目录
+
+**特性:**
+- 支持用户级或项目级安装
+- 原子操作，失败时自动回滚
+- 内置连接测试
+- 故障诊断模式
+
+**示例:**
+```bash
+# 为 Claude Code 设置用户级集成（推荐）
+ie setup --target claude-code
+
+# 预览将要进行的操作
+ie setup --target claude-code --dry-run
+
+# 诊断现有配置
+ie setup --diagnose
+
+# 强制重新安装
+ie setup --target claude-code --force
+
+# 项目级安装
+ie setup --target claude-code --scope project
+```
+
+**输出示例:**
+```json
+{
+  "success": true,
+  "target": "claude-code",
+  "scope": "user",
+  "actions": [
+    "Created MCP server configuration",
+    "Tested connectivity",
+    "Updated Claude Code config"
+  ]
+}
+```
+
+---
+
+#### `doctor` - 系统健康检查
+
+检查系统健康状态和依赖项。
+
+**用法:**
+```bash
+ie doctor
+```
+
+**功能:**
+- 验证 Intent-Engine 安装
+- 检查 MCP 服务器配置
+- 测试数据库连接
+- 验证 Claude Code 集成状态
+- 提供修复建议
+
+**示例:**
+```bash
+# 运行系统健康检查
+ie doctor
+
+# 输出示例：
+# ✓ Intent-Engine 安装正常
+# ✓ SQLite 数据库连接正常
+# ⚠️  MCP 服务器未配置
+# 💡 建议运行: ie setup --target claude-code
 ```
 
 ---
@@ -1242,8 +1380,8 @@ ie task switch 1
 ie task done
 
 # 7. 查看任务层级
-ie task find --parent null  # 根任务
-ie task find --parent 1     # 子任务
+ie task list --parent null  # 根任务
+ie task list --parent 1     # 子任务
 ```
 
 ### 场景 3：并行任务管理

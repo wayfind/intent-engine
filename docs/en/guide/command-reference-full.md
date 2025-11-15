@@ -201,13 +201,13 @@ cat design.md | ie task add --name "Design review" --spec-stdin
 
 ---
 
-#### `task find` - Find Tasks
+#### `task list` - Find Tasks
 
 Find tasks, supporting filtering by status and parent.
 
 **Usage:**
 ```bash
-ie task find [OPTIONS]
+ie task list [OPTIONS]
 ```
 
 **Parameters:**
@@ -217,22 +217,22 @@ ie task find [OPTIONS]
 **Examples:**
 ```bash
 # Find all tasks
-ie task find
+ie task list
 
 # Find tasks in progress
-ie task find --status doing
+ie task list --status doing
 
 # Find completed tasks
-ie task find --status done
+ie task list --status done
 
 # Find all subtasks of specific parent task
-ie task find --parent 1
+ie task list --parent 1
 
 # Find all root tasks (no parent)
-ie task find --parent null
+ie task list --parent null
 
 # Combined query: find subtasks of task 1 that are in progress
-ie task find --parent 1 --status doing
+ie task list --parent 1 --status doing
 ```
 
 **Output Example:**
@@ -829,9 +829,57 @@ ie task search "JWT" | jq '.[].match_snippet'
 - AI context lookup
 - Find related tasks during code review
 
-**Difference from `task find`:**
-- `task find`: Exact filtering (by status, parent), returns complete task list
+**Difference from `task list`:**
+- `task list`: Exact filtering (by status, parent), returns complete task list
 - `task search`: Full-text search (by content keywords), returns results with match snippets, sorted by relevance
+
+---
+
+#### `task depends-on` - Add Task Dependency
+
+Create a dependency between two tasks.
+
+**Usage:**
+```bash
+ie task depends-on <BLOCKED_TASK_ID> <BLOCKING_TASK_ID>
+```
+
+**Parameters:**
+- `<BLOCKED_TASK_ID>` - Task that has the dependency (blocked task)
+- `<BLOCKING_TASK_ID>` - Task that must be completed first (blocking task)
+
+**Logic**: `depends-on A B` means Task A depends on Task B (Task B must be completed before Task A can start)
+
+**Examples:**
+```bash
+# Task 42 depends on Task 41 (41 must complete before 42 can start)
+ie task depends-on 42 41
+
+# Real scenario: API client implementation depends on authentication completion
+ie task add --name "Implement authentication system"   # Task 1
+ie task add --name "Implement API client"            # Task 2
+ie task depends-on 2 1                               # Task 2 depends on Task 1
+
+# Verify dependency
+ie task start 2  # Will fail if Task 1 is not completed
+```
+
+**Output Example:**
+```json
+{
+  "success": true,
+  "dependency": {
+    "blocked_task_id": 42,
+    "blocking_task_id": 41,
+    "message": "Task 42 now depends on Task 41"
+  }
+}
+```
+
+**Use Cases:**
+- Define task completion order
+- Ensure prerequisites are met
+- Project dependency management
 
 ---
 
@@ -1015,6 +1063,96 @@ ie current &>/dev/null && echo "Has current task" || echo "No current task"
   "current_task_id": null,
   "message": "No current task"
 }
+```
+
+---
+
+## System Utility Commands
+
+#### `setup` - Unified Setup Command
+
+Unified configuration interface for AI tool integrations, supporting both hook installation and MCP server configuration.
+
+**Usage:**
+```bash
+ie setup [OPTIONS]
+```
+
+**Options:**
+- `--target <TARGET>` - Target tool: claude-code, gemini-cli, codex
+- `--scope <SCOPE>` - Installation scope: user (default recommended), project, or both
+- `--dry-run` - Preview mode, show what would be done without executing
+- `--force` - Force overwrite existing configuration
+- `--diagnose` - Diagnose existing setup instead of installing
+- `--config-path <CONFIG_PATH>` - Custom config file path (advanced)
+- `--project-dir <PROJECT_DIR>` - Project directory for INTENT_ENGINE_PROJECT_DIR env var
+
+**Features:**
+- Support for user-level or project-level installation
+- Atomic operations with rollback on failure
+- Built-in connectivity testing
+- Troubleshooting mode
+
+**Examples:**
+```bash
+# Setup Claude Code integration at user level (recommended)
+ie setup --target claude-code
+
+# Preview what will be done
+ie setup --target claude-code --dry-run
+
+# Diagnose existing configuration
+ie setup --diagnose
+
+# Force reinstall
+ie setup --target claude-code --force
+
+# Project-level installation
+ie setup --target claude-code --scope project
+```
+
+**Output Example:**
+```json
+{
+  "success": true,
+  "target": "claude-code",
+  "scope": "user",
+  "actions": [
+    "Created MCP server configuration",
+    "Tested connectivity",
+    "Updated Claude Code config"
+  ]
+}
+```
+
+---
+
+#### `doctor` - System Health Check
+
+Check system health and dependencies.
+
+**Usage:**
+```bash
+ie doctor
+```
+
+**Features:**
+- Verify Intent-Engine installation
+- Check MCP server configuration
+- Test database connectivity
+- Validate Claude Code integration status
+- Provide repair suggestions
+
+**Examples:**
+```bash
+# Run system health check
+ie doctor
+
+# Example output:
+# ✓ Intent-Engine installation OK
+# ✓ SQLite database connection OK
+# ⚠️  MCP server not configured
+# 💡 Suggestion: Run 'ie setup --target claude-code'
 ```
 
 ---

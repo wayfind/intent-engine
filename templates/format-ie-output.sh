@@ -6,10 +6,6 @@
 
 set -euo pipefail
 
-# Environment variables provided by Claude Code
-TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
-TOOL_OUTPUT="${CLAUDE_TOOL_OUTPUT:-}"
-
 # 0. Ensure jq is available - try multiple common locations
 JQ_CMD=""
 for jq_candidate in \
@@ -36,21 +32,30 @@ if [ -z "$JQ_CMD" ]; then
     fi
 fi
 
-# 1. Only process intent-engine MCP tools
+# 1. Read JSON input from stdin
+# Actual format: {"tool_name": "...", "tool_response": [{"type": "text", "text": "..."}]}
+INPUT_JSON=$(cat)
+
+# 2. Parse tool_name and tool_response
+TOOL_NAME=$(echo "$INPUT_JSON" | $JQ_CMD -r '.tool_name // ""')
+TOOL_OUTPUT=$(echo "$INPUT_JSON" | $JQ_CMD -r '.tool_response[0].text // ""')
+
+# 3. Only process intent-engine MCP tools
 if [[ ! "$TOOL_NAME" =~ ^mcp__intent-engine__ ]]; then
     exit 0
 fi
 
-# 2. Skip if output is empty
+# 4. Skip if output is empty
 if [ -z "$TOOL_OUTPUT" ]; then
     exit 0
 fi
 
-# 3. Format based on tool type
+# 5. Format based on tool type
+# All output goes to stderr (exit code 2) so Claude Code passes it to Claude
+{
 case "$TOOL_NAME" in
     "mcp__intent-engine__task_context")
         # Format task context with tree view
-        echo "<system-reminder>"
         echo "Intent-Engine: Task Context"
         echo ""
 
@@ -109,12 +114,10 @@ case "$TOOL_NAME" in
             echo ""
         fi
 
-        echo "</system-reminder>"
         ;;
 
     "mcp__intent-engine__task_get")
         # Format task details
-        echo "<system-reminder>"
         echo "Intent-Engine: Task Details"
         echo ""
 
@@ -172,12 +175,10 @@ case "$TOOL_NAME" in
             fi
         fi
 
-        echo "</system-reminder>"
         ;;
 
     "mcp__intent-engine__current_task_get")
         # Format current task
-        echo "<system-reminder>"
 
         HAS_TASK=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.current_task_id != null')
 
@@ -207,46 +208,49 @@ case "$TOOL_NAME" in
             echo "Tip: Use 'ie task pick-next' to get a recommendation"
         fi
 
-        echo "</system-reminder>"
         ;;
 
     "mcp__intent-engine__task_list")
         # Format task list
-        echo "<system-reminder>"
         echo "Intent-Engine: Task List"
         echo ""
 
-        TASK_COUNT=$(echo "$TOOL_OUTPUT" | $JQ_CMD '[.tasks[]?] | length')
+        TASK_COUNT=$(echo "$TOOL_OUTPUT" | $JQ_CMD 'length')
 
         if [ "$TASK_COUNT" -eq 0 ]; then
             echo "No tasks found"
         else
             echo "Found ${TASK_COUNT} tasks:"
             echo ""
-            echo "$TOOL_OUTPUT" | $JQ_CMD -r '.tasks[]? | "  " + (if .status == "done" then "✓" elif .status == "doing" then "→" else "○" end) + " #" + (.id|tostring) + " " + .name + " [" + (.priority // "medium") + "]"'
+            echo "$TOOL_OUTPUT" | $JQ_CMD -r '.[] | "  " + (if .status == "done" then "✓" elif .status == "doing" then "→" else "○" end) + " #" + (.id|tostring) + " " + .name + " [p" + (.priority|tostring) + "]"'
         fi
 
-        echo "</system-reminder>"
         ;;
 
     "mcp__intent-engine__task_pick_next")
         # Format pick-next recommendation
-        echo "<system-reminder>"
         echo "Intent-Engine: Next Task Recommendation"
         echo ""
 
-        HAS_TASK=$(echo "$TOOL_OUTPUT" | $JQ_CMD 'has("recommended_task")')
+        HAS_TASK=$(echo "$TOOL_OUTPUT" | $JQ_CMD 'has("task")')
 
         if [ "$HAS_TASK" = "true" ]; then
-            TASK_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.recommended_task.id')
-            TASK_NAME=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.recommended_task.name')
-            REASON=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.reason // ""')
+            TASK_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.task.id')
+            TASK_NAME=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.task.name')
+            SUGGESTION_TYPE=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.suggestion_type // ""')
 
             echo "Recommended: #${TASK_ID} ${TASK_NAME}"
             echo ""
 
-            if [ -n "$REASON" ]; then
-                echo "Why: ${REASON}"
+            if [ -n "$SUGGESTION_TYPE" ]; then
+                case "$SUGGESTION_TYPE" in
+                    "SUBTASK_OF_CURRENT")
+                        echo "Why: Subtask of current focused task"
+                        ;;
+                    "TOP_LEVEL_TASK")
+                        echo "Why: Top-level task (no current focus)"
+                        ;;
+                esac
                 echo ""
             fi
 
@@ -257,12 +261,10 @@ case "$TOOL_NAME" in
             echo "All tasks may be completed or blocked by dependencies"
         fi
 
-        echo "</system-reminder>"
         ;;
 
     "mcp__intent-engine__task_search"|"mcp__intent-engine__unified_search")
         # Format search results
-        echo "<system-reminder>"
         echo "Intent-Engine: Search Results"
         echo ""
 
@@ -285,12 +287,10 @@ case "$TOOL_NAME" in
             echo "No results found"
         fi
 
-        echo "</system-reminder>"
         ;;
 
     "mcp__intent-engine__event_list")
         # Format event list
-        echo "<system-reminder>"
         echo "Intent-Engine: Events"
         echo ""
 
@@ -304,7 +304,6 @@ case "$TOOL_NAME" in
             echo "$TOOL_OUTPUT" | $JQ_CMD -r '.events[]? | "  [" + .type + "] " + .created_at + "\n    " + (.data | split("\n")[0])'
         fi
 
-        echo "</system-reminder>"
         ;;
 
     *)
@@ -313,3 +312,7 @@ case "$TOOL_NAME" in
         exit 0
         ;;
 esac
+} >&2
+
+# Exit with code 2 to pass output to Claude
+exit 2
