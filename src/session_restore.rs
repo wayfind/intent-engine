@@ -211,7 +211,7 @@ impl<'a> SessionRestoreManager<'a> {
 
         // Get recent events
         let events = event_mgr
-            .list_events(current_task_id, None, None, None)
+            .list_events(Some(current_task_id), None, None, None)
             .await?;
         let recent_events: Vec<EventInfo> = events
             .into_iter()

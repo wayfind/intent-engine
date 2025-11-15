@@ -1,6 +1,6 @@
 # Intent-Engine: Claude Integration Guide
 
-**Version**: 0.3
+**Version**: 0.4
 **Target**: Claude Code, Claude Desktop, and AI assistants via MCP
 
 ---
@@ -38,6 +38,8 @@ Intent-Engine is your **external long-term memory** for strategic task managemen
 
 ## 🎯 Core Concept: Focus-Driven Workflow
 
+> **Technical details**: See [AGENT.md](AGENT.md#focus-driven-operations) for data models and atomic operation semantics
+
 Intent-Engine works like your brain - **one focused task at a time**:
 
 ```
@@ -60,256 +62,61 @@ Intent-Engine works like your brain - **one focused task at a time**:
 
 ---
 
-## 🛠️ Available MCP Tools
+## 🛠️ Essential MCP Tools
 
-### Task Management
+> **For detailed technical specifications**, see [AGENT.md](AGENT.md#essential-commands)
 
-#### `task_add` - Create Strategic Task
-```json
-{
-  "name": "Implement user authentication",
-  "spec": "Use JWT with 7-day expiry, refresh tokens, HS256 algorithm",
-  "priority": "high"  // Optional: "critical", "high", "medium", "low"
-}
-```
+### Core Workflow Tools
 
-**Priority levels** (new in v0.2):
-- `critical` - Highest priority
-- `high` - Important
-- `medium` - Normal priority
-- `low` - Can wait
+| Tool | Purpose | Key Parameters |
+|------|---------|----------------|
+| `task_add` | Create strategic task | `name`, `spec`, `priority` |
+| `task_start` | Begin working (sets focus) | `task_id`, `with_events` |
+| `task_done` | Complete current task | (no parameters) |
+| `task_spawn_subtask` | Create and switch to subtask | `name`, `spec` |
+| `task_switch` | Change focus to another task | `task_id` |
+| `task_pick_next` | Get smart recommendation | (no parameters) |
+| `task_list` | Filter by status/parent | `status`, `parent` |
+| `task_add_dependency` | Define task dependencies | `blocked_task_id`, `blocking_task_id` |
 
-**When to use**:
-- User gives you a complex requirement
-- You need to track work across sessions
-- The task has multiple steps or sub-problems
+### Search and Discovery
 
-#### `task_start` - Begin Working
-```json
-{
-  "task_id": 42,
-  "with_events": true
-}
-```
+| Tool | Purpose | Key Parameters |
+|------|---------|----------------|
+| `unified_search` | Search tasks AND events | `query`, `include_tasks`, `include_events` |
 
-**What it does** (atomic):
-1. Sets task status to `doing`
-2. Makes it the current focused task
-3. Returns full context with decision history
+**Search capabilities**:
+- Supports FTS5 syntax: `AND`, `OR`, `NOT`, `"phrases"`
+- Returns mixed results with task ancestry for events
+- Example: `unified_search(query: "JWT AND authentication")`
 
-**When to use**:
-- Starting a new task
-- Resuming work after a break
-- User asks "what should I work on?"
+### Event Tracking
 
-#### `task_done` - Complete Current Task
-```json
-{
-  // NO parameters - operates on current_task_id
-}
-```
+| Tool | Purpose | Key Parameters |
+|------|---------|----------------|
+| `event_add` | Record decision/blocker/note | `type`, `data`, `task_id?` |
+| `event_list` | Query events with filters | `task_id?`, `type?`, `since?`, `limit?` |
 
-**Prerequisites**:
-- A task must be current/focused
-- All subtasks must be done
+**Event types**: `decision`, `blocker`, `milestone`, `note`
 
-**What it does** (atomic):
-1. Verifies all children are done
-2. Marks current task as done
-3. Clears current_task_id (unfocuses)
+**Filtering** (new in v0.2):
+- By type: `event_list(type: "decision")`
+- By time: `event_list(since: "7d")`
+- Combined: `event_list(type: "blocker", since: "24h")`
 
-**When to use**:
-- Task is complete and verified
-- All subtasks are finished
-- Ready to move to next task
+### Workspace and Reporting
 
-#### `task_spawn_subtask` - Decompose Problem
-```json
-{
-  "name": "Configure JWT secret key",
-  "spec": "Store in environment variables, use strong random value"
-}
-```
+| Tool | Purpose | Key Parameters |
+|------|---------|----------------|
+| `current_task_get` | Get focused task | (no parameters) |
+| `report_generate` | Generate summary report | `since`, `summary_only` |
 
-**What it does** (atomic):
-1. Creates subtask under current task
-2. Switches focus to new subtask
-3. Sets new subtask as `doing`
+### New Features (v0.2+)
 
-**When to use**:
-- Discover a sub-problem while working
-- Need to break down current task
-- Want to track detailed steps
-
-#### `task_switch` - Change Focus
-```json
-{
-  "task_id": 43
-}
-```
-
-**What it does** (atomic):
-1. Previous task: `doing` → `todo` (pause)
-2. New task: `todo` → `doing` (resume)
-3. Update focus to new task
-
-**When to use**:
-- Pause current work to handle something else
-- Return to a previously started task
-- User asks to switch context
-
-#### `task_pick_next` - Get Recommendation
-```json
-{
-  // No required parameters
-}
-```
-
-**Smart algorithm** (depth-first):
-1. **First priority**: Subtasks of current focused task
-2. **Second priority**: Top-level todo tasks
-
-**When to use**:
-- User asks "what should I work on next?"
-- Current task is done, need next step
-- Starting a new work session
-
-#### `task_list` - Filter by Metadata
-```json
-{
-  "status": "doing",
-  "parent": 42
-}
-```
-
-**When to use**:
-- Find all tasks in a specific status
-- List subtasks of a parent
-- Query structured properties
-
-**NOT for text search** - use `task_search` instead
-
-> **Note**: Previously called `task_find` (deprecated in v0.2). Old name still works but shows a warning.
-
-#### `task_search` - Full-Text Search
-```json
-{
-  "query": "JWT AND authentication",
-  "snippet": true
-}
-```
-
-**Searches**: Both `name` and `spec` fields
-
-**When to use**:
-- Find tasks by content/keywords
-- Search for specific technical terms
-- Locate related work
-
-#### `task_add_dependency` - Define Task Dependencies
-```json
-{
-  "blocked_task_id": 43,
-  "blocking_task_id": 42
-}
-```
-
-**What it does**:
-- Creates a dependency: Task 43 depends on Task 42
-- Validates no circular dependencies exist
-- Task 43 cannot start until Task 42 is `done`
-
-**When to use**:
-- Define execution order between tasks
-- Ensure prerequisites are met before starting work
-- Model complex workflows with dependencies
-
-**Important**:
-- `task_start` will fail if task has incomplete dependencies
-- `task_pick_next` filters out blocked tasks automatically
-
-### Event Recording
-
-#### `event_add` - Record Decisions/Blockers
-```json
-{
-  "type": "decision",  // or "blocker", "milestone", "note"
-  "data": "Chose HS256 over RS256 because we don't need key rotation yet",
-  "task_id": 42  // Optional - defaults to current task
-}
-```
-
-**Two modes**:
-1. **During work**: Omit `task_id` → records for current task
-2. **Retrospective**: Include `task_id` → records for any task
-
-**When to use**:
-- Made an important design decision
-- Hit a blocker that needs tracking
-- Reached a milestone
-- Quick note for future reference
-
-#### `event_list` - Query Events with Filters
-```json
-{
-  "task_id": 42,
-  "type": "decision",        // Optional: filter by type
-  "since": "7d",             // Optional: only recent events
-  "limit": 10                // Optional: limit results
-}
-```
-
-**New in v0.2**: Smart filtering for efficiency
-
-**Filtering options**:
-- `type`: Filter by event type (`decision`, `blocker`, `milestone`, `note`)
-- `since`: Time-based filter (`7d`, `24h`, `30m`, `60s`)
-- Combine both for precise queries
-
-**When to use**:
-- Task has many events, need specific subset
-- Find all decisions made on a task
-- Review recent blockers or milestones
-- Optimize token usage by filtering
-
-**Example use cases**:
-```json
-// Get only decisions from last week
-{"task_id": 42, "type": "decision", "since": "7d"}
-
-// Get all recent events (any type)
-{"task_id": 42, "since": "24h"}
-
-// Get all blockers (any time)
-{"task_id": 42, "type": "blocker"}
-```
-
-### Reporting
-
-#### `report_generate` - Generate Summary
-```json
-{
-  "since": "7d",
-  "summary_only": true
-}
-```
-
-**When to use**:
-- User asks "what have we accomplished?"
-- Weekly/daily standup summary
-- Project status report
-
-#### `current_task_get` - Get Focused Task
-```json
-{
-  // No parameters
-}
-```
-
-**When to use**:
-- Check what task is currently focused
-- Understand current context
-- Before performing focus-driven operations
+**Priority Levels**: Tasks support `critical`, `high`, `medium`, `low`
+**Dependencies**: Use `task_add_dependency` to model prerequisites
+**Event Filtering**: Filter by type, time range, or both
+**Unified Search**: Search across both tasks and events
 
 ---
 
@@ -352,8 +159,8 @@ You: "I chose HS256 algorithm because..."
 User: "Let's continue with authentication"
 
 You:
-1. task_search(query: "authentication")
-   → Find task ID 42
+1. unified_search(query: "authentication")
+   → Find task ID 42 and related events
 2. task_start(task_id: 42, with_events: true)
    → Get full context with decision history
 3. Review events_summary
@@ -393,8 +200,8 @@ You:
 User: "What decisions did we make on the authentication task?"
 
 You:
-1. task_search(query: "authentication")
-   → Find task ID 42
+1. unified_search(query: "authentication")
+   → Find task ID 42 and decision events
 2. event_list(task_id: 42, type: "decision")
    → Get only decision events (efficient!)
 3. Review and summarize the decisions
@@ -450,11 +257,11 @@ event_list(task_id: 42, type: "blocker", since: "7d")
    task_done()              # Then complete
 ```
 
-### Mistake 2: Using find for text search
+### Mistake 2: Using list for text search
 ```
-❌ task_find(name_pattern: "JWT")  # WRONG - find is metadata only
+❌ task_list(status: "JWT")  # WRONG - list is metadata only (status, parent)
 
-✅ task_search(query: "JWT")        # Correct
+✅ unified_search(query: "JWT")  # Correct - searches tasks and events
 ```
 
 ### Mistake 3: Not checking current task
@@ -549,59 +356,6 @@ task_done ─────────────┘
 
 ---
 
-## 📊 Understanding Output
-
-### TaskWithEvents Structure
-```json
-{
-  "task": {
-    "id": 42,
-    "name": "Implement authentication",
-    "status": "doing",
-    "spec": "Use JWT...",
-    "first_doing_at": "2024-11-09T10:00:00Z"
-  },
-  "events_summary": {
-    "total_count": 5,
-    "recent_events": [
-      {
-        "log_type": "decision",
-        "discussion_data": "Chose HS256 algorithm",
-        "timestamp": "2024-11-09T10:15:00Z"
-      }
-    ]
-  }
-}
-```
-
-**Use this to**:
-- Understand current task state
-- Review decision history
-- Resume work with full context
-
-### PickNextResult Structure
-```json
-{
-  "recommended_task": {
-    "id": 43,
-    "name": "Configure JWT secret",
-    "parent_id": 42
-  },
-  "reason": "subtask_of_current",
-  "context": {
-    "current_task_id": 42,
-    "strategy": "depth_first"
-  }
-}
-```
-
-**Use this to**:
-- Recommend next logical step
-- Explain why this task is suggested
-- Maintain focus on current work tree
-
----
-
 ## 🧠 Mental Model
 
 Think of Intent-Engine as:
@@ -616,10 +370,12 @@ Think of Intent-Engine as:
 
 ## 📚 Key References
 
-- **Full Spec**: `docs/INTERFACE_SPEC.md`
-- **Agent Guide**: `AGENT.md`
+- **Interface Spec** (authoritative): `docs/INTERFACE_SPEC.md`
+- **AI Agent Guide** (technical details): `AGENT.md`
 - **MCP Schema**: `mcp-server.json`
-- **Setup**: `docs/*/integration/mcp-server.md`
+- **Setup Guide**: `docs/*/integration/mcp-server.md`
+
+> For data models, output formats, and command specifications, see [AGENT.md](AGENT.md)
 
 ---
 
@@ -635,7 +391,7 @@ Intent-Engine is designed for **strategic intent tracking**, not tactical todo l
 
 ---
 
-**Last Updated**: 2025-11-11
-**Spec Version**: 0.3
-**MCP Tools**: 14 available (added task_add_dependency)
+**Last Updated**: 2025-11-14
+**Spec Version**: 0.4
+**MCP Tools**: 14 available (unified_search replaces task_search)
 **Status**: Experimental (Pre-1.0)

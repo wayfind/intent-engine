@@ -47,11 +47,10 @@ fn test_task_search_basic() {
         .assert()
         .success();
 
-    // Search for "authentication"
+    // Search for "authentication" (unified search)
     let mut search = Command::new(cargo::cargo_bin!("ie"));
     search
         .current_dir(temp_dir.path())
-        .arg("task")
         .arg("search")
         .arg("authentication");
 

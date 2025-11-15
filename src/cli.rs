@@ -17,9 +17,12 @@ pub enum Commands {
 
     /// Workspace state management
     Current {
-        /// Set the current task ID
+        /// Set the current task ID (for backward compatibility)
         #[arg(long)]
         set: Option<i64>,
+
+        #[command(subcommand)]
+        command: Option<CurrentAction>,
     },
 
     /// Generate analysis and reports
@@ -52,6 +55,24 @@ pub enum Commands {
     /// Event logging commands
     #[command(subcommand)]
     Event(EventCommands),
+
+    /// Unified search across tasks and events
+    Search {
+        /// Search query (supports FTS5 syntax like "JWT AND authentication")
+        query: String,
+
+        /// Search in tasks (default: true)
+        #[arg(long, default_value = "true")]
+        tasks: bool,
+
+        /// Search in events (default: true)
+        #[arg(long, default_value = "true")]
+        events: bool,
+
+        /// Maximum number of results (default: 20)
+        #[arg(long)]
+        limit: Option<i64>,
+    },
 
     /// Check system health and dependencies
     Doctor,
@@ -121,6 +142,20 @@ pub enum Commands {
         #[arg(long)]
         project_dir: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+pub enum CurrentAction {
+    /// Set the current task (low-level atomic command, prefer 'ie task start')
+    #[command(hide = true)]
+    Set {
+        /// Task ID to set as current
+        task_id: i64,
+    },
+
+    /// Clear the current task (low-level atomic command, prefer 'ie task done')
+    #[command(hide = true)]
+    Clear,
 }
 
 #[derive(Subcommand)]
@@ -246,12 +281,6 @@ pub enum TaskCommands {
         id: i64,
     },
 
-    /// Search tasks by content using full-text search
-    Search {
-        /// Search query (supports FTS5 syntax like "bug AND NOT critical")
-        query: String,
-    },
-
     /// Add a dependency between tasks
     ///
     /// Creates a dependency where BLOCKED_TASK depends on BLOCKING_TASK.
@@ -266,6 +295,15 @@ pub enum TaskCommands {
 
         /// Task ID that must be completed first (blocking task)
         blocking_task_id: i64,
+    },
+
+    /// Get task context (ancestors, siblings, children)
+    ///
+    /// Shows the full family tree of a task to understand its strategic context.
+    /// If no task ID is provided, uses the current focused task.
+    Context {
+        /// Task ID (optional, uses current task if omitted)
+        task_id: Option<i64>,
     },
 }
 
@@ -286,13 +324,13 @@ pub enum EventCommands {
         data_stdin: bool,
     },
 
-    /// List events for a task
+    /// List events for a task (or globally if task_id not specified)
     List {
-        /// Task ID
+        /// Task ID (optional, lists all events if not specified)
         #[arg(long)]
-        task_id: i64,
+        task_id: Option<i64>,
 
-        /// Maximum number of events to return
+        /// Maximum number of events to return (default: 50)
         #[arg(long)]
         limit: Option<i64>,
 

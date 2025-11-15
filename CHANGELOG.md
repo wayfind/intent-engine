@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-11-14
+
+### Added
+- **Unified Search**: New `ie search` command searches across both tasks and events
+  - Full-text search using FTS5 in both task specs/names and event discussion_data
+  - Mixed results with task and event variants in a tagged union structure
+  - Event results include full task ancestry chain for hierarchical context
+  - Configurable search scope: tasks only, events only, or both (default)
+  - Snippet highlighting with `**` markers for matched keywords
+  - New `UnifiedSearchResult` data model with discriminated union
+- **Global Event Queries**: `event list` now supports omitting task_id
+  - Query events across all tasks with `--type` and `--since` filters
+  - Useful for finding all recent blockers, decisions, or notes globally
+  - Default limit changed from 100 to 50 for better performance
+- **Enhanced MCP Parameter Validation**: Improved error messages for `task_add`
+  - Specific messages distinguish between missing, null, empty, and wrong-type parameters
+  - Error message examples:
+    - "Missing required parameter: name"
+    - "Parameter 'name' cannot be null"
+    - "Parameter 'name' cannot be empty"
+    - "Parameter 'name' must be a string, got: 123"
+  - Makes debugging MCP tool calls much easier
+
+### Changed
+- **CLI Commands**: Replaced `ie task search` with `ie search` (top-level command)
+- **MCP Tools**: Replaced `task_search` with `unified_search` tool
+- **Event List**: `task_id` parameter is now optional (breaking for strict type checkers)
+- **Atomic Commands Hidden**: Low-level atomic commands are now hidden from `--help` to guide users toward safer composite commands
+  - `ie current set` and `ie current clear` are hidden (prefer `ie task start` and `ie task done`)
+  - These commands still work but show deprecation warnings
+  - MCP tools never exposed these atomic operations (already aligned)
+  - Design principle: Expose only commands that ensure business logic consistency
+
+### Removed
+- **CLI**: `ie task search` command (use `ie search` instead)
+- **MCP**: `task_search` tool (use `unified_search` instead)
+
+### Fixed
+- Improved parameter validation error messages for better debugging
+- **PostToolUse Hook Cross-Platform Compatibility**:
+  - Fixed macOS Bash 3.2 compatibility: Replaced `${var:offset:length}` syntax with POSIX-compliant `head -c`
+  - Enhanced jq path detection with multi-platform fallback (macOS Intel/M1, Linux, Git Bash, custom installations)
+  - Hook now works on macOS default Bash (3.2.57) without requiring Bash 4+ upgrade
+  - Improved jq discovery for Homebrew installations on both Intel (`/usr/local/bin`) and Apple Silicon (`/opt/homebrew/bin`)
+
+### Documentation
+- Updated CLAUDE.md to version 0.4 with unified_search examples
+- Updated INTERFACE_SPEC.md with version 0.4 changelog and new search section
+- Added comprehensive documentation for unified search in both files
+- Updated all usage patterns and examples to use new search command
+
+### Migration Guide
+- Replace all `ie task search` calls with `ie search`
+- Replace all `task_search` MCP tool calls with `unified_search`
+- Event results now include `task_chain` array for ancestry context
+- When using `event_list`, `task_id` is now optional (omit for global queries)
+
+## [0.3.x] - 2025-11-13
+
 ### Added
 - **Smart Lazy Initialization**: Automatic project root detection and initialization
   - Intelligently infers project root by detecting common markers (.git, Cargo.toml, package.json, etc.)

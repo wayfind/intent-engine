@@ -190,12 +190,12 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
         "task_done" => handle_task_done(params.arguments).await,
         "task_update" => handle_task_update(params.arguments).await,
         "task_list" => handle_task_list(params.arguments).await,
-        "task_search" => handle_task_search(params.arguments).await,
         "task_get" => handle_task_get(params.arguments).await,
         "task_context" => handle_task_context(params.arguments).await,
         "task_delete" => handle_task_delete(params.arguments).await,
         "event_add" => handle_event_add(params.arguments).await,
         "event_list" => handle_event_list(params.arguments).await,
+        "unified_search" => handle_unified_search(params.arguments).await,
         "current_task_get" => handle_current_task_get(params.arguments).await,
         "report_generate" => handle_report_generate(params.arguments).await,
         _ => Err(format!("Unknown tool: {}", params.name)),
@@ -213,10 +213,22 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
 // Tool Handlers
 
 async fn handle_task_add(args: Value) -> Result<Value, String> {
-    let name = args
-        .get("name")
-        .and_then(|v| v.as_str())
-        .ok_or("Missing required parameter: name")?;
+    // Improved parameter validation with specific error messages
+    let name = match args.get("name") {
+        None => return Err("Missing required parameter: name".to_string()),
+        Some(value) => {
+            if value.is_null() {
+                return Err("Parameter 'name' cannot be null".to_string());
+            }
+            match value.as_str() {
+                Some(s) if s.trim().is_empty() => {
+                    return Err("Parameter 'name' cannot be empty".to_string());
+                },
+                Some(s) => s,
+                None => return Err(format!("Parameter 'name' must be a string, got: {}", value)),
+            }
+        },
+    };
 
     let spec = args.get("spec").and_then(|v| v.as_str());
     let parent_id = args.get("parent_id").and_then(|v| v.as_i64());
@@ -424,25 +436,6 @@ async fn handle_task_list(args: Value) -> Result<Value, String> {
     serde_json::to_value(&tasks).map_err(|e| format!("Serialization error: {}", e))
 }
 
-async fn handle_task_search(args: Value) -> Result<Value, String> {
-    let query = args
-        .get("query")
-        .and_then(|v| v.as_str())
-        .ok_or("Missing required parameter: query")?;
-
-    let ctx = ProjectContext::load()
-        .await
-        .map_err(|e| format!("Failed to load project context: {}", e))?;
-
-    let task_mgr = TaskManager::new(&ctx.pool);
-    let results = task_mgr
-        .search_tasks(query)
-        .await
-        .map_err(|e| format!("Failed to search tasks: {}", e))?;
-
-    serde_json::to_value(&results).map_err(|e| format!("Serialization error: {}", e))
-}
-
 async fn handle_task_get(args: Value) -> Result<Value, String> {
     let task_id = args
         .get("task_id")
@@ -579,10 +572,7 @@ async fn handle_event_add(args: Value) -> Result<Value, String> {
 }
 
 async fn handle_event_list(args: Value) -> Result<Value, String> {
-    let task_id = args
-        .get("task_id")
-        .and_then(|v| v.as_i64())
-        .ok_or("Missing required parameter: task_id")?;
+    let task_id = args.get("task_id").and_then(|v| v.as_i64());
 
     let limit = args.get("limit").and_then(|v| v.as_i64());
     let log_type = args
@@ -605,6 +595,39 @@ async fn handle_event_list(args: Value) -> Result<Value, String> {
         .map_err(|e| format!("Failed to list events: {}", e))?;
 
     serde_json::to_value(&events).map_err(|e| format!("Serialization error: {}", e))
+}
+
+async fn handle_unified_search(args: Value) -> Result<Value, String> {
+    use crate::search::SearchManager;
+
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing required parameter: query")?;
+
+    let include_tasks = args
+        .get("include_tasks")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let include_events = args
+        .get("include_events")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let limit = args.get("limit").and_then(|v| v.as_i64());
+
+    let ctx = ProjectContext::load()
+        .await
+        .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+    let search_mgr = SearchManager::new(&ctx.pool);
+    let results = search_mgr
+        .unified_search(query, include_tasks, include_events, limit)
+        .await
+        .map_err(|e| format!("Failed to perform unified search: {}", e))?;
+
+    serde_json::to_value(&results).map_err(|e| format!("Serialization error: {}", e))
 }
 
 async fn handle_current_task_get(_args: Value) -> Result<Value, String> {

@@ -177,7 +177,7 @@ async fn test_massive_events() {
     // Test listing events with limit
     let start = Instant::now();
     let events = event_mgr
-        .list_events(task.id, Some(100), None, None)
+        .list_events(Some(task.id), Some(100), None, None)
         .await
         .unwrap();
     let elapsed = start.elapsed();

@@ -75,6 +75,27 @@ impl<'a> TaskManager<'a> {
         })
     }
 
+    /// Get full ancestry chain for a task
+    ///
+    /// Returns a vector of tasks from the given task up to the root:
+    /// [task itself, parent, grandparent, ..., root]
+    ///
+    /// Example:
+    /// - Task 42 (parent_id: 55) → [Task 42, Task 55, ...]
+    /// - Task 100 (parent_id: null) → [Task 100]
+    pub async fn get_task_ancestry(&self, task_id: i64) -> Result<Vec<Task>> {
+        let mut chain = Vec::new();
+        let mut current_id = Some(task_id);
+
+        while let Some(id) = current_id {
+            let task = self.get_task(id).await?;
+            current_id = task.parent_id;
+            chain.push(task);
+        }
+
+        Ok(chain)
+    }
+
     /// Get task context - the complete family tree of a task
     ///
     /// Returns:

@@ -60,7 +60,7 @@ impl ClaudeCodeSetup {
             }
         }
 
-        // Install hook script with absolute path
+        // Install session-start hook script
         let hook_content = include_str!("../../templates/session-start.sh");
         if !opts.dry_run {
             fs::write(&hook_script, hook_content).map_err(IntentError::IoError)?;
@@ -71,9 +71,37 @@ impl ClaudeCodeSetup {
             println!("Would write: {}", hook_script.display());
         }
 
-        // 2. Setup settings.json with absolute path
+        // Install format-ie-output hook script
+        let format_hook_script = hooks_dir.join("format-ie-output.sh");
+        let format_hook_content = include_str!("../../templates/format-ie-output.sh");
+
+        if format_hook_script.exists() && !opts.force {
+            return Err(IntentError::InvalidInput(format!(
+                "Format hook already exists: {}. Use --force to overwrite",
+                format_hook_script.display()
+            )));
+        }
+
+        if format_hook_script.exists() && !opts.dry_run {
+            if let Some(backup) = create_backup(&format_hook_script)? {
+                backups.push((format_hook_script.clone(), backup.clone()));
+                println!("✓ Backed up format hook to {}", backup.display());
+            }
+        }
+
+        if !opts.dry_run {
+            fs::write(&format_hook_script, format_hook_content).map_err(IntentError::IoError)?;
+            set_executable(&format_hook_script)?;
+            files_modified.push(format_hook_script.clone());
+            println!("✓ Installed {}", format_hook_script.display());
+        } else {
+            println!("Would write: {}", format_hook_script.display());
+        }
+
+        // 2. Setup settings.json with absolute paths
         let settings_file = claude_dir.join("settings.json");
         let hook_abs_path = resolve_absolute_path(&hook_script)?;
+        let format_hook_abs_path = resolve_absolute_path(&format_hook_script)?;
 
         if settings_file.exists() && !opts.force {
             return Err(IntentError::InvalidInput(format!(
@@ -96,7 +124,58 @@ impl ClaudeCodeSetup {
                         "type": "command",
                         "command": hook_abs_path.to_string_lossy()
                     }]
-                }]
+                }],
+                "PostToolUse": [
+                    {
+                        "matcher": "mcp__intent-engine__task_context",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__task_get",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__current_task_get",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__task_list",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__task_pick_next",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__unified_search",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__event_list",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    }
+                ]
             }
         });
 
@@ -220,7 +299,7 @@ impl ClaudeCodeSetup {
             )));
         }
 
-        // Install hook script
+        // Install session-start hook script
         let hook_content = include_str!("../../templates/session-start.sh");
         if !opts.dry_run {
             fs::write(&hook_script, hook_content).map_err(IntentError::IoError)?;
@@ -231,9 +310,30 @@ impl ClaudeCodeSetup {
             println!("Would write: {}", hook_script.display());
         }
 
-        // Create settings.json with absolute path
+        // Install format-ie-output hook script
+        let format_hook_script = hooks_dir.join("format-ie-output.sh");
+        let format_hook_content = include_str!("../../templates/format-ie-output.sh");
+
+        if format_hook_script.exists() && !opts.force {
+            return Err(IntentError::InvalidInput(format!(
+                "Format hook already exists: {}. Use --force to overwrite",
+                format_hook_script.display()
+            )));
+        }
+
+        if !opts.dry_run {
+            fs::write(&format_hook_script, format_hook_content).map_err(IntentError::IoError)?;
+            set_executable(&format_hook_script)?;
+            files_modified.push(format_hook_script.clone());
+            println!("✓ Installed {}", format_hook_script.display());
+        } else {
+            println!("Would write: {}", format_hook_script.display());
+        }
+
+        // Create settings.json with absolute paths
         let settings_file = claude_dir.join("settings.json");
         let hook_abs_path = resolve_absolute_path(&hook_script)?;
+        let format_hook_abs_path = resolve_absolute_path(&format_hook_script)?;
 
         // Check if settings file already exists
         if settings_file.exists() && !opts.force {
@@ -250,7 +350,58 @@ impl ClaudeCodeSetup {
                         "type": "command",
                         "command": hook_abs_path.to_string_lossy()
                     }]
-                }]
+                }],
+                "PostToolUse": [
+                    {
+                        "matcher": "mcp__intent-engine__task_context",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__task_get",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__current_task_get",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__task_list",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__task_pick_next",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__unified_search",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    },
+                    {
+                        "matcher": "mcp__intent-engine__event_list",
+                        "hooks": [{
+                            "type": "command",
+                            "command": format_hook_abs_path.to_string_lossy()
+                        }]
+                    }
+                ]
             }
         });
 
@@ -356,7 +507,58 @@ impl SetupModule for ClaudeCodeSetup {
         };
         checks.push(hook_check);
 
-        // Check 2: Settings file has SessionStart config
+        // Check 2: Format hook script exists and is executable
+        let format_hook_script = claude_dir.join("hooks").join("format-ie-output.sh");
+        let format_hook_check = if format_hook_script.exists() {
+            if format_hook_script
+                .metadata()
+                .map(|m| m.is_file())
+                .unwrap_or(false)
+            {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let perms = format_hook_script.metadata().unwrap().permissions();
+                    let is_executable = perms.mode() & 0o111 != 0;
+                    if is_executable {
+                        DiagnosisCheck {
+                            name: "Format hook script".to_string(),
+                            passed: true,
+                            details: format!("Found at {}", format_hook_script.display()),
+                        }
+                    } else {
+                        suggested_fixes.push(format!("chmod +x {}", format_hook_script.display()));
+                        DiagnosisCheck {
+                            name: "Format hook script".to_string(),
+                            passed: false,
+                            details: "Script exists but is not executable".to_string(),
+                        }
+                    }
+                }
+                #[cfg(not(unix))]
+                DiagnosisCheck {
+                    name: "Format hook script".to_string(),
+                    passed: true,
+                    details: format!("Found at {}", format_hook_script.display()),
+                }
+            } else {
+                DiagnosisCheck {
+                    name: "Format hook script".to_string(),
+                    passed: false,
+                    details: "Path exists but is not a file".to_string(),
+                }
+            }
+        } else {
+            suggested_fixes.push("Run: ie setup --target claude-code --force".to_string());
+            DiagnosisCheck {
+                name: "Format hook script".to_string(),
+                passed: false,
+                details: format!("Not found at {}", format_hook_script.display()),
+            }
+        };
+        checks.push(format_hook_check);
+
+        // Check 3: Settings file has SessionStart config
         let settings_file = claude_dir.join("settings.json");
         let settings_check = if settings_file.exists() {
             match read_json_config(&settings_file) {
@@ -397,7 +599,46 @@ impl SetupModule for ClaudeCodeSetup {
         };
         checks.push(settings_check);
 
-        // Check 3: MCP config exists and has intent-engine
+        // Check 4: Settings file has PostToolUse config
+        let posttool_check = if settings_file.exists() {
+            match read_json_config(&settings_file) {
+                Ok(config) => {
+                    if config
+                        .get("hooks")
+                        .and_then(|h| h.get("PostToolUse"))
+                        .is_some()
+                    {
+                        DiagnosisCheck {
+                            name: "PostToolUse hooks".to_string(),
+                            passed: true,
+                            details: "PostToolUse hook configured".to_string(),
+                        }
+                    } else {
+                        suggested_fixes
+                            .push("Run: ie setup --target claude-code --force".to_string());
+                        DiagnosisCheck {
+                            name: "PostToolUse hooks".to_string(),
+                            passed: false,
+                            details: "Missing PostToolUse hook configuration".to_string(),
+                        }
+                    }
+                },
+                Err(_) => DiagnosisCheck {
+                    name: "PostToolUse hooks".to_string(),
+                    passed: false,
+                    details: "Failed to parse settings.json".to_string(),
+                },
+            }
+        } else {
+            DiagnosisCheck {
+                name: "PostToolUse hooks".to_string(),
+                passed: false,
+                details: "Settings file not found".to_string(),
+            }
+        };
+        checks.push(posttool_check);
+
+        // Check 5: MCP config exists and has intent-engine
         let home = get_home_dir()?;
         let mcp_config = home.join(".claude.json");
         let mcp_check = if mcp_config.exists() {
@@ -439,7 +680,7 @@ impl SetupModule for ClaudeCodeSetup {
         };
         checks.push(mcp_check);
 
-        // Check 4: Binary in PATH
+        // Check 6: Binary in PATH
         let binary_check = match find_ie_binary() {
             Ok(path) => DiagnosisCheck {
                 name: "Binary availability".to_string(),

@@ -26,6 +26,16 @@
 git commit --no-verify -m "message"
 ```
 
+## verify-ie-binary.md
+
+详细的 `ie` 二进制验证文档（497 行），包含：
+- 二进制查找逻辑和测试用例
+- Windows/Linux/macOS 平台验证
+- CI 环境测试策略
+- 故障排查指南
+
+如需了解 `ie` 二进制的发现和验证机制，请参阅此文档。
+
 ## 使用 Makefile
 
 项目根目录的 `Makefile` 提供了更多便捷命令：

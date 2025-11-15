@@ -154,7 +154,60 @@ mod handler_tests {
 
         let result = handle_task_add(args).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("name"));
+        let err = result.unwrap_err();
+        assert!(err.contains("Missing required parameter: name"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_task_add_null_name() {
+        let args = json!({
+            "name": null,
+            "spec": "Test spec"
+        });
+
+        let result = handle_task_add(args).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err, "Parameter 'name' cannot be null");
+    }
+
+    #[tokio::test]
+    async fn test_handle_task_add_empty_name() {
+        let args = json!({
+            "name": "",
+            "spec": "Test spec"
+        });
+
+        let result = handle_task_add(args).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err, "Parameter 'name' cannot be empty");
+    }
+
+    #[tokio::test]
+    async fn test_handle_task_add_whitespace_only_name() {
+        let args = json!({
+            "name": "   ",
+            "spec": "Test spec"
+        });
+
+        let result = handle_task_add(args).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err, "Parameter 'name' cannot be empty");
+    }
+
+    #[tokio::test]
+    async fn test_handle_task_add_wrong_type_name() {
+        let args = json!({
+            "name": 123,
+            "spec": "Test spec"
+        });
+
+        let result = handle_task_add(args).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Parameter 'name' must be a string"));
     }
 
     #[tokio::test]
@@ -311,38 +364,6 @@ mod handler_tests {
         let tasks = value.as_array().unwrap();
         assert!(!tasks.is_empty());
         assert_eq!(tasks[0].get("status").unwrap(), "doing");
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_handle_task_search_success() {
-        let ctx = setup_test_env().await;
-
-        // Create a task with searchable content
-        let task_mgr = TaskManager::new(ctx.pool());
-        task_mgr
-            .add_task("Authentication Feature", Some("JWT implementation"), None)
-            .await
-            .unwrap();
-
-        let args = json!({
-            "query": "Authentication"
-        });
-
-        let result = handle_task_search(args).await;
-        assert!(result.is_ok());
-
-        let value = result.unwrap();
-        let results = value.as_array().unwrap();
-        assert!(!results.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_handle_task_search_missing_query() {
-        let args = json!({});
-        let result = handle_task_search(args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("query"));
     }
 
     #[tokio::test]
@@ -732,11 +753,32 @@ mod handler_tests {
     }
 
     #[tokio::test]
-    async fn test_handle_event_list_missing_task_id() {
+    #[serial]
+    async fn test_handle_event_list_global() {
+        let ctx = setup_test_env().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        // Create tasks and events
+        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
+        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+        event_mgr
+            .add_event(task1.id, "decision", "Decision 1")
+            .await
+            .unwrap();
+        event_mgr
+            .add_event(task2.id, "blocker", "Blocker 1")
+            .await
+            .unwrap();
+
+        // Query global events (no task_id)
         let args = json!({});
         let result = handle_event_list(args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("task_id"));
+        assert!(result.is_ok());
+
+        let events = result.unwrap();
+        let events_array = events.as_array().unwrap();
+        assert!(events_array.len() >= 2); // Should contain events from both tasks
     }
 
     #[tokio::test]

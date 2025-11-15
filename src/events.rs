@@ -1,7 +1,7 @@
 use crate::db::models::Event;
 use crate::error::{IntentError, Result};
 use chrono::Utc;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 pub struct EventManager<'a> {
     pool: &'a SqlitePool,
@@ -56,26 +56,28 @@ impl<'a> EventManager<'a> {
         })
     }
 
-    /// List events for a task
+    /// List events for a task (or globally if task_id is None)
     pub async fn list_events(
         &self,
-        task_id: i64,
+        task_id: Option<i64>,
         limit: Option<i64>,
         log_type: Option<String>,
         since: Option<String>,
     ) -> Result<Vec<Event>> {
-        // Check if task exists
-        let task_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)")
-                .bind(task_id)
-                .fetch_one(self.pool)
-                .await?;
+        // Check if task exists (only if task_id provided)
+        if let Some(tid) = task_id {
+            let task_exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)")
+                    .bind(tid)
+                    .fetch_one(self.pool)
+                    .await?;
 
-        if !task_exists {
-            return Err(IntentError::TaskNotFound(task_id));
+            if !task_exists {
+                return Err(IntentError::TaskNotFound(tid));
+            }
         }
 
-        let limit = limit.unwrap_or(100);
+        let limit = limit.unwrap_or(50);
 
         // Parse since duration if provided
         let since_timestamp = if let Some(duration_str) = since {
@@ -86,9 +88,13 @@ impl<'a> EventManager<'a> {
 
         // Build dynamic query based on filters
         let mut query = String::from(
-            "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE task_id = ?",
+            "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE 1=1",
         );
         let mut conditions = Vec::new();
+
+        if task_id.is_some() {
+            conditions.push("task_id = ?");
+        }
 
         if log_type.is_some() {
             conditions.push("log_type = ?");
@@ -106,7 +112,11 @@ impl<'a> EventManager<'a> {
         query.push_str(" ORDER BY timestamp DESC LIMIT ?");
 
         // Build and execute query
-        let mut sql_query = sqlx::query_as::<_, Event>(&query).bind(task_id);
+        let mut sql_query = sqlx::query_as::<_, Event>(&query);
+
+        if let Some(tid) = task_id {
+            sql_query = sql_query.bind(tid);
+        }
 
         if let Some(ref typ) = log_type {
             sql_query = sql_query.bind(typ);
@@ -153,6 +163,63 @@ impl<'a> EventManager<'a> {
 
         Ok(result)
     }
+
+    /// Search events using FTS5
+    pub async fn search_events_fts5(
+        &self,
+        query: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<EventSearchResult>> {
+        let limit = limit.unwrap_or(20);
+
+        // Use FTS5 to search events and get snippets
+        let results = sqlx::query(
+            r#"
+            SELECT
+                e.id,
+                e.task_id,
+                e.timestamp,
+                e.log_type,
+                e.discussion_data,
+                snippet(events_fts, 0, '**', '**', '...', 15) as match_snippet
+            FROM events_fts
+            INNER JOIN events e ON events_fts.rowid = e.id
+            WHERE events_fts MATCH ?
+            ORDER BY rank
+            LIMIT ?
+            "#,
+        )
+        .bind(query)
+        .bind(limit)
+        .fetch_all(self.pool)
+        .await?;
+
+        let mut search_results = Vec::new();
+        for row in results {
+            let event = Event {
+                id: row.get("id"),
+                task_id: row.get("task_id"),
+                timestamp: row.get("timestamp"),
+                log_type: row.get("log_type"),
+                discussion_data: row.get("discussion_data"),
+            };
+            let match_snippet: String = row.get("match_snippet");
+
+            search_results.push(EventSearchResult {
+                event,
+                match_snippet,
+            });
+        }
+
+        Ok(search_results)
+    }
+}
+
+/// Event search result with match snippet
+#[derive(Debug)]
+pub struct EventSearchResult {
+    pub event: Event,
+    pub match_snippet: String,
 }
 
 #[cfg(test)]
@@ -210,7 +277,7 @@ mod tests {
             .unwrap();
 
         let events = event_mgr
-            .list_events(task.id, None, None, None)
+            .list_events(Some(task.id), None, None, None)
             .await
             .unwrap();
         assert_eq!(events.len(), 3);
@@ -238,7 +305,7 @@ mod tests {
         }
 
         let events = event_mgr
-            .list_events(task.id, Some(3), None, None)
+            .list_events(Some(task.id), Some(3), None, None)
             .await
             .unwrap();
         assert_eq!(events.len(), 3);
@@ -249,7 +316,7 @@ mod tests {
         let ctx = TestContext::new().await;
         let event_mgr = EventManager::new(ctx.pool());
 
-        let result = event_mgr.list_events(999, None, None, None).await;
+        let result = event_mgr.list_events(Some(999), None, None, None).await;
         assert!(matches!(result, Err(IntentError::TaskNotFound(999))));
     }
 
@@ -262,7 +329,7 @@ mod tests {
         let task = task_mgr.add_task("Test task", None, None).await.unwrap();
 
         let events = event_mgr
-            .list_events(task.id, None, None, None)
+            .list_events(Some(task.id), None, None, None)
             .await
             .unwrap();
         assert_eq!(events.len(), 0);

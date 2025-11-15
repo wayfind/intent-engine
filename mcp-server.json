@@ -1,6 +1,6 @@
 {
   "name": "intent-engine",
-  "version": "0.3",
+  "version": "0.4",
   "description": "An expert task management assistant that provides a persistent, intent-driven context layer. Use this toolset to maintain strategic clarity in complex projects—one focused task at a time, with complete decision history. Think of it as your external brain for project management.",
   "cli_info": {
     "primary_command": "intent-engine",
@@ -266,32 +266,6 @@
       }
     },
     {
-      "name": "task_search",
-      "description": "# Core Duty\nPerforms powerful full-text search across all intents using SQLite FTS5.\n\n# Tactical Guide\nThis is your primary tool for DISCOVERY when you don't have a task ID. Searches both 'name' and 'spec' fields.\n\n**Use this when:**\n- User asks a question about a topic without providing ID\n- Looking for tasks by keywords or technical terms\n- Finding related work\n\n**FTS5 Syntax Support:**\n- AND: 'auth AND jwt'\n- OR: 'auth OR oauth'\n- NOT: 'auth NOT password'\n- Phrases: '\"user authentication\"'\n- NEAR: 'auth NEAR/5 token' (within 5 tokens)\n\n**Best Practice:** Use `snippet: true` to see highlighted matches in context.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "FTS5 search query string. Supports full-text search syntax including AND, OR, NOT, phrases (\"...\"), and NEAR/N operators."
-          },
-          "snippet": {
-            "type": "boolean",
-            "description": "If true, returns a 'match_snippet' with highlighted keywords using ** markers. Highly recommended for understanding match context.",
-            "default": true
-          },
-          "limit": {
-            "type": "integer",
-            "description": "Maximum number of results to return (optional). Defaults to 20.",
-            "default": 20
-          }
-        },
-        "required": [
-          "query"
-        ]
-      }
-    },
-    {
       "name": "task_get",
       "description": "# Core Duty\nRetrieves the full details of a SINGLE, KNOWN task by its ID.\n\n# Tactical Guide\nUse this after task_list or task_search to get complete information before starting work.\n\nReturns complete task object with all fields (name, spec, status, timestamps, etc.).\n\n**Best Practice:** If you need event history too, use `task_start({task_id: ID, with_events: true})` directly—it's more efficient than calling task_get and event_list separately.",
       "inputSchema": {
@@ -421,17 +395,17 @@
     },
     {
       "name": "event_list",
-      "description": "# Core Duty\nRetrieves the historical event stream for a task.\n\n# Tactical Guide\nUse this to:\n- Review decision-making process\n- Recover context when resuming old work\n- Understand blockers and milestones\n- Prepare project retrospectives\n\n**Performance Optimization:**\nFor tasks with hundreds of events, use filters to reduce token usage:\n- Filter by type (e.g., 'decision') to focus on specific event categories\n- Filter by since (e.g., '7d') to get recent events only\n- Combine filters for maximum efficiency\n\nReturns array of events sorted by timestamp (newest first).\n\n**Best Practice:** When resuming work on a task, call `task_start` with `with_events: true` instead of separately calling event_list—it's more efficient.",
+      "description": "# Core Duty\nRetrieves the historical event stream for a task, or globally across all tasks.\n\n# Tactical Guide\nUse this to:\n- Review decision-making process for a specific task\n- Search events globally (e.g., all recent blockers, all decisions)\n- Recover context when resuming old work\n- Prepare project retrospectives\n\n**Two modes:**\n1. **Task-specific:** Provide `task_id` to get events for one task\n2. **Global:** Omit `task_id` to search across all tasks\n\n**Performance Optimization:**\nFor tasks with hundreds of events, use filters to reduce token usage:\n- Filter by type (e.g., 'decision') to focus on specific event categories\n- Filter by since (e.g., '7d') to get recent events only\n- Combine filters for maximum efficiency\n\n**Examples:**\n- `{task_id: 42, type: 'decision'}` - All decisions for task 42\n- `{type: 'blocker', since: '7d'}` - All blockers in last 7 days (global)\n- `{since: '24h'}` - All events from last 24 hours (global)\n\nReturns array of events sorted by timestamp (newest first).\n\n**Best Practice:** When resuming work on a task, call `task_start` with `with_events: true` instead of separately calling event_list—it's more efficient.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "task_id": {
             "type": "integer",
-            "description": "The ID of the task whose history you want to see."
+            "description": "The ID of the task whose history you want to see. Optional - if omitted, searches globally across all tasks."
           },
           "limit": {
             "type": "integer",
-            "description": "Maximum number of events to return (optional). Useful for large histories. Defaults to 100."
+            "description": "Maximum number of events to return (optional). Defaults to 50."
           },
           "type": {
             "type": "string",
@@ -448,10 +422,36 @@
             "description": "Filter events created within duration (optional). Format: '7d' (7 days), '24h' (24 hours), '30m' (30 minutes), '60s' (60 seconds). Use this to get recent events only and save processing time.",
             "pattern": "^\\d+[dhms]$"
           }
+        }
+      }
+    },
+    {
+      "name": "unified_search",
+      "description": "# Core Duty\nPerforms unified full-text search across both tasks and events.\n\n# Tactical Guide\nUse this when you need to find information that could be in either tasks or events:\n- Search for keywords across all project context\n- Find related work mentioned in both task specs and event logs\n- Discover decisions, blockers, or notes related to a topic\n\n**Search behavior:**\n- Uses FTS5 full-text search with snippet highlighting\n- Returns mixed results from both tasks and events\n- Each result includes context: task ancestry chain for events, match field for tasks\n- Results ordered by FTS5 relevance rank\n\n**Parameters:**\n- `query`: FTS5 search query (supports AND, OR, NOT, phrases)\n- `include_tasks`: Search in tasks (default: true)\n- `include_events`: Search in events (default: true)\n- `limit`: Maximum total results (default: 20)\n\n**Examples:**\n- `{query: \"JWT authentication\"}` - Search both tasks and events\n- `{query: \"API\", include_tasks: true, include_events: false}` - Tasks only\n- `{query: \"blocker\", include_tasks: false, include_events: true}` - Events only\n\n**Returns:**\nArray of `UnifiedSearchResult` objects with discriminated union:\n- Task results: `{result_type: \"task\", task: {...}, match_snippet: \"...\", match_field: \"name\"|\"spec\"}`\n- Event results: `{result_type: \"event\", event: {...}, task_chain: [...], match_snippet: \"...\"}`\n\n**Use cases:**\n- \"Find everything related to authentication\"\n- \"What decisions have we made about caching?\"\n- \"Show me all mentions of the API redesign\"",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "FTS5 search query string. Supports full-text search syntax including AND, OR, NOT, phrases (\"...\"), and NEAR/N operators."
+          },
+          "include_tasks": {
+            "type": "boolean",
+            "description": "Whether to search in tasks (default: true)",
+            "default": true
+          },
+          "include_events": {
+            "type": "boolean",
+            "description": "Whether to search in events (default: true)",
+            "default": true
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of total results to return (default: 20)",
+            "default": 20
+          }
         },
-        "required": [
-          "task_id"
-        ]
+        "required": ["query"]
       }
     },
     {

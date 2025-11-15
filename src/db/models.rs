@@ -140,6 +140,25 @@ pub struct TaskSearchResult {
     pub match_snippet: String,
 }
 
+/// Unified search result that can represent either a task or event match
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "result_type")]
+pub enum UnifiedSearchResult {
+    #[serde(rename = "task")]
+    Task {
+        #[serde(flatten)]
+        task: Task,
+        match_snippet: String,
+        match_field: String, // "name" or "spec"
+    },
+    #[serde(rename = "event")]
+    Event {
+        event: Event,
+        task_chain: Vec<Task>, // Ancestry: [immediate task, parent, grandparent, ...]
+        match_snippet: String,
+    },
+}
+
 /// Response for task switch command - includes previous and current task info
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwitchTaskResponse {

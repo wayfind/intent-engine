@@ -231,26 +231,32 @@ Add configuration:
 }
 ```
 
-Restart Claude Code/Desktop, and you'll see **13 Intent-Engine tools** available.
+Restart Claude Code/Desktop, and you'll see **17 Intent-Engine tools** available.
 
 ### MCP Tools List
 
 After installation, Claude can automatically use the following tools:
 
-**Task Management** (9 tools):
+**Task Management** (12 tools):
 - `task_add` - Create strategic task
+- `task_add_dependency` - Define task dependencies
 - `task_start` - Start task (atomic: set doing + set as current)
 - `task_pick_next` - Intelligently recommend next task
 - `task_spawn_subtask` - Create subtask and switch (atomic)
 - `task_switch` - Switch tasks (atomic: pause current + start new)
 - `task_done` - Complete task (validates all subtasks done)
-- `task_update` - Update task properties
-- `task_find` - Find tasks by status/parent
+- `task_list` - Find tasks by status/parent (renamed from `task_find`)
 - `task_get` - Get detailed task information
+- `task_context` - Get task ancestry and subtask tree
+- `task_update` - Update task properties
+- `task_delete` - Delete a task
+
+**Search & Discovery** (1 tool):
+- `unified_search` - Unified full-text search across tasks and events
 
 **Event Tracking** (2 tools):
 - `event_add` - Record decisions/blockers/milestones (AI's external long-term memory)
-- `event_list` - List event history for a task
+- `event_list` - List event history with filtering
 
 **Workflow** (2 tools):
 - `current_task_get` - Get currently focused task
@@ -320,6 +326,9 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
 ---
 
 ## ✨ Core Features
+
+### New in v0.4 (2025-11)
+- **🔍 Unified Search Engine**: `unified_search` provides full-text search across both tasks and events, retrieving complete context in a single query
 
 ### New in v0.2 (2025-11)
 - **🔗 Task Dependency System**: Define task dependencies, automatically prevent blocked tasks from starting
@@ -441,11 +450,12 @@ cargo test --test performance_tests -- --ignored
 cargo tarpaulin
 ```
 
-**Test Statistics**: 116 tests all passing ✅
-- 47 unit tests
-- 22 CLI integration tests
-- 10 special character security tests
-- 37 performance tests
+**Test Statistics**: 505+ tests all passing ✅
+- Unit tests, integration tests, CLI tests
+- MCP integration tests
+- Special character security tests
+- Performance and benchmarking tests
+- Windows encoding compatibility tests
 
 ---
 

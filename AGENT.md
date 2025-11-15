@@ -1,6 +1,6 @@
 # Intent-Engine: AI Agent Guide
 
-**Version**: 0.1.9
+**Version**: {{VERSION}}
 **Purpose**: This document helps AI agents understand Intent-Engine's core concepts and interface design
 
 ---
@@ -93,7 +93,8 @@ Task {
   name: String,
   spec: Option<String>,              // Markdown specification
   status: String,                     // "todo", "doing", "done"
-  priority: Option<i32>,              // 1 = highest priority
+  priority: Option<i32>,              // Priority level: 1=critical, 2=high, 3=medium, 4=low
+                                      // CLI accepts: --priority critical|high|medium|low
   complexity: Option<i32>,            // Optional complexity rating
   parent_id: Option<i64>,             // Parent task for subtasks
   first_todo_at: Option<Timestamp>,   // Lifecycle tracking
@@ -174,6 +175,87 @@ LIMIT 1
 
 ---
 
+## 🆕 New Features (v0.2+)
+
+### Task Dependencies (v0.2)
+
+Define task dependencies to ensure prerequisites are met:
+
+```bash
+# Task 43 depends on Task 42
+task add-dependency --blocked 43 --blocking 42
+```
+
+**Behaviors**:
+- `task start` will fail if task has incomplete dependencies
+- `task pick-next` automatically filters out blocked tasks
+- Circular dependency detection prevents invalid configurations
+
+### Priority Levels (v0.2)
+
+Tasks now support priority enum values:
+
+```bash
+task add --name "Fix critical bug" --priority critical
+task add --name "Add feature" --priority high
+task add --name "Refactor code" --priority medium
+task add --name "Update docs" --priority low
+```
+
+**Priority levels** (1 = highest):
+- `critical` → priority 1
+- `high` → priority 2
+- `medium` → priority 3
+- `low` → priority 4
+
+`task pick-next` sorts by priority automatically.
+
+### Event Filtering (v0.2)
+
+`event list` now supports advanced filtering:
+
+```bash
+# All decisions across all tasks
+event list --type decision
+
+# Recent blockers from last 7 days
+event list --type blocker --since 7d
+
+# Latest 10 events for a specific task
+event list --task-id 42 --limit 10
+
+# All events from a task
+event list --task-id 42
+```
+
+**Filter parameters**:
+- `--type`: Filter by event type (decision, blocker, milestone, note)
+- `--since`: Time-based filter (e.g., "7d", "24h", "30m", "60s")
+- `--limit`: Maximum results (default: 50)
+- `--task-id`: Optional - omit for global search
+
+### Unified Search (v0.4)
+
+The `search` command replaces `task search` and searches both tasks AND events:
+
+```bash
+# Search across tasks and events
+search "JWT authentication"
+
+# Search only tasks
+search "JWT" --include-tasks
+
+# Search only events
+search "JWT" --include-events
+```
+
+**Returns mixed results**:
+- Task matches with snippets
+- Event matches with full task ancestry chain
+- FTS5 highlighting with `**keywords**`
+
+---
+
 ## 🛠️ Essential Commands
 
 ### Task Management
@@ -186,15 +268,16 @@ LIMIT 1
 | `task switch <ID>` | Switch focus | `<TASK_ID>` | Changes focus |
 | `task spawn-subtask` | Create + switch | `--name`, `--spec-stdin` | ✅ Yes |
 | `task pick-next` | Recommend next | `--format` | Context-aware |
-| `task find` | Filter by metadata | `--status`, `--parent` | ❌ |
-| `task search` | Full-text search | `<QUERY>`, `--snippet` | ❌ |
+| `task list` | Filter by metadata | `--status`, `--parent` | ❌ |
+| `task add-dependency` | Define dependencies | `--blocked`, `--blocking` | ❌ |
+| `search` | Unified search (tasks+events) | `<QUERY>`, `--include-tasks`, `--include-events` | ❌ |
 
 ### Event Recording
 
 | Command | Purpose | Parameters | Focus-Driven? |
 |---------|---------|------------|---------------|
 | `event add` | Record event | `--type`, `--task-id?`, `--data-stdin` | ✅ Yes (if no --task-id) |
-| `event list <ID>` | List events | `<TASK_ID>` | ❌ |
+| `event list` | List events | `--task-id?`, `--type?`, `--since?`, `--limit?` | ❌ (global if no task-id) |
 
 ### Workspace
 
@@ -315,14 +398,14 @@ task start 42   # Set as current
 task done       # Complete current
 ```
 
-### ❌ DON'T: Use `find` for text search
+### ❌ DON'T: Use `list` for text search
 ```bash
-task find --name-pattern "auth"  # WRONG - find is for metadata only
+task list --name "auth"  # WRONG - list is for metadata only (status, parent)
 ```
 
 ### ✅ DO: Use `search` for text
 ```bash
-task search "auth AND jwt"  # Correct
+search "auth AND jwt"  # Correct - searches both tasks and events
 ```
 
 ### ❌ DON'T: Forget to set current task before `done`
@@ -407,6 +490,6 @@ task done                               # Parent done (all children done)
 
 ---
 
-**Last Updated**: 2024-11-09
-**Spec Version**: 0.1.9
+**Last Updated**: 2025-11-14
+**Spec Version**: {{VERSION}}
 **Status**: Experimental (Pre-1.0)

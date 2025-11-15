@@ -286,13 +286,13 @@ fn test_task_search_with_fts5_query() {
     // Give DB time to sync
     thread::sleep(Duration::from_millis(100));
 
-    // Search for "authentication"
+    // Search for "authentication" (unified search)
     let request = json!({
         "jsonrpc": "2.0",
         "id": 5,
         "method": "tools/call",
         "params": {
-            "name": "task_search",
+            "name": "unified_search",
             "arguments": {
                 "query": "authentication"
             }

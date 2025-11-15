@@ -197,7 +197,7 @@ fn test_search_chinese_content() {
     // Search for Chinese keywords - verify it doesn't crash with Chinese input
     let output = Command::new(cargo::cargo_bin!("ie"))
         .current_dir(temp_dir.path())
-        .args(["task", "search", "用户"])
+        .args(["search", "用户"])
         .output()
         .unwrap();
 
@@ -206,11 +206,16 @@ fn test_search_chinese_content() {
         "Search should succeed with Chinese query"
     );
 
-    // Verify output is valid JSON (even if empty)
+    // Verify output is valid JSON object with results field
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.starts_with('[') && stdout.trim().ends_with(']'),
-        "Search should return valid JSON array: {}",
+        stdout.starts_with('{') && stdout.trim().ends_with('}'),
+        "Search should return valid JSON object: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("\"results\""),
+        "Search output should contain results field: {}",
         stdout
     );
 }

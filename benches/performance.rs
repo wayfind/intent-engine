@@ -146,7 +146,7 @@ fn bench_event_list(c: &mut Criterion) {
                 // Benchmark list
                 black_box(
                     event_mgr
-                        .list_events(task.id, None, None, None)
+                        .list_events(Some(task.id), None, None, None)
                         .await
                         .unwrap(),
                 );

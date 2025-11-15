@@ -1,5 +1,6 @@
 use clap::Parser;
-use intent_engine::cli::{Cli, Commands, EventCommands, TaskCommands};
+use intent_engine::cli::{Cli, Commands, CurrentAction, EventCommands, TaskCommands};
+use intent_engine::db::models::TaskContext;
 use intent_engine::error::{IntentError, Result};
 use intent_engine::events::EventManager;
 use intent_engine::project::ProjectContext;
@@ -35,7 +36,7 @@ async fn run() -> Result<()> {
 
     match cli.command {
         Commands::Task(task_cmd) => handle_task_command(task_cmd).await?,
-        Commands::Current { set } => handle_current_command(set).await?,
+        Commands::Current { set, command } => handle_current_command(set, command).await?,
         Commands::Report {
             since,
             status,
@@ -45,6 +46,12 @@ async fn run() -> Result<()> {
             summary_only,
         } => handle_report_command(since, status, filter_name, filter_spec, summary_only).await?,
         Commands::Event(event_cmd) => handle_event_command(event_cmd).await?,
+        Commands::Search {
+            query,
+            tasks,
+            events,
+            limit,
+        } => handle_search_command(&query, tasks, events, limit).await?,
         Commands::Doctor => handle_doctor_command().await?,
         Commands::McpServer => {
             // Run MCP server - this never returns unless there's an error
@@ -240,14 +247,6 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&task)?);
         },
 
-        TaskCommands::Search { query } => {
-            let ctx = ProjectContext::load().await?;
-            let task_mgr = TaskManager::new(&ctx.pool);
-
-            let results = task_mgr.search_tasks(&query).await?;
-            println!("{}", serde_json::to_string_pretty(&results)?);
-        },
-
         TaskCommands::DependsOn {
             blocked_task_id,
             blocking_task_id,
@@ -274,24 +273,88 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             println!("{}", serde_json::to_string_pretty(&response)?);
         },
+
+        TaskCommands::Context { task_id } => {
+            let ctx = ProjectContext::load().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+            let workspace_mgr = WorkspaceManager::new(&ctx.pool);
+
+            // If no task_id provided, use current task
+            let target_id = if let Some(id) = task_id {
+                id
+            } else {
+                let current = workspace_mgr.get_current_task().await?;
+                current.current_task_id.ok_or_else(|| {
+                    IntentError::InvalidInput(
+                        "No task currently focused. Use 'ie task start <ID>' or provide task_id"
+                            .to_string(),
+                    )
+                })?
+            };
+
+            let context = task_mgr.get_task_context(target_id).await?;
+
+            // Format and print the context
+            print_task_context(&context)?;
+        },
     }
 
     Ok(())
 }
 
-async fn handle_current_command(set: Option<i64>) -> Result<()> {
+async fn handle_current_command(set: Option<i64>, command: Option<CurrentAction>) -> Result<()> {
+    let ctx = ProjectContext::load().await?;
+    let workspace_mgr = WorkspaceManager::new(&ctx.pool);
+    let task_mgr = TaskManager::new(&ctx.pool);
+
+    // Handle backward compatibility: --set flag takes precedence
     if let Some(task_id) = set {
-        let ctx = ProjectContext::load_or_init().await?;
-        let workspace_mgr = WorkspaceManager::new(&ctx.pool);
-
+        eprintln!("⚠️  Warning: 'ie current --set' is a low-level atomic command.");
+        eprintln!(
+            "   For normal use, prefer 'ie task start {}' which ensures data consistency.",
+            task_id
+        );
+        eprintln!();
         let response = workspace_mgr.set_current_task(task_id).await?;
+        println!("✓ Switched to task #{}", task_id);
         println!("{}", serde_json::to_string_pretty(&response)?);
-    } else {
-        let ctx = ProjectContext::load().await?;
-        let workspace_mgr = WorkspaceManager::new(&ctx.pool);
+        return Ok(());
+    }
 
-        let response = workspace_mgr.get_current_task().await?;
-        println!("{}", serde_json::to_string_pretty(&response)?);
+    // Handle subcommands
+    match command {
+        Some(CurrentAction::Set { task_id }) => {
+            eprintln!("⚠️  Warning: 'ie current set' is a low-level atomic command.");
+            eprintln!(
+                "   For normal use, prefer 'ie task start {}' which ensures data consistency.",
+                task_id
+            );
+            eprintln!();
+            let response = workspace_mgr.set_current_task(task_id).await?;
+            println!("✓ Switched to task #{}", task_id);
+            println!("{}", serde_json::to_string_pretty(&response)?);
+        },
+        Some(CurrentAction::Clear) => {
+            eprintln!("⚠️  Warning: 'ie current clear' is a low-level atomic command.");
+            eprintln!("   For normal use, prefer 'ie task done' or 'ie task switch' which ensures data consistency.");
+            eprintln!();
+            sqlx::query("DELETE FROM workspace_state WHERE key = 'current_task_id'")
+                .execute(&ctx.pool)
+                .await?;
+            println!("✓ Current task cleared");
+        },
+        None => {
+            // Default: display current task
+            let response = workspace_mgr.get_current_task().await?;
+
+            if let Some(task_id) = response.current_task_id {
+                let task = task_mgr.get_task(task_id).await?;
+                print_current_task(&task)?;
+            } else {
+                println!("No task currently focused.");
+                println!("\nTip: Start a task with 'ie task start <ID>' or pick next with 'ie task pick-next'");
+            }
+        },
     }
 
     Ok(())
@@ -710,6 +773,25 @@ fn check_hooks_configuration() -> serde_json::Value {
     })
 }
 
+async fn handle_search_command(
+    query: &str,
+    include_tasks: bool,
+    include_events: bool,
+    limit: Option<i64>,
+) -> Result<()> {
+    use intent_engine::search::SearchManager;
+
+    let ctx = ProjectContext::load_or_init().await?;
+    let search_mgr = SearchManager::new(&ctx.pool);
+
+    let results = search_mgr
+        .unified_search(query, include_tasks, include_events, limit)
+        .await?;
+
+    print_search_results(&results)?;
+    Ok(())
+}
+
 async fn handle_doctor_command() -> Result<()> {
     use serde_json::json;
 
@@ -1061,4 +1143,276 @@ fn handle_setup_diagnose(target: &str) -> Result<()> {
             target
         ))),
     }
+}
+
+/// Print task context in a human-friendly tree format
+fn print_task_context(ctx: &TaskContext) -> Result<()> {
+    let task = &ctx.task;
+
+    // Status badge
+    let status_badge = match task.status.as_str() {
+        "done" => "✓",
+        "doing" => "→",
+        "todo" => "○",
+        _ => "?",
+    };
+
+    // Main task info
+    println!("Task #{}: {} [{}]", task.id, task.name, status_badge);
+
+    // Timestamps
+    if let Some(created) = task.first_todo_at {
+        print!("Created: {}", created);
+        if let Some(started) = task.first_doing_at {
+            print!(" | Started: {}", started);
+        }
+        if let Some(done) = task.first_done_at {
+            print!(" | Done: {}", done);
+        }
+        println!();
+    }
+
+    // Ancestors
+    println!("\nAncestors:");
+    if ctx.ancestors.is_empty() {
+        println!("  (none - top-level task)");
+    } else {
+        for ancestor in &ctx.ancestors {
+            let status = match ancestor.status.as_str() {
+                "done" => "✓",
+                "doing" => "→",
+                "todo" => "○",
+                _ => "?",
+            };
+            println!("  └─ #{}: {} {}", ancestor.id, ancestor.name, status);
+        }
+    }
+
+    // Children
+    let done_count = ctx.children.iter().filter(|c| c.status == "done").count();
+    println!(
+        "\nChildren ({} subtasks, {} done):",
+        ctx.children.len(),
+        done_count
+    );
+    if ctx.children.is_empty() {
+        println!("  (none)");
+    } else {
+        for (i, child) in ctx.children.iter().enumerate() {
+            let status = match child.status.as_str() {
+                "done" => "✓",
+                "doing" => "→",
+                "todo" => "○",
+                _ => "?",
+            };
+            let prefix = if i == ctx.children.len() - 1 {
+                "└─"
+            } else {
+                "├─"
+            };
+            println!("  {} #{} {} {}", prefix, child.id, child.name, status);
+        }
+    }
+
+    // Siblings
+    if !ctx.siblings.is_empty() {
+        println!("\nSiblings ({} at same level):", ctx.siblings.len());
+        let show_count = 5.min(ctx.siblings.len());
+        for (i, sibling) in ctx.siblings.iter().take(show_count).enumerate() {
+            let status = match sibling.status.as_str() {
+                "done" => "✓",
+                "doing" => "→",
+                "todo" => "○",
+                _ => "?",
+            };
+            let prefix = if i == show_count - 1 && ctx.siblings.len() <= 5 {
+                "└─"
+            } else {
+                "├─"
+            };
+            println!("  {} #{} {} {}", prefix, sibling.id, sibling.name, status);
+        }
+        if ctx.siblings.len() > 5 {
+            println!("  ... and {} more", ctx.siblings.len() - 5);
+        }
+    }
+
+    // Dependencies
+    if !ctx.dependencies.blocking_tasks.is_empty() {
+        println!("\nBlocking tasks (must complete first):");
+        for task in &ctx.dependencies.blocking_tasks {
+            let status = match task.status.as_str() {
+                "done" => "✓",
+                "doing" => "→",
+                "todo" => "○",
+                _ => "?",
+            };
+            println!("  • #{} {} {}", task.id, task.name, status);
+        }
+    }
+
+    if !ctx.dependencies.blocked_by_tasks.is_empty() {
+        println!("\nBlocked by this task:");
+        for task in &ctx.dependencies.blocked_by_tasks {
+            let status = match task.status.as_str() {
+                "done" => "✓",
+                "doing" => "→",
+                "todo" => "○",
+                _ => "?",
+            };
+            println!("  • #{} {} {}", task.id, task.name, status);
+        }
+    }
+
+    Ok(())
+}
+
+/// Print current task in a human-friendly format
+fn print_current_task(task: &intent_engine::db::models::Task) -> Result<()> {
+    let status_badge = match task.status.as_str() {
+        "done" => "✓",
+        "doing" => "→",
+        "todo" => "○",
+        _ => "?",
+    };
+
+    println!(
+        "Current task: #{} {} [{}]",
+        task.id, task.name, status_badge
+    );
+
+    // Timestamps
+    if let Some(started) = task.first_doing_at {
+        println!("Started: {}", started);
+    }
+
+    // Spec preview
+    if let Some(spec) = &task.spec {
+        if !spec.is_empty() {
+            println!("\nSpec (preview):");
+            let lines: Vec<&str> = spec.lines().collect();
+            for line in lines.iter().take(3) {
+                println!("{}", line);
+            }
+            if lines.len() > 3 {
+                println!("... ({} more lines)", lines.len() - 3);
+            }
+        }
+    }
+
+    // Helpful tips
+    println!("\nNext steps:");
+    println!("  • 'ie task context' - see task hierarchy");
+    println!("  • 'ie task get {}' - full task details", task.id);
+    println!("  • 'ie event add --type note' - record progress");
+    println!("  • 'ie task done' - mark complete (when finished)");
+
+    Ok(())
+}
+
+/// Print search results in a human-friendly format
+fn print_search_results(results: &[intent_engine::db::models::UnifiedSearchResult]) -> Result<()> {
+    use intent_engine::db::models::UnifiedSearchResult;
+
+    if results.is_empty() {
+        println!("No results found");
+        return Ok(());
+    }
+
+    // Separate tasks and events
+    let tasks: Vec<_> = results
+        .iter()
+        .filter_map(|r| match r {
+            UnifiedSearchResult::Task {
+                task,
+                match_snippet,
+                match_field,
+            } => Some((task, match_snippet, match_field)),
+            _ => None,
+        })
+        .collect();
+
+    let events: Vec<_> = results
+        .iter()
+        .filter_map(|r| match r {
+            UnifiedSearchResult::Event {
+                event,
+                task_chain,
+                match_snippet,
+            } => Some((event, task_chain, match_snippet)),
+            _ => None,
+        })
+        .collect();
+
+    // Print tasks
+    if !tasks.is_empty() {
+        println!("Tasks ({}):", tasks.len());
+        for (task, _snippet, field) in &tasks {
+            let status_badge = match task.status.as_str() {
+                "done" => "✓",
+                "doing" => "→",
+                "todo" => "○",
+                _ => "?",
+            };
+
+            let priority_label = match task.priority {
+                Some(p) if p < 0 => "[critical] ",
+                Some(p) if p > 0 => "[low] ",
+                _ => "",
+            };
+
+            println!(
+                "  {} #{} {} {}[{}]",
+                status_badge, task.id, priority_label, task.name, task.status
+            );
+
+            // Show matched field if it's in spec
+            if *field == "spec" {
+                if let Some(spec) = &task.spec {
+                    let preview: String =
+                        spec.lines().next().unwrap_or("").chars().take(60).collect();
+                    if !preview.is_empty() {
+                        println!("     {}", preview);
+                    }
+                }
+            }
+        }
+        println!();
+    }
+
+    // Print events
+    if !events.is_empty() {
+        println!("Events ({}):", events.len());
+        for (event, task_chain, _snippet) in &events {
+            let type_label = match event.log_type.as_str() {
+                "decision" => "[decision]",
+                "blocker" => "[blocker]",
+                "milestone" => "[milestone]",
+                "note" => "[note]",
+                _ => "[event]",
+            };
+
+            // Get task info (first in chain is immediate task)
+            let task_info = if let Some(task) = task_chain.first() {
+                format!("Task #{}: ", task.id)
+            } else {
+                String::new()
+            };
+
+            // Get first line of event data
+            let data_preview: String = event
+                .discussion_data
+                .lines()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(60)
+                .collect();
+
+            println!("  {} {}{}", type_label, task_info, data_preview);
+        }
+        println!();
+    }
+
+    Ok(())
 }

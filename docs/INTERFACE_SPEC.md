@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.3
-**Last Updated**: 2025-11-13
+**Version**: 0.4
+**Last Updated**: 2025-11-14
 **Status**: Experimental (Pre-1.0)
 
 ---
@@ -28,6 +28,43 @@
 ---
 
 ## Changelog
+
+### Version 0.4 (2025-11-14)
+
+**Theme**: "Unified Search & Enhanced Discovery"
+
+**New Features:**
+- **Unified Search**: New `search` command searches across both tasks and events using FTS5
+- **Event Search**: Full-text search in event discussion_data with snippet highlighting
+- **Task Ancestry**: Event results include full task ancestry chain for hierarchical context
+- **Global Event Queries**: `event list` now supports omitting task_id to query across all tasks
+
+**CLI Commands Added:**
+- `search`: Unified full-text search across tasks and events (replaces `task search`)
+
+**CLI Commands Removed:**
+- `task search`: Use `search` instead (searches both tasks and events)
+
+**MCP Tools Added:**
+- `unified_search`: Searches across tasks and events with task ancestry for events
+
+**MCP Tools Removed:**
+- `task_search`: Use `unified_search` instead
+
+**Data Models Added:**
+- `UnifiedSearchResult`: Tagged enum with task and event variants
+
+**Breaking Changes:**
+- Removed `ie task search` command (use `ie search` instead)
+- Removed `task_search` MCP tool (use `unified_search` instead)
+- `event_list` parameter `task_id` is now optional (breaking for strict type checkers)
+
+**Migration Notes:**
+- Replace all `ie task search` calls with `ie search`
+- Replace all `task_search` MCP tool calls with `unified_search`
+- Event results now include `task_chain` array for ancestry context
+
+---
 
 ### Version 0.3 (2025-11-13)
 
@@ -514,7 +551,7 @@ ie task find \
 - `--status <STATUS>` (optional): Filter by status (`todo`, `doing`, `done`)
 - `--parent <PARENT_ID>` (optional): Filter by parent ID (use `"null"` for root tasks)
 
-**Design Note**: `task find` handles **structured filtering only**. For text search, use `task search`.
+**Design Note**: `task find` handles **structured filtering only**. For text search, use `search` (unified search across tasks and events).
 
 **Output**: JSON (array of tasks)
 ```json
@@ -526,43 +563,6 @@ ie task find \
     "parent_id": null
   },
   ...
-]
-```
-
----
-
-#### `task search`
-**Purpose**: Full-text search using FTS5
-
-**Signature**:
-```bash
-ie task search <QUERY> \
-  [--limit <N>] \
-  [--snippet]
-```
-
-**Parameters**:
-- `<QUERY>` (required): FTS5 search query
-- `--limit <N>` (optional): Maximum results to return
-- `--snippet` (optional): Return highlighted matches with `**`
-
-**Search Scope**: Searches in both `name` and `spec` fields.
-
-**FTS5 Syntax Support**:
-- AND: `auth AND jwt`
-- OR: `auth OR oauth`
-- NEAR: `auth NEAR/5 token`
-- Phrases: `"user authentication"`
-
-**Output** (with `--snippet`):
-```json
-[
-  {
-    "task_id": 42,
-    "name": "Implement **authentication**",
-    "spec_snippet": "Use **JWT** with refresh tokens...",
-    "rank": 0.95
-  }
 ]
 ```
 
@@ -642,7 +642,78 @@ ie event list <TASK_ID>
 
 ---
 
-### 2.3 Report Commands
+### 2.3 Search Commands
+
+#### `search`
+**Purpose**: Unified full-text search across tasks and events using FTS5
+
+**Signature**:
+```bash
+ie search <QUERY> \
+  [--tasks <true|false>] \
+  [--events <true|false>] \
+  [--limit <N>]
+```
+
+**Parameters**:
+- `<QUERY>` (required): FTS5 search query
+- `--tasks` (optional, default: true): Include tasks in search
+- `--events` (optional, default: true): Include events in search
+- `--limit <N>` (optional, default: 20): Maximum total results to return
+
+**Search Scope**:
+- Tasks: Searches in both `name` and `spec` fields
+- Events: Searches in `discussion_data` field
+
+**FTS5 Syntax Support**:
+- AND: `auth AND jwt`
+- OR: `auth OR oauth`
+- NOT: `auth NOT password`
+- NEAR: `auth NEAR/5 token`
+- Phrases: `"user authentication"`
+
+**Output**:
+```json
+{
+  "results": [
+    {
+      "result_type": "task",
+      "task": {
+        "id": 42,
+        "name": "Implement authentication",
+        "spec": "Use JWT with 7-day expiry...",
+        "status": "doing"
+      },
+      "match_snippet": "Implement **authentication**",
+      "match_field": "name"
+    },
+    {
+      "result_type": "event",
+      "event": {
+        "id": 15,
+        "task_id": 42,
+        "log_type": "decision",
+        "discussion_data": "Chose JWT over OAuth for simplicity",
+        "timestamp": "2025-11-14T10:30:00Z"
+      },
+      "task_chain": [
+        {
+          "id": 42,
+          "name": "Implement authentication",
+          "parent_id": null
+        }
+      ],
+      "match_snippet": "Chose **JWT** over OAuth for simplicity"
+    }
+  ]
+}
+```
+
+**Design Note**: The `task_chain` array shows the full ancestry path from the event's task to the root. This provides hierarchical context for event matches.
+
+---
+
+### 2.4 Report Commands
 
 #### `report`
 **Purpose**: Generate analysis and reports
@@ -683,7 +754,7 @@ ie report \
 
 ---
 
-### 2.4 Workspace Commands
+### 2.5 Workspace Commands
 
 #### `current`
 **Purpose**: Get or set current task
@@ -917,26 +988,25 @@ The installed hook (`session-start.sh`) will:
 
 ### 3.2 Available Tools
 
-| Tool Name | Purpose | Maps to CLI |
-|-----------|---------|-------------|
-| `task_add` | Create task | `task add` |
-| `task_add_dependency` | Add task dependency | `task depends-on` |
-| `task_start` | Start task | `task start` |
-| `task_pick_next` | Recommend tasks | `task pick-next` |
-| `task_spawn_subtask` | Create subtask | `task spawn-subtask` |
-| `task_switch` | Switch task | `task switch` |
-| `task_done` | Complete task | `task done` |
-| `task_update` | Update task | `task update` |
-| `task_list` | List/filter tasks | `task list` |
-| `task_find` | ⚠️  Deprecated (use `task_list`) | `task find` (deprecated) |
-| `task_search` | Search tasks (FTS5) | `task search` |
-| `task_get` | Get task by ID | `task get` |
-| `task_context` | Get task family tree | N/A |
-| `task_delete` | Delete task | `task delete` |
-| `event_add` | Record event | `event add` |
-| `event_list` | List events | `event list` |
-| `current_task_get` | Get current task | `current` |
-| `report_generate` | Generate report | `report` |
+| Tool Name | Purpose | Maps to CLI | Notes |
+|-----------|---------|-------------|-------|
+| `task_add` | Create task | `ie task add` | ✓ Full parity |
+| `task_add_dependency` | Add task dependency | `ie task depends-on` | ✓ Full parity |
+| `task_start` | Start task | `ie task start` | ✓ Full parity |
+| `task_pick_next` | Recommend tasks | `ie task pick-next` | ✓ Full parity |
+| `task_spawn_subtask` | Create subtask | `ie task spawn-subtask` | ✓ Full parity |
+| `task_switch` | Switch task | `ie task switch` | ✓ Full parity |
+| `task_done` | Complete task | `ie task done` | ✓ Full parity |
+| `task_update` | Update task | `ie task update` | ✓ Full parity |
+| `task_list` | List/filter tasks | `ie task list` | ✓ Full parity |
+| `search` | Unified search across tasks and events (FTS5) | `ie search` | Added in v0.4 |
+| `task_get` | Get task by ID | `ie task get` | ✓ Full parity |
+| `task_context` | Get task family tree | `ie task context` | Added in v0.4 |
+| `task_delete` | Delete task | `ie task delete` | ✓ Full parity |
+| `event_add` | Record event | `ie event add` | ✓ Full parity |
+| `event_list` | List events | `ie event list` | ✓ Full parity |
+| `current_task_get` | Get current task | `ie current` | Enhanced in v0.4 (added subcommands) |
+| `report_generate` | Generate report | `ie report` | ✓ Full parity |
 
 ### 3.3 Tool Schema Reference
 
@@ -1052,13 +1122,36 @@ All CLI commands output structured JSON by default.
 
 ### 5.2 Special Output Structures
 
-#### SearchResult (from `task search --snippet`)
+#### UnifiedSearchResult (from `search`)
 ```json
+// Task result
 {
-  "task_id": 42,
-  "name": "Text with **highlighted** matches",
-  "spec_snippet": "Snippet with **highlighted** terms...",
-  "rank": 0.95
+  "result_type": "task",
+  "task": {
+    "id": 42,
+    "name": "Implement authentication",
+    "spec": "...",
+    "status": "doing",
+    ...
+  },
+  "match_snippet": "Text with **highlighted** matches",
+  "match_field": "name" // or "spec"
+}
+
+// Event result
+{
+  "result_type": "event",
+  "event": {
+    "id": 15,
+    "task_id": 42,
+    "log_type": "decision",
+    "discussion_data": "...",
+    "timestamp": "2025-11-14T10:30:00Z"
+  },
+  "task_chain": [
+    { "id": 42, "name": "Parent task", "parent_id": null }
+  ],
+  "match_snippet": "Text with **highlighted** matches"
 }
 ```
 
