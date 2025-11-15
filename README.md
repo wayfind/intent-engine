@@ -1,204 +1,489 @@
-# Intent-Engine 
-  
-   **中文 | [English](README.en.md)**
-  
+# Intent-Engine
+
+**[中文](Readme.zh.md) | English**
+
 [![CI](https://github.com/wayfind/intent-engine/workflows/CI/badge.svg)](https://github.com/wayfind/intent-engine/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/wayfind/intent-engine/branch/main/graph/badge.svg)](https://codecov.io/gh/wayfind/intent-engine)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
 [![Documentation](https://docs.rs/intent-engine/badge.svg)](https://docs.rs/intent-engine)
 
+**Intent-Engine is a minimalist, project-specific strategic intent tracking system designed for human-AI collaboration.**
 
-**为人机协作，编织清晰的思路**
-
-> AI 的外部长时记忆 + 战略任务管理系统
->
-> 将您和 AI 伙伴短暂、易失的协作瞬间，沉淀为项目可追溯、可恢复的永恒智慧
-
-
-
-## 🎯 这是什么？
-
-**项目级持久化任务系统** + **完整决策历史追踪** = AI 的外部长时记忆
-
-- 📝 **战略意图层**：关注 What（做什么）和 Why（为什么），而非 How（怎么做）
-- 🧠 **跨会话记忆**：持久化到 SQLite，任何时候都能恢复完整上下文
-- 🌳 **层级任务树**：支持无限层级的父子任务，自然的问题分解
-- 📊 **决策历史**：每个关键决策都被记录为事件流，可追溯、可回顾
-- 🔄 **AI 原生**：CLI + JSON + MCP 协议，为 AI 工具链深度优化
+It's not just another todo list—it's a bridge connecting human strategic thinking with AI execution capabilities, helping answer two critical questions: "Where are we going?" and "Why are we going there?"
 
 ---
 
-## 💡 解决什么痛点？
+## 🎯 What is it?
 
-### Claude Code TodoWrite 的局限
+Intent-Engine is a CLI tool + database system for recording, tracking, and reviewing **strategic intents**. It provides a shared, traceable "intent layer" for human-AI collaboration.
 
-❌ **会话级生命周期** - 对话结束即消失，无法跨会话
-❌ **无决策历史** - 不知道为什么做某个决定
-❌ **平铺结构** - 难以管理复杂的层级任务
-
-### Intent-Engine 的解决方案
-
-✅ **项目级持久化** - 永久保存在 `.intent-engine/project.db`
-✅ **完整事件流** - 记录每个 decision/blocker/milestone
-✅ **任务树结构** - 自然的层级分解 + 强制子任务完成验证
-✅ **原子操作** - `start`/`spawn-subtask`/`switch` 等命令节省 50-70% Token
+**Core Features:**
+- 📝 **Strategic Task Management**: Focus on What and Why, not just How
+- 🧠 **AI's External Long-term Memory**: Persist decision history and context across sessions
+- 🌳 **Hierarchical Problem Decomposition**: Support unlimited levels of parent-child task relationships
+- 📊 **Structured Decision Tracking**: Every key decision is recorded as an event stream
+- 🔄 **JSON-native Interface**: Perfect for AI tool integration
 
 ---
 
-## 🚀 快速开始
+## 👥 Who is it for?
 
-### 安装
+### Primary Users
+
+1. **Human Developers**: Set strategic goals and record project intentions
+2. **AI Agents**: Understand objectives, execute tasks, and document decision processes
+3. **Human-AI Collaboration Teams**: Maintain context synchronization in long-term projects
+
+### Use Cases
+
+- ✅ Complex projects requiring AI to work continuously across multiple sessions
+- ✅ Technical projects needing to trace "why this decision was made"
+- ✅ System engineering requiring decomposition of large tasks into subtask trees
+- ✅ Automated processes where AI autonomously manages work priorities
+
+---
+
+## 💡 What problems does it solve?
+
+### Value for Humans
+
+**Problems with Traditional Task Management Tools (Jira/Linear):**
+- ❌ Focus on tactical execution (Sprints, Story Points), lacking strategic layer
+- ❌ Require extensive manual maintenance (status updates, comments)
+- ❌ Not suitable for AI integration (primarily Web UI)
+
+**Intent-Engine's Solution:**
+- ✅ Strategic intent layer: Each task includes complete **specifications (spec)** and **decision history (events)**
+- ✅ Automation-friendly: AI can autonomously create, update, and switch tasks
+- ✅ CLI + JSON: Perfect AI toolchain integration
+
+### Value for AI
+
+**Limitations of Claude Code TodoWrite:**
+- ❌ **Session-level**: Only exists in current conversation, disappears when session ends
+- ❌ **No History**: Cannot trace previous decisions and thought processes
+- ❌ **Flat Structure**: Lacks hierarchical relationships, difficult to manage complex tasks
+
+**Intent-Engine's Advantages:**
+- ✅ **Project-level**: Persisted to SQLite database, permanently saved across sessions
+- ✅ **Traceable**: Complete event stream records context of every decision
+- ✅ **Hierarchical**: Task tree structure, enforces completing all subtasks before parent task
+- ✅ **Atomic Operations**: Commands like `start`, `pick-next`, `spawn-subtask`, `switch` save 50-70% tokens
+
+---
+
+## 📊 Essential Differences from Other Tools
+
+| Dimension | Intent-Engine | Claude Code TodoWrite | Jira/Linear |
+|-----------|---------------|----------------------|-------------|
+| **Core Philosophy** | Strategic intent layer: What + Why | Tactical execution layer: What (temporary) | Task tracking layer: What + When |
+| **Primary Users** | Humans ↔ AI (bidirectional) | AI internal use (unidirectional) | Human teams (collaborative) |
+| **Lifecycle** | Project-level (cross-session, persistent) | Session-level (temporary, volatile) | Project-level (persistent) |
+| **Data Structure** | Task tree + Event stream + Specifications | Flat list (no hierarchy) | Workflows + Fields + Comments |
+| **History Tracing** | ✅ Complete decision history (events) | ❌ No history | ⚠️ Has comments but no structured decisions |
+| **Interaction Mode** | CLI + JSON (AI-friendly) | Tool Call (AI-specific) | Web UI (human-friendly) |
+| **Granularity** | Coarse-grained (strategic milestones) | Fine-grained (current steps) | Medium-grained (Sprint tasks) |
+| **Core Value** | AI's external long-term memory | AI's working memory (short-term) | Team work coordination |
+
+### Typical Use Case Comparison
+
+**Intent-Engine:** "Implement user authentication system" (includes complete technical specs, decision history, subtask tree)
+- Lifecycle: Days to weeks
+- AI can resume context anytime via `task start --with-events` and continue working
+
+**TodoWrite:** "Modify auth.rs file" (temporary step in current session)
+- Lifecycle: Current session
+- Disappears after session ends, cannot be recovered
+
+**Jira:** "PROJ-123: Add OAuth2 support" (specific task assigned to team)
+- Lifecycle: One Sprint (1-2 weeks)
+- Requires manual status and progress updates
+
+---
+
+## 🚀 Quick Start
+
+### 1. Installation
 
 ```bash
-# 方式 1: Cargo Install（推荐）
+# Method 1: Cargo Install (Recommended)
 cargo install intent-engine
 
-# 方式 2: 预编译二进制
-# 访问 https://github.com/wayfind/intent-engine/releases
+# Method 2: Download Pre-compiled Binary
+# Visit https://github.com/wayfind/intent-engine/releases
 
-# 验证安装
+# Verify Installation
 ie --version
 ```
 
-### 5 分钟核心体验
+> 📖 **Detailed Installation Guide**: See [INSTALLATION.md](docs/en/guide/installation.md) for all installation methods, troubleshooting, and integration options.
+
+### 2. Experience Core Features in 5 Minutes
 
 ```bash
-# 1. 添加任务（自动初始化项目）
-echo "使用 JWT 认证，支持刷新 Token" | \
-  ie task add --name "实现用户认证" --spec-stdin
+# 1. Add a strategic task
+echo "Implement JWT authentication with token refresh, 7-day validity" | \
+  ie task add --name "Implement user authentication" --spec-stdin
 
-# 2. 开始任务
+# 2. Start task and view context
 ie task start 1 --with-events
 
-# 3. 发现子问题？创建子任务并自动切换
-ie task spawn-subtask --name "配置 JWT 密钥"
+# 3. Discover sub-problem during work? Create subtask and auto-switch
+ie task spawn-subtask --name "Configure JWT secret key"
 
-# 4. 记录决策
-echo "选择 HS256 算法，密钥存储在环境变量" | \
+# 4. Record key decision (subtask is now current task)
+echo "Chose HS256 algorithm, store secret in environment variables" | \
   ie event add --type decision --data-stdin
 
-# 5. 完成子任务，获取下一步建议
+# 5. Complete subtask
 ie task done
-ie task pick-next
+
+# 6. Switch back to parent task and complete
+ie task switch 1
+ie task done
+
+# 7. Generate work report
+ie report --since 1d --summary-only
 ```
 
-> 💡 **详细教程**: [Quickstart Guide](docs/zh-CN/guide/quickstart.md) | [The Intent-Engine Way](docs/zh-CN/guide/the-intent-engine-way.md)
+> 💡 **More Detailed Tutorial**: See [QUICKSTART.md](QUICKSTART.en.md)
 
 ---
 
-## 🔌 MCP 集成：与 Claude Code/Desktop 无缝集成
+## 🔌 MCP Service: Deep Integration with Claude Code/Desktop
 
-一键安装脚本：
+Intent-Engine provides a **Rust-native MCP (Model Context Protocol) server**, enabling Claude Code and Claude Desktop to directly use all Intent-Engine features without manually running commands.
+
+### Why Use MCP Service?
+
+**Traditional CLI Approach** vs **MCP Service**:
+
+| Aspect | CLI Commands | MCP Service |
+|--------|--------------|-------------|
+| **Usage** | Humans manually execute commands | AI automatically invokes tools |
+| **Integration Difficulty** | Need to copy-paste commands | Completely transparent, works out-of-box |
+| **Context Awareness** | Need to manually pass task IDs | AI automatically manages current task |
+| **Token Efficiency** | Need to output full commands | Atomic operations, save 50-70% |
+| **User Experience** | Need to switch between terminal | Seamlessly complete within conversation |
+
+### Quick Installation
+
+**Method 1: Automatic (Recommended)**
 
 ```bash
-# 克隆并安装
-git clone https://github.com/wayfind/intent-engine.git
-cd intent-engine
-cargo install --path .
+# Install from cargo
+cargo install intent-engine
 
-# 自动配置 MCP 服务器
-./scripts/install/install-mcp-server.sh
+# Auto-configure MCP server for Claude Code
+ie setup-mcp
+
+# Or for Claude Desktop
+ie setup-mcp --target claude-desktop
 ```
 
-安装后，Claude 可以自动使用 **17 个 MCP 工具** 来管理任务和记录决策，无需手动运行命令。
+**Method 2: From Source**
 
-> 📖 **详细指南**: [MCP 服务器集成](docs/zh-CN/integration/mcp-server.md) | [AI 集成完整指南](CLAUDE.md)
+```bash
+# Clone the project
+git clone https://github.com/wayfind/intent-engine.git
+cd intent-engine
+
+# Build and install (unified binary with CLI and MCP server)
+cargo install --path .
+
+# Auto-configure for Claude Code/Desktop
+ie setup-mcp
+# Or use the shell script:
+# ./scripts/install/install-mcp-server.sh
+```
+
+> **Note**: The `setup-mcp` command automatically detects your OS and configures the correct file path. It targets Claude Code v2.0.37+ by default.
+
+### Manual Configuration
+
+Edit Claude's MCP configuration file:
+
+**Claude Code** (v2.0.37+):
+- Linux/macOS/WSL: `~/.claude.json`
+- Windows: `%APPDATA%\Claude\.claude.json`
+
+> **Note**: Earlier versions may use `~/.claude/mcp_servers.json` or `~/.config/claude-code/mcp_servers.json`
+
+**Claude Desktop**:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Add configuration:
+
+```json
+{
+  "mcpServers": {
+    "intent-engine": {
+      "command": "/home/user/.cargo/bin/intent-engine",
+      "args": ["mcp-server"],
+      "env": {
+        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
+      },
+      "description": "Strategic intent and task workflow management"
+    }
+  }
+}
+```
+
+Restart Claude Code/Desktop, and you'll see **17 Intent-Engine tools** available.
+
+### MCP Tools List
+
+After installation, Claude can automatically use the following tools:
+
+**Task Management** (12 tools):
+- `task_add` - Create strategic task
+- `task_add_dependency` - Define task dependencies
+- `task_start` - Start task (atomic: set doing + set as current)
+- `task_pick_next` - Intelligently recommend next task
+- `task_spawn_subtask` - Create subtask and switch (atomic)
+- `task_switch` - Switch tasks (atomic: pause current + start new)
+- `task_done` - Complete task (validates all subtasks done)
+- `task_list` - Find tasks by status/parent (renamed from `task_find`)
+- `task_get` - Get detailed task information
+- `task_context` - Get task ancestry and subtask tree
+- `task_update` - Update task properties
+- `task_delete` - Delete a task
+
+**Search & Discovery** (1 tool):
+- `unified_search` - Unified full-text search across tasks and events
+
+**Event Tracking** (2 tools):
+- `event_add` - Record decisions/blockers/milestones (AI's external long-term memory)
+- `event_list` - List event history with filtering
+
+**Workflow** (2 tools):
+- `current_task_get` - Get currently focused task
+- `report_generate` - Generate work reports
+
+### Usage Example
+
+After installation, the experience in Claude Code:
+
+```
+You: "Help me implement a user authentication system"
+
+Claude: I'll use Intent-Engine to track this work.
+[Automatically calls task_add to create task #1]
+[Automatically calls task_start to begin and get context]
+
+"I've created and started task #1: Implement user authentication system.
+Based on project analysis, I suggest breaking it down into these subtasks:
+
+1. JWT Token generation and validation
+2. User password hashing storage
+3. Refresh Token mechanism
+
+Let me create subtasks for each area..."
+[Automatically calls task_spawn_subtask to create subtask #2]
+[Begins implementing first subtask]
+```
+
+**Key Advantages**:
+- ✅ **Zero Manual Operations**: AI automatically manages tasks, no need to copy-paste commands
+- ✅ **Context Preservation**: Automatically resume task status and decision history across sessions
+- ✅ **Transparent Tracking**: All decisions automatically recorded to event stream
+- ✅ **Multi-project Isolation**: Different projects automatically use their own `.intent-engine` databases
+
+### Technical Advantages
+
+Intent-Engine's MCP server uses **Rust native implementation**, compared to traditional Python wrappers:
+
+| Metric | Rust Native | Python Wrapper |
+|--------|-------------|----------------|
+| **Startup Time** | < 10ms | 300-500ms |
+| **Memory Usage** | ~5MB | ~30-50MB |
+| **Dependencies** | Zero | Requires Python 3.7+ |
+| **Performance** | Native | IPC overhead |
+
+### Verify Installation
+
+```bash
+# Manually test MCP server (from project directory)
+cd /path/to/your/project
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  ie mcp-server
+
+# Or using environment variable
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project ie mcp-server
+
+# Should return JSON response with 13 tools
+```
+
+### Detailed Documentation
+
+- 📖 [Complete MCP Server Configuration Guide](docs/en/integration/mcp-server.md) - Installation, configuration, troubleshooting
+- 🔧 [MCP Tools Sync System](docs/en/technical/mcp-tools-sync.md) - Maintainer's guide
+- 📘 [CLAUDE.md](CLAUDE.md) - Complete AI assistant integration guide
 
 ---
 
-## ✨ 核心特性
+## ✨ Core Features
 
-### v0.4 新功能 (2025-11)
-- **🔍 统一搜索引擎**：`unified_search` 跨任务和事件的全文搜索，一次查询获取完整上下文
+### New in v0.4 (2025-11)
+- **🔍 Unified Search Engine**: `unified_search` provides full-text search across both tasks and events, retrieving complete context in a single query
 
-### v0.2 新功能 (2025-11)
-- **🔗 任务依赖系统**：定义任务依赖关系，自动阻止依赖未满足的任务启动
-- **📊 智能事件查询**：按类型和时间过滤事件，大幅节省 Token 和处理时间
-- **🎯 优先级枚举**：人性化的优先级接口 (`critical`/`high`/`medium`/`low`)
-- **📝 命令更名**：`task find` → `task list` 更清晰直观
+### New in v0.2 (2025-11)
+- **🔗 Task Dependency System**: Define task dependencies, automatically prevent blocked tasks from starting
+- **📊 Smart Event Querying**: Filter events by type and time range, dramatically reduce token usage
+- **🎯 Priority Enum**: Human-friendly priority interface (`critical`/`high`/`medium`/`low`)
+- **📝 Command Rename**: `task find` → `task list` for better clarity
 
-### 核心功能
-- **🔍 智能项目检测**：自动向上查找 `.git`/`Cargo.toml` 等标记，确定项目根目录
-- **⚡ 惰性初始化**：写入命令自动初始化，无需手动 `init`
-- **🎯 聚焦工作流**：`current_task_id` 概念，大部分命令操作当前聚焦任务
-- **🤖 智能推荐**：`pick-next` 基于深度优先策略推荐下一个任务
-- **🔍 FTS5 全文搜索**：GB 级任务量下毫秒级响应，`**` 高亮匹配词
-- **📦 零依赖部署**：单一静态链接二进制，无需 Python/Node 环境
-- **🚀 Rust 原生 MCP**：启动 < 10ms，内存占用 ~5MB
-
----
-
-## 📚 文档导航
-
-### 🎯 核心文档
-- [**接口规范**](docs/INTERFACE_SPEC.md) - CLI/MCP/Rust API 权威定义
-- [**设计哲学**](docs/zh-CN/guide/the-intent-engine-way.md) - Intent-Engine Way 深入解读
-
-### 🚀 用户指南
-- [安装指南](docs/zh-CN/guide/installation.md) - 所有安装方式 + 故障排除
-- [快速开始](docs/zh-CN/guide/quickstart.md) - 详细教程和最佳实践
-- [命令参考](docs/zh-CN/guide/command-reference-full.md) - 完整命令说明
-
-### 🤖 AI 集成
-- [Claude 集成指南](CLAUDE.md) - AI 助手完整集成手册
-- [MCP 服务器](docs/zh-CN/integration/mcp-server.md) - Claude Code/Desktop 配置
-- [通用 LLM 集成](docs/zh-CN/integration/generic-llm.md) - 其他 AI 工具集成
-
-### 🔧 技术文档
-- [性能基准](docs/zh-CN/technical/performance.md) - 性能测试和优化
-- [安全测试](docs/zh-CN/technical/security.md) - 安全性验证
-- [MCP 工具同步](docs/zh-CN/technical/mcp-tools-sync.md) - 维护者指南
-
-### 👥 贡献者
-- [贡献指南](docs/zh-CN/contributing/contributing.md) - 如何贡献代码
-- [发布流程](docs/zh-CN/contributing/publish-to-crates-io.md) - 发布到 crates.io
+### Core Capabilities
+- **Project Awareness**: Automatically searches upward for `.intent-engine` directory, senses project root
+- **Lazy Initialization**: Write commands auto-initialize project, no manual init needed
+- **Task Tree Management**: Support unlimited levels of parent-child task relationships
+- **Decision History**: Complete event stream recording (decision, blocker, milestone, etc.)
+- **Smart Recommendation**: `pick-next` recommends next task based on context
+- **Atomic Operations**: Commands like `start`, `switch`, `spawn-subtask` save 50-70% tokens
+- **🔍 FTS5 Search Engine**: Millisecond response under GB-scale tasks, unique snippet function highlights matches with `**`, extremely Agent-context-friendly
+- **JSON Output**: All commands output structured JSON, perfect for AI tool integration
 
 ---
 
-## 🧪 质量保证
+## 📚 Documentation Navigation
 
-- **505+ 测试全部通过** ✅ (单元测试 + 集成测试 + 性能测试)
-- **85% 代码覆盖率** 📊 持续集成验证
-- **安全性测试** 🛡️ 特殊字符、SQL 注入、路径遍历防护
-- **跨平台验证** 🖥️ Linux/macOS/Windows 自动化测试
+### 🎯 Core Documents
+- [**INTERFACE_SPEC.md**](docs/INTERFACE_SPEC.md) - **Interface Specification** (Authoritative)
+- [**QUICKSTART.md**](QUICKSTART.en.md) - 5-minute quick start
 
----
+### 🚀 Getting Started
+- [**The Intent-Engine Way**](docs/en/guide/the-intent-engine-way.md) - Design philosophy and collaboration patterns (highly recommended)
+- [**Installation Guide**](docs/en/guide/installation.md) - Detailed installation guide and troubleshooting
 
-## 🛠️ 技术栈
+### 🤖 AI Integration
+- [**AI Quick Guide**](docs/en/guide/ai-quick-guide.md) - AI client quick reference
+- [**MCP Server**](docs/en/integration/mcp-server.md) - Integrate with Claude Code/Desktop
+- [**Claude Skill**](.claude-code/intent-engine.skill.md) - Lightweight Claude Code integration
 
-- **语言**: Rust 2021 Edition
-- **CLI**: clap 4.5 (声明式命令行)
-- **数据库**: SQLite + sqlx 0.7 (异步查询)
-- **全文搜索**: SQLite FTS5 (毫秒级搜索)
-- **异步运行时**: tokio 1.35
+### 📖 Deep Dive
+- [**Command Reference**](docs/en/guide/command-reference.md) - Complete command reference
+- [**Task Workflow Analysis**](docs/en/technical/task-workflow-analysis.md) - Token optimization strategy explained
+- [**Performance Report**](docs/en/technical/performance.md) - Performance benchmarks
+- [**Security Testing**](docs/en/technical/security.md) - Security test reports
+- [**MCP Tools Sync**](docs/en/technical/mcp-tools-sync.md) - MCP tools synchronization system
 
----
-
-## 🌟 与其他工具的本质区别
-
-| 维度 | Intent-Engine | Claude Code TodoWrite | Jira/Linear |
-|------|---------------|----------------------|-------------|
-| **生命周期** | 项目级（永久） | 会话级（临时） | 项目级（永久） |
-| **核心用户** | 人类 ↔ AI | AI 内部 | 人类团队 |
-| **决策历史** | ✅ 完整事件流 | ❌ 无记录 | ⚠️ 评论（非结构化） |
-| **任务结构** | 层级树 + 规格 | 平铺列表 | 工作流 + 字段 |
-| **AI 集成** | CLI + JSON + MCP | Tool Call | ❌ 不支持 |
-
-**典型使用场景**:
-- **Intent-Engine**: "实现用户认证系统"（数天，完整上下文，可恢复）
-- **TodoWrite**: "修改 auth.rs"（当前会话，临时步骤）
-- **Jira**: "PROJ-123: OAuth2 支持"（Sprint 任务，人工维护）
+### 👥 Contributors
+- [**Contributing Guide**](docs/en/contributing/contributing.md) - How to contribute code
+- [**Release Process**](docs/en/contributing/publish-to-crates-io.md) - Release workflow
 
 ---
 
-## 📄 许可证
+## 🌟 Unique Value of Intent-Engine
 
-本项目采用 MIT 或 Apache-2.0 双许可证。
+### 1. Memory Sharing Layer for Human-AI Collaboration
+- Humans set strategic intents (What + Why)
+- AI executes tactical tasks (How)
+- Intent-Engine records the entire process
 
-- MIT License - 详见 [LICENSE-MIT](LICENSE-MIT)
-- Apache License 2.0 - 详见 [LICENSE-APACHE](LICENSE-APACHE)
+### 2. Cross-session Context Recovery
+- AI can resume complete context anytime via `task start --with-events`
+- No need for humans to repeatedly explain background
+
+### 3. Decision Traceability
+- Every key decision is recorded (`event add --type decision`)
+- Future review of "why we chose solution A over solution B"
+
+### 4. Hierarchical Problem Decomposition
+- Support unlimited levels of parent-child tasks
+- Enforces completing all subtasks before parent task completion
 
 ---
 
-**下一步**: 阅读 [The Intent-Engine Way](docs/zh-CN/guide/the-intent-engine-way.md) 深入理解设计哲学，或查看 [Quickstart](docs/zh-CN/guide/quickstart.md) 开始使用。
+## 🛠️ Technology Stack
+
+- **Language**: Rust 2021
+- **CLI**: clap 4.5
+- **Database**: SQLite with sqlx 0.7
+- **Async Runtime**: tokio 1.35
+- **Full-text Search**: SQLite FTS5
+
+---
+
+## 🔧 Development Setup
+
+### First-time Setup for Contributors (Required)
+
+To avoid CI formatting check failures, please run immediately after cloning:
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+This installs git pre-commit hooks that automatically run `cargo fmt` before each commit, ensuring code formatting compliance.
+
+### Development Tool Commands
+
+The project provides a Makefile to simplify common operations:
+
+```bash
+make help          # Show all available commands
+make fmt           # Format code
+make check         # Run format, clippy and tests
+make test          # Run all tests
+make setup-hooks   # Install git hooks (same as above script)
+```
+
+> 📖 **Detailed Documentation**: See [scripts/README.md](scripts/README.md) for complete development workflow and automation tools.
+
+---
+
+## 🧪 Testing
+
+Intent-Engine includes a complete testing suite:
+
+```bash
+# Run all tests
+cargo test
+
+# Run performance tests
+cargo test --test performance_tests -- --ignored
+
+# View test coverage
+cargo tarpaulin
+```
+
+**Test Statistics**: 505+ tests all passing ✅
+- Unit tests, integration tests, CLI tests
+- MCP integration tests
+- Special character security tests
+- Performance and benchmarking tests
+- Windows encoding compatibility tests
+
+---
+
+## 📄 License
+
+This project is dual-licensed under MIT or Apache-2.0.
+
+- MIT License - See [LICENSE-MIT](LICENSE-MIT)
+- Apache License 2.0 - See [LICENSE-APACHE](LICENSE-APACHE)
+
+---
+
+## 🤝 Contributing
+
+Issues and Pull Requests are welcome!
+
+- [Contributing Guide](docs/en/contributing/contributing.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md) (coming soon)
+
+---
+
+## 🔗 Related Links
+
+- [GitHub Repository](https://github.com/wayfind/intent-engine)
+- [Crates.io](https://crates.io/crates/intent-engine)
+- [Documentation](https://docs.rs/intent-engine)
+- [Issue Tracker](https://github.com/wayfind/intent-engine/issues)
+
+---
+
+**Next Steps**: Read [The Intent-Engine Way](docs/en/guide/the-intent-engine-way.md) for deep understanding of design philosophy, or check out [QUICKSTART.md](QUICKSTART.en.md) to start using it right away.
