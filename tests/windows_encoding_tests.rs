@@ -206,16 +206,16 @@ fn test_search_chinese_content() {
         "Search should succeed with Chinese query"
     );
 
-    // Verify output is valid JSON object with results field
+    // Verify output is valid JSON array
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.starts_with('{') && stdout.trim().ends_with('}'),
-        "Search should return valid JSON object: {}",
+        stdout.starts_with('[') && stdout.trim().ends_with(']'),
+        "Search should return valid JSON array: {}",
         stdout
     );
     assert!(
-        stdout.contains("\"results\""),
-        "Search output should contain results field: {}",
+        stdout.contains("\"result_type\""),
+        "Search output should contain result_type field: {}",
         stdout
     );
 }

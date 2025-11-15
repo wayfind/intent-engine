@@ -305,7 +305,6 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 async fn handle_current_command(set: Option<i64>, command: Option<CurrentAction>) -> Result<()> {
     let ctx = ProjectContext::load().await?;
     let workspace_mgr = WorkspaceManager::new(&ctx.pool);
-    let task_mgr = TaskManager::new(&ctx.pool);
 
     // Handle backward compatibility: --set flag takes precedence
     if let Some(task_id) = set {
@@ -344,16 +343,9 @@ async fn handle_current_command(set: Option<i64>, command: Option<CurrentAction>
             println!("✓ Current task cleared");
         },
         None => {
-            // Default: display current task
+            // Default: display current task in JSON format
             let response = workspace_mgr.get_current_task().await?;
-
-            if let Some(task_id) = response.current_task_id {
-                let task = task_mgr.get_task(task_id).await?;
-                print_current_task(&task)?;
-            } else {
-                println!("No task currently focused.");
-                println!("\nTip: Start a task with 'ie task start <ID>' or pick next with 'ie task pick-next'");
-            }
+            println!("{}", serde_json::to_string_pretty(&response)?);
         },
     }
 
@@ -788,7 +780,7 @@ async fn handle_search_command(
         .unified_search(query, include_tasks, include_events, limit)
         .await?;
 
-    print_search_results(&results)?;
+    println!("{}", serde_json::to_string_pretty(&results)?);
     Ok(())
 }
 
@@ -1262,156 +1254,6 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
             };
             println!("  • #{} {} {}", task.id, task.name, status);
         }
-    }
-
-    Ok(())
-}
-
-/// Print current task in a human-friendly format
-fn print_current_task(task: &intent_engine::db::models::Task) -> Result<()> {
-    let status_badge = match task.status.as_str() {
-        "done" => "✓",
-        "doing" => "→",
-        "todo" => "○",
-        _ => "?",
-    };
-
-    println!(
-        "Current task: #{} {} [{}]",
-        task.id, task.name, status_badge
-    );
-
-    // Timestamps
-    if let Some(started) = task.first_doing_at {
-        println!("Started: {}", started);
-    }
-
-    // Spec preview
-    if let Some(spec) = &task.spec {
-        if !spec.is_empty() {
-            println!("\nSpec (preview):");
-            let lines: Vec<&str> = spec.lines().collect();
-            for line in lines.iter().take(3) {
-                println!("{}", line);
-            }
-            if lines.len() > 3 {
-                println!("... ({} more lines)", lines.len() - 3);
-            }
-        }
-    }
-
-    // Helpful tips
-    println!("\nNext steps:");
-    println!("  • 'ie task context' - see task hierarchy");
-    println!("  • 'ie task get {}' - full task details", task.id);
-    println!("  • 'ie event add --type note' - record progress");
-    println!("  • 'ie task done' - mark complete (when finished)");
-
-    Ok(())
-}
-
-/// Print search results in a human-friendly format
-fn print_search_results(results: &[intent_engine::db::models::UnifiedSearchResult]) -> Result<()> {
-    use intent_engine::db::models::UnifiedSearchResult;
-
-    if results.is_empty() {
-        println!("No results found");
-        return Ok(());
-    }
-
-    // Separate tasks and events
-    let tasks: Vec<_> = results
-        .iter()
-        .filter_map(|r| match r {
-            UnifiedSearchResult::Task {
-                task,
-                match_snippet,
-                match_field,
-            } => Some((task, match_snippet, match_field)),
-            _ => None,
-        })
-        .collect();
-
-    let events: Vec<_> = results
-        .iter()
-        .filter_map(|r| match r {
-            UnifiedSearchResult::Event {
-                event,
-                task_chain,
-                match_snippet,
-            } => Some((event, task_chain, match_snippet)),
-            _ => None,
-        })
-        .collect();
-
-    // Print tasks
-    if !tasks.is_empty() {
-        println!("Tasks ({}):", tasks.len());
-        for (task, _snippet, field) in &tasks {
-            let status_badge = match task.status.as_str() {
-                "done" => "✓",
-                "doing" => "→",
-                "todo" => "○",
-                _ => "?",
-            };
-
-            let priority_label = match task.priority {
-                Some(p) if p < 0 => "[critical] ",
-                Some(p) if p > 0 => "[low] ",
-                _ => "",
-            };
-
-            println!(
-                "  {} #{} {} {}[{}]",
-                status_badge, task.id, priority_label, task.name, task.status
-            );
-
-            // Show matched field if it's in spec
-            if *field == "spec" {
-                if let Some(spec) = &task.spec {
-                    let preview: String =
-                        spec.lines().next().unwrap_or("").chars().take(60).collect();
-                    if !preview.is_empty() {
-                        println!("     {}", preview);
-                    }
-                }
-            }
-        }
-        println!();
-    }
-
-    // Print events
-    if !events.is_empty() {
-        println!("Events ({}):", events.len());
-        for (event, task_chain, _snippet) in &events {
-            let type_label = match event.log_type.as_str() {
-                "decision" => "[decision]",
-                "blocker" => "[blocker]",
-                "milestone" => "[milestone]",
-                "note" => "[note]",
-                _ => "[event]",
-            };
-
-            // Get task info (first in chain is immediate task)
-            let task_info = if let Some(task) = task_chain.first() {
-                format!("Task #{}: ", task.id)
-            } else {
-                String::new()
-            };
-
-            // Get first line of event data
-            let data_preview: String = event
-                .discussion_data
-                .lines()
-                .next()
-                .unwrap_or("")
-                .chars()
-                .take(60)
-                .collect();
-
-            println!("  {} {}{}", type_label, task_info, data_preview);
-        }
-        println!();
     }
 
     Ok(())
