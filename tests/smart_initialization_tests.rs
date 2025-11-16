@@ -1036,3 +1036,978 @@ fn test_nested_projects_from_child_subdirectory() {
         "Parent should NOT see child tasks"
     );
 }
+
+// ============================================================================
+// COMPREHENSIVE NESTED PROJECT TEST MATRIX
+// Based on: tests/nested_project_test_matrix.md
+// ============================================================================
+
+/// Test Matrix #2: Parent has .git+.intent, Child has NO markers
+/// Expected: Child should use Parent's .intent (no boundary to separate them)
+#[test]
+fn test_matrix_2_parent_has_all_child_has_none() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Setup: Parent with .git and .intent
+    fs::create_dir(root.join(".git")).expect("Failed to create .git");
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success(), "Parent init should succeed");
+
+    // Child directory with NO markers
+    let child_dir = root.join("child");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+
+    // Run from child
+    let child_run = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to run in child");
+    assert!(child_run.status.success(), "Child run should succeed");
+
+    // Child should NOT have its own .intent
+    assert!(
+        !child_dir.join(".intent-engine").exists(),
+        "Child should not create .intent (no boundary)"
+    );
+
+    // Parent should have .intent
+    assert!(
+        root.join(".intent-engine").exists(),
+        "Parent should have .intent"
+    );
+
+    // Both tasks should be in parent's database
+    let list_output = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list");
+    let output_str = String::from_utf8_lossy(&list_output.stdout);
+    assert!(
+        output_str.contains("Parent task") && output_str.contains("Child task"),
+        "Both tasks should be in parent's database"
+    );
+}
+
+/// Test Matrix #3: Parent has .git but NO .intent, Child has .git but NO .intent
+/// Expected: Child creates its own .intent (boundary at child's .git)
+#[test]
+fn test_matrix_3_both_have_git_no_intent() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Setup: Parent with .git only
+    fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
+
+    // Child with its own .git
+    let child_dir = root.join("child-project");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
+
+    // Run from child
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to init child");
+    assert!(child_init.status.success(), "Child init should succeed");
+
+    // Child should have its own .intent
+    let child_intent = child_dir.join(".intent-engine");
+    assert!(
+        child_intent.exists(),
+        "Child should create own .intent (has .git boundary)"
+    );
+
+    // Parent should NOT have .intent yet
+    assert!(
+        !root.join(".intent-engine").exists(),
+        "Parent should not have .intent"
+    );
+
+    // Run from parent
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success(), "Parent init should succeed");
+
+    // Now parent should have .intent
+    let parent_intent = root.join(".intent-engine");
+    assert!(parent_intent.exists(), "Parent should now have .intent");
+
+    // Verify isolation
+    let parent_db = parent_intent.join("project.db");
+    let child_db = child_intent.join("project.db");
+    assert_ne!(
+        parent_db.canonicalize().unwrap(),
+        child_db.canonicalize().unwrap(),
+        "Databases should be different files"
+    );
+}
+
+/// Test Matrix #4: Parent has NO .git but HAS .intent, Child has .git
+/// Expected: Child creates its own .intent (boundary at child's .git)
+#[test]
+fn test_matrix_4_parent_intent_only_child_has_git() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Setup: Parent with .intent but no marker
+    // Initialize parent first (will create .intent at CWD due to no markers)
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(
+        parent_init.status.success(),
+        "Parent init should succeed: {:?}",
+        String::from_utf8_lossy(&parent_init.stderr)
+    );
+
+    // Parent should now have .intent (created at CWD fallback)
+    let parent_intent = root.join(".intent-engine");
+    assert!(
+        parent_intent.exists(),
+        "Parent should have .intent after initialization"
+    );
+
+    // Child with .git marker
+    let child_dir = root.join("child-project");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
+
+    // Run from child
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to init child");
+    assert!(child_init.status.success(), "Child init should succeed");
+
+    // Child should create its own .intent (has .git boundary)
+    let child_intent = child_dir.join(".intent-engine");
+    assert!(
+        child_intent.exists(),
+        "Child should create own .intent (has .git boundary)"
+    );
+
+    // Verify isolation - child should NOT have parent's task
+    let child_list = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list child");
+    let child_output = String::from_utf8_lossy(&child_list.stdout);
+    assert!(
+        !child_output.contains("Parent task"),
+        "Child should not see parent tasks"
+    );
+}
+
+/// Test Matrix #5: Parent has nothing, Child has .git
+/// Expected: Child creates .intent at its .git boundary
+#[test]
+fn test_matrix_5_parent_empty_child_has_git() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Parent has nothing (no markers, no .intent)
+    // Child has .git
+    let child_dir = root.join("child-project");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
+
+    // Run from child
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to init child");
+    assert!(child_init.status.success(), "Child init should succeed");
+
+    // Child should have .intent
+    assert!(
+        child_dir.join(".intent-engine").exists(),
+        "Child should create .intent at .git boundary"
+    );
+
+    // Parent should NOT have .intent
+    assert!(
+        !root.join(".intent-engine").exists(),
+        "Parent should not have .intent"
+    );
+}
+
+/// Test Matrix #6: Both parent and child already have .intent
+/// Expected: Child uses its own .intent
+#[test]
+fn test_matrix_6_both_have_intent() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Setup parent with .git and .intent
+    fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success());
+
+    // Setup child with .git and .intent
+    let child_dir = root.join("child-project");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to init child");
+    assert!(child_init.status.success());
+
+    // Verify both have .intent
+    assert!(root.join(".intent-engine").exists());
+    assert!(child_dir.join(".intent-engine").exists());
+
+    // Add another task to child
+    let child_add = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task 2"])
+        .output()
+        .expect("Failed to add to child");
+    assert!(child_add.status.success());
+
+    // Child should only see its own tasks
+    let child_list = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list child");
+    let child_output = String::from_utf8_lossy(&child_list.stdout);
+    assert!(child_output.contains("Child task"));
+    assert!(child_output.contains("Child task 2"));
+    assert!(!child_output.contains("Parent task"));
+
+    // Parent should only see its own task
+    let parent_list = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list parent");
+    let parent_output = String::from_utf8_lossy(&parent_list.stdout);
+    assert!(parent_output.contains("Parent task"));
+    assert!(!parent_output.contains("Child task"));
+}
+
+/// Test Matrix #7: Parent has .intent but no marker, Child has no marker
+/// Expected: Child uses parent's .intent (no boundary)
+#[test]
+fn test_matrix_7_parent_intent_only_child_nothing() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Parent: manually create .intent (unusual case)
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success());
+
+    // Child: no markers
+    let child_dir = root.join("subdir");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+
+    // Run from child
+    let child_add = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to add in child");
+    assert!(child_add.status.success());
+
+    // Child should NOT create .intent
+    assert!(
+        !child_dir.join(".intent-engine").exists(),
+        "Child should not create .intent"
+    );
+
+    // Both tasks should be in parent's database
+    let list_output = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list");
+    let output_str = String::from_utf8_lossy(&list_output.stdout);
+    assert!(
+        output_str.contains("Parent task") && output_str.contains("Child task"),
+        "Both tasks should be in parent's database"
+    );
+}
+
+/// Test Matrix #8: Neither parent nor child have markers
+/// Expected: Creates .intent at CWD with fallback warning
+#[test]
+fn test_matrix_8_both_have_nothing() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // No markers anywhere
+    let child_dir = root.join("some/deep/path");
+    fs::create_dir_all(&child_dir).expect("Failed to create deep path");
+
+    // Run from deep path
+    let output = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Task"])
+        .output()
+        .expect("Failed to run");
+    assert!(output.status.success());
+
+    // Should create .intent at the run location (CWD fallback)
+    let intent_at_deep = child_dir.join(".intent-engine");
+    assert!(
+        intent_at_deep.exists(),
+        ".intent should be created at CWD (fallback)"
+    );
+
+    // Should print warning about no markers
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Warning") || stderr.contains("warning"),
+        "Should warn about no project markers"
+    );
+}
+
+// ============================================================================
+// MULTI-LEVEL NESTING TESTS (3+ levels deep)
+// ============================================================================
+
+/// Test N1: Grandparent(.git+.intent) -> Parent(.git) -> Child(.git)
+/// Expected: Child creates own .intent, Parent creates own .intent
+#[test]
+fn test_multi_level_n1_all_have_git() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Grandparent: .git + .intent
+    fs::create_dir(root.join(".git")).expect("Failed to create GP .git");
+    let gp_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "GP task"])
+        .output()
+        .expect("Failed to init GP");
+    assert!(gp_init.status.success());
+
+    // Parent: .git only
+    let parent_dir = root.join("parent");
+    fs::create_dir_all(&parent_dir).expect("Failed to create parent");
+    fs::create_dir(parent_dir.join(".git")).expect("Failed to create parent .git");
+
+    // Child: .git only
+    let child_dir = parent_dir.join("child");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
+
+    // Initialize child
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to init child");
+    assert!(child_init.status.success());
+
+    // Child should have own .intent (boundary at child's .git)
+    assert!(
+        child_dir.join(".intent-engine").exists(),
+        "Child should have own .intent"
+    );
+
+    // Initialize parent
+    let parent_init = Command::new(binary_path)
+        .current_dir(&parent_dir)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success());
+
+    // Parent should have own .intent (boundary at parent's .git)
+    assert!(
+        parent_dir.join(".intent-engine").exists(),
+        "Parent should have own .intent"
+    );
+
+    // All three should have separate databases
+    assert!(root.join(".intent-engine").exists());
+    assert!(parent_dir.join(".intent-engine").exists());
+    assert!(child_dir.join(".intent-engine").exists());
+
+    // Verify isolation - each sees only their own task
+    let gp_list = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list GP");
+    let gp_output = String::from_utf8_lossy(&gp_list.stdout);
+    assert!(gp_output.contains("GP task"));
+    assert!(!gp_output.contains("Parent task"));
+    assert!(!gp_output.contains("Child task"));
+}
+
+/// Test N2: Grandparent(.git+.intent) -> Parent(nothing) -> Child(.git)
+/// Expected: Child creates own .intent, Parent uses GP's .intent
+#[test]
+fn test_multi_level_n2_skip_middle_generation() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Grandparent: .git + .intent
+    fs::create_dir(root.join(".git")).expect("Failed to create GP .git");
+    let gp_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "GP task"])
+        .output()
+        .expect("Failed to init GP");
+    assert!(gp_init.status.success());
+
+    // Parent: nothing
+    let parent_dir = root.join("parent");
+    fs::create_dir_all(&parent_dir).expect("Failed to create parent");
+
+    // Child: .git
+    let child_dir = parent_dir.join("child");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
+
+    // Add task from parent (should use GP's .intent)
+    let parent_add = Command::new(binary_path)
+        .current_dir(&parent_dir)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to add parent task");
+    assert!(parent_add.status.success());
+
+    // Parent should NOT have .intent (uses GP's)
+    assert!(
+        !parent_dir.join(".intent-engine").exists(),
+        "Parent should not have .intent (no boundary)"
+    );
+
+    // Add task from child
+    let child_add = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to add child task");
+    assert!(child_add.status.success());
+
+    // Child should have own .intent (has .git boundary)
+    assert!(
+        child_dir.join(".intent-engine").exists(),
+        "Child should have own .intent"
+    );
+
+    // GP should see GP + Parent tasks (same database)
+    let gp_list = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list GP");
+    let gp_output = String::from_utf8_lossy(&gp_list.stdout);
+    assert!(gp_output.contains("GP task"));
+    assert!(gp_output.contains("Parent task"));
+    assert!(!gp_output.contains("Child task"));
+
+    // Child should only see own task
+    let child_list = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list child");
+    let child_output = String::from_utf8_lossy(&child_list.stdout);
+    assert!(child_output.contains("Child task"));
+    assert!(!child_output.contains("GP task"));
+    assert!(!child_output.contains("Parent task"));
+}
+
+/// Test N3: Different marker types across levels
+/// GP(.git) -> Parent(package.json) -> Child(Cargo.toml)
+#[test]
+fn test_multi_level_n3_different_markers() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Grandparent: .git + .intent
+    fs::create_dir(root.join(".git")).expect("Failed to create .git");
+    let gp_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "GP task"])
+        .output()
+        .expect("Failed to init GP");
+    assert!(gp_init.status.success());
+
+    // Parent: package.json (Node.js project)
+    let parent_dir = root.join("nodejs-service");
+    fs::create_dir_all(&parent_dir).expect("Failed to create parent");
+    fs::write(parent_dir.join("package.json"), r#"{"name": "service"}"#)
+        .expect("Failed to create package.json");
+
+    // Child: Cargo.toml (Rust project)
+    let child_dir = parent_dir.join("rust-lib");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::write(child_dir.join("Cargo.toml"), "[package]\nname = \"lib\"")
+        .expect("Failed to create Cargo.toml");
+
+    // Initialize parent
+    let parent_init = Command::new(binary_path)
+        .current_dir(&parent_dir)
+        .args(["task", "add", "--name", "Node task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success());
+
+    // Parent should have own .intent (package.json boundary)
+    assert!(
+        parent_dir.join(".intent-engine").exists(),
+        "Parent should have own .intent"
+    );
+
+    // Initialize child
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Rust task"])
+        .output()
+        .expect("Failed to init child");
+    assert!(child_init.status.success());
+
+    // Child should have own .intent (Cargo.toml boundary)
+    assert!(
+        child_dir.join(".intent-engine").exists(),
+        "Child should have own .intent"
+    );
+
+    // All three should be isolated
+    assert!(root.join(".intent-engine").exists());
+    assert!(parent_dir.join(".intent-engine").exists());
+    assert!(child_dir.join(".intent-engine").exists());
+}
+
+/// Test N4: Deep nesting with no middle boundaries
+/// GP(.git+.intent) -> Parent(nothing) -> Child(nothing)
+/// Expected: Both parent and child use GP's .intent
+#[test]
+fn test_multi_level_n4_no_middle_boundaries() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Grandparent: .git + .intent
+    fs::create_dir(root.join(".git")).expect("Failed to create .git");
+    let gp_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "GP task"])
+        .output()
+        .expect("Failed to init GP");
+    assert!(gp_init.status.success());
+
+    // Parent: nothing
+    let parent_dir = root.join("src");
+    fs::create_dir_all(&parent_dir).expect("Failed to create parent");
+
+    // Child: nothing
+    let child_dir = parent_dir.join("components");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+
+    // Add tasks from different levels
+    let parent_add = Command::new(binary_path)
+        .current_dir(&parent_dir)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to add parent");
+    assert!(parent_add.status.success());
+
+    let child_add = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to add child");
+    assert!(child_add.status.success());
+
+    // Neither parent nor child should have .intent
+    assert!(
+        !parent_dir.join(".intent-engine").exists(),
+        "Parent should not have .intent"
+    );
+    assert!(
+        !child_dir.join(".intent-engine").exists(),
+        "Child should not have .intent"
+    );
+
+    // All tasks should be in GP's database
+    let gp_list = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list");
+    let gp_output = String::from_utf8_lossy(&gp_list.stdout);
+    assert!(gp_output.contains("GP task"));
+    assert!(gp_output.contains("Parent task"));
+    assert!(gp_output.contains("Child task"));
+}
+
+// ============================================================================
+// SIBLING PROJECT ISOLATION TESTS
+// ============================================================================
+
+/// Test S1: Two sibling projects should have separate databases
+/// Parent(.git+.intent) -> Sibling1(.git) + Sibling2(.git)
+#[test]
+fn test_siblings_s1_both_have_git() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Parent with .git + .intent
+    fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success());
+
+    // Sibling 1 with .git
+    let sib1_dir = root.join("project-a");
+    fs::create_dir_all(&sib1_dir).expect("Failed to create sib1");
+    fs::create_dir(sib1_dir.join(".git")).expect("Failed to create sib1 .git");
+
+    // Sibling 2 with .git
+    let sib2_dir = root.join("project-b");
+    fs::create_dir_all(&sib2_dir).expect("Failed to create sib2");
+    fs::create_dir(sib2_dir.join(".git")).expect("Failed to create sib2 .git");
+
+    // Initialize sibling 1
+    let sib1_init = Command::new(binary_path)
+        .current_dir(&sib1_dir)
+        .args(["task", "add", "--name", "Project A task"])
+        .output()
+        .expect("Failed to init sib1");
+    assert!(sib1_init.status.success());
+
+    // Initialize sibling 2
+    let sib2_init = Command::new(binary_path)
+        .current_dir(&sib2_dir)
+        .args(["task", "add", "--name", "Project B task"])
+        .output()
+        .expect("Failed to init sib2");
+    assert!(sib2_init.status.success());
+
+    // Each sibling should have own .intent
+    assert!(
+        sib1_dir.join(".intent-engine").exists(),
+        "Sibling 1 should have own .intent"
+    );
+    assert!(
+        sib2_dir.join(".intent-engine").exists(),
+        "Sibling 2 should have own .intent"
+    );
+
+    // Verify isolation - sib1 should only see its task
+    let sib1_list = Command::new(binary_path)
+        .current_dir(&sib1_dir)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list sib1");
+    let sib1_output = String::from_utf8_lossy(&sib1_list.stdout);
+    assert!(sib1_output.contains("Project A task"));
+    assert!(!sib1_output.contains("Project B task"));
+    assert!(!sib1_output.contains("Parent task"));
+
+    // Sib2 should only see its task
+    let sib2_list = Command::new(binary_path)
+        .current_dir(&sib2_dir)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list sib2");
+    let sib2_output = String::from_utf8_lossy(&sib2_list.stdout);
+    assert!(sib2_output.contains("Project B task"));
+    assert!(!sib2_output.contains("Project A task"));
+    assert!(!sib2_output.contains("Parent task"));
+
+    // Parent should only see its task
+    let parent_list = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list parent");
+    let parent_output = String::from_utf8_lossy(&parent_list.stdout);
+    assert!(parent_output.contains("Parent task"));
+    assert!(!parent_output.contains("Project A task"));
+    assert!(!parent_output.contains("Project B task"));
+}
+
+/// Test S2: Three siblings with mixed markers
+/// Parent(.git) -> Sib1(.git) + Sib2(package.json) + Sib3(nothing)
+#[test]
+fn test_siblings_s2_mixed_markers() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Parent with .git + .intent
+    fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success());
+
+    // Sibling 1: .git
+    let sib1_dir = root.join("rust-service");
+    fs::create_dir_all(&sib1_dir).expect("Failed to create sib1");
+    fs::create_dir(sib1_dir.join(".git")).expect("Failed to create sib1 .git");
+
+    // Sibling 2: package.json
+    let sib2_dir = root.join("node-service");
+    fs::create_dir_all(&sib2_dir).expect("Failed to create sib2");
+    fs::write(sib2_dir.join("package.json"), r#"{"name": "service"}"#)
+        .expect("Failed to create package.json");
+
+    // Sibling 3: nothing
+    let sib3_dir = root.join("docs");
+    fs::create_dir_all(&sib3_dir).expect("Failed to create sib3");
+
+    // Initialize all siblings
+    let sib1_init = Command::new(binary_path)
+        .current_dir(&sib1_dir)
+        .args(["task", "add", "--name", "Rust task"])
+        .output()
+        .expect("Failed to init sib1");
+    assert!(sib1_init.status.success());
+
+    let sib2_init = Command::new(binary_path)
+        .current_dir(&sib2_dir)
+        .args(["task", "add", "--name", "Node task"])
+        .output()
+        .expect("Failed to init sib2");
+    assert!(sib2_init.status.success());
+
+    let sib3_init = Command::new(binary_path)
+        .current_dir(&sib3_dir)
+        .args(["task", "add", "--name", "Docs task"])
+        .output()
+        .expect("Failed to init sib3");
+    assert!(sib3_init.status.success());
+
+    // Sib1 and Sib2 should have own .intent (have boundaries)
+    assert!(
+        sib1_dir.join(".intent-engine").exists(),
+        "Sib1 should have own .intent"
+    );
+    assert!(
+        sib2_dir.join(".intent-engine").exists(),
+        "Sib2 should have own .intent"
+    );
+
+    // Sib3 should NOT have .intent (no boundary, uses parent's)
+    assert!(
+        !sib3_dir.join(".intent-engine").exists(),
+        "Sib3 should not have .intent"
+    );
+
+    // Verify: Sib3's task should be in parent's database
+    let parent_list = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list parent");
+    let parent_output = String::from_utf8_lossy(&parent_list.stdout);
+    assert!(parent_output.contains("Parent task"));
+    assert!(parent_output.contains("Docs task"));
+    assert!(!parent_output.contains("Rust task"));
+    assert!(!parent_output.contains("Node task"));
+}
+
+// ============================================================================
+// EDGE CASES AND SPECIAL SCENARIOS
+// ============================================================================
+
+/// Test E1: Run from very deep subdirectory (5+ levels)
+/// Should find correct project boundary
+#[test]
+fn test_edge_e1_very_deep_subdirectory() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Create .git at root
+    fs::create_dir(root.join(".git")).expect("Failed to create .git");
+
+    // Create very deep path
+    let deep_path = root.join("src/components/ui/buttons/primary/variants");
+    fs::create_dir_all(&deep_path).expect("Failed to create deep path");
+
+    // Initialize from deep path
+    let init = Command::new(binary_path)
+        .current_dir(&deep_path)
+        .args(["task", "add", "--name", "Deep task"])
+        .output()
+        .expect("Failed to init deep");
+    assert!(init.status.success());
+
+    // .intent should be at root (where .git is), not in deep path
+    assert!(
+        root.join(".intent-engine").exists(),
+        ".intent should be at project root"
+    );
+    assert!(
+        !deep_path.join(".intent-engine").exists(),
+        ".intent should NOT be in deep path"
+    );
+
+    // Verify from root
+    let list = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list");
+    let output = String::from_utf8_lossy(&list.stdout);
+    assert!(output.contains("Deep task"));
+}
+
+/// Test E3: Parent with .intent but no marker, Child with marker
+/// Child should create own .intent (not use parent's orphaned one)
+#[test]
+fn test_edge_e3_orphaned_parent_intent() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Parent: Initialize without marker (creates .intent at CWD)
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Orphan task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success());
+
+    // Now parent has .intent but no marker
+    assert!(root.join(".intent-engine").exists());
+
+    // Child: has .git marker
+    let child_dir = root.join("child-project");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::create_dir(child_dir.join(".git")).expect("Failed to create .git");
+
+    // Initialize child
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to init child");
+    assert!(child_init.status.success());
+
+    // Child should create own .intent (has .git boundary)
+    assert!(
+        child_dir.join(".intent-engine").exists(),
+        "Child should create own .intent despite parent having one"
+    );
+
+    // Verify isolation
+    let child_list = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list child");
+    let child_output = String::from_utf8_lossy(&child_list.stdout);
+    assert!(child_output.contains("Child task"));
+    assert!(!child_output.contains("Orphan task"));
+}
+
+/// Test E4: Multiple markers in same directory - uses highest priority
+/// Directory has both .git and package.json
+#[test]
+fn test_edge_e4_multiple_markers_same_dir() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Create both .git (priority 1) and package.json (priority 3)
+    fs::create_dir(root.join(".git")).expect("Failed to create .git");
+    fs::write(root.join("package.json"), r#"{"name": "test"}"#)
+        .expect("Failed to create package.json");
+
+    // Create child with Cargo.toml
+    let child_dir = root.join("rust-subproject");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::write(child_dir.join("Cargo.toml"), "[package]\nname = \"sub\"")
+        .expect("Failed to create Cargo.toml");
+
+    // Initialize parent
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to init parent");
+    assert!(parent_init.status.success());
+
+    // Initialize child
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to init child");
+    assert!(child_init.status.success());
+
+    // Child should have own .intent (Cargo.toml is a boundary)
+    assert!(
+        child_dir.join(".intent-engine").exists(),
+        "Child should have own .intent"
+    );
+
+    // Both should be isolated
+    let child_list = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list child");
+    let child_output = String::from_utf8_lossy(&child_list.stdout);
+    assert!(child_output.contains("Child task"));
+    assert!(!child_output.contains("Parent task"));
+}
