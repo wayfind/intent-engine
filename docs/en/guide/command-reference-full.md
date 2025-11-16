@@ -220,10 +220,10 @@ ie task list [OPTIONS]
 ie task list
 
 # Find tasks in progress
-ie task list --status doing
+ie task list doing
 
 # Find completed tasks
-ie task list --status done
+ie task list done
 
 # Find all subtasks of specific parent task
 ie task list --parent 1
@@ -232,7 +232,7 @@ ie task list --parent 1
 ie task list --parent null
 
 # Combined query: find subtasks of task 1 that are in progress
-ie task list --parent 1 --status doing
+ie task list doing --parent 1
 ```
 
 **Output Example:**

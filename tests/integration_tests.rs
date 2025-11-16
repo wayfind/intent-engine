@@ -183,12 +183,11 @@ fn test_task_list_with_status_filter() {
         .assert()
         .success();
 
-    // List only todo tasks
+    // List only todo tasks (using positional argument)
     let mut find = Command::new(cargo::cargo_bin!("ie"));
     find.current_dir(temp_dir.path())
         .arg("task")
         .arg("list")
-        .arg("--status")
         .arg("todo");
 
     let output = find.output().unwrap();

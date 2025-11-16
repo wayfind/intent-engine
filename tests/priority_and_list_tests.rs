@@ -318,12 +318,11 @@ fn test_task_list_command() {
     let tasks: Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(tasks.as_array().unwrap().len(), 3);
 
-    // List with status filter
+    // List with status filter (using positional argument)
     let output = intent_engine_cmd()
         .current_dir(dir)
         .arg("task")
         .arg("list")
-        .arg("--status")
         .arg("todo")
         .assert()
         .success();

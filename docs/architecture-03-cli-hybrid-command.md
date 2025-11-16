@@ -58,7 +58,7 @@ $ ie add "重构认证模块以支持OAuth2"
 > Task 55 added.
 
 # 2. 查看待办列表
-$ ie ls --status todo
+$ ie ls todo
 > ID   Priority   Name
 > 55   medium     重构认证模块以支持OAuth2
 

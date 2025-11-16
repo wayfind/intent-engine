@@ -84,6 +84,166 @@ async fn run() -> Result<()> {
             )
             .await?;
         },
+
+        // ========================================
+        // Hybrid Commands - Forward to task/event handlers
+        // ========================================
+        Commands::Add {
+            name,
+            spec,
+            parent,
+            priority,
+        } => {
+            let ctx = ProjectContext::load_or_init().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+            let mut task = task_mgr.add_task(&name, spec.as_deref(), parent).await?;
+
+            // Update priority if specified
+            if let Some(priority_str) = priority {
+                use intent_engine::priority::PriorityLevel;
+                let priority_value = PriorityLevel::parse_to_int(&priority_str)?;
+
+                task = task_mgr
+                    .update_task(task.id, None, None, None, None, None, Some(priority_value))
+                    .await?;
+            }
+
+            println!("{}", serde_json::to_string_pretty(&task)?);
+        },
+
+        Commands::Start { id, with_events } => {
+            let ctx = ProjectContext::load_or_init().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+            let task = task_mgr.start_task(id, with_events).await?;
+            println!("{}", serde_json::to_string_pretty(&task)?);
+        },
+
+        Commands::Done => {
+            let ctx = ProjectContext::load_or_init().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+            let task = task_mgr.done_task().await?;
+            println!("{}", serde_json::to_string_pretty(&task)?);
+        },
+
+        Commands::Switch { id, with_events } => {
+            let ctx = ProjectContext::load_or_init().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+
+            if with_events {
+                // Switch and then get task with events
+                task_mgr.switch_to_task(id).await?;
+                let task = task_mgr.get_task_with_events(id).await?;
+                println!("{}", serde_json::to_string_pretty(&task)?);
+            } else {
+                let task = task_mgr.switch_to_task(id).await?;
+                println!("{}", serde_json::to_string_pretty(&task)?);
+            }
+        },
+
+        Commands::Log {
+            event_type,
+            data,
+            task_id,
+        } => {
+            let ctx = ProjectContext::load_or_init().await?;
+            let event_mgr = EventManager::new(&ctx.pool);
+            let workspace_mgr = WorkspaceManager::new(&ctx.pool);
+
+            // Determine task_id: use provided, or fall back to current task
+            let target_task_id = if let Some(tid) = task_id {
+                tid
+            } else {
+                let current_response = workspace_mgr.get_current_task().await?;
+                let current_task = current_response.task.ok_or_else(|| {
+                    IntentError::ActionNotAllowed(
+                        "No current task set. Use --task-id or start a task first.".to_string(),
+                    )
+                })?;
+                current_task.id
+            };
+
+            let event = event_mgr
+                .add_event(target_task_id, &event_type, &data)
+                .await?;
+            println!("{}", serde_json::to_string_pretty(&event)?);
+        },
+
+        Commands::Next { format } => {
+            let ctx = ProjectContext::load_or_init().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+            let response = task_mgr.pick_next().await?;
+
+            if format == "json" {
+                println!("{}", serde_json::to_string_pretty(&response)?);
+            } else if let Some(task) = response.task {
+                println!("Recommended next task:");
+                println!("  ID: {}", task.id);
+                println!("  Name: {}", task.name);
+                if let Some(priority) = task.priority {
+                    use intent_engine::priority::PriorityLevel;
+                    println!("  Priority: {}", PriorityLevel::to_str(priority));
+                }
+                if let Some(msg) = response.message {
+                    println!("  Reason: {}", msg);
+                }
+            } else {
+                println!("No task recommendation available");
+                if let Some(msg) = response.message {
+                    println!("Reason: {}", msg);
+                }
+            }
+        },
+
+        Commands::List { status, parent } => {
+            let ctx = ProjectContext::load().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+
+            let parent_opt = parent.map(|p| {
+                if p == "null" {
+                    None
+                } else {
+                    Some(p.parse::<i64>().unwrap())
+                }
+            });
+
+            let tasks = task_mgr.find_tasks(status.as_deref(), parent_opt).await?;
+            println!("{}", serde_json::to_string_pretty(&tasks)?);
+        },
+
+        Commands::Context { task_id } => {
+            let ctx = ProjectContext::load().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+            let workspace_mgr = WorkspaceManager::new(&ctx.pool);
+
+            // If no task_id provided, use current task
+            let target_id = if let Some(id) = task_id {
+                id
+            } else {
+                let current_response = workspace_mgr.get_current_task().await?;
+                let current_task = current_response.task.ok_or_else(|| {
+                    IntentError::ActionNotAllowed(
+                        "No current task set. Provide task_id or start a task first.".to_string(),
+                    )
+                })?;
+                current_task.id
+            };
+
+            let context = task_mgr.get_task_context(target_id).await?;
+            println!("{}", serde_json::to_string_pretty(&context)?);
+        },
+
+        Commands::Get { id, with_events } => {
+            let ctx = ProjectContext::load().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+
+            if with_events {
+                let task = task_mgr.get_task_with_events(id).await?;
+                println!("{}", serde_json::to_string_pretty(&task)?);
+            } else {
+                let task = task_mgr.get_task(id).await?;
+                println!("{}", serde_json::to_string_pretty(&task)?);
+            }
+        },
     }
 
     Ok(())

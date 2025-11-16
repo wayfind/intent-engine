@@ -142,6 +142,113 @@ pub enum Commands {
         #[arg(long)]
         project_dir: Option<String>,
     },
+
+    // ========================================
+    // Hybrid Commands - High-Frequency Aliases
+    // ========================================
+    // These are convenience aliases for the most common operations.
+    // They provide a verb-centric, streamlined UX for frequent actions.
+    // See: docs/architecture-03-cli-hybrid-command.md
+    /// Add a new task (alias for 'task add')
+    #[command(alias = "a")]
+    Add {
+        /// Task name
+        name: String,
+
+        /// Detailed specification (markdown)
+        #[arg(long)]
+        spec: Option<String>,
+
+        /// Parent task ID
+        #[arg(long)]
+        parent: Option<i64>,
+
+        /// Priority (critical, high, medium, low)
+        #[arg(long)]
+        priority: Option<String>,
+    },
+
+    /// Start a task and set focus (alias for 'task start')
+    #[command(alias = "s")]
+    Start {
+        /// Task ID
+        id: i64,
+
+        /// Include events summary
+        #[arg(long, default_value = "true")]
+        with_events: bool,
+    },
+
+    /// Complete the current focused task (alias for 'task done')
+    #[command(alias = "d")]
+    Done,
+
+    /// Switch to a different task (alias for 'task switch')
+    #[command(alias = "sw")]
+    Switch {
+        /// Task ID
+        id: i64,
+
+        /// Include events summary
+        #[arg(long)]
+        with_events: bool,
+    },
+
+    /// Record an event for current task (alias for 'event add')
+    Log {
+        /// Event type (decision, blocker, milestone, note)
+        #[arg(value_parser = ["decision", "blocker", "milestone", "note"])]
+        event_type: String,
+
+        /// Event data/description
+        data: String,
+
+        /// Task ID (optional, uses current task if not specified)
+        #[arg(long)]
+        task_id: Option<i64>,
+    },
+
+    /// Get the next recommended task (alias for 'task pick-next')
+    #[command(alias = "n")]
+    Next {
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
+    /// List tasks with filters (alias for 'task list')
+    ///
+    /// Examples:
+    ///   ie ls              # List all tasks
+    ///   ie ls todo         # List todo tasks
+    ///   ie ls doing        # List doing tasks
+    ///   ie ls done         # List done tasks
+    #[command(alias = "ls")]
+    List {
+        /// Filter by status (todo, doing, done)
+        status: Option<String>,
+
+        /// Filter by parent ID (use "null" for no parent)
+        #[arg(long)]
+        parent: Option<String>,
+    },
+
+    /// Get task context (alias for 'task context')
+    #[command(alias = "ctx")]
+    Context {
+        /// Task ID (optional, uses current task if omitted)
+        task_id: Option<i64>,
+    },
+
+    /// Get task details (alias for 'task get')
+    Get {
+        /// Task ID
+        id: i64,
+
+        /// Include events summary
+        #[arg(long)]
+        with_events: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -222,9 +329,14 @@ pub enum TaskCommands {
     },
 
     /// List tasks with filters
+    ///
+    /// Examples:
+    ///   ie task list              # List all tasks
+    ///   ie task list todo         # List todo tasks
+    ///   ie task list doing        # List doing tasks
+    ///   ie task list done         # List done tasks
     List {
-        /// Filter by status
-        #[arg(long)]
+        /// Filter by status (todo, doing, done)
         status: Option<String>,
 
         /// Filter by parent ID (use "null" for no parent)

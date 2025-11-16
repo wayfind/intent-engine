@@ -220,10 +220,10 @@ ie task list [OPTIONS]
 ie task list
 
 # 查找正在进行的任务
-ie task list --status doing
+ie task list doing
 
 # 查找已完成的任务
-ie task list --status done
+ie task list done
 
 # 查找特定父任务的所有子任务
 ie task list --parent 1
@@ -232,7 +232,7 @@ ie task list --parent 1
 ie task list --parent null
 
 # 组合查询：查找任务 1 下正在进行的子任务
-ie task list --parent 1 --status doing
+ie task list doing --parent 1
 ```
 
 **输出示例:**

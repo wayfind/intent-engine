@@ -700,7 +700,7 @@ fn test_concurrent_initialization_attempts() {
     // This ensures the concurrent operations didn't corrupt it
     let output = Command::new(binary_path)
         .current_dir(&subdir)
-        .args(["task", "list", "--status", "todo"])
+        .args(["task", "list", "todo"])
         .output()
         .expect("Failed to execute find command");
 
