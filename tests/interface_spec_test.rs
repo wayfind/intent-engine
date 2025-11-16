@@ -1,4 +1,4 @@
-/// Test to ensure INTERFACE_SPEC.md stays in sync with actual implementation
+/// Test to ensure spec-03-interface-current.md stays in sync with actual implementation
 use serde_json::Value;
 use std::fs;
 use std::process::Command;
@@ -13,9 +13,9 @@ fn test_spec_version_matches_cargo() {
         .and_then(|line| line.split('"').nth(1))
         .expect("Failed to extract version from Cargo.toml");
 
-    // Read INTERFACE_SPEC.md
-    let spec =
-        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
+    // Read spec-03-interface-current.md
+    let spec = fs::read_to_string("docs/spec-03-interface-current.md")
+        .expect("Failed to read spec-03-interface-current.md");
 
     // Extract version from spec (first occurrence of "**Version**: X.Y")
     let spec_version = spec
@@ -23,7 +23,7 @@ fn test_spec_version_matches_cargo() {
         .find(|line| line.starts_with("**Version**:"))
         .and_then(|line| line.split(':').nth(1))
         .map(|v| v.trim())
-        .expect("Failed to extract version from INTERFACE_SPEC.md");
+        .expect("Failed to extract version from spec-03-interface-current.md");
 
     // Extract major.minor from Cargo.toml version (e.g., "0.1.12" -> "0.1")
     let cargo_minor = cargo_version
@@ -34,7 +34,7 @@ fn test_spec_version_matches_cargo() {
 
     assert_eq!(
         cargo_minor, spec_version,
-        "\nInterface version mismatch!\n  Cargo.toml (major.minor): {}\n  INTERFACE_SPEC.md: {}\n\nINTERFACE_SPEC.md should reflect interface contract version (major.minor), not patch version.\nOnly update when interface changes (breaking or feature changes).",
+        "\nInterface version mismatch!\n  Cargo.toml (major.minor): {}\n  spec-03-interface-current.md: {}\n\nspec-03-interface-current.md should reflect interface contract version (major.minor), not patch version.\nOnly update when interface changes (breaking or feature changes).",
         cargo_minor, spec_version
     );
 }
@@ -59,15 +59,15 @@ fn test_spec_lists_all_mcp_tools() {
         })
         .collect();
 
-    // Read INTERFACE_SPEC.md
-    let spec =
-        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
+    // Read spec-03-interface-current.md
+    let spec = fs::read_to_string("docs/spec-03-interface-current.md")
+        .expect("Failed to read spec-03-interface-current.md");
 
     // Check that each tool is documented in the spec
     for tool in &tools {
         assert!(
             spec.contains(&format!("`{}`", tool)),
-            "Tool '{}' is missing from INTERFACE_SPEC.md MCP tools table",
+            "Tool '{}' is missing from spec-03-interface-current.md MCP tools table",
             tool
         );
     }
@@ -77,8 +77,8 @@ fn test_spec_lists_all_mcp_tools() {
 
 #[test]
 fn test_spec_documents_cli_commands() {
-    let spec =
-        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
+    let spec = fs::read_to_string("docs/spec-03-interface-current.md")
+        .expect("Failed to read spec-03-interface-current.md");
 
     // Core CLI commands that must be documented
     let required_commands = vec![
@@ -98,7 +98,7 @@ fn test_spec_documents_cli_commands() {
     for cmd in required_commands {
         assert!(
             spec.contains(&format!("`{}`", cmd)) || spec.contains(&format!("#### `{}`", cmd)),
-            "Command '{}' is not documented in INTERFACE_SPEC.md",
+            "Command '{}' is not documented in spec-03-interface-current.md",
             cmd
         );
     }
@@ -137,8 +137,8 @@ fn test_cli_help_matches_spec() {
 
 #[test]
 fn test_spec_data_model_matches_schema() {
-    let spec =
-        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
+    let spec = fs::read_to_string("docs/spec-03-interface-current.md")
+        .expect("Failed to read spec-03-interface-current.md");
 
     // Check that data model section exists and contains key fields
     assert!(
@@ -190,8 +190,8 @@ fn test_spec_data_model_matches_schema() {
 
 #[test]
 fn test_spec_has_version_guarantees() {
-    let spec =
-        fs::read_to_string("docs/INTERFACE_SPEC.md").expect("Failed to read INTERFACE_SPEC.md");
+    let spec = fs::read_to_string("docs/spec-03-interface-current.md")
+        .expect("Failed to read spec-03-interface-current.md");
 
     // Check that spec includes stability guarantees
     assert!(

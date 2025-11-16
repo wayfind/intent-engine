@@ -15,7 +15,7 @@ echo "🔄 Restoring version placeholders in documentation..."
 
 # Extract versions from source files
 CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
-INTERFACE_VERSION=$(head -10 docs/INTERFACE_SPEC.md | grep '^\*\*Version\*\*:' | sed 's/.*: //')
+INTERFACE_VERSION=$(head -10 docs/spec-03-interface-current.md | grep '^\*\*Version\*\*:' | sed 's/.*: //')
 
 # Calculate previous minor version
 IFS='.' read -r major minor patch <<< "$CARGO_VERSION"

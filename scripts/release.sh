@@ -84,12 +84,12 @@ if [ -f "CLAUDE.md" ]; then
     success "Updated CLAUDE.md"
 fi
 
-# Update INTERFACE_SPEC.md
-if [ -f "docs/INTERFACE_SPEC.md" ]; then
-    info "Updating INTERFACE_SPEC.md..."
-    sed -i.bak "s/^Version: .*/Version: $NEW_VERSION/" docs/INTERFACE_SPEC.md
-    rm docs/INTERFACE_SPEC.md.bak
-    success "Updated INTERFACE_SPEC.md"
+# Update spec-03-interface-current.md
+if [ -f "docs/spec-03-interface-current.md" ]; then
+    info "Updating spec-03-interface-current.md..."
+    sed -i.bak "s/^Version: .*/Version: $NEW_VERSION/" docs/spec-03-interface-current.md
+    rm docs/spec-03-interface-current.md.bak
+    success "Updated spec-03-interface-current.md"
 fi
 
 # Update Cargo.lock
@@ -117,7 +117,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Review the changes above"
 echo "  2. Commit and push:"
-echo "     git add Cargo.toml Cargo.lock CLAUDE.md docs/INTERFACE_SPEC.md"
+echo "     git add Cargo.toml Cargo.lock CLAUDE.md docs/spec-03-interface-current.md"
 echo "     git commit -m \"chore: bump version to $NEW_VERSION\""
 echo "     git push origin main"
 echo ""
@@ -132,7 +132,7 @@ echo ""
 if [ "$2" == "--auto" ] || [ "$2" == "-y" ]; then
     info "Auto-committing changes..."
 
-    git add Cargo.toml Cargo.lock CLAUDE.md docs/INTERFACE_SPEC.md
+    git add Cargo.toml Cargo.lock CLAUDE.md docs/spec-03-interface-current.md
     git commit -m "chore: bump version to $NEW_VERSION"
 
     # Handle existing tags
