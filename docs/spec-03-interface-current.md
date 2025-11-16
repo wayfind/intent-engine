@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.4
-**Last Updated**: 2025-11-14
+**Version**: 0.5
+**Last Updated**: 2025-11-16
 **Status**: Experimental (Pre-1.0)
 
 ---
@@ -28,6 +28,45 @@
 ---
 
 ## Changelog
+
+### Version 0.5 (2025-11-16)
+
+**Theme**: "Hybrid Command Model & Ergonomic CLI"
+
+**New Features:**
+- **Hybrid Commands**: Added convenient top-level aliases for high-frequency operations
+- **Positional Parameters**: Optimized `list` command to use positional argument for status
+- **Reduced Verbosity**: Common operations now require fewer characters (e.g., `ie ls` vs `ie task list`)
+
+**CLI Commands Added:**
+- `add`: Alias for `task add`
+- `start`: Alias for `task start`
+- `done`: Alias for `task done`
+- `switch`: Alias for `task switch`
+- `log`: Alias for `event add`
+- `next`: Alias for `task pick-next`
+- `list` / `ls`: Alias for `task list`
+- `context` / `ctx`: Alias for `current-task`
+- `get`: Alias for `task get`
+
+**CLI Behavior Changes:**
+- `list/ls` command: Status parameter changed from `--status <value>` to positional `<status>`
+  - Old: `ie ls --status todo`
+  - New: `ie ls todo`
+  - Backward compatible: `--status` flag still works
+
+**MCP Tools:**
+- No changes (all changes are CLI-only convenience aliases)
+
+**Breaking Changes:**
+- None (all aliases maintain full compatibility with hierarchical commands)
+
+**Migration Notes:**
+- All new commands are optional convenience aliases
+- Existing hierarchical commands (`ie task list`, etc.) continue to work unchanged
+- For `list` command, positional syntax is preferred but flag syntax still supported
+
+---
 
 ### Version 0.4 (2025-11-14)
 

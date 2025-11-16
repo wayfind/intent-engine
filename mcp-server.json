@@ -1,6 +1,6 @@
 {
   "name": "intent-engine",
-  "version": "0.4",
+  "version": "0.5",
   "description": "An expert task management assistant that provides a persistent, intent-driven context layer. Use this toolset to maintain strategic clarity in complex projects—one focused task at a time, with complete decision history. Think of it as your external brain for project management.",
   "cli_info": {
     "primary_command": "intent-engine",
@@ -451,7 +451,9 @@
             "default": 20
           }
         },
-        "required": ["query"]
+        "required": [
+          "query"
+        ]
       }
     },
     {

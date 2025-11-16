@@ -9,9 +9,9 @@
 
 > **IMPORTANT**: This guide is a practical summary derived from the authoritative specification.
 >
-> **Single Source of Truth**: `docs/INTERFACE_SPEC.md`
+> **Single Source of Truth**: `docs/spec-03-interface-current.md`
 >
-> The INTERFACE_SPEC.md document is the **foundational blueprint** that defines:
+> The spec-03-interface-current.md document is the **foundational blueprint** that defines:
 > - ✅ All CLI command signatures and behaviors
 > - ✅ All MCP tool definitions and interfaces
 > - ✅ Data models and their exact field names
@@ -19,7 +19,7 @@
 > - ✅ Output format specifications
 > - ✅ Interface stability guarantees (SemVer)
 >
-> **In case of any conflict or ambiguity**, the INTERFACE_SPEC.md takes precedence.
+> **In case of any conflict or ambiguity**, the spec-03-interface-current.md takes precedence.
 >
 > This CLAUDE.md guide provides practical usage patterns and integration tips,
 > but should always align with the authoritative specification.
@@ -370,7 +370,7 @@ Think of Intent-Engine as:
 
 ## 📚 Key References
 
-- **Interface Spec** (authoritative): `docs/INTERFACE_SPEC.md`
+- **Interface Spec** (authoritative): `docs/spec-03-interface-current.md`
 - **AI Agent Guide** (technical details): `AGENT.md`
 - **MCP Schema**: `mcp-server.json`
 - **Setup Guide**: `docs/*/integration/mcp-server.md`
@@ -391,7 +391,7 @@ Intent-Engine is designed for **strategic intent tracking**, not tactical todo l
 
 ---
 
-**Last Updated**: 2025-11-14
-**Spec Version**: 0.4
+**Last Updated**: 2025-11-16
+**Spec Version**: 0.5
 **MCP Tools**: 14 available (unified_search replaces task_search)
 **Status**: Experimental (Pre-1.0)

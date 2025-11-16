@@ -72,24 +72,24 @@ jobs:
           echo "major_minor=$MAJOR_MINOR" >> $GITHUB_OUTPUT
           echo "Interface version (major.minor): $MAJOR_MINOR"
 
-      - name: Check INTERFACE_SPEC.md consistency
+      - name: Check Interface Spec consistency
         run: |
           CARGO_MINOR="${{ steps.version_parts.outputs.major_minor }}"
-          SPEC_VERSION=$(grep '^\*\*Version\*\*:' docs/INTERFACE_SPEC.md | head -1 | sed 's/.*: //')
+          SPEC_VERSION=$(grep '^\*\*Version\*\*:' docs/spec-03-interface-current.md | head -1 | sed 's/.*: //')
 
           if [ "$CARGO_MINOR" != "$SPEC_VERSION" ]; then
             echo "❌ ERROR: Version mismatch detected!"
             echo "   Cargo.toml (major.minor): $CARGO_MINOR"
-            echo "   INTERFACE_SPEC.md: $SPEC_VERSION"
+            echo "   spec-03-interface-current.md: $SPEC_VERSION"
             echo ""
-            echo "🚨 INTERFACE_SPEC.md must be manually updated when interface changes!"
-            echo "   - If this is a breaking change: update INTERFACE_SPEC.md version"
-            echo "   - If this is a new feature: update INTERFACE_SPEC.md version"
-            echo "   - If this is a bug fix only: INTERFACE_SPEC.md should NOT change"
+            echo "🚨 spec-03-interface-current.md must be manually updated when interface changes!"
+            echo "   - If this is a breaking change: update spec version"
+            echo "   - If this is a new feature: update spec version"
+            echo "   - If this is a bug fix only: spec should NOT change"
             exit 1
           fi
 
-          echo "✅ INTERFACE_SPEC.md version is consistent: $SPEC_VERSION"
+          echo "✅ Interface spec version is consistent: $SPEC_VERSION"
 
       - name: Update version in CLAUDE.md
         run: |
@@ -119,7 +119,7 @@ jobs:
             - Update Cargo.toml version to ${{ steps.bump.outputs.version }}
             - Update CLAUDE.md version to ${{ steps.version_parts.outputs.major_minor }}
             - Update mcp-server.json version to ${{ steps.version_parts.outputs.major_minor }}
-            - Verify INTERFACE_SPEC.md consistency (${{ steps.version_parts.outputs.major_minor }})
+            - Verify spec-03-interface-current.md consistency (${{ steps.version_parts.outputs.major_minor }})
             - Update Cargo.lock
           branch: release/v${{ steps.bump.outputs.version }}
           delete-branch: true
@@ -133,13 +133,13 @@ jobs:
             - ✅ Updated `Cargo.toml` version to **${{ steps.bump.outputs.version }}**
             - ✅ Updated `CLAUDE.md` version to **${{ steps.version_parts.outputs.major_minor }}**
             - ✅ Updated `mcp-server.json` version to **${{ steps.version_parts.outputs.major_minor }}**
-            - ✅ Verified `INTERFACE_SPEC.md` consistency (**${{ steps.version_parts.outputs.major_minor }}**)
+            - ✅ Verified `spec-03-interface-current.md` consistency (**${{ steps.version_parts.outputs.major_minor }}**)
             - ✅ Updated `Cargo.lock`
 
             ### Version Strategy
             - **Implementation version** (Cargo.toml): `${{ steps.bump.outputs.version }}` (major.minor.patch)
-            - **Interface version** (INTERFACE_SPEC.md): `${{ steps.version_parts.outputs.major_minor }}` (major.minor)
-            - INTERFACE_SPEC.md is the source of truth for interface contract
+            - **Interface version** (spec-03-interface-current.md): `${{ steps.version_parts.outputs.major_minor }}` (major.minor)
+            - spec-03-interface-current.md is the source of truth for interface contract
 
             ### Next Steps
             1. Review the changes
