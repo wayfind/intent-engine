@@ -147,8 +147,13 @@ impl ProjectContext {
     ///
     /// Search strategy (in priority order):
     /// 1. Check INTENT_ENGINE_PROJECT_DIR environment variable
-    /// 2. Search upwards from current directory for .intent-engine/
+    /// 2. Search upwards from current directory for .intent-engine/, but:
+    ///    - Stop at project boundary (defined by PROJECT_ROOT_MARKERS)
+    ///    - Do NOT cross into parent projects to prevent database mixing
     /// 3. Check user's home directory for .intent-engine/
+    ///
+    /// **Important**: This function now respects project boundaries to prevent
+    /// nested projects from accidentally using parent project databases.
     pub fn find_project_root() -> Option<PathBuf> {
         // Strategy 1: Check environment variable (highest priority)
         if let Ok(env_path) = std::env::var("INTENT_ENGINE_PROJECT_DIR") {
@@ -168,16 +173,47 @@ impl ProjectContext {
             }
         }
 
-        // Strategy 2: Search upwards from current directory (original behavior)
-        if let Ok(mut current) = std::env::current_dir() {
-            let start_dir = current.clone();
+        // Strategy 2: Search upwards from current directory
+        // BUT respect project boundaries (don't cross into parent projects)
+        if let Ok(current_dir) = std::env::current_dir() {
+            let start_dir = current_dir.clone();
+
+            // First, find the boundary of the current project (if any)
+            // This is the directory that contains a project marker
+            let project_boundary = Self::infer_project_root();
+
+            let mut current = start_dir.clone();
             loop {
                 let intent_dir = current.join(INTENT_DIR);
                 if intent_dir.exists() && intent_dir.is_dir() {
+                    // Found .intent-engine directory
+
+                    // Check if we're within or at the project boundary
+                    // If there's a project boundary and we've crossed it, don't use this .intent-engine
+                    if let Some(ref boundary) = project_boundary {
+                        // Check if the found .intent-engine is within our project boundary
+                        // (current path should be equal to or a child of boundary)
+                        if !current.starts_with(boundary) && current != *boundary {
+                            // We've crossed the project boundary into a parent project
+                            // Do NOT use this .intent-engine
+                            break;
+                        }
+                    }
+
                     if current != start_dir {
                         eprintln!("✓ Found project: {}", current.display());
                     }
                     return Some(current);
+                }
+
+                // Check if we've reached the project boundary
+                // If so, stop searching (don't go into parent projects)
+                if let Some(ref boundary) = project_boundary {
+                    if current == *boundary {
+                        // We've reached the boundary without finding .intent-engine
+                        // Stop here and return None (will trigger initialization)
+                        break;
+                    }
                 }
 
                 if !current.pop() {

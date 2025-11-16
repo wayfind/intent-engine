@@ -840,3 +840,199 @@ fn test_invalid_database_fails_appropriately() {
         "Error should indicate database problem"
     );
 }
+
+/// Test for nested projects bug: Child project should NOT use parent's database
+///
+/// This test verifies a critical bug scenario:
+/// - Parent project has .git and .intent_engine
+/// - Child project has .git but NO .intent_engine
+/// - When running from child project, it should create its OWN database
+/// - It should NOT use the parent project's database
+///
+/// Expected behavior:
+/// - Child project should detect its own .git marker
+/// - Child project should initialize its own .intent_engine
+/// - Tasks added in child should NOT appear in parent's database
+#[test]
+fn test_nested_projects_should_not_share_database() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    // Setup parent project with .git and .intent_engine
+    fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Initialize parent project
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to initialize parent");
+
+    assert!(
+        parent_init.status.success(),
+        "Parent initialization failed: {:?}",
+        String::from_utf8_lossy(&parent_init.stderr)
+    );
+
+    // Verify parent has .intent_engine
+    let parent_intent = root.join(".intent-engine");
+    assert!(parent_intent.exists(), "Parent should have .intent_engine");
+
+    // Setup child project INSIDE parent with its own .git
+    let child_dir = root.join("child-project");
+    fs::create_dir_all(&child_dir).expect("Failed to create child dir");
+    fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
+
+    // Initialize child project
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to initialize child");
+
+    assert!(
+        child_init.status.success(),
+        "Child initialization failed: {:?}",
+        String::from_utf8_lossy(&child_init.stderr)
+    );
+
+    // *** CRITICAL CHECKS ***
+
+    // Child should have its OWN .intent_engine
+    let child_intent = child_dir.join(".intent-engine");
+    assert!(
+        child_intent.exists(),
+        "Child project should have its own .intent_engine directory"
+    );
+
+    // Child should have its own database
+    let child_db = child_intent.join("project.db");
+    assert!(
+        child_db.exists(),
+        "Child project should have its own database file"
+    );
+
+    // Parent should still have its database
+    let parent_db = parent_intent.join("project.db");
+    assert!(
+        parent_db.exists(),
+        "Parent project should still have its database"
+    );
+
+    // Verify databases are DIFFERENT files
+    assert_ne!(
+        parent_db.canonicalize().unwrap(),
+        child_db.canonicalize().unwrap(),
+        "Parent and child should have DIFFERENT database files"
+    );
+
+    // List tasks in parent - should only have "Parent task"
+    let parent_list = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list parent tasks");
+
+    assert!(parent_list.status.success(), "Parent list should succeed");
+    let parent_output = String::from_utf8_lossy(&parent_list.stdout);
+    assert!(
+        parent_output.contains("Parent task"),
+        "Parent should have 'Parent task'"
+    );
+    assert!(
+        !parent_output.contains("Child task"),
+        "Parent should NOT have 'Child task' (databases should be isolated)"
+    );
+
+    // List tasks in child - should only have "Child task"
+    let child_list = Command::new(binary_path)
+        .current_dir(&child_dir)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list child tasks");
+
+    assert!(child_list.status.success(), "Child list should succeed");
+    let child_output = String::from_utf8_lossy(&child_list.stdout);
+    assert!(
+        child_output.contains("Child task"),
+        "Child should have 'Child task'"
+    );
+    assert!(
+        !child_output.contains("Parent task"),
+        "Child should NOT have 'Parent task' (databases should be isolated)"
+    );
+}
+
+/// Test for nested projects in subdirectory: should use child's database, not parent's
+///
+/// This tests a variant where we run from a subdirectory of the child project
+#[test]
+fn test_nested_projects_from_child_subdirectory() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let root = temp_dir.path();
+
+    // Setup parent project
+    fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
+
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+
+    // Initialize parent
+    let parent_init = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "add", "--name", "Parent task"])
+        .output()
+        .expect("Failed to initialize parent");
+
+    assert!(parent_init.status.success(), "Parent init failed");
+
+    // Setup child project with its own .git
+    let child_dir = root.join("child-project");
+    fs::create_dir_all(&child_dir).expect("Failed to create child");
+    fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
+
+    // Create child subdirectory
+    let child_subdir = child_dir.join("src/components");
+    fs::create_dir_all(&child_subdir).expect("Failed to create child subdir");
+
+    // Run from child subdirectory
+    let child_init = Command::new(binary_path)
+        .current_dir(&child_subdir)
+        .args(["task", "add", "--name", "Child task"])
+        .output()
+        .expect("Failed to run from child subdir");
+
+    assert!(
+        child_init.status.success(),
+        "Child subdir init failed: {:?}",
+        String::from_utf8_lossy(&child_init.stderr)
+    );
+
+    // .intent_engine should be in child project root (where child's .git is)
+    let child_intent = child_dir.join(".intent-engine");
+    assert!(
+        child_intent.exists(),
+        "Child should have .intent_engine at its root (where .git is)"
+    );
+
+    // Should NOT create .intent_engine in subdirectory
+    let subdir_intent = child_subdir.join(".intent-engine");
+    assert!(
+        !subdir_intent.exists(),
+        "Should not create .intent_engine in subdirectory"
+    );
+
+    // Verify task isolation
+    let parent_list = Command::new(binary_path)
+        .current_dir(root)
+        .args(["task", "list"])
+        .output()
+        .expect("Failed to list parent");
+
+    let parent_output = String::from_utf8_lossy(&parent_list.stdout);
+    assert!(
+        !parent_output.contains("Child task"),
+        "Parent should NOT see child tasks"
+    );
+}
