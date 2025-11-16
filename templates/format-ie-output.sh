@@ -1,6 +1,6 @@
 #!/bin/bash
 # Intent-Engine PostToolUse Output Formatter
-# Version: 1.0
+# Version: 2.0
 # Triggers: After MCP tool calls
 # Purpose: Format JSON output from intent-engine MCP tools into human-friendly text
 
@@ -306,9 +306,85 @@ case "$TOOL_NAME" in
 
         ;;
 
+    "mcp__intent-engine__task_add")
+        # Format task_add response
+        TASK_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.id')
+        TASK_NAME=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.name')
+        PARENT_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.parent_id // ""')
+
+        echo "✓ Created task #${TASK_ID}: ${TASK_NAME}"
+
+        if [ -n "$PARENT_ID" ]; then
+            echo "  └─ Parent: #${PARENT_ID}"
+        fi
+
+        echo ""
+        echo "Next: Use 'ie task start ${TASK_ID}' to begin work"
+        ;;
+
+    "mcp__intent-engine__task_start")
+        # Format task_start response
+        TASK_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.task.id // .id')
+        TASK_NAME=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.task.name // .name')
+
+        echo "→ Started task #${TASK_ID}: ${TASK_NAME}"
+
+        # Check if events were included
+        HAS_EVENTS=$(echo "$TOOL_OUTPUT" | $JQ_CMD 'has("events_summary")')
+        if [ "$HAS_EVENTS" = "true" ]; then
+            EVENTS_COUNT=$(echo "$TOOL_OUTPUT" | $JQ_CMD '[.events_summary.recent_events[]?] | length')
+            if [ "$EVENTS_COUNT" -gt 0 ]; then
+                echo ""
+                echo "Recent events (${EVENTS_COUNT}):"
+                echo "$TOOL_OUTPUT" | $JQ_CMD -r '.events_summary.recent_events[]? | "  [" + .type + "] " + (.data | split("\n")[0])'
+            fi
+        fi
+        ;;
+
+    "mcp__intent-engine__task_done")
+        # Format task_done response
+        TASK_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.id')
+        TASK_NAME=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.name')
+
+        echo "✓ Completed task #${TASK_ID}: ${TASK_NAME}"
+        ;;
+
+    "mcp__intent-engine__task_switch")
+        # Format task_switch response
+        TASK_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.id')
+        TASK_NAME=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.name')
+
+        echo "→ Switched to task #${TASK_ID}: ${TASK_NAME}"
+        ;;
+
+    "mcp__intent-engine__task_spawn_subtask")
+        # Format task_spawn_subtask response
+        TASK_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.id')
+        TASK_NAME=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.name')
+        PARENT_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.parent_id // ""')
+
+        echo "✓ Created and started subtask #${TASK_ID}: ${TASK_NAME}"
+
+        if [ -n "$PARENT_ID" ]; then
+            echo "  └─ Parent: #${PARENT_ID}"
+        fi
+        ;;
+
+    "mcp__intent-engine__event_add")
+        # Format event_add response
+        EVENT_TYPE=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.type')
+        TASK_ID=$(echo "$TOOL_OUTPUT" | $JQ_CMD -r '.task_id // ""')
+
+        echo "✓ Recorded event: [${EVENT_TYPE}]"
+
+        if [ -n "$TASK_ID" ]; then
+            echo "  └─ Task: #${TASK_ID}"
+        fi
+        ;;
+
     *)
-        # For other intent-engine tools, just indicate success
-        # (task_start, task_done, task_add, etc. already have clear CLI output)
+        # For any other intent-engine tools not explicitly handled
+        # Just pass through without formatting
         exit 0
         ;;
 esac
