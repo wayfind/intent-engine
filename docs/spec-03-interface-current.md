@@ -85,22 +85,22 @@
 - `task search`: Use `search` instead (searches both tasks and events)
 
 **MCP Tools Added:**
-- `unified_search`: Searches across tasks and events with task ancestry for events
+- `search`: Searches across tasks and events with task ancestry for events
 
 **MCP Tools Removed:**
-- `task_search`: Use `unified_search` instead
+- `task_search`: Use `search` instead
 
 **Data Models Added:**
 - `UnifiedSearchResult`: Tagged enum with task and event variants
 
 **Breaking Changes:**
 - Removed `ie task search` command (use `ie search` instead)
-- Removed `task_search` MCP tool (use `unified_search` instead)
+- Removed `task_search` MCP tool (use `search` instead)
 - `event_list` parameter `task_id` is now optional (breaking for strict type checkers)
 
 **Migration Notes:**
 - Replace all `ie task search` calls with `ie search`
-- Replace all `task_search` MCP tool calls with `unified_search`
+- Replace all `task_search` MCP tool calls with `search`
 - Event results now include `task_chain` array for ancestry context
 
 ---

@@ -83,12 +83,12 @@ Intent-Engine works like your brain - **one focused task at a time**:
 
 | Tool | Purpose | Key Parameters |
 |------|---------|----------------|
-| `unified_search` | Search tasks AND events | `query`, `include_tasks`, `include_events` |
+| `search` | Search tasks AND events | `query`, `include_tasks`, `include_events` |
 
 **Search capabilities**:
 - Supports FTS5 syntax: `AND`, `OR`, `NOT`, `"phrases"`
 - Returns mixed results with task ancestry for events
-- Example: `unified_search(query: "JWT AND authentication")`
+- Example: `search(query: "JWT AND authentication")`
 
 ### Event Tracking
 
@@ -159,7 +159,7 @@ You: "I chose HS256 algorithm because..."
 User: "Let's continue with authentication"
 
 You:
-1. unified_search(query: "authentication")
+1. search(query: "authentication")
    → Find task ID 42 and related events
 2. task_start(task_id: 42, with_events: true)
    → Get full context with decision history
@@ -200,7 +200,7 @@ You:
 User: "What decisions did we make on the authentication task?"
 
 You:
-1. unified_search(query: "authentication")
+1. search(query: "authentication")
    → Find task ID 42 and decision events
 2. event_list(task_id: 42, type: "decision")
    → Get only decision events (efficient!)
@@ -261,7 +261,7 @@ event_list(task_id: 42, type: "blocker", since: "7d")
 ```
 ❌ task_list(status: "JWT")  # WRONG - list is metadata only (status, parent)
 
-✅ unified_search(query: "JWT")  # Correct - searches tasks and events
+✅ search(query: "JWT")  # Correct - searches tasks and events
 ```
 
 ### Mistake 3: Not checking current task
@@ -391,7 +391,7 @@ Intent-Engine is designed for **strategic intent tracking**, not tactical todo l
 
 ---
 
-**Last Updated**: 2025-11-16
+**Last Updated**: 2025-11-17
 **Spec Version**: 0.5
-**MCP Tools**: 14 available (unified_search replaces task_search)
+**MCP Tools**: 14 available (search tool for unified search)
 **Status**: Experimental (Pre-1.0)

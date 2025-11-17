@@ -262,7 +262,7 @@ fn test_task_search_with_fts5_query() {
         "id": 5,
         "method": "tools/call",
         "params": {
-            "name": "unified_search",
+            "name": "search",
             "arguments": {
                 "query": "authentication"
             }

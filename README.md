@@ -252,7 +252,7 @@ After installation, Claude can automatically use the following tools:
 - `task_delete` - Delete a task
 
 **Search & Discovery** (1 tool):
-- `unified_search` - Unified full-text search across tasks and events
+- `search` - Unified full-text search across tasks and events
 
 **Event Tracking** (2 tools):
 - `event_add` - Record decisions/blockers/milestones (AI's external long-term memory)
@@ -381,7 +381,7 @@ ie dashboard stop
 ## ✨ Core Features
 
 ### New in v0.4 (2025-11)
-- **🔍 Unified Search Engine**: `unified_search` provides full-text search across both tasks and events, retrieving complete context in a single query
+- **🔍 Unified Search Engine**: `search` provides full-text search across both tasks and events, retrieving complete context in a single query
 
 ### New in v0.2 (2025-11)
 - **🔗 Task Dependency System**: Define task dependencies, automatically prevent blocked tasks from starting

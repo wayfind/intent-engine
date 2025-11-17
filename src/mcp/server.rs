@@ -222,7 +222,7 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
         "task_delete" => handle_task_delete(params.arguments).await,
         "event_add" => handle_event_add(params.arguments).await,
         "event_list" => handle_event_list(params.arguments).await,
-        "unified_search" => handle_unified_search(params.arguments).await,
+        "search" => handle_unified_search(params.arguments).await,
         "current_task_get" => handle_current_task_get(params.arguments).await,
         "report_generate" => handle_report_generate(params.arguments).await,
         _ => Err(format!("Unknown tool: {}", params.name)),

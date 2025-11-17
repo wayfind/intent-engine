@@ -23,11 +23,12 @@
       "workflow": [
         {
           "step": 1,
-          "thought": "For content-based discovery without an ID, use task_search for full-text search (not task_list, which is metadata-only).",
-          "tool": "task_search",
+          "thought": "For content-based discovery without an ID, use search for full-text search (not task_list, which is metadata-only).",
+          "tool": "search",
           "arguments": {
             "query": "\"database performance\"",
-            "snippet": true
+            "include_tasks": true,
+            "include_events": true
           }
         },
         {
@@ -52,9 +53,11 @@
         {
           "step": 1,
           "thought": "First locate the task by searching for it.",
-          "tool": "task_search",
+          "tool": "search",
           "arguments": {
-            "query": "authentication refactor"
+            "query": "authentication refactor",
+            "include_tasks": true,
+            "include_events": false
           }
         },
         {
@@ -133,8 +136,15 @@
             "description": "ID of the parent intent, for hierarchical problem breakdown. Use when creating subtasks explicitly (though task_spawn_subtask is preferred for active work)."
           },
           "priority": {
-            "type": "integer",
-            "description": "Priority of the task where LOWER number = HIGHER priority (1 is highest). Optional, defaults to medium priority."
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ],
+            "default": "medium",
+            "description": "Priority level where critical > high > medium > low. Optional, defaults to medium."
           }
         },
         "required": [
@@ -245,7 +255,7 @@
     },
     {
       "name": "task_list",
-      "description": "# Core Duty\nPerforms STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\n# Tactical Guide\nUse this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\n**NOT for text search:**\n- ❌ task_list: For structured metadata filtering only\n- ✅ task_search: For searching by keywords, names, or spec content\n\n**Examples:**\n- List all in-progress work: `{status: 'doing'}`\n- List all top-level tasks: `{parent: 'null'}`\n- List subtasks of task 42: `{parent: '42'}`",
+      "description": "# Core Duty\nPerforms STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\n# Tactical Guide\nUse this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\n**NOT for text search:**\n- ❌ task_list: For structured metadata filtering only\n- ✅ search: For full-text searching by keywords across tasks and events\n\n**Examples:**\n- List all in-progress work: `{status: 'doing'}`\n- List all top-level tasks: `{parent: 'null'}`\n- List subtasks of task 42: `{parent: '42'}`",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -260,7 +270,7 @@
           },
           "parent": {
             "type": "string",
-            "description": "Filter by parent ID. Use the string 'null' for top-level tasks, or a numeric string like '42' for subtasks of task 42 (optional)."
+            "description": "Filter by parent ID (optional). Use the string 'null' for top-level tasks only, or a numeric string like '42' for subtasks of task 42. Leave undefined to include all tasks regardless of parent."
           }
         }
       }
@@ -405,11 +415,12 @@
           },
           "limit": {
             "type": "integer",
+            "default": 50,
             "description": "Maximum number of events to return (optional). Defaults to 50."
           },
           "type": {
             "type": "string",
-            "description": "Filter events by log_type (optional). Common types: 'decision', 'blocker', 'milestone', 'note'. Use this to focus on specific event categories and save tokens.",
+            "description": "Filter events by event_type (optional). Common types: 'decision', 'blocker', 'milestone', 'note'. Use this to focus on specific event categories and save tokens.",
             "enum": [
               "decision",
               "blocker",
@@ -426,7 +437,7 @@
       }
     },
     {
-      "name": "unified_search",
+      "name": "search",
       "description": "# Core Duty\nPerforms unified full-text search across both tasks and events.\n\n# Tactical Guide\nUse this when you need to find information that could be in either tasks or events:\n- Search for keywords across all project context\n- Find related work mentioned in both task specs and event logs\n- Discover decisions, blockers, or notes related to a topic\n\n**Search behavior:**\n- Uses FTS5 full-text search with snippet highlighting\n- Returns mixed results from both tasks and events\n- Each result includes context: task ancestry chain for events, match field for tasks\n- Results ordered by FTS5 relevance rank\n\n**Parameters:**\n- `query`: FTS5 search query (supports AND, OR, NOT, phrases)\n- `include_tasks`: Search in tasks (default: true)\n- `include_events`: Search in events (default: true)\n- `limit`: Maximum total results (default: 20)\n\n**Examples:**\n- `{query: \"JWT authentication\"}` - Search both tasks and events\n- `{query: \"API\", include_tasks: true, include_events: false}` - Tasks only\n- `{query: \"blocker\", include_tasks: false, include_events: true}` - Events only\n\n**Returns:**\nArray of `UnifiedSearchResult` objects with discriminated union:\n- Task results: `{result_type: \"task\", task: {...}, match_snippet: \"...\", match_field: \"name\"|\"spec\"}`\n- Event results: `{result_type: \"event\", event: {...}, task_chain: [...], match_snippet: \"...\"}`\n\n**Use cases:**\n- \"Find everything related to authentication\"\n- \"What decisions have we made about caching?\"\n- \"Show me all mentions of the API redesign\"",
       "inputSchema": {
         "type": "object",
@@ -515,8 +526,8 @@
     },
     "mistake_2": {
       "wrong": "task_list({query: 'JWT'})",
-      "right": "task_search({query: 'JWT', snippet: true})",
-      "reason": "task_list is for metadata filtering only. Use task_search for text search"
+      "right": "search({query: 'JWT', include_tasks: true})",
+      "reason": "task_list is for metadata filtering only. Use search for text search across tasks and events"
     },
     "mistake_3": {
       "wrong": "task_update({task_id: 42, status: 'doing'})",
