@@ -49,7 +49,7 @@ encoding_rs = "0.8"
 which = "6.0"
 dialoguer = "0.11"
 dirs = "5.0"
-axum = "0.7"
+axum = "0.8"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
 
