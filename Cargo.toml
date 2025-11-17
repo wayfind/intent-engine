@@ -47,7 +47,7 @@ tokio = { version = "1.35", features = ["full"] }
 anyhow = "1.0"
 encoding_rs = "0.8"
 which = "6.0"
-dialoguer = "0.11"
+dialoguer = "0.12"
 dirs = "5.0"
 axum = "0.7"
 tower = "0.4"
