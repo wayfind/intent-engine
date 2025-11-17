@@ -10,6 +10,9 @@ use std::time::Duration;
 
 /// Initialize a project in the given directory
 fn init_project(project_path: &Path) -> Result<()> {
+    // Create .git marker to establish project root
+    std::fs::create_dir(project_path.join(".git"))?;
+
     // Create .intent-engine directory
     let intent_dir = project_path.join(".intent-engine");
     std::fs::create_dir_all(&intent_dir)?;
@@ -67,12 +70,21 @@ struct DashboardTestServer {
     process: Option<Child>,
     port: u16,
     _project_path: PathBuf,
+    _temp_home: tempfile::TempDir, // Keep temp home alive for server lifetime
 }
 
 impl DashboardTestServer {
     /// Start a new dashboard server on the given port
     fn start(port: u16, project_path: PathBuf) -> Result<Self> {
         let binary_path = common::ie_binary();
+
+        // Create a temporary HOME directory for the dashboard server
+        // (dashboard needs to write to ~/.intent-engine/projects.json)
+        let temp_home = tempfile::tempdir()?;
+        let home_path = temp_home
+            .path()
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Failed to convert home path to string"))?;
 
         let process = Command::new(&binary_path)
             .args([
@@ -83,6 +95,8 @@ impl DashboardTestServer {
                 &port.to_string(),
             ])
             .current_dir(&project_path)
+            .env("HOME", home_path)
+            .env("USERPROFILE", home_path)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?;
@@ -94,6 +108,7 @@ impl DashboardTestServer {
             process: Some(process),
             port,
             _project_path: project_path,
+            _temp_home: temp_home,
         })
     }
 
