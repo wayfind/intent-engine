@@ -5,20 +5,13 @@
 
 #![allow(deprecated)]
 
-use assert_cmd::cargo;
-use assert_cmd::Command;
-use tempfile::TempDir;
-
-/// Helper to setup test environment with proper UTF-8
-fn setup_test_env() -> TempDir {
-    tempfile::tempdir().unwrap()
-}
+mod common;
 
 #[test]
 fn test_chinese_task_name() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
-    let output = Command::new(cargo::cargo_bin!("ie"))
+    let output = common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "测试任务"])
         .output()
@@ -36,9 +29,9 @@ fn test_chinese_task_name() {
 
 #[test]
 fn test_chinese_task_name_with_spec() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
-    let output = Command::new(cargo::cargo_bin!("ie"))
+    let output = common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "用户认证", "--spec-stdin"])
         .write_stdin("使用 JWT 实现用户认证，支持刷新令牌")
@@ -62,10 +55,10 @@ fn test_chinese_task_name_with_spec() {
 
 #[test]
 fn test_chinese_event_data() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // First create a task
-    let task_output = Command::new(cargo::cargo_bin!("ie"))
+    let task_output = common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "测试任务"])
         .output()
@@ -76,14 +69,14 @@ fn test_chinese_event_data() {
     let task_id = 1;
 
     // Set it as current
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .args(["current", "--set", &task_id.to_string()])
         .output()
         .unwrap();
 
     // Add an event with Chinese data
-    let output = Command::new(cargo::cargo_bin!("ie"))
+    let output = common::ie_command()
         .current_dir(temp_dir.path())
         .args(["event", "add", "--type", "decision", "--data-stdin"])
         .write_stdin("选择使用 HS256 算法因为不需要密钥轮换")
@@ -102,9 +95,9 @@ fn test_chinese_event_data() {
 
 #[test]
 fn test_mixed_languages() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
-    let output = Command::new(cargo::cargo_bin!("ie"))
+    let output = common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "Implement 用户认证 with JWT"])
         .output()
@@ -122,7 +115,7 @@ fn test_mixed_languages() {
 
 #[test]
 fn test_special_chinese_characters() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Test various special Chinese characters
     let special_chars = vec![
@@ -135,7 +128,7 @@ fn test_special_chinese_characters() {
     ];
 
     for test_case in special_chars {
-        let output = Command::new(cargo::cargo_bin!("ie"))
+        let output = common::ie_command()
             .current_dir(temp_dir.path())
             .args(["task", "add", "--name", test_case])
             .output()
@@ -159,9 +152,9 @@ fn test_special_chinese_characters() {
 
 #[test]
 fn test_emoji_support() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
-    let output = Command::new(cargo::cargo_bin!("ie"))
+    let output = common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "测试任务 🎯 完成目标"])
         .output()
@@ -179,23 +172,23 @@ fn test_emoji_support() {
 
 #[test]
 fn test_search_chinese_content() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Create tasks with Chinese content
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "实现用户认证"])
         .output()
         .unwrap();
 
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "实现数据库迁移"])
         .output()
         .unwrap();
 
     // Search for Chinese keywords - verify it doesn't crash with Chinese input
-    let output = Command::new(cargo::cargo_bin!("ie"))
+    let output = common::ie_command()
         .current_dir(temp_dir.path())
         .args(["search", "用户"])
         .output()
@@ -222,10 +215,10 @@ fn test_search_chinese_content() {
 
 #[test]
 fn test_report_with_chinese_tasks() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Create and complete a task with Chinese name
-    let task_output = Command::new(cargo::cargo_bin!("ie"))
+    let task_output = common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "add", "--name", "完成中文任务"])
         .output()
@@ -233,21 +226,21 @@ fn test_report_with_chinese_tasks() {
     assert!(task_output.status.success());
 
     // Start the task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "start", "1"])
         .output()
         .unwrap();
 
     // Complete it
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .args(["task", "done"])
         .output()
         .unwrap();
 
     // Generate full report (without --summary-only to get task details)
-    let output = Command::new(cargo::cargo_bin!("ie"))
+    let output = common::ie_command()
         .current_dir(temp_dir.path())
         .args(["report"])
         .output()

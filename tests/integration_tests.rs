@@ -1,20 +1,15 @@
 #![allow(deprecated)]
 
-use assert_cmd::cargo;
-use assert_cmd::Command;
-use predicates::prelude::*;
-use tempfile::TempDir;
+mod common;
 
-fn setup_test_env() -> TempDir {
-    TempDir::new().unwrap()
-}
+use predicates::prelude::*;
 
 #[test]
 fn test_task_search_basic() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add tasks with different names and specs
-    let mut add1 = Command::new(cargo::cargo_bin!("ie"));
+    let mut add1 = common::ie_command();
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -25,7 +20,7 @@ fn test_task_search_basic() {
         .assert()
         .success();
 
-    let mut add2 = Command::new(cargo::cargo_bin!("ie"));
+    let mut add2 = common::ie_command();
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -36,7 +31,7 @@ fn test_task_search_basic() {
         .assert()
         .success();
 
-    let mut add3 = Command::new(cargo::cargo_bin!("ie"));
+    let mut add3 = common::ie_command();
     add3.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -48,7 +43,7 @@ fn test_task_search_basic() {
         .success();
 
     // Search for "authentication" (unified search)
-    let mut search = Command::new(cargo::cargo_bin!("ie"));
+    let mut search = common::ie_command();
     search
         .current_dir(temp_dir.path())
         .arg("search")
@@ -63,10 +58,10 @@ fn test_task_search_basic() {
 
 #[test]
 fn test_task_update_priority_and_complexity() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add a task
-    let mut add = Command::new(cargo::cargo_bin!("ie"));
+    let mut add = common::ie_command();
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -76,7 +71,7 @@ fn test_task_update_priority_and_complexity() {
         .success();
 
     // Update priority and complexity
-    let mut update = Command::new(cargo::cargo_bin!("ie"));
+    let mut update = common::ie_command();
     update
         .current_dir(temp_dir.path())
         .arg("task")
@@ -117,10 +112,10 @@ fn test_task_update_priority_and_complexity() {
 
 #[test]
 fn test_task_delete() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add a task
-    let mut add = Command::new(cargo::cargo_bin!("ie"));
+    let mut add = common::ie_command();
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -130,7 +125,7 @@ fn test_task_delete() {
         .success();
 
     // Delete the task
-    let mut del = Command::new(cargo::cargo_bin!("ie"));
+    let mut del = common::ie_command();
     del.current_dir(temp_dir.path())
         .arg("task")
         .arg("del")
@@ -139,7 +134,7 @@ fn test_task_delete() {
     del.assert().success();
 
     // Try to get deleted task
-    let mut get = Command::new(cargo::cargo_bin!("ie"));
+    let mut get = common::ie_command();
     get.current_dir(temp_dir.path())
         .arg("task")
         .arg("get")
@@ -152,10 +147,10 @@ fn test_task_delete() {
 
 #[test]
 fn test_task_list_with_status_filter() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add multiple tasks
-    let mut add1 = Command::new(cargo::cargo_bin!("ie"));
+    let mut add1 = common::ie_command();
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -164,7 +159,7 @@ fn test_task_list_with_status_filter() {
         .assert()
         .success();
 
-    let mut add2 = Command::new(cargo::cargo_bin!("ie"));
+    let mut add2 = common::ie_command();
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -174,7 +169,7 @@ fn test_task_list_with_status_filter() {
         .success();
 
     // Start one task
-    let mut start = Command::new(cargo::cargo_bin!("ie"));
+    let mut start = common::ie_command();
     start
         .current_dir(temp_dir.path())
         .arg("task")
@@ -184,7 +179,7 @@ fn test_task_list_with_status_filter() {
         .success();
 
     // List only todo tasks (using positional argument)
-    let mut find = Command::new(cargo::cargo_bin!("ie"));
+    let mut find = common::ie_command();
     find.current_dir(temp_dir.path())
         .arg("task")
         .arg("list")
@@ -199,10 +194,10 @@ fn test_task_list_with_status_filter() {
 
 #[test]
 fn test_task_list_top_level_only() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add parent task
-    let mut add_parent = Command::new(cargo::cargo_bin!("ie"));
+    let mut add_parent = common::ie_command();
     add_parent
         .current_dir(temp_dir.path())
         .arg("task")
@@ -213,7 +208,7 @@ fn test_task_list_top_level_only() {
         .success();
 
     // Add child task
-    let mut add_child = Command::new(cargo::cargo_bin!("ie"));
+    let mut add_child = common::ie_command();
     add_child
         .current_dir(temp_dir.path())
         .arg("task")
@@ -226,7 +221,7 @@ fn test_task_list_top_level_only() {
         .success();
 
     // List top-level tasks (parent is null)
-    let mut find = Command::new(cargo::cargo_bin!("ie"));
+    let mut find = common::ie_command();
     find.current_dir(temp_dir.path())
         .arg("task")
         .arg("list")
@@ -242,10 +237,10 @@ fn test_task_list_top_level_only() {
 
 #[test]
 fn test_event_add_with_current_task() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add and start a task
-    let mut add = Command::new(cargo::cargo_bin!("ie"));
+    let mut add = common::ie_command();
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -254,7 +249,7 @@ fn test_event_add_with_current_task() {
         .assert()
         .success();
 
-    let mut start = Command::new(cargo::cargo_bin!("ie"));
+    let mut start = common::ie_command();
     start
         .current_dir(temp_dir.path())
         .arg("task")
@@ -264,7 +259,7 @@ fn test_event_add_with_current_task() {
         .success();
 
     // Add event to current task
-    let mut event = Command::new(cargo::cargo_bin!("ie"));
+    let mut event = common::ie_command();
     event
         .current_dir(temp_dir.path())
         .arg("event")
@@ -283,10 +278,10 @@ fn test_event_add_with_current_task() {
 
 #[test]
 fn test_event_list_limit() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add a task
-    let mut add = Command::new(cargo::cargo_bin!("ie"));
+    let mut add = common::ie_command();
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -297,7 +292,7 @@ fn test_event_list_limit() {
 
     // Add multiple events
     for i in 1..=10 {
-        let mut event = Command::new(cargo::cargo_bin!("ie"));
+        let mut event = common::ie_command();
         event
             .current_dir(temp_dir.path())
             .arg("event")
@@ -313,7 +308,7 @@ fn test_event_list_limit() {
     }
 
     // List events with limit
-    let mut list = Command::new(cargo::cargo_bin!("ie"));
+    let mut list = common::ie_command();
     list.current_dir(temp_dir.path())
         .arg("event")
         .arg("list")
@@ -332,10 +327,10 @@ fn test_event_list_limit() {
 
 #[test]
 fn test_report_with_time_filter() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add some tasks
-    let mut add1 = Command::new(cargo::cargo_bin!("ie"));
+    let mut add1 = common::ie_command();
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -344,7 +339,7 @@ fn test_report_with_time_filter() {
         .assert()
         .success();
 
-    let mut add2 = Command::new(cargo::cargo_bin!("ie"));
+    let mut add2 = common::ie_command();
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -354,7 +349,7 @@ fn test_report_with_time_filter() {
         .success();
 
     // Generate report for last 7 days
-    let mut report = Command::new(cargo::cargo_bin!("ie"));
+    let mut report = common::ie_command();
     report
         .current_dir(temp_dir.path())
         .arg("report")
@@ -371,10 +366,10 @@ fn test_report_with_time_filter() {
 
 #[test]
 fn test_task_with_invalid_status() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add a task
-    let mut add = Command::new(cargo::cargo_bin!("ie"));
+    let mut add = common::ie_command();
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -384,7 +379,7 @@ fn test_task_with_invalid_status() {
         .success();
 
     // Try to update with invalid status
-    let mut update = Command::new(cargo::cargo_bin!("ie"));
+    let mut update = common::ie_command();
     update
         .current_dir(temp_dir.path())
         .arg("task")
@@ -401,12 +396,12 @@ fn test_task_with_invalid_status() {
 
 #[test]
 fn test_multiple_tasks_with_priorities() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add tasks with different priorities
     let priorities = ["low", "low", "medium", "high", "critical"];
     for i in 1..=5 {
-        let mut add = Command::new(cargo::cargo_bin!("ie"));
+        let mut add = common::ie_command();
         add.current_dir(temp_dir.path())
             .arg("task")
             .arg("add")
@@ -416,7 +411,7 @@ fn test_multiple_tasks_with_priorities() {
             .success();
 
         // Set priority (lower number = higher priority)
-        let mut update = Command::new(cargo::cargo_bin!("ie"));
+        let mut update = common::ie_command();
         update
             .current_dir(temp_dir.path())
             .arg("task")
@@ -429,7 +424,7 @@ fn test_multiple_tasks_with_priorities() {
     }
 
     // Pick next should recommend task 5 (priority critical = 1)
-    let mut pick = Command::new(cargo::cargo_bin!("ie"));
+    let mut pick = common::ie_command();
     pick.current_dir(temp_dir.path())
         .arg("task")
         .arg("pick-next")
@@ -443,10 +438,10 @@ fn test_multiple_tasks_with_priorities() {
 
 #[test]
 fn test_task_switch_between_tasks() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add two tasks
-    let mut add1 = Command::new(cargo::cargo_bin!("ie"));
+    let mut add1 = common::ie_command();
     add1.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -455,7 +450,7 @@ fn test_task_switch_between_tasks() {
         .assert()
         .success();
 
-    let mut add2 = Command::new(cargo::cargo_bin!("ie"));
+    let mut add2 = common::ie_command();
     add2.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -465,7 +460,7 @@ fn test_task_switch_between_tasks() {
         .success();
 
     // Switch to task 1
-    let mut switch1 = Command::new(cargo::cargo_bin!("ie"));
+    let mut switch1 = common::ie_command();
     switch1
         .current_dir(temp_dir.path())
         .arg("task")
@@ -475,7 +470,7 @@ fn test_task_switch_between_tasks() {
     switch1.assert().success();
 
     // Verify current task is 1
-    let mut current = Command::new(cargo::cargo_bin!("ie"));
+    let mut current = common::ie_command();
     current.current_dir(temp_dir.path()).arg("current");
 
     current
@@ -484,7 +479,7 @@ fn test_task_switch_between_tasks() {
         .stdout(predicate::str::contains("\"current_task_id\": 1"));
 
     // Switch to task 2
-    let mut switch2 = Command::new(cargo::cargo_bin!("ie"));
+    let mut switch2 = common::ie_command();
     switch2
         .current_dir(temp_dir.path())
         .arg("task")
@@ -494,7 +489,7 @@ fn test_task_switch_between_tasks() {
     switch2.assert().success();
 
     // Verify current task is 2
-    let mut current2 = Command::new(cargo::cargo_bin!("ie"));
+    let mut current2 = common::ie_command();
     current2.current_dir(temp_dir.path()).arg("current");
 
     current2
@@ -505,10 +500,10 @@ fn test_task_switch_between_tasks() {
 
 #[test]
 fn test_spawn_subtask_workflow() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add and start a parent task
-    let mut add = Command::new(cargo::cargo_bin!("ie"));
+    let mut add = common::ie_command();
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -517,7 +512,7 @@ fn test_spawn_subtask_workflow() {
         .assert()
         .success();
 
-    let mut start = Command::new(cargo::cargo_bin!("ie"));
+    let mut start = common::ie_command();
     start
         .current_dir(temp_dir.path())
         .arg("task")
@@ -527,7 +522,7 @@ fn test_spawn_subtask_workflow() {
         .success();
 
     // Spawn a subtask
-    let mut spawn = Command::new(cargo::cargo_bin!("ie"));
+    let mut spawn = common::ie_command();
     spawn
         .current_dir(temp_dir.path())
         .arg("task")
@@ -545,7 +540,7 @@ fn test_spawn_subtask_workflow() {
         .stdout(predicate::str::contains("\"status\": \"doing\""));
 
     // Verify current task is now the subtask
-    let mut current = Command::new(cargo::cargo_bin!("ie"));
+    let mut current = common::ie_command();
     current.current_dir(temp_dir.path()).arg("current");
 
     current
@@ -565,10 +560,10 @@ fn test_spawn_subtask_workflow() {
 
 #[test]
 fn test_task_get_nonexistent() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Initialize project
-    let mut add = Command::new(cargo::cargo_bin!("ie"));
+    let mut add = common::ie_command();
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -578,7 +573,7 @@ fn test_task_get_nonexistent() {
         .success();
 
     // Try to get nonexistent task
-    let mut get = Command::new(cargo::cargo_bin!("ie"));
+    let mut get = common::ie_command();
     get.current_dir(temp_dir.path())
         .arg("task")
         .arg("get")
@@ -592,10 +587,10 @@ fn test_task_get_nonexistent() {
 
 #[test]
 fn test_event_add_to_nonexistent_task() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Initialize project
-    let mut add = Command::new(cargo::cargo_bin!("ie"));
+    let mut add = common::ie_command();
     add.current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -605,7 +600,7 @@ fn test_event_add_to_nonexistent_task() {
         .success();
 
     // Try to add event to nonexistent task
-    let mut event = Command::new(cargo::cargo_bin!("ie"));
+    let mut event = common::ie_command();
     event
         .current_dir(temp_dir.path())
         .arg("event")

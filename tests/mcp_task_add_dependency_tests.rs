@@ -1,25 +1,18 @@
-use assert_cmd::cargo;
+mod common;
+
 use assert_cmd::Command;
 use serde_json::Value;
 use std::path::PathBuf;
-use tempfile::TempDir;
 
 /// Helper to get the binary path
 fn intent_engine_cmd() -> Command {
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
 }
 
 /// Helper to create a test project
-fn setup_test_project() -> (TempDir, PathBuf) {
-    let temp_dir = TempDir::new().unwrap();
-    let db_path = temp_dir.path().join("intent.db");
-
-    // Initialize project
-    intent_engine_cmd()
-        .current_dir(temp_dir.path())
-        .arg("doctor")
-        .assert()
-        .success();
+fn setup_test_project() -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = common::setup_test_env();
+    let db_path = temp_dir.path().join(".intent-engine").join("project.db");
 
     (temp_dir, db_path)
 }

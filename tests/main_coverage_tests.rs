@@ -1,14 +1,10 @@
 /// Comprehensive tests for main.rs to improve code coverage
 /// Focuses on error paths and edge cases that are difficult to trigger in normal usage
-use assert_cmd::{cargo, Command};
+mod common;
+
 use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
-use tempfile::TempDir;
-
-fn setup_test_env() -> TempDir {
-    TempDir::new().unwrap()
-}
 
 // ============================================================================
 // Session Restore Tests
@@ -16,9 +12,9 @@ fn setup_test_env() -> TempDir {
 
 #[test]
 fn test_session_restore_without_workspace() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("session-restore")
         .arg("--include-events")
@@ -31,10 +27,10 @@ fn test_session_restore_without_workspace() {
 
 #[test]
 fn test_session_restore_with_workspace_path() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Initialize workspace
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -44,7 +40,7 @@ fn test_session_restore_with_workspace_path() {
         .success();
 
     // Try session restore with explicit workspace path
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.arg("session-restore")
         .arg("--include-events")
         .arg("3")
@@ -56,10 +52,10 @@ fn test_session_restore_with_workspace_path() {
 
 #[test]
 fn test_session_restore_with_nonexistent_workspace_path() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let nonexistent = temp_dir.path().join("nonexistent");
 
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.arg("session-restore")
         .arg("--workspace")
         .arg(&nonexistent);
@@ -74,10 +70,10 @@ fn test_session_restore_with_nonexistent_workspace_path() {
 
 #[test]
 fn test_event_add_without_data_stdin_flag() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Initialize and create a task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -87,7 +83,7 @@ fn test_event_add_without_data_stdin_flag() {
         .success();
 
     // Try to add event without --data-stdin
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("event")
         .arg("add")
@@ -107,10 +103,10 @@ fn test_event_add_without_data_stdin_flag() {
 
 #[test]
 fn test_event_add_without_current_task_and_without_task_id() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Initialize workspace but don't set current task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -120,7 +116,7 @@ fn test_event_add_without_current_task_and_without_task_id() {
         .success();
 
     // Try to add event without task_id and without current task
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("event")
         .arg("add")
@@ -146,10 +142,10 @@ fn test_event_add_without_current_task_and_without_task_id() {
 
 #[test]
 fn test_setup_claude_code_dry_run() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
 
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -167,10 +163,10 @@ fn test_setup_claude_code_dry_run() {
 
 #[test]
 fn test_setup_claude_code_creates_hook() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
 
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -205,7 +201,7 @@ fn test_setup_claude_code_creates_hook() {
 
 #[test]
 fn test_setup_claude_code_refuses_to_overwrite_without_force() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
 
     // Create hook first
@@ -215,7 +211,7 @@ fn test_setup_claude_code_refuses_to_overwrite_without_force() {
     fs::write(&hook_path, "existing content").unwrap();
 
     // Try to setup without --force
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -241,7 +237,7 @@ fn test_setup_claude_code_refuses_to_overwrite_without_force() {
 
 #[test]
 fn test_setup_claude_code_with_force_overwrites() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
 
     // Create existing hook
@@ -251,7 +247,7 @@ fn test_setup_claude_code_with_force_overwrites() {
     fs::write(&hook_path, "old content").unwrap();
 
     // Setup with --force
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -272,10 +268,10 @@ fn test_setup_claude_code_with_force_overwrites() {
 #[test]
 #[ignore] // Deprecated: --claude-dir removed in favor of unified setup
 fn test_setup_claude_code_with_custom_claude_dir() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let custom_dir = temp_dir.path().join("custom-claude");
 
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -297,10 +293,10 @@ fn test_setup_claude_code_with_custom_claude_dir() {
 
 #[test]
 fn test_setup_mcp_dry_run() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
 
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -318,10 +314,10 @@ fn test_setup_mcp_dry_run() {
 
 #[test]
 fn test_setup_mcp_creates_config() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
 
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -347,7 +343,7 @@ fn test_setup_mcp_creates_config() {
 
 #[test]
 fn test_setup_mcp_refuses_to_overwrite_without_force() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
 
     // Create existing config
@@ -365,7 +361,7 @@ fn test_setup_mcp_refuses_to_overwrite_without_force() {
     .unwrap();
 
     // Try to setup without --force
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -382,7 +378,7 @@ fn test_setup_mcp_refuses_to_overwrite_without_force() {
 
 #[test]
 fn test_setup_mcp_with_force_overwrites() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
 
     // Create existing config
@@ -400,7 +396,7 @@ fn test_setup_mcp_with_force_overwrites() {
     .unwrap();
 
     // Setup with --force
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -424,7 +420,7 @@ fn test_setup_mcp_with_force_overwrites() {
 
 #[test]
 fn test_setup_mcp_creates_backup() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
 
     // Create existing config
@@ -436,7 +432,7 @@ fn test_setup_mcp_creates_backup() {
     .unwrap();
 
     // Setup with --force to trigger backup
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -467,11 +463,11 @@ fn test_setup_mcp_creates_backup() {
 
 #[test]
 fn test_setup_mcp_with_different_targets() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Test setup with custom config path
     let config_file1 = temp_dir.path().join("config1.json");
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -488,7 +484,7 @@ fn test_setup_mcp_with_different_targets() {
 
     // Test setup with different config path (need --force since hooks already exist)
     let config_file2 = temp_dir.path().join("config2.json");
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("setup")
         .arg("--target")
@@ -514,9 +510,9 @@ fn test_setup_mcp_with_different_targets() {
 
 #[test]
 fn test_doctor_in_fresh_environment() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path()).arg("doctor");
 
     cmd.assert()
@@ -533,10 +529,10 @@ fn test_doctor_in_fresh_environment() {
 
 #[test]
 fn test_task_update_with_priority() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add a task
-    let output = Command::new(cargo::cargo_bin!("ie"))
+    let output = common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -548,7 +544,7 @@ fn test_task_update_with_priority() {
     assert!(output.status.success());
 
     // Update with priority
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("update")
@@ -563,10 +559,10 @@ fn test_task_update_with_priority() {
 
 #[test]
 fn test_task_delete() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add a task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -576,7 +572,7 @@ fn test_task_delete() {
         .success();
 
     // Delete the task
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("del")
@@ -589,10 +585,10 @@ fn test_task_delete() {
 
 #[test]
 fn test_task_list_with_parent_filter() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add parent task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -602,7 +598,7 @@ fn test_task_list_with_parent_filter() {
         .success();
 
     // Add child task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -614,7 +610,7 @@ fn test_task_list_with_parent_filter() {
         .success();
 
     // List with parent filter
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("list")
@@ -628,10 +624,10 @@ fn test_task_list_with_parent_filter() {
 
 #[test]
 fn test_task_list_with_null_parent() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add parent task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -641,7 +637,7 @@ fn test_task_list_with_null_parent() {
         .success();
 
     // Add child task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -653,7 +649,7 @@ fn test_task_list_with_null_parent() {
         .success();
 
     // List with null parent filter (only top-level tasks)
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("list")
@@ -669,10 +665,10 @@ fn test_task_list_with_null_parent() {
 
 #[test]
 fn test_task_pick_next_text_format() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add a task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -682,7 +678,7 @@ fn test_task_pick_next_text_format() {
         .success();
 
     // Pick next with text format
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("pick-next")
@@ -694,10 +690,10 @@ fn test_task_pick_next_text_format() {
 
 #[test]
 fn test_task_pick_next_json_format() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add a task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -707,7 +703,7 @@ fn test_task_pick_next_json_format() {
         .success();
 
     // Pick next with json format
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("task")
         .arg("pick-next")
@@ -728,10 +724,10 @@ fn test_task_pick_next_json_format() {
 
 #[test]
 fn test_current_get_when_no_current_task() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Initialize workspace
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -741,7 +737,7 @@ fn test_current_get_when_no_current_task() {
         .success();
 
     // Get current task (should be null)
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path()).arg("current");
 
     cmd.assert()
@@ -751,10 +747,10 @@ fn test_current_get_when_no_current_task() {
 
 #[test]
 fn test_current_set_and_get() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add a task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -764,7 +760,7 @@ fn test_current_set_and_get() {
         .success();
 
     // Set current task
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("current")
         .arg("--set")
@@ -773,7 +769,7 @@ fn test_current_set_and_get() {
         .success();
 
     // Get current task
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path()).arg("current");
 
     cmd.assert()
@@ -787,10 +783,10 @@ fn test_current_set_and_get() {
 
 #[test]
 fn test_report_with_filters() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add tasks
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -800,7 +796,7 @@ fn test_report_with_filters() {
         .success();
 
     // Generate report with status filter
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("report")
         .arg("--status")
@@ -811,10 +807,10 @@ fn test_report_with_filters() {
 
 #[test]
 fn test_report_summary_only() {
-    let temp_dir = setup_test_env();
+    let temp_dir = common::setup_test_env();
 
     // Add tasks
-    Command::new(cargo::cargo_bin!("ie"))
+    common::ie_command()
         .current_dir(temp_dir.path())
         .arg("task")
         .arg("add")
@@ -824,7 +820,7 @@ fn test_report_summary_only() {
         .success();
 
     // Generate summary-only report
-    let mut cmd = Command::new(cargo::cargo_bin!("ie"));
+    let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())
         .arg("report")
         .arg("--summary-only");

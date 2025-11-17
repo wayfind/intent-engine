@@ -44,6 +44,32 @@ pub fn ie_binary() -> PathBuf {
         })
 }
 
+/// Create a Command for `ie` with proper environment isolation
+///
+/// This returns a Command pre-configured with:
+/// - The correct `ie` binary path
+/// - Environment isolation (HOME=/nonexistent) to prevent home directory fallback
+///
+/// # Examples
+///
+/// ```no_run
+/// mod common;
+///
+/// let output = common::ie_command()
+///     .current_dir(&temp_dir)
+///     .arg("task")
+///     .arg("list")
+///     .assert()
+///     .success();
+/// ```
+#[allow(dead_code)] // Not all test files use this yet
+pub fn ie_command() -> Command {
+    let mut cmd = Command::new(ie_binary());
+    cmd.env("HOME", "/nonexistent") // Prevent fallback to home on Unix
+        .env("USERPROFILE", "/nonexistent"); // Prevent fallback to home on Windows
+    cmd
+}
+
 /// Setup a test environment with an initialized intent-engine project
 ///
 /// This creates a temporary directory with:
@@ -66,25 +92,16 @@ pub fn ie_binary() -> PathBuf {
 ///     // Use temp_dir for testing...
 /// }
 /// ```
+#[allow(dead_code)] // Not all test files use this yet
 pub fn setup_test_env() -> TempDir {
     let temp_dir = TempDir::new().unwrap();
 
     // Create a .git marker to prevent falling back to home project
+    // This ensures intent-engine recognizes this as a valid project root
     fs::create_dir(temp_dir.path().join(".git")).unwrap();
 
-    // Initialize the project by adding a dummy task (triggers auto-init)
-    // Set HOME to nonexistent directory to prevent fallback to home
-    let mut init_cmd = Command::new(ie_binary());
-    init_cmd
-        .current_dir(temp_dir.path())
-        .env("HOME", "/nonexistent") // Prevent fallback to home on Unix
-        .env("USERPROFILE", "/nonexistent") // Prevent fallback to home on Windows
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Setup task")
-        .assert()
-        .success();
+    // No explicit initialization needed - auto-init will trigger on first command
+    // Tests should use environment isolation (HOME=/nonexistent) when running commands
 
     temp_dir
 }
