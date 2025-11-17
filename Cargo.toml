@@ -1,6 +1,6 @@
 [package]
 name = "intent-engine"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 authors = ["Intent Engine Contributors"]
 description = "A command-line database service for tracking strategic intent, tasks, and events"
