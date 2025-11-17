@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intent-Engine Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Markdown & Code Highlighting -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+
+    <!-- DOMPurify for XSS protection -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* Prose styles for Markdown */
+        .prose { max-width: none; }
+        .prose pre { background: #1f2937; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; }
+        .prose code { background: #374151; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em; }
+        .prose pre code { background: transparent; padding: 0; }
+        .prose h1 { font-size: 2em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        .prose h2 { font-size: 1.5em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        .prose h3 { font-size: 1.25em; font-weight: bold; margin-top: 0.8em; margin-bottom: 0.4em; }
+        .prose p { margin: 0.5em 0; }
+        .prose ul, .prose ol { margin: 0.5em 0; padding-left: 2em; }
+        .prose li { margin: 0.25em 0; }
+        .prose blockquote { border-left: 4px solid #d1d5db; padding-left: 1em; color: #6b7280; }
+        .prose a { color: #3b82f6; text-decoration: underline; }
+        .prose table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+        .prose th, .prose td { border: 1px solid #d1d5db; padding: 0.5em; }
+        .prose th { background: #f3f4f6; font-weight: bold; }
+
+        /* Task card hover effect */
+        .task-card:hover { background: #f9fafb; }
+        .task-card.active { background: #eff6ff; border-color: #3b82f6; }
+
+        /* Status badges */
+        .status-todo { background: #fef3c7; color: #92400e; }
+        .status-doing { background: #dbeafe; color: #1e40af; }
+        .status-done { background: #d1fae5; color: #065f46; }
+
+        /* Priority badges */
+        .priority-critical { background: #fee2e2; color: #991b1b; }
+        .priority-high { background: #fed7aa; color: #9a3412; }
+        .priority-medium { background: #fef3c7; color: #92400e; }
+        .priority-low { background: #e0e7ff; color: #3730a3; }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen overflow-hidden">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg">
+        <div class="px-6 py-4 flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold">Intent-Engine Dashboard</h1>
+                <p class="text-sm text-indigo-100" id="project-name">Loading project...</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button onclick="openNewTaskModal()" class="bg-white text-indigo-600 px-4 py-2 rounded-lg font-medium hover:bg-indigo-50 transition">
+                    + New Task
+                </button>
+                <button onclick="loadCurrentTask()" class="bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-400 transition">
+                    Current Focus
+                </button>
+                <button onclick="pickNextTask()" class="bg-purple-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-400 transition">
+                    Pick Next
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="flex h-[calc(100vh-80px)]">
+        <!-- Left Sidebar: Task List -->
+        <aside class="w-80 bg-white border-r border-gray-200 flex flex-col">
+            <div class="p-4 border-b border-gray-200">
+                <input
+                    type="text"
+                    id="search-input"
+                    placeholder="Search tasks and events..."
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    oninput="handleSearch(event)">
+            </div>
+
+            <div class="p-4 border-b border-gray-200">
+                <div class="flex space-x-2">
+                    <button onclick="filterTasks('all')" id="filter-all" class="flex-1 px-3 py-2 text-sm font-medium bg-indigo-100 text-indigo-700 rounded-lg">All</button>
+                    <button onclick="filterTasks('todo')" id="filter-todo" class="flex-1 px-3 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Todo</button>
+                    <button onclick="filterTasks('doing')" id="filter-doing" class="flex-1 px-3 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Doing</button>
+                    <button onclick="filterTasks('done')" id="filter-done" class="flex-1 px-3 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Done</button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4" id="task-list-container">
+                <div id="task-list-items" class="space-y-2">
+                    <div class="text-center text-gray-500 py-8">Loading tasks...</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content: Task Details -->
+        <main class="flex-1 bg-white flex flex-col overflow-hidden">
+            <div id="task-detail-container" class="flex-1 overflow-y-auto">
+                <div class="max-w-4xl mx-auto p-8">
+                    <div class="text-center text-gray-400 py-20">
+                        <svg class="mx-auto h-24 w-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <h3 class="mt-4 text-xl font-medium text-gray-500">Select a task to view details</h3>
+                        <p class="mt-2 text-sm text-gray-400">Choose a task from the list on the left</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar: Event History (Optional) -->
+        <aside class="w-96 bg-white border-l border-gray-200 hidden lg:flex flex-col" id="event-sidebar">
+            <div class="p-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-800">Event History</h2>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4" id="event-list-container">
+                <div class="text-center text-gray-400 py-8 text-sm">
+                    Select a task to view its event history
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- New Task Modal -->
+    <div id="new-task-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 class="text-xl font-semibold text-gray-800">Create New Task</h2>
+                <button onclick="closeNewTaskModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="new-task-form" onsubmit="createTask(event)" class="p-6">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Task Name *</label>
+                        <input type="text" name="name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Specification (Markdown)</label>
+                        <textarea name="spec" rows="8" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                            <select name="priority" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                <option value="">Default</option>
+                                <option value="1">Critical</option>
+                                <option value="2">High</option>
+                                <option value="3">Medium</option>
+                                <option value="4">Low</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Parent Task ID</label>
+                            <input type="number" name="parent_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button type="button" onclick="closeNewTaskModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Create Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Event Modal -->
+    <div id="add-event-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 class="text-xl font-semibold text-gray-800">Add Event</h2>
+                <button onclick="closeAddEventModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="add-event-form" onsubmit="addEvent(event)" class="p-6">
+                <input type="hidden" name="task_id" id="event-task-id">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Event Type *</label>
+                        <select name="type" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="decision">Decision</option>
+                            <option value="blocker">Blocker</option>
+                            <option value="milestone">Milestone</option>
+                            <option value="note">Note</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Event Data (Markdown) *</label>
+                        <textarea name="data" required rows="6" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"></textarea>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button type="button" onclick="closeAddEventModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
