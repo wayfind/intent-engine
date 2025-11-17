@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod dashboard;
 pub mod db;
 pub mod dependencies;
 pub mod error;

@@ -38,6 +38,9 @@ pub enum IntentError {
 
     #[error("JSON serialization error: {0}")]
     JsonError(#[from] serde_json::Error),
+
+    #[error("Other error: {0}")]
+    OtherError(#[from] anyhow::Error),
 }
 
 #[derive(Serialize)]

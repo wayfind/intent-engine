@@ -6,10 +6,29 @@ use assert_cmd::cargo;
 /// Tests that special characters work correctly through the CLI interface
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::fs;
 use tempfile::TempDir;
 
 fn setup_test_env() -> TempDir {
-    TempDir::new().unwrap()
+    let temp_dir = TempDir::new().unwrap();
+    // Create a .git marker to prevent falling back to home project
+    fs::create_dir(temp_dir.path().join(".git")).unwrap();
+
+    // Initialize the project by adding a dummy task (triggers auto-init)
+    // Prevent fallback to home by setting HOME to nonexistent directory
+    let mut init_cmd = Command::new(cargo::cargo_bin!("ie"));
+    init_cmd
+        .current_dir(temp_dir.path())
+        .env("HOME", "/nonexistent")  // Prevent fallback to home
+        .env("USERPROFILE", "/nonexistent")  // Windows equivalent
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Setup task")
+        .assert()
+        .success();
+
+    temp_dir
 }
 
 #[test]

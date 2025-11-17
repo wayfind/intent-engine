@@ -1,5 +1,7 @@
 use clap::Parser;
-use intent_engine::cli::{Cli, Commands, CurrentAction, EventCommands, TaskCommands};
+use intent_engine::cli::{
+    Cli, Commands, CurrentAction, DashboardCommands, EventCommands, TaskCommands,
+};
 use intent_engine::db::models::TaskContext;
 use intent_engine::error::{IntentError, Result};
 use intent_engine::events::EventManager;
@@ -53,6 +55,7 @@ async fn run() -> Result<()> {
             limit,
         } => handle_search_command(&query, tasks, events, limit).await?,
         Commands::Doctor => handle_doctor_command().await?,
+        Commands::Dashboard(dashboard_cmd) => handle_dashboard_command(dashboard_cmd).await?,
         Commands::McpServer => {
             // Run MCP server - this never returns unless there's an error
             // io::Error is automatically converted to IntentError::IoError via #[from]
@@ -1417,4 +1420,364 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()> {
+    use chrono::Utc;
+    use intent_engine::dashboard::{daemon, registry::*};
+
+    match dashboard_cmd {
+        DashboardCommands::Start { port, foreground } => {
+            // Load project context to get project path and DB path
+            let project_ctx = ProjectContext::load_or_init().await?;
+            let project_path = project_ctx.root.clone();
+            let db_path = project_ctx.db_path.clone();
+            let project_name = project_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+
+            // Load or create registry
+            let mut registry = ProjectRegistry::load()?;
+
+            // Check if already running
+            if let Some(existing) = registry.find_by_path(&project_path) {
+                if let Some(pid) = existing.pid {
+                    if daemon::is_process_running(pid) {
+                        println!("Dashboard already running for this project:");
+                        println!("  Port: {}", existing.port);
+                        println!("  PID: {}", pid);
+                        println!("  URL: http://127.0.0.1:{}", existing.port);
+                        return Ok(());
+                    } else {
+                        // Process is dead, clean up
+                        daemon::delete_pid_file(existing.port).ok();
+                        registry.unregister(&project_path);
+                    }
+                }
+            }
+
+            // Allocate port
+            let allocated_port = if let Some(custom_port) = port {
+                // Verify custom port is in valid range
+                if !(3030..=3099).contains(&custom_port) {
+                    return Err(IntentError::InvalidInput(
+                        "Port must be in range 3030-3099".to_string(),
+                    ));
+                }
+                // Check if custom port is available
+                if !ProjectRegistry::is_port_available(custom_port) {
+                    return Err(IntentError::InvalidInput(format!(
+                        "Port {} is already in use",
+                        custom_port
+                    )));
+                }
+                custom_port
+            } else {
+                registry.allocate_port()?
+            };
+
+            // Register project
+            let registered_project = RegisteredProject {
+                path: project_path.clone(),
+                name: project_name.clone(),
+                port: allocated_port,
+                pid: None, // Will be set after server starts
+                started_at: Utc::now().to_rfc3339(),
+                db_path: db_path.clone(),
+            };
+
+            registry.register(registered_project);
+            registry.save()?;
+
+            println!("Dashboard starting for project: {}", project_name);
+            println!("  Port: {}", allocated_port);
+            println!("  URL: http://127.0.0.1:{}", allocated_port);
+            println!(
+                "  Mode: {}",
+                if foreground { "foreground" } else { "daemon" }
+            );
+
+            if foreground {
+                // Start server in foreground mode
+                use intent_engine::dashboard::server::DashboardServer;
+
+                let server =
+                    DashboardServer::new(allocated_port, project_path.clone(), db_path.clone())
+                        .await?;
+
+                println!(
+                    "\n🚀 Dashboard server running at http://127.0.0.1:{}",
+                    allocated_port
+                );
+                println!("   Press Ctrl+C to stop\n");
+
+                // Update registry with current PID
+                let current_pid = std::process::id();
+                if let Some(project) = registry.find_by_path_mut(&project_path) {
+                    project.pid = Some(current_pid);
+                    registry.save()?;
+                }
+                daemon::write_pid_file(allocated_port, current_pid)?;
+
+                // Run server (blocks until terminated)
+                let result = server.run().await;
+
+                // Cleanup on exit
+                daemon::delete_pid_file(allocated_port).ok();
+                registry.unregister(&project_path);
+                registry.save().ok();
+
+                result.map_err(IntentError::OtherError)?;
+                Ok(())
+            } else {
+                // Daemon mode: spawn background process
+                println!("\n🚀 Dashboard server starting in background...");
+
+                // Spawn new process with same binary but in foreground mode
+                let current_exe = std::env::current_exe()?;
+
+                let child = std::process::Command::new(current_exe)
+                    .arg("dashboard")
+                    .arg("start")
+                    .arg("--foreground")
+                    .arg("--port")
+                    .arg(allocated_port.to_string())
+                    .current_dir(&project_path)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()?;
+
+                let pid = child.id();
+
+                // Update registry with PID
+                if let Some(project) = registry.find_by_path_mut(&project_path) {
+                    project.pid = Some(pid);
+                    registry.save()?;
+                }
+                daemon::write_pid_file(allocated_port, pid)?;
+
+                // Give server a moment to start
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                // Check if process is still running
+                if daemon::is_process_running(pid) {
+                    println!("✓ Dashboard server started successfully");
+                    println!("  PID: {}", pid);
+                    println!("  URL: http://127.0.0.1:{}", allocated_port);
+                    println!("\nUse 'ie dashboard stop' to stop the server");
+                } else {
+                    // Server failed to start
+                    daemon::delete_pid_file(allocated_port).ok();
+                    registry.unregister(&project_path);
+                    registry.save().ok();
+                    return Err(IntentError::InvalidInput(
+                        "Failed to start dashboard server".to_string(),
+                    ));
+                }
+
+                Ok(())
+            }
+        },
+
+        DashboardCommands::Stop { all } => {
+            let mut registry = ProjectRegistry::load()?;
+
+            if all {
+                // Stop all dashboards
+                let projects: Vec<_> = registry.list_all().to_vec();
+                let mut stopped_count = 0;
+
+                for project in projects {
+                    if let Some(pid) = project.pid {
+                        if daemon::is_process_running(pid) {
+                            if let Err(e) = daemon::stop_process(pid) {
+                                eprintln!("Failed to stop {} (PID {}): {}", project.name, pid, e);
+                            } else {
+                                println!("Stopped dashboard for: {}", project.name);
+                                stopped_count += 1;
+                            }
+                        }
+                    }
+
+                    daemon::delete_pid_file(project.port).ok();
+                    registry.unregister(&project.path);
+                }
+
+                registry.save()?;
+                println!("Stopped {} dashboard(s)", stopped_count);
+            } else {
+                // Stop dashboard for current project
+                let project_ctx = ProjectContext::load_or_init().await?;
+                let project_path = project_ctx.root.clone();
+
+                if let Some(project) = registry.find_by_path(&project_path) {
+                    let port = project.port;
+                    let pid = project.pid;
+
+                    if let Some(pid) = pid {
+                        if daemon::is_process_running(pid) {
+                            daemon::stop_process(pid)?;
+                            println!("Stopped dashboard (PID: {})", pid);
+                        } else {
+                            println!("Dashboard process not running (stale PID: {})", pid);
+                        }
+                    } else {
+                        println!("Dashboard has no PID recorded");
+                    }
+
+                    daemon::delete_pid_file(port).ok();
+                    registry.unregister(&project_path);
+                    registry.save()?;
+                } else {
+                    eprintln!("No dashboard running for current project");
+                    return Err(IntentError::InvalidInput(
+                        "No dashboard instance found".to_string(),
+                    ));
+                }
+            }
+
+            Ok(())
+        },
+
+        DashboardCommands::Status { all } => {
+            let mut registry = ProjectRegistry::load()?;
+
+            // Clean up dead processes
+            registry.cleanup_dead_processes();
+            registry.save()?;
+
+            if all {
+                // Show all dashboards
+                let projects = registry.list_all();
+
+                if projects.is_empty() {
+                    println!("No dashboard instances registered");
+                    return Ok(());
+                }
+
+                println!("Dashboard instances:");
+                for project in projects {
+                    let status = if let Some(pid) = project.pid {
+                        if daemon::is_process_running(pid) {
+                            format!("✓ Running (PID: {})", pid)
+                        } else {
+                            "✗ Stopped (stale PID)".to_string()
+                        }
+                    } else {
+                        "? Unknown (no PID)".to_string()
+                    };
+
+                    println!("\n  Project: {}", project.name);
+                    println!("    Path: {}", project.path.display());
+                    println!("    Port: {}", project.port);
+                    println!("    Status: {}", status);
+                    println!("    Started: {}", project.started_at);
+                    println!("    URL: http://127.0.0.1:{}", project.port);
+                }
+            } else {
+                // Show status for current project
+                let project_ctx = ProjectContext::load_or_init().await?;
+                let project_path = project_ctx.root.clone();
+
+                if let Some(project) = registry.find_by_path(&project_path) {
+                    let status = if let Some(pid) = project.pid {
+                        if daemon::is_process_running(pid) {
+                            format!("✓ Running (PID: {})", pid)
+                        } else {
+                            "✗ Stopped (stale PID)".to_string()
+                        }
+                    } else {
+                        "? Unknown (no PID)".to_string()
+                    };
+
+                    println!("Dashboard status:");
+                    println!("  Project: {}", project.name);
+                    println!("  Port: {}", project.port);
+                    println!("  Status: {}", status);
+                    println!("  URL: http://127.0.0.1:{}", project.port);
+                } else {
+                    println!("No dashboard running for current project");
+                }
+            }
+
+            Ok(())
+        },
+
+        DashboardCommands::List => {
+            let mut registry = ProjectRegistry::load()?;
+
+            // Clean up dead processes
+            registry.cleanup_dead_processes();
+            registry.save()?;
+
+            let projects = registry.list_all();
+
+            if projects.is_empty() {
+                println!("No dashboard instances registered");
+                return Ok(());
+            }
+
+            println!("Registered dashboard instances:");
+            println!("{:<30} {:<8} {:<12} PATH", "PROJECT", "PORT", "STATUS");
+            println!("{}", "-".repeat(80));
+
+            for project in projects {
+                let status = if let Some(pid) = project.pid {
+                    if daemon::is_process_running(pid) {
+                        "Running"
+                    } else {
+                        "Stopped"
+                    }
+                } else {
+                    "Unknown"
+                };
+
+                println!(
+                    "{:<30} {:<8} {:<12} {}",
+                    project.name,
+                    project.port,
+                    status,
+                    project.path.display()
+                );
+            }
+
+            Ok(())
+        },
+
+        DashboardCommands::Open => {
+            let registry = ProjectRegistry::load()?;
+            let project_ctx = ProjectContext::load_or_init().await?;
+            let project_path = project_ctx.root.clone();
+
+            if let Some(project) = registry.find_by_path(&project_path) {
+                // Check if dashboard is running
+                if let Some(pid) = project.pid {
+                    if !daemon::is_process_running(pid) {
+                        eprintln!("Dashboard is not running");
+                        eprintln!("Start it with: ie dashboard start");
+                        return Err(IntentError::InvalidInput(
+                            "Dashboard not running".to_string(),
+                        ));
+                    }
+                } else {
+                    eprintln!("Dashboard status unknown");
+                }
+
+                let url = format!("http://127.0.0.1:{}", project.port);
+                println!("Opening dashboard: {}", url);
+
+                daemon::open_browser(&url)?;
+            } else {
+                eprintln!("No dashboard registered for current project");
+                eprintln!("Start it with: ie dashboard start");
+                return Err(IntentError::InvalidInput(
+                    "No dashboard instance found".to_string(),
+                ));
+            }
+
+            Ok(())
+        },
+    }
 }

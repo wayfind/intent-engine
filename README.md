@@ -325,6 +325,59 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
 
 ---
 
+## 🌐 Web Dashboard: Visual Task Management
+
+**New in v0.5**: Intent-Engine now includes a built-in web dashboard for visual task management and monitoring.
+
+### Key Features
+
+- ✅ **Modern Web UI**: Beautiful interface powered by TailwindCSS and HTMX
+- ✅ **Markdown Rendering**: Rich text display with code syntax highlighting
+- ✅ **Real-Time Search**: Instant full-text search across tasks and events
+- ✅ **Task Workflows**: Visual buttons for start, complete, switch, and spawn operations
+- ✅ **Event Tracking**: Timeline view of decisions, blockers, milestones, and notes
+- ✅ **Multi-Project Support**: Run dashboards for multiple projects simultaneously
+
+### Quick Start
+
+```bash
+# Start dashboard (auto-selects available port 3030-3099)
+cd /path/to/your/project
+ie dashboard start
+
+# Open in browser automatically
+ie dashboard open
+
+# Or manually access the URL shown in the output
+# http://127.0.0.1:3030
+
+# Check running dashboards
+ie dashboard list
+
+# Stop dashboard
+ie dashboard stop
+```
+
+### Why Use the Dashboard?
+
+**Perfect for:**
+- 👀 **Visualizing Progress**: See task hierarchy and status at a glance
+- 📊 **Browsing History**: Review event timelines with rich Markdown rendering
+- 🎨 **Presenting to Teams**: Share project status via browser
+- 🔍 **Exploring Tasks**: Search and filter large task sets interactively
+
+**Integration:**
+- All changes sync instantly with CLI and MCP tools (shares same database)
+- RESTful API available for custom integrations
+
+### Documentation
+
+- 📖 [Dashboard User Guide](docs/dashboard-user-guide.md) - Complete user manual
+- 🔧 [API Reference](docs/dashboard-api-reference.md) - REST API documentation
+- 🏗️ [Architecture Spec](docs/web-dashboard-spec.md) - Technical design
+
+---
+
 ## ✨ Core Features
 
 ### New in v0.4 (2025-11)

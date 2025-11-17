@@ -102,6 +102,10 @@ pub enum Commands {
         workspace: Option<String>,
     },
 
+    /// Dashboard management commands
+    #[command(subcommand)]
+    Dashboard(DashboardCommands),
+
     /// Unified setup command for AI tool integrations
     ///
     /// This command provides a unified interface for setting up intent-engine integration
@@ -454,4 +458,38 @@ pub enum EventCommands {
         #[arg(long)]
         since: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+pub enum DashboardCommands {
+    /// Start the Dashboard web server for current project
+    Start {
+        /// Custom port (default: auto-allocated 3030-3099)
+        #[arg(long)]
+        port: Option<u16>,
+
+        /// Run in foreground (default: daemon mode)
+        #[arg(long)]
+        foreground: bool,
+    },
+
+    /// Stop the Dashboard server
+    Stop {
+        /// Stop all Dashboard instances
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// Show Dashboard status
+    Status {
+        /// Show status for all projects
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// List all registered Dashboard instances
+    List,
+
+    /// Open Dashboard in browser
+    Open,
 }

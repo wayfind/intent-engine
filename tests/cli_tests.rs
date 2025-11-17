@@ -7,7 +7,78 @@ use std::fs;
 use tempfile::TempDir;
 
 fn setup_test_env() -> TempDir {
-    TempDir::new().unwrap()
+    let temp_dir = TempDir::new().unwrap();
+    // Create a .git marker to prevent falling back to home project
+    fs::create_dir(temp_dir.path().join(".git")).unwrap();
+
+    // Initialize the project by adding a dummy task (triggers auto-init)
+    // Prevent fallback to home by setting HOME to nonexistent directory
+    let mut init_cmd = Command::new(cargo::cargo_bin!("ie"));
+    init_cmd
+        .current_dir(temp_dir.path())
+        .env("HOME", "/nonexistent")  // Prevent fallback to home
+        .env("USERPROFILE", "/nonexistent")  // Windows equivalent
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("Setup task")
+        .assert()
+        .success();
+
+    temp_dir
+}
+
+// Setup environment WITHOUT initializing a project
+// Used for tests that verify "project not found" behavior
+fn setup_uninitialized_env() -> TempDir {
+    let temp_dir = TempDir::new().unwrap();
+    // Create a .git marker to prevent falling back to home project
+    fs::create_dir(temp_dir.path().join(".git")).unwrap();
+    temp_dir
+}
+
+// Setup environment with an EMPTY initialized project (no tasks)
+// Used for tests that need a clean project to add their own tasks
+fn setup_empty_project() -> TempDir {
+    let temp_dir = TempDir::new().unwrap();
+    // Create a .git marker
+    fs::create_dir(temp_dir.path().join(".git")).unwrap();
+
+    // Run a command that will initialize the database
+    let mut init_cmd = Command::new(cargo::cargo_bin!("ie"));
+    init_cmd
+        .current_dir(temp_dir.path())
+        .env("HOME", "/nonexistent")
+        .env("USERPROFILE", "/nonexistent")
+        .arg("task")
+        .arg("add")
+        .arg("--name")
+        .arg("_temp")
+        .assert()
+        .success();
+
+    // Delete the temporary task to get an empty project
+    let mut delete_cmd = Command::new(cargo::cargo_bin!("ie"));
+    delete_cmd
+        .current_dir(temp_dir.path())
+        .env("HOME", "/nonexistent")
+        .env("USERPROFILE", "/nonexistent")
+        .arg("task")
+        .arg("del")
+        .arg("1")
+        .assert()
+        .success();
+
+    // Reset the SQLite auto-increment sequence so next task ID is 1
+    use std::process::Command as StdCommand;
+    let db_path = temp_dir.path().join(".intent-engine/project.db");
+    StdCommand::new("sqlite3")
+        .arg(&db_path)
+        .arg("UPDATE sqlite_sequence SET seq = 0 WHERE name = 'tasks';")
+        .output()
+        .ok(); // Ignore errors if sqlite3 not available
+
+    temp_dir
 }
 
 #[test]
@@ -261,7 +332,7 @@ fn test_cli_event_list() {
 
 #[test]
 fn test_cli_report() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_empty_project();
 
     // Add some tasks
     let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
@@ -290,11 +361,13 @@ fn test_cli_report() {
 
 #[test]
 fn test_cli_project_not_found() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_uninitialized_env();
 
     // Try to get task in non-project directory (read operation)
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
+        .env("HOME", "/nonexistent")  // Prevent fallback to home
+        .env("USERPROFILE", "/nonexistent")
         .arg("task")
         .arg("get")
         .arg("1");
@@ -306,11 +379,13 @@ fn test_cli_project_not_found() {
 
 #[test]
 fn test_cli_lazy_init() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_uninitialized_env();
 
     // Write operation should auto-initialize
     let mut cmd = Command::new(cargo::cargo_bin!("ie"));
     cmd.current_dir(temp_dir.path())
+        .env("HOME", "/nonexistent")  // Prevent fallback to home
+        .env("USERPROFILE", "/nonexistent")
         .arg("task")
         .arg("add")
         .arg("--name")
@@ -567,9 +642,15 @@ fn test_cli_isolated_projects() {
     let temp_dir1 = TempDir::new().unwrap();
     let temp_dir2 = TempDir::new().unwrap();
 
+    // Create .git markers to prevent fallback to home
+    fs::create_dir(temp_dir1.path().join(".git")).unwrap();
+    fs::create_dir(temp_dir2.path().join(".git")).unwrap();
+
     // Project 1: Add task
     let mut cmd1 = Command::new(cargo::cargo_bin!("ie"));
     cmd1.current_dir(temp_dir1.path())
+        .env("HOME", "/nonexistent")
+        .env("USERPROFILE", "/nonexistent")
         .arg("task")
         .arg("add")
         .arg("--name")
@@ -580,6 +661,8 @@ fn test_cli_isolated_projects() {
     // Project 2: Add task
     let mut cmd2 = Command::new(cargo::cargo_bin!("ie"));
     cmd2.current_dir(temp_dir2.path())
+        .env("HOME", "/nonexistent")
+        .env("USERPROFILE", "/nonexistent")
         .arg("task")
         .arg("add")
         .arg("--name")
@@ -654,7 +737,7 @@ fn test_cli_task_update_with_complexity_priority() {
 
 #[test]
 fn test_cli_pick_next_tasks() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_empty_project();
 
     // Add multiple tasks with different priorities
     for i in 1..=3 {
@@ -702,7 +785,7 @@ fn test_cli_pick_next_tasks() {
 
 #[test]
 fn test_cli_spawn_subtask() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_empty_project();
 
     // Add and start a parent task
     let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
@@ -755,7 +838,7 @@ fn test_cli_spawn_subtask() {
 
 #[test]
 fn test_cli_switch_task() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_empty_project();
 
     // Add two tasks
     let mut add_cmd1 = Command::new(cargo::cargo_bin!("ie"));
@@ -862,7 +945,7 @@ fn test_cli_pick_next_json_format() {
 
 #[test]
 fn test_cli_pick_next_text_format() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_empty_project();
 
     // Create a top-level task
     let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
@@ -892,7 +975,7 @@ fn test_cli_pick_next_text_format() {
 
 #[test]
 fn test_cli_pick_next_no_tasks() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_empty_project();
 
     // Pick next when no tasks exist
     let mut pick_cmd = Command::new(cargo::cargo_bin!("ie"));
@@ -915,7 +998,7 @@ fn test_cli_pick_next_no_tasks() {
 
 #[test]
 fn test_cli_pick_next_all_completed() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_empty_project();
 
     // Create and complete a task
     let mut add_cmd = Command::new(cargo::cargo_bin!("ie"));
@@ -966,7 +1049,7 @@ fn test_cli_pick_next_all_completed() {
 
 #[test]
 fn test_cli_pick_next_priority_ordering() {
-    let temp_dir = setup_test_env();
+    let temp_dir = setup_empty_project();
 
     // Create multiple tasks with different priorities
     let mut add1_cmd = Command::new(cargo::cargo_bin!("ie"));
