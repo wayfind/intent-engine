@@ -1,3 +1,5 @@
+mod common;
+
 use anyhow::Result;
 use intent_engine::db::{create_pool, run_migrations};
 use serde_json::json;
@@ -5,16 +7,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::Duration;
-
-/// Get the path to the ie binary
-fn get_ie_binary() -> Result<PathBuf> {
-    Ok(std::env::current_exe()?
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("ie"))
-}
 
 /// Initialize a project in the given directory
 fn init_project(project_path: &Path) -> Result<()> {
@@ -80,7 +72,7 @@ struct DashboardTestServer {
 impl DashboardTestServer {
     /// Start a new dashboard server on the given port
     fn start(port: u16, project_path: PathBuf) -> Result<Self> {
-        let binary_path = get_ie_binary()?;
+        let binary_path = common::ie_binary();
 
         let process = Command::new(&binary_path)
             .args([
