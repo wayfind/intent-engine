@@ -32,13 +32,14 @@ use tempfile::TempDir;
 ///
 /// Panics if the `ie` binary cannot be found in either the environment
 /// variable or the standard cargo build directory.
+#[allow(deprecated)] // cargo_bin() is deprecated but needed for fallback
 pub fn ie_binary() -> PathBuf {
     // CI environments (especially coverage tests with custom --target-dir) set
     // CARGO_BIN_EXE_<name> to point to the actual binary location
     std::env::var("CARGO_BIN_EXE_ie")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
-            // Fallback to cargo_bin!() for local testing with standard target directory
+            // Fallback to cargo_bin() for local testing with standard target directory
             assert_cmd::cargo::cargo_bin("ie")
         })
 }

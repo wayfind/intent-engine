@@ -1,17 +1,22 @@
+mod common;
+
 use std::process::Command;
 
 use serde_json::Value;
-use tempfile::TempDir;
 
 #[test]
 fn doctor_reports_database_path_resolution_details() {
-    let temp_dir = TempDir::new().expect("failed to create temp dir");
+    // Use common::setup_test_env() to ensure proper initialization
+    // (.git marker + HOME isolation + auto-init database)
+    let temp_dir = common::setup_test_env();
 
     // Use Cargo-provided environment variable for binary path
     // This works correctly in all test environments (local, CI, llvm-cov, etc.)
     let binary_path = env!("CARGO_BIN_EXE_ie");
     let output = Command::new(binary_path)
         .current_dir(temp_dir.path())
+        .env("HOME", "/nonexistent") // Ensure isolation
+        .env("USERPROFILE", "/nonexistent") // Windows isolation
         .arg("doctor")
         .output()
         .expect("failed to run doctor command");
