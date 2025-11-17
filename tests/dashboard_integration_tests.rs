@@ -1,9 +1,74 @@
 use anyhow::Result;
+use intent_engine::db::{create_pool, run_migrations};
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::Duration;
+
+/// Get the path to the ie binary
+fn get_ie_binary() -> Result<PathBuf> {
+    Ok(std::env::current_exe()?
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("ie"))
+}
+
+/// Initialize a project in the given directory
+fn init_project(project_path: &Path) -> Result<()> {
+    // Create .intent-engine directory
+    let intent_dir = project_path.join(".intent-engine");
+    std::fs::create_dir_all(&intent_dir)?;
+
+    // Create database
+    let db_path = intent_dir.join("project.db");
+
+    // Use tokio runtime to run async database initialization
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(async {
+        let pool = create_pool(&db_path).await?;
+        run_migrations(&pool).await?;
+        Ok::<(), anyhow::Error>(())
+    })?;
+
+    // Copy static files for Dashboard tests
+    // Get the project root (where Cargo.toml is)
+    let exe_path = std::env::current_exe()?;
+    let project_root = exe_path
+        .parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.parent())
+        .ok_or_else(|| anyhow::anyhow!("Failed to find project root"))?;
+
+    let source_static = project_root.join("static");
+    if source_static.exists() {
+        let dest_static = project_path.join("static");
+        copy_dir_recursive(&source_static, &dest_static)?;
+    }
+
+    Ok(())
+}
+
+/// Recursively copy a directory
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+    std::fs::create_dir_all(dst)?;
+
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let dest_path = dst.join(entry.file_name());
+
+        if path.is_dir() {
+            copy_dir_recursive(&path, &dest_path)?;
+        } else {
+            std::fs::copy(&path, &dest_path)?;
+        }
+    }
+
+    Ok(())
+}
 
 /// Helper to manage a dashboard server process for testing
 struct DashboardTestServer {
@@ -15,12 +80,7 @@ struct DashboardTestServer {
 impl DashboardTestServer {
     /// Start a new dashboard server on the given port
     fn start(port: u16, project_path: PathBuf) -> Result<Self> {
-        let binary_path = std::env::current_exe()?
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("ie");
+        let binary_path = get_ie_binary()?;
 
         let process = Command::new(&binary_path)
             .args([
@@ -92,10 +152,7 @@ fn test_dashboard_health_check() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
 
     // Initialize project
-    Command::new("cargo")
-        .args(["run", "--release", "--", "setup"])
-        .current_dir(&temp_dir)
-        .output()?;
+    init_project(temp_dir.path())?;
 
     let server = DashboardTestServer::start(3070, temp_dir.path().to_path_buf())?;
 
@@ -115,10 +172,7 @@ fn test_dashboard_task_crud() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
 
     // Initialize project
-    Command::new("cargo")
-        .args(["run", "--release", "--", "setup"])
-        .current_dir(&temp_dir)
-        .output()?;
+    init_project(temp_dir.path())?;
 
     let server = DashboardTestServer::start(3071, temp_dir.path().to_path_buf())?;
 
@@ -183,10 +237,7 @@ fn test_dashboard_task_workflow() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
 
     // Initialize project
-    Command::new("cargo")
-        .args(["run", "--release", "--", "setup"])
-        .current_dir(&temp_dir)
-        .output()?;
+    init_project(temp_dir.path())?;
 
     let server = DashboardTestServer::start(3072, temp_dir.path().to_path_buf())?;
 
@@ -237,10 +288,7 @@ fn test_dashboard_events() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
 
     // Initialize project
-    Command::new("cargo")
-        .args(["run", "--release", "--", "setup"])
-        .current_dir(&temp_dir)
-        .output()?;
+    init_project(temp_dir.path())?;
 
     let server = DashboardTestServer::start(3073, temp_dir.path().to_path_buf())?;
 
@@ -284,10 +332,7 @@ fn test_dashboard_search() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
 
     // Initialize project
-    Command::new("cargo")
-        .args(["run", "--release", "--", "setup"])
-        .current_dir(&temp_dir)
-        .output()?;
+    init_project(temp_dir.path())?;
 
     let server = DashboardTestServer::start(3074, temp_dir.path().to_path_buf())?;
 
@@ -337,10 +382,7 @@ fn test_dashboard_pick_next() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
 
     // Initialize project
-    Command::new("cargo")
-        .args(["run", "--release", "--", "setup"])
-        .current_dir(&temp_dir)
-        .output()?;
+    init_project(temp_dir.path())?;
 
     let server = DashboardTestServer::start(3075, temp_dir.path().to_path_buf())?;
 
@@ -369,10 +411,7 @@ fn test_dashboard_static_files() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
 
     // Initialize project
-    Command::new("cargo")
-        .args(["run", "--release", "--", "setup"])
-        .current_dir(&temp_dir)
-        .output()?;
+    init_project(temp_dir.path())?;
 
     let server = DashboardTestServer::start(3076, temp_dir.path().to_path_buf())?;
 
@@ -400,10 +439,7 @@ fn test_dashboard_spawn_subtask() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
 
     // Initialize project
-    Command::new("cargo")
-        .args(["run", "--release", "--", "setup"])
-        .current_dir(&temp_dir)
-        .output()?;
+    init_project(temp_dir.path())?;
 
     let server = DashboardTestServer::start(3077, temp_dir.path().to_path_buf())?;
 
@@ -447,10 +483,7 @@ fn test_dashboard_markdown_xss_protection() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;
 
     // Initialize project
-    Command::new("cargo")
-        .args(["run", "--release", "--", "setup"])
-        .current_dir(&temp_dir)
-        .output()?;
+    init_project(temp_dir.path())?;
 
     let server = DashboardTestServer::start(3078, temp_dir.path().to_path_buf())?;
 
