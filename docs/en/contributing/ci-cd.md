@@ -279,14 +279,36 @@ Use Manual Build workflow to test specific platforms:
    cargo test
    ```
 
-2. **Commit Messages**: Use conventional commits
+2. **Optional UI Tests** (pre-commit hook):
+
+   By default, UI/Dashboard integration tests are skipped during commit to keep the process fast.
+
+   To enable UI tests in pre-commit hook:
+   ```bash
+   # One-time commit with UI tests
+   INTENT_RUN_UI_TESTS=1 git commit -m "your message"
+
+   # Or export for entire session
+   export INTENT_RUN_UI_TESTS=1
+   git commit -m "your message"
+
+   # To disable again
+   unset INTENT_RUN_UI_TESTS
+   ```
+
+   Run UI tests manually:
+   ```bash
+   cargo test --test dashboard_integration_tests --all-features
+   ```
+
+3. **Commit Messages**: Use conventional commits
    ```bash
    feat: add new feature
    fix: resolve issue
    docs: update readme
    ```
 
-3. **PR Description**: Clear description of changes
+4. **PR Description**: Clear description of changes
 
 ### For Maintainers
 
