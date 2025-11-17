@@ -33,7 +33,7 @@ jobs:
           OUTPUT: CHANGELOG.md
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: 'docs: update CHANGELOG for ${{ github.ref_name }}'
