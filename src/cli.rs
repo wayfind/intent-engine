@@ -471,6 +471,10 @@ pub enum DashboardCommands {
         /// Run in foreground (default: daemon mode)
         #[arg(long)]
         foreground: bool,
+
+        /// Don't automatically open browser
+        #[arg(long)]
+        no_browser: bool,
     },
 
     /// Stop the Dashboard server

@@ -459,3 +459,45 @@ pub async fn search(
             .into_response(),
     }
 }
+
+/// List all registered projects
+pub async fn list_projects() -> impl IntoResponse {
+    match crate::dashboard::registry::ProjectRegistry::load() {
+        Ok(mut registry) => {
+            // Clean up stale MCP connections before returning
+            registry.cleanup_stale_mcp_connections();
+            if let Err(e) = registry.save() {
+                eprintln!("⚠ Failed to save registry after cleanup: {}", e);
+            }
+
+            let projects: Vec<serde_json::Value> = registry
+                .projects
+                .iter()
+                .map(|p| {
+                    json!({
+                        "name": p.name,
+                        "path": p.path.display().to_string(),
+                        "port": p.port,
+                        "pid": p.pid,
+                        "url": format!("http://127.0.0.1:{}", p.port),
+                        "started_at": p.started_at,
+                        "mcp_connected": p.mcp_connected,
+                        "mcp_agent": p.mcp_agent,
+                        "mcp_last_seen": p.mcp_last_seen,
+                    })
+                })
+                .collect();
+
+            (StatusCode::OK, Json(ApiResponse { data: projects })).into_response()
+        },
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiError {
+                code: "REGISTRY_ERROR".to_string(),
+                message: format!("Failed to load project registry: {}", e),
+                details: None,
+            }),
+        )
+            .into_response(),
+    }
+}

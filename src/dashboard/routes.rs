@@ -31,6 +31,7 @@ pub fn api_routes() -> Router<AppState> {
         .route("/current-task", get(handlers::get_current_task))
         .route("/pick-next", get(handlers::pick_next_task))
         .route("/search", get(handlers::search))
+        .route("/projects", get(handlers::list_projects))
 }
 
 #[cfg(test)]

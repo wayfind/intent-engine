@@ -52,7 +52,34 @@ const MCP_TOOLS: &str = include_str!("../../mcp-server.json");
 /// Run the MCP server
 /// This is the main entry point for MCP server mode
 pub async fn run() -> io::Result<()> {
-    run_server().await
+    // Load project context
+    let ctx = ProjectContext::load_or_init()
+        .await
+        .map_err(|e| io::Error::other(e.to_string()))?;
+
+    // Register MCP connection in the global registry
+    if let Err(e) = register_mcp_connection(&ctx.root) {
+        eprintln!("⚠ Failed to register MCP connection: {}", e);
+    }
+
+    // Start heartbeat task
+    let project_path = ctx.root.clone();
+    let heartbeat_handle = tokio::spawn(async move {
+        heartbeat_task(project_path).await;
+    });
+
+    // Run the MCP server
+    let result = run_server().await;
+
+    // Clean up: unregister MCP connection
+    if let Err(e) = unregister_mcp_connection(&ctx.root) {
+        eprintln!("⚠ Failed to unregister MCP connection: {}", e);
+    }
+
+    // Cancel heartbeat task
+    heartbeat_handle.abort();
+
+    result
 }
 
 async fn run_server() -> io::Result<()> {
@@ -674,6 +701,78 @@ async fn handle_report_generate(args: Value) -> Result<Value, String> {
         .map_err(|e| format!("Failed to generate report: {}", e))?;
 
     serde_json::to_value(&report).map_err(|e| format!("Serialization error: {}", e))
+}
+
+// ============================================================================
+// MCP Connection Registry Integration
+// ============================================================================
+
+/// Register this MCP server instance with the global project registry
+fn register_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()> {
+    use crate::dashboard::registry::ProjectRegistry;
+
+    let mut registry = ProjectRegistry::load()?;
+
+    // Detect agent type from environment (Claude Code sets specific env vars)
+    let agent_name = detect_agent_type();
+
+    registry.register_mcp_connection(&project_path.to_path_buf(), agent_name)?;
+
+    eprintln!(
+        "✓ MCP connection registered for project: {}",
+        project_path.display()
+    );
+
+    Ok(())
+}
+
+/// Unregister this MCP server instance from the global project registry
+fn unregister_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()> {
+    use crate::dashboard::registry::ProjectRegistry;
+
+    let mut registry = ProjectRegistry::load()?;
+    registry.unregister_mcp_connection(&project_path.to_path_buf())?;
+
+    eprintln!(
+        "✓ MCP connection unregistered for project: {}",
+        project_path.display()
+    );
+
+    Ok(())
+}
+
+/// Heartbeat task that keeps the MCP connection alive
+async fn heartbeat_task(project_path: std::path::PathBuf) {
+    use crate::dashboard::registry::ProjectRegistry;
+
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+
+    loop {
+        interval.tick().await;
+
+        // Update heartbeat
+        if let Ok(mut registry) = ProjectRegistry::load() {
+            if let Err(e) = registry.update_mcp_heartbeat(&project_path) {
+                eprintln!("⚠ Failed to update MCP heartbeat: {}", e);
+            }
+        }
+    }
+}
+
+/// Detect the agent type from environment variables
+fn detect_agent_type() -> Option<String> {
+    // Check for Claude Code specific environment variables
+    if std::env::var("CLAUDE_CODE_VERSION").is_ok() {
+        return Some("claude-code".to_string());
+    }
+
+    // Check for Claude Desktop
+    if std::env::var("CLAUDE_DESKTOP").is_ok() {
+        return Some("claude-desktop".to_string());
+    }
+
+    // Generic MCP client
+    Some("mcp-client".to_string())
 }
 
 #[cfg(test)]

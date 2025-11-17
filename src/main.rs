@@ -1427,7 +1427,11 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
     use intent_engine::dashboard::{daemon, registry::*};
 
     match dashboard_cmd {
-        DashboardCommands::Start { port, foreground } => {
+        DashboardCommands::Start {
+            port,
+            foreground,
+            no_browser,
+        } => {
             // Load project context to get project path and DB path
             let project_ctx = ProjectContext::load_or_init().await?;
             let project_path = project_ctx.root.clone();
@@ -1486,6 +1490,9 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 pid: None, // Will be set after server starts
                 started_at: Utc::now().to_rfc3339(),
                 db_path: db_path.clone(),
+                mcp_connected: false,
+                mcp_last_seen: None,
+                mcp_agent: None,
             };
 
             registry.register(registered_project);
@@ -1513,6 +1520,18 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 );
                 println!("   Press Ctrl+C to stop\n");
 
+                // Open browser if not disabled
+                if !no_browser {
+                    let dashboard_url = format!("http://127.0.0.1:{}", allocated_port);
+                    tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+                    println!("🌐 Opening dashboard in browser...");
+                    if let Err(e) = open::that(&dashboard_url) {
+                        eprintln!("⚠️  Could not open browser automatically: {}", e);
+                        eprintln!("   Please manually visit: {}", dashboard_url);
+                    }
+                    println!();
+                }
+
                 // Update registry with current PID
                 let current_pid = std::process::id();
                 if let Some(project) = registry.find_by_path_mut(&project_path) {
@@ -1538,12 +1557,19 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 // Spawn new process with same binary but in foreground mode
                 let current_exe = std::env::current_exe()?;
 
-                let child = std::process::Command::new(current_exe)
-                    .arg("dashboard")
+                let mut cmd = std::process::Command::new(current_exe);
+                cmd.arg("dashboard")
                     .arg("start")
                     .arg("--foreground")
                     .arg("--port")
-                    .arg(allocated_port.to_string())
+                    .arg(allocated_port.to_string());
+
+                // Pass --no-browser flag to child process if user specified it
+                if no_browser {
+                    cmd.arg("--no-browser");
+                }
+
+                let child = cmd
                     .current_dir(&project_path)
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
@@ -1563,9 +1589,20 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
 
                 // Check if process is still running
                 if daemon::is_process_running(pid) {
+                    let dashboard_url = format!("http://127.0.0.1:{}", allocated_port);
                     println!("✓ Dashboard server started successfully");
                     println!("  PID: {}", pid);
-                    println!("  URL: http://127.0.0.1:{}", allocated_port);
+                    println!("  URL: {}", dashboard_url);
+
+                    // Open browser if not disabled
+                    if !no_browser {
+                        println!("\n🌐 Opening dashboard in browser...");
+                        if let Err(e) = open::that(&dashboard_url) {
+                            eprintln!("⚠️  Could not open browser automatically: {}", e);
+                            eprintln!("   Please manually visit: {}", dashboard_url);
+                        }
+                    }
+
                     println!("\nUse 'ie dashboard stop' to stop the server");
                 } else {
                     // Server failed to start

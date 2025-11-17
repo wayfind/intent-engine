@@ -1,19 +1,24 @@
 use anyhow::{Context, Result};
 use axum::{
-    extract::State,
-    http::{Method, StatusCode},
-    response::{Html, IntoResponse, Json},
+    extract::{Path, State},
+    http::{header, Method, StatusCode},
+    response::{Html, IntoResponse, Json, Response},
     routing::get,
     Router,
 };
+use rust_embed::RustEmbed;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use tower_http::{
     cors::{Any, CorsLayer},
-    services::ServeDir,
     trace::TraceLayer,
 };
+
+/// Embedded static assets (HTML, CSS, JS)
+#[derive(RustEmbed)]
+#[folder = "static/"]
+struct StaticAssets;
 
 /// Dashboard server state shared across handlers
 #[derive(Clone)]
@@ -120,15 +125,12 @@ fn create_router(state: AppState) -> Router {
         .route("/info", get(info_handler))
         .merge(routes::api_routes());
 
-    // Static file serving
-    let static_dir = std::env::current_dir().unwrap().join("static");
-
     // Main router
     Router::new()
         // Root route - serve index.html
         .route("/", get(serve_index))
-        // Static files under /static prefix
-        .nest_service("/static", ServeDir::new(static_dir))
+        // Static files under /static prefix (embedded)
+        .route("/static/*path", get(serve_static))
         // API routes under /api prefix
         .nest("/api", api_routes)
         // Fallback to 404
@@ -145,13 +147,47 @@ fn create_router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
 }
 
-/// Serve the main index.html file
+/// Serve the main index.html file from embedded assets
 async fn serve_index() -> impl IntoResponse {
-    match tokio::fs::read_to_string("static/index.html").await {
-        Ok(content) => Html(content).into_response(),
-        Err(_) => (
+    match StaticAssets::get("index.html") {
+        Some(content) => {
+            let body = content.data.to_vec();
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .body(body.into())
+                .unwrap()
+        },
+        None => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Html("<h1>Error: index.html not found</h1>".to_string()),
+        )
+            .into_response(),
+    }
+}
+
+/// Serve static files from embedded assets
+async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
+    // Remove leading slash if present
+    let path = path.trim_start_matches('/');
+
+    match StaticAssets::get(path) {
+        Some(content) => {
+            let mime = mime_guess::from_path(path).first_or_octet_stream();
+            let body = content.data.to_vec();
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, mime.as_ref())
+                .body(body.into())
+                .unwrap()
+        },
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "File not found",
+                "code": "NOT_FOUND",
+                "path": path
+            })),
         )
             .into_response(),
     }

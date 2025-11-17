@@ -23,6 +23,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Load project tabs
+    await loadProjectTabs();
+
     // Load project info
     await loadProjectInfo();
 
@@ -31,6 +34,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load current task if exists
     await loadCurrentTask();
+
+    // Refresh project tabs every 30 seconds
+    setInterval(loadProjectTabs, 30000);
 });
 
 // Safe Markdown rendering
@@ -612,5 +618,42 @@ function showNotification(message, type = 'info') {
     // You could implement a toast notification here
     if (type === 'error') {
         alert(message);
+    }
+}
+
+// Load project tabs
+async function loadProjectTabs() {
+    try {
+        const response = await fetch('/api/projects');
+        const result = await response.json();
+
+        if (!result.data || result.data.length === 0) {
+            document.getElementById('project-tabs').innerHTML = '<div class="text-sm text-gray-500 py-3">No projects found</div>';
+            return;
+        }
+
+        const currentPort = window.location.port || '3030';
+
+        const tabsHTML = result.data.map(project => {
+            const isActive = project.port.toString() === currentPort;
+            const activeClass = isActive ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50';
+            const indicator = isActive ? '<span class="ml-1">●</span>' : '';
+
+            // MCP connection status indicator
+            const mcpConnected = project.mcp_connected || false;
+            const mcpAgent = project.mcp_agent || 'unknown';
+            const mcpIndicator = mcpConnected
+                ? `<span class="ml-1 text-green-500" title="Agent connected: ${mcpAgent}">🟢</span>`
+                : '<span class="ml-1 text-gray-400" title="No agent connected">⚪</span>';
+
+            const tooltipText = `${project.path}${mcpConnected ? '\n🟢 Agent: ' + mcpAgent : '\n⚪ No agent connected'}`;
+
+            return `<a href="${project.url}" class="px-4 py-3 text-sm font-medium transition-colors ${activeClass} whitespace-nowrap" title="${tooltipText}">${project.name}${indicator}${mcpIndicator}</a>`;
+        }).join('');
+
+        document.getElementById('project-tabs').innerHTML = tabsHTML;
+    } catch (error) {
+        console.error('Failed to load project tabs:', error);
+        document.getElementById('project-tabs').innerHTML = '<div class="text-sm text-red-500 py-3">Failed to load projects</div>';
     }
 }

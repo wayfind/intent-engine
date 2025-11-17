@@ -28,39 +28,7 @@ fn init_project(project_path: &Path) -> Result<()> {
         Ok::<(), anyhow::Error>(())
     })?;
 
-    // Copy static files for Dashboard tests
-    // Get the project root (where Cargo.toml is)
-    let exe_path = std::env::current_exe()?;
-    let project_root = exe_path
-        .parent()
-        .and_then(|p| p.parent())
-        .and_then(|p| p.parent())
-        .ok_or_else(|| anyhow::anyhow!("Failed to find project root"))?;
-
-    let source_static = project_root.join("static");
-    if source_static.exists() {
-        let dest_static = project_path.join("static");
-        copy_dir_recursive(&source_static, &dest_static)?;
-    }
-
-    Ok(())
-}
-
-/// Recursively copy a directory
-fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
-    std::fs::create_dir_all(dst)?;
-
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let path = entry.path();
-        let dest_path = dst.join(entry.file_name());
-
-        if path.is_dir() {
-            copy_dir_recursive(&path, &dest_path)?;
-        } else {
-            std::fs::copy(&path, &dest_path)?;
-        }
-    }
+    // Note: Static files are now embedded using rust-embed, so no need to copy them
 
     Ok(())
 }

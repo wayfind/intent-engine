@@ -25,6 +25,14 @@ pub struct RegisteredProject {
     pub pid: Option<u32>,
     pub started_at: String,
     pub db_path: PathBuf,
+
+    // MCP connection tracking
+    #[serde(default)]
+    pub mcp_connected: bool,
+    #[serde(default)]
+    pub mcp_last_seen: Option<String>,
+    #[serde(default)]
+    pub mcp_agent: Option<String>,
 }
 
 impl ProjectRegistry {
@@ -145,6 +153,75 @@ impl ProjectRegistry {
         &self.projects
     }
 
+    /// Register or update MCP connection for a project
+    pub fn register_mcp_connection(
+        &mut self,
+        path: &PathBuf,
+        agent_name: Option<String>,
+    ) -> anyhow::Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Check if project already exists
+        if let Some(project) = self.find_by_path_mut(path) {
+            // Update existing project
+            project.mcp_connected = true;
+            project.mcp_last_seen = Some(now.clone());
+            project.mcp_agent = agent_name;
+        } else {
+            // Create new entry for MCP-only project (no Dashboard running)
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+
+            let db_path = path.join(".intent-engine").join("intents.db");
+
+            let project = RegisteredProject {
+                path: path.clone(),
+                name,
+                port: 0, // No Dashboard server, use 0 as placeholder
+                pid: None,
+                started_at: now.clone(),
+                db_path,
+                mcp_connected: true,
+                mcp_last_seen: Some(now),
+                mcp_agent: agent_name,
+            };
+
+            self.projects.push(project);
+        }
+
+        self.save()
+    }
+
+    /// Update MCP heartbeat
+    pub fn update_mcp_heartbeat(&mut self, path: &PathBuf) -> anyhow::Result<()> {
+        if let Some(project) = self.find_by_path_mut(path) {
+            project.mcp_last_seen = Some(chrono::Utc::now().to_rfc3339());
+            project.mcp_connected = true;
+            self.save()?;
+        }
+        Ok(())
+    }
+
+    /// Unregister MCP connection
+    pub fn unregister_mcp_connection(&mut self, path: &PathBuf) -> anyhow::Result<()> {
+        if let Some(project) = self.find_by_path_mut(path) {
+            project.mcp_connected = false;
+            project.mcp_last_seen = None;
+            project.mcp_agent = None;
+
+            // If no Dashboard is running (port = 0), remove the entry entirely
+            if project.port == 0 {
+                self.unregister(path);
+            }
+
+            self.save()?;
+        }
+        Ok(())
+    }
+
     /// Clean up projects with dead PIDs
     pub fn cleanup_dead_processes(&mut self) {
         self.projects.retain(|project| {
@@ -154,6 +231,29 @@ impl ProjectRegistry {
                 true // Keep projects without PID
             }
         });
+    }
+
+    /// Clean up stale MCP connections (no heartbeat for 5 minutes)
+    pub fn cleanup_stale_mcp_connections(&mut self) {
+        use chrono::DateTime;
+        let now = chrono::Utc::now();
+        const TIMEOUT_MINUTES: i64 = 5;
+
+        for project in &mut self.projects {
+            if let Some(last_seen) = &project.mcp_last_seen {
+                if let Ok(last_time) = DateTime::parse_from_rfc3339(last_seen) {
+                    let duration = now.signed_duration_since(last_time.with_timezone(&chrono::Utc));
+                    if duration.num_minutes() > TIMEOUT_MINUTES {
+                        project.mcp_connected = false;
+                        project.mcp_last_seen = None;
+                        project.mcp_agent = None;
+                    }
+                }
+            }
+        }
+
+        // Remove MCP-only projects that are disconnected (port = 0 and not connected)
+        self.projects.retain(|p| p.port != 0 || p.mcp_connected);
     }
 
     /// Check if a process is alive
@@ -214,6 +314,9 @@ mod tests {
             pid: None,
             started_at: "2025-01-01T00:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project1/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
         });
 
         // Allocate second port
@@ -232,6 +335,9 @@ mod tests {
             pid: Some(12345),
             started_at: "2025-01-01T00:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
         };
 
         registry.register(project.clone());
@@ -259,6 +365,9 @@ mod tests {
             pid: None,
             started_at: "2025-01-01T00:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
         };
 
         registry.register(project.clone());
@@ -279,6 +388,9 @@ mod tests {
             pid: None,
             started_at: "2025-01-01T00:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
         };
 
         let project2 = RegisteredProject {
@@ -288,6 +400,9 @@ mod tests {
             pid: None,
             started_at: "2025-01-01T01:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
         };
 
         registry.register(project1);
@@ -314,6 +429,9 @@ mod tests {
             pid: Some(12345),
             started_at: "2025-01-01T00:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
         };
 
         registry.register(project);
