@@ -216,14 +216,6 @@ impl ClaudeCodeSetup {
         let binary_path = find_ie_binary()?;
         println!("✓ Found binary: {}", binary_path.display());
 
-        // Determine project directory
-        let project_dir = if let Some(ref dir) = opts.project_dir {
-            dir.clone()
-        } else {
-            env::current_dir().map_err(IntentError::IoError)?
-        };
-        let project_dir_abs = resolve_absolute_path(&project_dir)?;
-
         // Backup existing config
         if config_path.exists() && !opts.dry_run {
             if let Some(backup) = create_backup(&config_path)? {
@@ -253,9 +245,6 @@ impl ClaudeCodeSetup {
         config["mcpServers"]["intent-engine"] = json!({
             "command": binary_path.to_string_lossy(),
             "args": ["mcp-server"],
-            "env": {
-                "INTENT_ENGINE_PROJECT_DIR": project_dir_abs.to_string_lossy()
-            },
             "description": "Strategic intent and task workflow management"
         });
 

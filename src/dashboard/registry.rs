@@ -12,7 +12,6 @@ const VERSION: &str = "1.0";
 pub struct ProjectRegistry {
     pub version: String,
     pub projects: Vec<RegisteredProject>,
-    pub next_port: u16,
 }
 
 /// A registered project with Dashboard instance
@@ -40,7 +39,6 @@ impl ProjectRegistry {
         Self {
             version: VERSION.to_string(),
             projects: Vec::new(),
-            next_port: DEFAULT_PORT, // Fixed port
         }
     }
 
@@ -279,7 +277,6 @@ mod tests {
         let registry = ProjectRegistry::new();
         assert_eq!(registry.version, VERSION);
         assert_eq!(registry.projects.len(), 0);
-        assert_eq!(registry.next_port, DEFAULT_PORT);
     }
 
     #[test]
@@ -440,8 +437,5 @@ mod tests {
         // Always allocates DEFAULT_PORT
         let port = registry.allocate_port().unwrap();
         assert_eq!(port, DEFAULT_PORT);
-
-        // next_port remains unchanged (not used for fixed port)
-        assert_eq!(registry.next_port, DEFAULT_PORT);
     }
 }

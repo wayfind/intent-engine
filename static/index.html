@@ -6,19 +6,19 @@
     <title>Intent-Engine Dashboard</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 
-    <!-- TailwindCSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Basic TailwindCSS -->
+    <link rel="stylesheet" href="/static/vendor/tailwindcss.css">
 
-    <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Local HTMX -->
+    <script src="/static/vendor/htmx.min.js"></script>
 
-    <!-- Markdown & Code Highlighting -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+    <!-- Local Markdown & Code Highlighting -->
+    <script src="/static/vendor/marked.min.js"></script>
+    <script src="/static/vendor/highlight.min.js"></script>
+    <link rel="stylesheet" href="/static/vendor/github-dark.min.css">
 
-    <!-- DOMPurify for XSS protection -->
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <!-- Local DOMPurify for XSS protection -->
+    <script src="/static/vendor/purify.min.js"></script>
 
     <style>
         /* Custom scrollbar */
@@ -30,8 +30,39 @@
         /* Prose styles for Markdown */
         .prose { max-width: none; }
         .prose pre { background: #1f2937; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; }
-        .prose code { background: #374151; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9em; }
-        .prose pre code { background: transparent; padding: 0; }
+        .prose code {
+            background: #f3f4f6;
+            color: #1f2937;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.9em;
+            border: 1px solid #e5e7eb;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        .prose pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit; /* Use highlight.js colors */
+            border: none;
+            box-shadow: none;
+        }
+
+        /* Dark mode support for inline code */
+        @media (prefers-color-scheme: dark) {
+            .prose code {
+                background: #374151;
+                color: #f9fafb;
+                border: 1px solid #4b5563;
+            }
+        }
+
+        /* Enhanced visibility for common code patterns */
+        .prose code {
+            /* Ensure better contrast for common programming terms */
+            font-weight: 500;
+            letter-spacing: 0.025em;
+        }
         .prose h1 { font-size: 2em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
         .prose h2 { font-size: 1.5em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
         .prose h3 { font-size: 1.25em; font-weight: bold; margin-top: 0.8em; margin-bottom: 0.4em; }
@@ -61,169 +92,274 @@
     </style>
 </head>
 <body class="bg-gray-50 h-screen overflow-hidden">
-    <!-- Header -->
-    <header class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg">
-        <div class="px-6 py-4 flex items-center justify-between">
-            <div>
-                <h1 class="text-2xl font-bold">Intent-Engine Dashboard</h1>
-                <p class="text-sm text-indigo-100" id="project-name">Loading project...</p>
+    <!-- Enhanced Header -->
+    <header class="bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 text-white shadow-2xl">
+        <div class="px-8 py-6 flex items-center justify-between">
+            <div class="space-y-1">
+                <h1 class="text-3xl font-bold tracking-wide">Intent-Engine Dashboard</h1>
+                <p class="text-sm text-blue-100 font-medium" id="project-name">Loading project...</p>
             </div>
             <div class="flex items-center space-x-4">
-                <button onclick="openNewTaskModal()" class="bg-white text-indigo-600 px-4 py-2 rounded-lg font-medium hover:bg-indigo-50 transition">
-                    + New Task
+                <button onclick="openNewTaskModal()" class="group bg-white text-blue-600 px-6 py-3 rounded-xl font-semibold hover:bg-blue-50 hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl">
+                    <span class="flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        <span>+ New Task</span>
+                    </span>
                 </button>
-                <button onclick="loadCurrentTask()" class="bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-400 transition">
-                    Current Focus
+                <button onclick="loadCurrentTask()" class="group bg-blue-500 bg-opacity-80 backdrop-blur text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-400 hover:scale-105 transition-all duration-200 shadow-lg">
+                    <span class="flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                        </svg>
+                        <span>Current Focus</span>
+                    </span>
                 </button>
-                <button onclick="pickNextTask()" class="bg-purple-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-400 transition">
-                    Pick Next
+                <button onclick="pickNextTask()" class="group bg-purple-500 bg-opacity-80 backdrop-blur text-white px-6 py-3 rounded-xl font-semibold hover:bg-purple-400 hover:scale-105 transition-all duration-200 shadow-lg">
+                    <span class="flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
+                        </svg>
+                        <span>Pick Next</span>
+                    </span>
                 </button>
             </div>
         </div>
     </header>
 
-    <!-- Project Tabs -->
-    <div class="bg-white border-b border-gray-200 shadow-sm">
-        <div class="px-6 flex space-x-1 overflow-x-auto" id="project-tabs">
+    <!-- Enhanced Project Tabs -->
+    <div class="bg-white border-b border-slate-200 shadow-sm">
+        <div class="px-6 py-2 flex space-x-1 overflow-x-auto" id="project-tabs">
             <!-- Project tabs will be dynamically loaded here -->
-            <div class="text-sm text-gray-500 py-3">Loading projects...</div>
+            <div class="text-sm text-slate-500 py-3 flex items-center space-x-2">
+                <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span>Loading projects...</span>
+            </div>
         </div>
     </div>
 
-    <!-- Main Layout -->
-    <div class="flex h-[calc(100vh-128px)]">
+    <!-- Enhanced Main Layout -->
+    <div class="flex h-[calc(100vh-144px)]">
         <!-- Left Sidebar: Task List (Fixed 320px) -->
-        <aside class="w-80 bg-white border-r border-gray-200 flex flex-col" style="flex: 0 0 320px;">
-            <div class="p-4 border-b border-gray-200">
-                <input
-                    type="text"
-                    id="search-input"
-                    placeholder="Search tasks and events..."
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    oninput="handleSearch(event)">
-            </div>
-
-            <div class="p-4 border-b border-gray-200">
-                <div class="flex space-x-2">
-                    <button onclick="filterTasks('all')" id="filter-all" class="flex-1 px-3 py-2 text-sm font-medium bg-indigo-100 text-indigo-700 rounded-lg">All</button>
-                    <button onclick="filterTasks('todo')" id="filter-todo" class="flex-1 px-3 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Todo</button>
-                    <button onclick="filterTasks('doing')" id="filter-doing" class="flex-1 px-3 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Doing</button>
-                    <button onclick="filterTasks('done')" id="filter-done" class="flex-1 px-3 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Done</button>
+        <aside class="w-80 bg-gradient-to-b from-white to-slate-50 border-r border-slate-200 flex flex-col" style="flex: 0 0 320px;">
+            <div class="p-5 border-b border-slate-200 bg-white rounded-b-lg shadow-sm">
+                <div class="relative">
+                    <svg class="absolute left-3 top-3 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <input
+                        type="text"
+                        id="search-input"
+                        placeholder="Search tasks and events..."
+                        class="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all"
+                        oninput="handleSearch(event)">
                 </div>
             </div>
 
-            <div class="flex-1 overflow-y-auto p-4" id="task-list-container">
-                <div id="task-list-items" class="space-y-2">
-                    <div class="text-center text-gray-500 py-8">Loading tasks...</div>
+            <div class="p-5 border-b border-slate-200 bg-white">
+                <div class="flex space-x-2">
+                    <button onclick="filterTasks('all')" id="filter-all" class="flex-1 px-3 py-2.5 text-sm font-medium bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg shadow-md hover:shadow-lg transition-all">All</button>
+                    <button onclick="filterTasks('todo')" id="filter-todo" class="flex-1 px-3 py-2.5 text-sm font-medium bg-gradient-to-r from-yellow-400 to-orange-400 text-white rounded-lg shadow-md hover:shadow-lg transition-all">Todo</button>
+                    <button onclick="filterTasks('doing')" id="filter-doing" class="flex-1 px-3 py-2.5 text-sm font-medium bg-gradient-to-r from-green-400 to-emerald-400 text-white rounded-lg shadow-md hover:shadow-lg transition-all">Doing</button>
+                    <button onclick="filterTasks('done')" id="filter-done" class="flex-1 px-3 py-2.5 text-sm font-medium bg-gradient-to-r from-slate-400 to-slate-500 text-white rounded-lg shadow-md hover:shadow-lg transition-all">Done</button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4 space-y-3" id="task-list-container">
+                <div id="task-list-items" class="space-y-3">
+                    <div class="text-center text-slate-400 py-12 flex flex-col items-center space-y-4">
+                        <svg class="w-16 h-16 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        </svg>
+                        <p class="text-lg">Loading tasks...</p>
+                        <p class="text-sm">Connecting to your workspace</p>
+                    </div>
                 </div>
             </div>
         </aside>
 
-        <!-- Main Content: Task Details (40% of remaining width) -->
-        <main class="flex-[4] bg-white flex flex-col overflow-hidden">
+        <!-- Enhanced Main Content: Task Details -->
+        <main class="flex-[4] bg-gradient-to-br from-white via-slate-50 to-slate-100 flex flex-col overflow-hidden border-r border-slate-200">
             <div id="task-detail-container" class="flex-1 overflow-y-auto">
-                <div class="p-8">
-                    <div class="text-center text-gray-400 py-20">
-                        <svg class="mx-auto h-24 w-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                        <h3 class="mt-4 text-xl font-medium text-gray-500">Select a task to view details</h3>
-                        <p class="mt-2 text-sm text-gray-400">Choose a task from the list on the left</p>
+                <div class="p-10">
+                    <div class="text-center text-slate-400 py-32 flex flex-col items-center space-y-6">
+                        <div class="relative">
+                            <div class="absolute inset-0 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full blur-xl opacity-20"></div>
+                            <div class="relative bg-gradient-to-r from-blue-500 to-purple-500 p-6 rounded-full">
+                                <svg class="h-20 w-20 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <h3 class="text-2xl font-bold text-slate-600">Select a task to view details</h3>
+                            <p class="text-slate-400 max-w-md">Choose a task from the list on the left to see its specifications and progress</p>
+                        </div>
                     </div>
                 </div>
             </div>
         </main>
 
-        <!-- Right Sidebar: Event History (60% of remaining width) -->
-        <aside class="flex-[6] bg-white border-l border-gray-200 flex flex-col" id="event-sidebar">
-            <div class="p-4 border-b border-gray-200">
-                <h2 class="text-lg font-semibold text-gray-800">Event History</h2>
+        <!-- Enhanced Right Sidebar: Event History -->
+        <aside class="flex-[6] bg-gradient-to-b from-white to-slate-50 border-l border-slate-200 flex flex-col" id="event-sidebar">
+            <div class="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-gradient-to-r from-indigo-500 to-purple-500 p-2 rounded-lg">
+                            <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <h2 class="text-xl font-bold text-slate-800">Event History</h2>
+                    </div>
+                    <span class="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Timeline</span>
+                </div>
             </div>
-            <div class="flex-1 overflow-y-auto p-4" id="event-list-container">
-                <div class="text-center text-gray-400 py-8 text-sm">
-                    Select a task to view its event history
+            <div class="flex-1 overflow-y-auto p-6" id="event-list-container">
+                <div class="text-center text-slate-400 py-16 flex flex-col items-center space-y-4">
+                    <div class="bg-slate-100 p-4 rounded-full">
+                        <svg class="h-12 w-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                    </div>
+                    <div class="space-y-2 text-center">
+                        <p class="text-lg font-medium text-slate-600">No events yet</p>
+                        <p class="text-slate-400 text-sm">Select a task to view its event history and timeline</p>
+                    </div>
                 </div>
             </div>
         </aside>
     </div>
 
-    <!-- New Task Modal -->
-    <div id="new-task-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 class="text-xl font-semibold text-gray-800">Create New Task</h2>
-                <button onclick="closeNewTaskModal()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
+    <!-- Enhanced New Task Modal -->
+    <div id="new-task-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 transform transition-all">
+            <div class="px-8 py-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-purple-50 rounded-t-2xl">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-gradient-to-r from-blue-500 to-purple-500 p-3 rounded-xl">
+                            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                        </div>
+                        <h2 class="text-2xl font-bold text-slate-800">Create New Task</h2>
+                    </div>
+                    <button onclick="closeNewTaskModal()" class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-all">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
-            <form id="new-task-form" onsubmit="createTask(event)" class="p-6">
-                <div class="space-y-4">
+            <form id="new-task-form" onsubmit="createTask(event)" class="p-8">
+                <div class="space-y-6">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Task Name *</label>
-                        <input type="text" name="name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                        <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 002.828 0l-7-7A1.994 1.994 0 003.586-1h.01M11 21h5a2 2 0 002-2v-5c0-.513-.196-1.024-.586-1.414l-7-7a1.994 1.994 0 00-1.414-.586H5"/>
+                            </svg>
+                            <span>Task Name *</span>
+                        </label>
+                        <input type="text" name="name" required class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all text-base" placeholder="Enter task name...">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Specification (Markdown)</label>
-                        <textarea name="spec" rows="8" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"></textarea>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            <span>Specification (Markdown)</span>
+                        </label>
+                        <textarea name="spec" rows="8" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all font-mono text-sm resize-none" placeholder="Describe your task in detail..."></textarea>
                     </div>
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-2 gap-6">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                            <select name="priority" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
+                                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11-7-7z"/>
+                                </svg>
+                                <span>Priority</span>
+                            </label>
+                            <select name="priority" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all">
                                 <option value="">Default</option>
-                                <option value="1">Critical</option>
-                                <option value="2">High</option>
-                                <option value="3">Medium</option>
-                                <option value="4">Low</option>
+                                <option value="1" class="text-red-600">🔴 Critical</option>
+                                <option value="2" class="text-orange-600">🟠 High</option>
+                                <option value="3" class="text-yellow-600">🟡 Medium</option>
+                                <option value="4" class="text-green-600">🟢 Low</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Parent Task ID</label>
-                            <input type="number" name="parent_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
+                                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2z"/>
+                                </svg>
+                                <span>Parent Task ID</span>
+                            </label>
+                            <input type="number" name="parent_id" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all" placeholder="Optional">
                         </div>
                     </div>
                 </div>
-                <div class="mt-6 flex justify-end space-x-3">
-                    <button type="button" onclick="closeNewTaskModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
-                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Create Task</button>
+                <div class="mt-8 flex justify-end space-x-4">
+                    <button type="button" onclick="closeNewTaskModal()" class="px-6 py-3 border-2 border-slate-300 rounded-xl text-slate-700 hover:bg-slate-50 font-semibold transition-all">Cancel</button>
+                    <button type="submit" class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl hover:from-blue-600 hover:to-purple-600 font-semibold shadow-lg hover:shadow-xl transition-all">Create Task</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Add Event Modal -->
-    <div id="add-event-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 class="text-xl font-semibold text-gray-800">Add Event</h2>
-                <button onclick="closeAddEventModal()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
+    <!-- Enhanced Add Event Modal -->
+    <div id="add-event-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 transform transition-all">
+            <div class="px-8 py-6 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-pink-50 rounded-t-2xl">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-gradient-to-r from-purple-500 to-pink-500 p-3 rounded-xl">
+                            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <h2 class="text-2xl font-bold text-slate-800">Add Event</h2>
+                    </div>
+                    <button onclick="closeAddEventModal()" class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-all">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
-            <form id="add-event-form" onsubmit="addEvent(event)" class="p-6">
+            <form id="add-event-form" onsubmit="addEvent(event)" class="p-8">
                 <input type="hidden" name="task_id" id="event-task-id">
-                <div class="space-y-4">
+                <div class="space-y-6">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Event Type *</label>
-                        <select name="type" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-                            <option value="decision">Decision</option>
-                            <option value="blocker">Blocker</option>
-                            <option value="milestone">Milestone</option>
-                            <option value="note">Note</option>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>Event Type *</span>
+                        </label>
+                        <select name="type" required class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all">
+                            <option value="decision">💡 Decision</option>
+                            <option value="blocker">🚫 Blocker</option>
+                            <option value="milestone">🏁 Milestone</option>
+                            <option value="note">📝 Note</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Event Data (Markdown) *</label>
-                        <textarea name="data" required rows="6" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"></textarea>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-4m-1.414-1.414a2 2 0 012.828 0L17 10.586V16a2 2 0 01-2 2h-2m-6 0a2 2 0 002 2v-4a2 2 0 012-2m-2.828 0L7 10.586a2 2 0 012.828 0z"/>
+                            </svg>
+                            <span>Event Data (Markdown) *</span>
+                        </label>
+                        <textarea name="data" required rows="6" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all font-mono text-sm resize-none" placeholder="Document your decision, blocker, or milestone..."></textarea>
                     </div>
                 </div>
-                <div class="mt-6 flex justify-end space-x-3">
-                    <button type="button" onclick="closeAddEventModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
-                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Event</button>
+                <div class="mt-8 flex justify-end space-x-4">
+                    <button type="button" onclick="closeAddEventModal()" class="px-6 py-3 border-2 border-slate-300 rounded-xl text-slate-700 hover:bg-slate-50 font-semibold transition-all">Cancel</button>
+                    <button type="submit" class="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 font-semibold shadow-lg hover:shadow-xl transition-all">Add Event</button>
                 </div>
             </form>
         </div>
