@@ -8,6 +8,9 @@ use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
+// Import project initialization function
+use intent_engine::project::ProjectContext;
+
 /// Get the path to the `ie` binary
 ///
 /// This function is compatible with both standard and custom target directories.
@@ -126,24 +129,31 @@ pub fn setup_test_env() -> TempDir {
     // This ensures intent-engine recognizes this as a valid project root
     fs::create_dir(temp_dir.path().join(".git")).unwrap();
 
-    // Initialize the intent-engine project by running a command that triggers database initialization
-    // The workspace command should trigger auto-initialization with proper database setup
-    let init_output = std::process::Command::new(ie_binary())
-        .current_dir(temp_dir.path())
-        .env("HOME", "/nonexistent") // Prevent fallback to home on Unix
-        .env("USERPROFILE", "/nonexistent") // Prevent fallback to home on Windows
-        .env("INTENT_ENGINE_PROJECT_DIR", temp_dir.path()) // Force project dir
-        .args(["workspace"]) // Simple command that should initialize database
-        .output()
-        .expect("Failed to run ie workspace command");
+    // Initialize the intent-engine project using the proper initialization function
+    // This creates the .intent-engine directory and database with all tables
+    // We need to temporarily change directory because ProjectContext::initialize_project()
+    // uses std::env::current_dir() to determine the project root
+    let original_dir = std::env::current_dir().unwrap();
 
-    // Even if it fails, check if it created the database structure
-    if !init_output.status.success() {
-        // Let's check if the .intent-engine directory was created at least
-        if !temp_dir.path().join(".intent-engine").exists() {
-            // Create it manually if auto-init failed
-            fs::create_dir(temp_dir.path().join(".intent-engine")).unwrap();
-        }
+    // Change to temp directory
+    std::env::set_current_dir(temp_dir.path()).unwrap();
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let init_result = runtime.block_on(async { ProjectContext::initialize_project().await });
+
+    // Always try to restore original directory, but don't panic if it fails
+    // (it might have been deleted by another test)
+    let _ = std::env::set_current_dir(&original_dir);
+
+    // Verify initialization succeeded
+    if let Err(e) = init_result {
+        panic!("Failed to initialize test project: {}", e);
+    }
+
+    // Verify database file exists
+    let db_path = temp_dir.path().join(".intent-engine").join("project.db");
+    if !db_path.exists() {
+        panic!("Database file was not created at {:?}", db_path);
     }
 
     temp_dir
