@@ -70,6 +70,31 @@ pub fn ie_command() -> Command {
     cmd
 }
 
+/// Create a Command for `ie` with project directory override
+///
+/// This returns a Command pre-configured with:
+/// - The correct `ie` binary path
+/// - INTENT_ENGINE_PROJECT_DIR set to the specified directory
+/// - Environment isolation (HOME=/nonexistent) to prevent home directory fallback
+///
+/// # Examples
+///
+/// ```no_run
+/// mod common;
+///
+/// let output = common::ie_command_with_project_dir(&temp_dir.path())
+///     .arg("task")
+///     .arg("list")
+///     .assert()
+///     .success();
+/// ```
+#[allow(dead_code)] // Used by MCP tests
+pub fn ie_command_with_project_dir(project_dir: &std::path::Path) -> Command {
+    let mut cmd = ie_command();
+    cmd.env("INTENT_ENGINE_PROJECT_DIR", project_dir);
+    cmd
+}
+
 /// Setup a test environment with an initialized intent-engine project
 ///
 /// This creates a temporary directory with:
@@ -100,10 +125,35 @@ pub fn setup_test_env() -> TempDir {
     // This ensures intent-engine recognizes this as a valid project root
     fs::create_dir(temp_dir.path().join(".git")).unwrap();
 
-    // No explicit initialization needed - auto-init will trigger on first command
-    // Tests should use environment isolation (HOME=/nonexistent) when running commands
+    // Initialize the intent-engine project in the test directory
+    // This creates the .intent-engine directory and project.db by running a simple command
+    // that triggers auto-initialization. We don't set HOME/USERPROFILE for init
+    // so it can properly create the project structure.
+    let init_output = std::process::Command::new(ie_binary())
+        .current_dir(temp_dir.path())
+        .arg("list")
+        .output()
+        .expect("Failed to initialize intent-engine project");
+
+    // We expect this to succeed with an empty list (auto-initialization)
+    if !init_output.status.success() {
+        panic!(
+            "Failed to initialize intent-engine project: {}",
+            String::from_utf8_lossy(&init_output.stderr)
+        );
+    }
 
     temp_dir
+}
+
+/// Get the current project directory for MCP tests
+///
+/// Since MCP server requires a fully initialized project and doesn't support
+/// creating fresh projects easily, we use the current project directory
+/// which is already properly set up.
+#[allow(dead_code)] // Used by MCP tests
+pub fn current_project_dir() -> PathBuf {
+    std::env::current_dir().expect("Failed to get current directory")
 }
 
 #[cfg(test)]

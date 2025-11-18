@@ -1,31 +1,28 @@
 mod common;
 
-use assert_cmd::Command;
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// Helper to get the binary path
-fn intent_engine_cmd() -> Command {
-    common::ie_command()
-}
-
-/// Helper to create a test project
+/// Helper to create a test project for MCP tests
 fn setup_test_project() -> (tempfile::TempDir, PathBuf) {
-    let temp_dir = common::setup_test_env();
-    let db_path = temp_dir.path().join(".intent-engine").join("project.db");
+    // For MCP tests, we need to use the current project directory which is already
+    // properly initialized. We still return a temp_dir to keep the interface compatible.
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let project_dir = common::current_project_dir();
+    let db_path = project_dir.join(".intent-engine").join("project.db");
 
     (temp_dir, db_path)
 }
 
 /// Helper to add a task via MCP and return its ID
-fn add_task_mcp(dir: &PathBuf, name: &str) -> i64 {
+fn add_task_mcp(_dir: &PathBuf, name: &str) -> i64 {
+    let project_dir = common::current_project_dir();
     let add_json = format!(
         r#"{{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {{"name": "task_add", "arguments": {{"name": "{}"}}}}}}"#,
         name
     );
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
+    let output = common::ie_command_with_project_dir(&project_dir)
         .arg("mcp-server")
         .write_stdin(add_json)
         .assert()
@@ -53,8 +50,7 @@ fn test_mcp_add_dependency_success() {
         task_b, task_a
     );
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
+    let output = common::ie_command_with_project_dir(&common::current_project_dir())
         .arg("mcp-server")
         .write_stdin(dep_json)
         .assert()
@@ -87,8 +83,7 @@ fn test_mcp_add_dependency_circular_detection() {
         task_b, task_a
     );
 
-    intent_engine_cmd()
-        .current_dir(dir)
+    common::ie_command_with_project_dir(&common::current_project_dir())
         .arg("mcp-server")
         .write_stdin(dep1_json)
         .assert()
@@ -100,8 +95,7 @@ fn test_mcp_add_dependency_circular_detection() {
         task_a, task_b
     );
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
+    let output = common::ie_command_with_project_dir(&common::current_project_dir())
         .arg("mcp-server")
         .write_stdin(dep2_json)
         .assert()
@@ -122,13 +116,12 @@ fn test_mcp_add_dependency_circular_detection() {
 #[test]
 fn test_mcp_add_dependency_missing_parameters() {
     let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
+    let _dir = temp_dir.path();
 
     // Try without blocked_task_id
     let dep_json = r#"{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "task_add_dependency", "arguments": {"blocking_task_id": 1}}}"#;
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
+    let output = common::ie_command_with_project_dir(&common::current_project_dir())
         .arg("mcp-server")
         .write_stdin(dep_json)
         .assert()
@@ -149,13 +142,12 @@ fn test_mcp_add_dependency_missing_parameters() {
 #[test]
 fn test_mcp_add_dependency_nonexistent_task() {
     let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
+    let _dir = temp_dir.path();
 
     // Try to add dependency with non-existent task IDs
     let dep_json = r#"{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "task_add_dependency", "arguments": {"blocked_task_id": 999, "blocking_task_id": 998}}}"#;
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
+    let output = common::ie_command_with_project_dir(&common::current_project_dir())
         .arg("mcp-server")
         .write_stdin(dep_json)
         .assert()
@@ -188,8 +180,7 @@ fn test_mcp_add_dependency_affects_task_start() {
         task_b, task_a
     );
 
-    intent_engine_cmd()
-        .current_dir(dir)
+    common::ie_command_with_project_dir(&common::current_project_dir())
         .arg("mcp-server")
         .write_stdin(dep_json)
         .assert()
@@ -201,8 +192,7 @@ fn test_mcp_add_dependency_affects_task_start() {
         task_b
     );
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
+    let output = common::ie_command_with_project_dir(&common::current_project_dir())
         .arg("mcp-server")
         .write_stdin(start_json)
         .assert()
@@ -232,8 +222,7 @@ fn test_mcp_add_dependency_shows_in_context() {
         task_b, task_a
     );
 
-    intent_engine_cmd()
-        .current_dir(dir)
+    common::ie_command_with_project_dir(&common::current_project_dir())
         .arg("mcp-server")
         .write_stdin(dep_json)
         .assert()
@@ -245,8 +234,7 @@ fn test_mcp_add_dependency_shows_in_context() {
         task_b
     );
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
+    let output = common::ie_command_with_project_dir(&common::current_project_dir())
         .arg("mcp-server")
         .write_stdin(context_json)
         .assert()
