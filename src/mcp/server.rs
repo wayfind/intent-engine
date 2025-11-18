@@ -763,8 +763,13 @@ fn register_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()>
     // Detect agent type from environment (Claude Code sets specific env vars)
     let agent_name = detect_agent_type();
 
+    // Normalize the path to handle symlinks (e.g., ~/prj -> /mnt/d/prj)
+    let normalized_path = project_path
+        .canonicalize()
+        .unwrap_or_else(|_| project_path.to_path_buf());
+
     // Register MCP connection - this will create a project entry if none exists
-    let project = registry.find_by_path(&project_path.to_path_buf());
+    let project = registry.find_by_path(&normalized_path);
     let dashboard_info = if let Some(p) = project {
         if p.port > 0 {
             format!("Dashboard: http://127.0.0.1:{}", p.port)
@@ -791,7 +796,13 @@ fn unregister_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<(
     use crate::dashboard::registry::ProjectRegistry;
 
     let mut registry = ProjectRegistry::load()?;
-    registry.unregister_mcp_connection(&project_path.to_path_buf())?;
+
+    // Normalize the path to handle symlinks (e.g., ~/prj -> /mnt/d/prj)
+    let normalized_path = project_path
+        .canonicalize()
+        .unwrap_or_else(|_| project_path.to_path_buf());
+
+    registry.unregister_mcp_connection(&normalized_path)?;
 
     eprintln!(
         "✓ MCP connection unregistered for project: {}",
@@ -813,8 +824,11 @@ async fn heartbeat_task(project_path: std::path::PathBuf) {
         // Update heartbeat (non-blocking)
         let path = project_path.clone();
         tokio::task::spawn_blocking(move || {
+            // Normalize the path to handle symlinks (e.g., ~/prj -> /mnt/d/prj)
+            let normalized_path = path.canonicalize().unwrap_or_else(|_| path.clone());
+
             if let Ok(mut registry) = ProjectRegistry::load() {
-                if let Err(e) = registry.update_mcp_heartbeat(&path) {
+                if let Err(e) = registry.update_mcp_heartbeat(&normalized_path) {
                     eprintln!("⚠ Failed to update MCP heartbeat: {}", e);
                 }
             }
