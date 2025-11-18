@@ -10,6 +10,8 @@ use rust_embed::RustEmbed;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
@@ -20,12 +22,20 @@ use tower_http::{
 #[folder = "static/"]
 struct StaticAssets;
 
-/// Dashboard server state shared across handlers
+/// Project context that can be switched dynamically
 #[derive(Clone)]
-pub struct AppState {
+pub struct ProjectContext {
     pub db_pool: SqlitePool,
     pub project_name: String,
     pub project_path: PathBuf,
+    pub db_path: PathBuf,
+}
+
+/// Dashboard server state shared across handlers
+#[derive(Clone)]
+pub struct AppState {
+    /// Current active project (wrapped in Arc<RwLock> for dynamic switching)
+    pub current_project: Arc<RwLock<ProjectContext>>,
     pub port: u16,
 }
 
@@ -87,11 +97,17 @@ impl DashboardServer {
             .await
             .context("Failed to connect to database")?;
 
-        // Create shared state
-        let state = AppState {
+        // Create project context
+        let project_context = ProjectContext {
             db_pool,
             project_name: self.project_name.clone(),
             project_path: self.project_path.clone(),
+            db_path: self.db_path.clone(),
+        };
+
+        // Create shared state
+        let state = AppState {
+            current_project: Arc::new(RwLock::new(project_context)),
             port: self.port,
         };
 
@@ -107,6 +123,14 @@ impl DashboardServer {
         tracing::info!("Dashboard server listening on {}", addr);
         tracing::info!("Project: {}", self.project_name);
         tracing::info!("Database: {}", self.db_path.display());
+
+        // Ignore SIGHUP signal on Unix systems to prevent termination when terminal closes
+        #[cfg(unix)]
+        {
+            unsafe {
+                libc::signal(libc::SIGHUP, libc::SIG_IGN);
+            }
+        }
 
         // Run server
         axum::serve(listener, app).await.context("Server error")?;
@@ -196,6 +220,7 @@ async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
 /// Legacy root handler - now unused, kept for reference
 #[allow(dead_code)]
 async fn index_handler(State(state): State<AppState>) -> Html<String> {
+    let project = state.current_project.read().await;
     let html = format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -309,9 +334,9 @@ async fn index_handler(State(state): State<AppState>) -> Html<String> {
 </body>
 </html>
 "#,
-        state.project_name,
-        state.project_name,
-        state.project_path.display(),
+        project.project_name,
+        project.project_name,
+        project.project_path.display(),
         state.port,
         env!("CARGO_PKG_VERSION")
     );
@@ -330,15 +355,11 @@ async fn health_handler() -> Json<HealthResponse> {
 
 /// Project info handler
 async fn info_handler(State(state): State<AppState>) -> Json<ProjectInfo> {
+    let project = state.current_project.read().await;
     Json(ProjectInfo {
-        name: state.project_name.clone(),
-        path: state.project_path.display().to_string(),
-        database: state
-            .project_path
-            .join(".intent-engine")
-            .join("intents.db")
-            .display()
-            .to_string(),
+        name: project.project_name.clone(),
+        path: project.project_path.display().to_string(),
+        database: project.db_path.display().to_string(),
         port: state.port,
     })
 }
@@ -377,11 +398,11 @@ mod tests {
             name: "test-project".to_string(),
             path: "/path/to/project".to_string(),
             database: "/path/to/db".to_string(),
-            port: 3030,
+            port: 11391,
         };
 
         let json = serde_json::to_string(&info).unwrap();
         assert!(json.contains("test-project"));
-        assert!(json.contains("3030"));
+        assert!(json.contains("11391"));
     }
 }

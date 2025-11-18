@@ -16,7 +16,8 @@ pub async fn list_tasks(
     State(state): State<AppState>,
     Query(query): Query<TaskListQuery>,
 ) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     // Convert parent filter to Option<Option<i64>>
     let parent_filter = query.parent.as_deref().map(|p| {
@@ -46,7 +47,8 @@ pub async fn list_tasks(
 
 /// Get a single task by ID
 pub async fn get_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     match task_mgr.get_task(id).await {
         Ok(task) => (StatusCode::OK, Json(ApiResponse { data: task })).into_response(),
@@ -76,7 +78,8 @@ pub async fn create_task(
     State(state): State<AppState>,
     Json(req): Json<CreateTaskRequest>,
 ) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     // Note: add_task doesn't support priority - it's set separately via update_task
     let result = task_mgr
@@ -115,7 +118,8 @@ pub async fn update_task(
     Path(id): Path<i64>,
     Json(req): Json<UpdateTaskRequest>,
 ) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     // First check if task exists
     match task_mgr.get_task(id).await {
@@ -173,7 +177,8 @@ pub async fn update_task(
 
 /// Delete a task
 pub async fn delete_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     match task_mgr.delete_task(id).await {
         Ok(_) => (StatusCode::NO_CONTENT).into_response(),
@@ -200,7 +205,8 @@ pub async fn delete_task(State(state): State<AppState>, Path(id): Path<i64>) -> 
 
 /// Start a task (set as current)
 pub async fn start_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     match task_mgr.start_task(id, false).await {
         Ok(task) => (StatusCode::OK, Json(ApiResponse { data: task })).into_response(),
@@ -227,7 +233,8 @@ pub async fn start_task(State(state): State<AppState>, Path(id): Path<i64>) -> i
 
 /// Complete the current task
 pub async fn done_task(State(state): State<AppState>) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     match task_mgr.done_task().await {
         Ok(task) => (StatusCode::OK, Json(ApiResponse { data: task })).into_response(),
@@ -254,7 +261,8 @@ pub async fn done_task(State(state): State<AppState>) -> impl IntoResponse {
 
 /// Switch to a different task
 pub async fn switch_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     match task_mgr.switch_to_task(id).await {
         Ok(task) => (StatusCode::OK, Json(ApiResponse { data: task })).into_response(),
@@ -286,7 +294,8 @@ pub async fn spawn_subtask(
     Path(_parent_id): Path<i64>, // Ignored - uses current task
     Json(req): Json<SpawnSubtaskRequest>,
 ) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     // spawn_subtask uses the current task as parent automatically
     match task_mgr.spawn_subtask(&req.name, req.spec.as_deref()).await {
@@ -314,7 +323,8 @@ pub async fn spawn_subtask(
 
 /// Get current task
 pub async fn get_current_task(State(state): State<AppState>) -> impl IntoResponse {
-    let workspace_mgr = WorkspaceManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let workspace_mgr = WorkspaceManager::new(&db_pool);
 
     match workspace_mgr.get_current_task().await {
         Ok(response) => {
@@ -345,7 +355,8 @@ pub async fn get_current_task(State(state): State<AppState>) -> impl IntoRespons
 
 /// Pick next task recommendation
 pub async fn pick_next_task(State(state): State<AppState>) -> impl IntoResponse {
-    let task_mgr = TaskManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
 
     match task_mgr.pick_next().await {
         Ok(response) => (StatusCode::OK, Json(ApiResponse { data: response })).into_response(),
@@ -367,7 +378,8 @@ pub async fn list_events(
     Path(task_id): Path<i64>,
     Query(query): Query<EventListQuery>,
 ) -> impl IntoResponse {
-    let event_mgr = EventManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let event_mgr = EventManager::new(&db_pool);
 
     // Signature: list_events(task_id, limit, log_type, since)
     match event_mgr
@@ -398,7 +410,8 @@ pub async fn create_event(
     Path(task_id): Path<i64>,
     Json(req): Json<CreateEventRequest>,
 ) -> impl IntoResponse {
-    let event_mgr = EventManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let event_mgr = EventManager::new(&db_pool);
 
     // Validate event type
     if !["decision", "blocker", "milestone", "note"].contains(&req.event_type.as_str()) {
@@ -436,7 +449,8 @@ pub async fn search(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
-    let search_mgr = SearchManager::new(&state.db_pool);
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let search_mgr = SearchManager::new(&db_pool);
 
     match search_mgr
         .unified_search(
@@ -500,4 +514,104 @@ pub async fn list_projects() -> impl IntoResponse {
         )
             .into_response(),
     }
+}
+
+/// Switch to a different project database dynamically
+pub async fn switch_project(
+    State(state): State<AppState>,
+    Json(req): Json<SwitchProjectRequest>,
+) -> impl IntoResponse {
+    use super::server::ProjectContext;
+    use sqlx::SqlitePool;
+    use std::path::PathBuf;
+
+    // Parse and validate project path
+    let project_path = PathBuf::from(&req.project_path);
+
+    if !project_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiError {
+                code: "PROJECT_NOT_FOUND".to_string(),
+                message: format!("Project path does not exist: {}", project_path.display()),
+                details: None,
+            }),
+        )
+            .into_response();
+    }
+
+    // Construct database path
+    let db_path = project_path.join(".intent-engine").join("project.db");
+
+    if !db_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiError {
+                code: "DATABASE_NOT_FOUND".to_string(),
+                message: format!(
+                    "Database not found at {}. Is this an Intent-Engine project?",
+                    db_path.display()
+                ),
+                details: None,
+            }),
+        )
+            .into_response();
+    }
+
+    // Create new database connection
+    let db_url = format!("sqlite://{}", db_path.display());
+    let new_db_pool = match SqlitePool::connect(&db_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_CONNECTION_ERROR".to_string(),
+                    message: format!("Failed to connect to database: {}", e),
+                    details: None,
+                }),
+            )
+                .into_response();
+        },
+    };
+
+    // Extract project name
+    let project_name = project_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    // Create new project context
+    let new_context = ProjectContext {
+        db_pool: new_db_pool,
+        project_name: project_name.clone(),
+        project_path: project_path.clone(),
+        db_path: db_path.clone(),
+    };
+
+    // Update the current project (write lock)
+    {
+        let mut current = state.current_project.write().await;
+        *current = new_context;
+    }
+
+    tracing::info!(
+        "Switched to project: {} at {}",
+        project_name,
+        project_path.display()
+    );
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse {
+            data: json!({
+                "success": true,
+                "project_name": project_name,
+                "project_path": project_path.display().to_string(),
+                "database": db_path.display().to_string(),
+            }),
+        }),
+    )
+        .into_response()
 }

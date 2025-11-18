@@ -77,6 +77,12 @@ pub struct EventListQuery {
     pub limit: Option<i32>,
 }
 
+/// Switch project request
+#[derive(Deserialize)]
+pub struct SwitchProjectRequest {
+    pub project_path: String,
+}
+
 /// Query parameters for search
 #[derive(Deserialize)]
 pub struct SearchQuery {

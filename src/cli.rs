@@ -1,15 +1,27 @@
 use clap::{Parser, Subcommand};
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 #[command(name = "intent-engine")]
 #[command(about = "A command-line database service for tracking strategic intent", long_about = None)]
 #[command(version)]
 pub struct Cli {
+    /// Enable verbose output (-v)
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    pub verbose: u8,
+
+    /// Suppress non-error output (-q)
+    #[arg(short, long)]
+    pub quiet: bool,
+
+    /// Output logs in JSON format
+    #[arg(long)]
+    pub json: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone)]
 pub enum Commands {
     /// Task management commands
     #[command(subcommand)]
@@ -255,7 +267,7 @@ pub enum Commands {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone)]
 pub enum CurrentAction {
     /// Set the current task (low-level atomic command, prefer 'ie task start')
     #[command(hide = true)]
@@ -269,7 +281,7 @@ pub enum CurrentAction {
     Clear,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone)]
 pub enum TaskCommands {
     /// Add a new task
     Add {
@@ -423,7 +435,7 @@ pub enum TaskCommands {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone)]
 pub enum EventCommands {
     /// Add a new event
     Add {
@@ -460,11 +472,11 @@ pub enum EventCommands {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone)]
 pub enum DashboardCommands {
     /// Start the Dashboard web server for current project
     Start {
-        /// Custom port (default: auto-allocated 3030-3099)
+        /// Custom port (default: 11391)
         #[arg(long)]
         port: Option<u16>,
 
@@ -472,9 +484,9 @@ pub enum DashboardCommands {
         #[arg(long)]
         foreground: bool,
 
-        /// Don't automatically open browser
+        /// Automatically open browser (default: false, use --browser to enable)
         #[arg(long)]
-        no_browser: bool,
+        browser: bool,
     },
 
     /// Stop the Dashboard server

@@ -7,6 +7,7 @@
 //! Unlike the Python wrapper (mcp-server.py), this implementation directly uses
 //! the Rust library functions, avoiding subprocess overhead and improving performance.
 
+use crate::error::IntentError;
 use crate::events::EventManager;
 use crate::project::ProjectContext;
 use crate::report::ReportManager;
@@ -14,7 +15,7 @@ use crate::tasks::TaskManager;
 use crate::workspace::WorkspaceManager;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::io::{self, BufRead, Write};
+use std::io;
 
 #[derive(Debug, Deserialize)]
 struct JsonRpcRequest {
@@ -52,15 +53,58 @@ const MCP_TOOLS: &str = include_str!("../../mcp-server.json");
 /// Run the MCP server
 /// This is the main entry point for MCP server mode
 pub async fn run() -> io::Result<()> {
-    // Load project context
-    let ctx = ProjectContext::load_or_init()
-        .await
-        .map_err(|e| io::Error::other(e.to_string()))?;
+    // Load project context - only load existing projects, don't initialize new ones
+    // This prevents blocking when MCP server is started outside an intent-engine project
+    let ctx = match ProjectContext::load().await {
+        Ok(ctx) => ctx,
+        Err(IntentError::NotAProject) => {
+            eprintln!("⚠️  Not in an intent-engine project directory.");
+            eprintln!("   MCP server requires an intent-engine project to function.");
+            eprintln!(
+                "   Run 'ie workspace init' to create a project, or cd to an existing project."
+            );
+            return Err(io::Error::other(
+                "MCP server must be run within an intent-engine project directory".to_string(),
+            ));
+        },
+        Err(e) => {
+            return Err(io::Error::other(format!(
+                "Failed to load project context: {}",
+                e
+            )));
+        },
+    };
 
-    // Register MCP connection in the global registry
-    if let Err(e) = register_mcp_connection(&ctx.root) {
-        eprintln!("⚠ Failed to register MCP connection: {}", e);
+    // Auto-start Dashboard if not running (fully async, non-blocking)
+    if !is_dashboard_running().await {
+        eprintln!("🚀 Dashboard not running, starting automatically...");
+        // Spawn Dashboard startup in background task - don't block MCP Server initialization
+        tokio::spawn(async {
+            if let Err(e) = start_dashboard_background().await {
+                eprintln!("⚠️  Failed to start Dashboard: {}", e);
+                eprintln!("   You can start it manually with: ie dashboard start");
+            } else {
+                eprintln!("✓ Dashboard started successfully at http://127.0.0.1:11391");
+            }
+        });
+    } else {
+        // Dashboard already running, show URL for user convenience
+        eprintln!("ℹ️  Dashboard is running at http://127.0.0.1:11391");
     }
+
+    // Show prominent notification about Dashboard GUI
+    eprintln!("╭─────────────────────────────────────────────────────────╮");
+    eprintln!("│  💡 Intent-Engine Dashboard GUI is available!          │");
+    eprintln!("│     Visit: http://127.0.0.1:11391                      │");
+    eprintln!("╰─────────────────────────────────────────────────────────╯");
+
+    // Register MCP connection in the global registry (non-blocking)
+    let project_root = ctx.root.clone();
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = register_mcp_connection(&project_root) {
+            eprintln!("⚠ Failed to register MCP connection: {}", e);
+        }
+    });
 
     // Start heartbeat task
     let project_path = ctx.root.clone();
@@ -83,12 +127,14 @@ pub async fn run() -> io::Result<()> {
 }
 
 async fn run_server() -> io::Result<()> {
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
-    let reader = stdin.lock();
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-    for line in reader.lines() {
-        let line = line?;
+    let stdin = tokio::io::stdin();
+    let mut stdout = tokio::io::stdout();
+    let reader = BufReader::new(stdin);
+    let mut lines = reader.lines();
+
+    while let Some(line) = lines.next_line().await? {
         if line.trim().is_empty() {
             continue;
         }
@@ -114,8 +160,9 @@ async fn run_server() -> io::Result<()> {
         };
 
         let response_json = serde_json::to_string(&response)?;
-        writeln!(stdout, "{}", response_json)?;
-        stdout.flush()?;
+        stdout.write_all(response_json.as_bytes()).await?;
+        stdout.write_all(b"\n").await?;
+        stdout.flush().await?;
     }
 
     Ok(())
@@ -716,11 +763,24 @@ fn register_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()>
     // Detect agent type from environment (Claude Code sets specific env vars)
     let agent_name = detect_agent_type();
 
+    // Register MCP connection - this will create a project entry if none exists
+    let project = registry.find_by_path(&project_path.to_path_buf());
+    let dashboard_info = if let Some(p) = project {
+        if p.port > 0 {
+            format!("Dashboard: http://127.0.0.1:{}", p.port)
+        } else {
+            "MCP-only mode (no Dashboard)".to_string()
+        }
+    } else {
+        "MCP-only mode (no Dashboard)".to_string()
+    };
+
     registry.register_mcp_connection(&project_path.to_path_buf(), agent_name)?;
 
     eprintln!(
-        "✓ MCP connection registered for project: {}",
-        project_path.display()
+        "✓ MCP connection registered for project: {} ({})",
+        project_path.display(),
+        dashboard_info
     );
 
     Ok(())
@@ -750,12 +810,15 @@ async fn heartbeat_task(project_path: std::path::PathBuf) {
     loop {
         interval.tick().await;
 
-        // Update heartbeat
-        if let Ok(mut registry) = ProjectRegistry::load() {
-            if let Err(e) = registry.update_mcp_heartbeat(&project_path) {
-                eprintln!("⚠ Failed to update MCP heartbeat: {}", e);
+        // Update heartbeat (non-blocking)
+        let path = project_path.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Ok(mut registry) = ProjectRegistry::load() {
+                if let Err(e) = registry.update_mcp_heartbeat(&path) {
+                    eprintln!("⚠ Failed to update MCP heartbeat: {}", e);
+                }
             }
-        }
+        });
     }
 }
 
@@ -773,6 +836,54 @@ fn detect_agent_type() -> Option<String> {
 
     // Generic MCP client
     Some("mcp-client".to_string())
+}
+
+/// Check if Dashboard is running by testing the health endpoint
+async fn is_dashboard_running() -> bool {
+    // Use a timeout to prevent blocking - Dashboard check should be fast
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(100), // Very short timeout
+        tokio::net::TcpStream::connect("127.0.0.1:11391"),
+    )
+    .await
+    {
+        Ok(Ok(_)) => true,
+        Ok(Err(_)) => false,
+        Err(_) => {
+            // Timeout occurred - assume dashboard is not running
+            false
+        },
+    }
+}
+
+/// Start Dashboard in background using `ie dashboard start` command
+async fn start_dashboard_background() -> io::Result<()> {
+    use tokio::process::Command;
+
+    // Get the current executable path
+    let current_exe = std::env::current_exe()?;
+
+    // Spawn Dashboard process in foreground mode
+    Command::new(current_exe)
+        .arg("dashboard")
+        .arg("start")
+        .arg("--foreground")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+
+    // Wait for Dashboard to start (check health endpoint)
+    for _ in 0..10 {
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        if is_dashboard_running().await {
+            return Ok(());
+        }
+    }
+
+    Err(io::Error::other(
+        "Dashboard failed to start within 5 seconds",
+    ))
 }
 
 #[cfg(test)]

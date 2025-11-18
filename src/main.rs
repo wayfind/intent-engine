@@ -5,6 +5,7 @@ use intent_engine::cli::{
 use intent_engine::db::models::TaskContext;
 use intent_engine::error::{IntentError, Result};
 use intent_engine::events::EventManager;
+use intent_engine::logging::LoggingConfig;
 use intent_engine::project::ProjectContext;
 use intent_engine::report::ReportManager;
 use intent_engine::tasks::TaskManager;
@@ -26,17 +27,26 @@ async fn main() {
         );
     }
 
-    if let Err(e) = run().await {
+    // Parse CLI arguments first to get logging configuration
+    let cli = Cli::parse();
+
+    // Initialize logging system
+    let log_config = LoggingConfig::from_args(cli.quiet, cli.verbose > 0, cli.json);
+    if let Err(e) = intent_engine::logging::init_logging(log_config) {
+        eprintln!("Failed to initialize logging: {}", e);
+        std::process::exit(1);
+    }
+
+    // Continue with main application logic
+    if let Err(e) = run(&cli).await {
         let error_response = e.to_error_response();
         eprintln!("{}", serde_json::to_string_pretty(&error_response).unwrap());
         std::process::exit(1);
     }
 }
 
-async fn run() -> Result<()> {
-    let cli = Cli::parse();
-
-    match cli.command {
+async fn run(cli: &Cli) -> Result<()> {
+    match cli.command.clone() {
         Commands::Task(task_cmd) => handle_task_command(task_cmd).await?,
         Commands::Current { set, command } => handle_current_command(set, command).await?,
         Commands::Report {
@@ -1430,7 +1440,7 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
         DashboardCommands::Start {
             port,
             foreground,
-            no_browser,
+            browser,
         } => {
             // Load project context to get project path and DB path
             let project_ctx = ProjectContext::load_or_init().await?;
@@ -1462,15 +1472,9 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 }
             }
 
-            // Allocate port
+            // Allocate port (always 11391, or custom if specified)
             let allocated_port = if let Some(custom_port) = port {
-                // Verify custom port is in valid range
-                if !(3030..=3099).contains(&custom_port) {
-                    return Err(IntentError::InvalidInput(
-                        "Port must be in range 3030-3099".to_string(),
-                    ));
-                }
-                // Check if custom port is available
+                // Custom port specified - check if available
                 if !ProjectRegistry::is_port_available(custom_port) {
                     return Err(IntentError::InvalidInput(format!(
                         "Port {} is already in use",
@@ -1479,6 +1483,7 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 }
                 custom_port
             } else {
+                // Use default fixed port (11391)
                 registry.allocate_port()?
             };
 
@@ -1520,8 +1525,8 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 );
                 println!("   Press Ctrl+C to stop\n");
 
-                // Open browser if not disabled
-                if !no_browser {
+                // Open browser if explicitly requested
+                if browser {
                     let dashboard_url = format!("http://127.0.0.1:{}", allocated_port);
                     tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
                     println!("🌐 Opening dashboard in browser...");
@@ -1564,9 +1569,9 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                     .arg("--port")
                     .arg(allocated_port.to_string());
 
-                // Pass --no-browser flag to child process if user specified it
-                if no_browser {
-                    cmd.arg("--no-browser");
+                // Pass --browser flag to child process if user specified it
+                if browser {
+                    cmd.arg("--browser");
                 }
 
                 let child = cmd
@@ -1594,8 +1599,8 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                     println!("  PID: {}", pid);
                     println!("  URL: {}", dashboard_url);
 
-                    // Open browser if not disabled
-                    if !no_browser {
+                    // Open browser if explicitly requested
+                    if browser {
                         println!("\n🌐 Opening dashboard in browser...");
                         if let Err(e) = open::that(&dashboard_url) {
                             eprintln!("⚠️  Could not open browser automatically: {}", e);

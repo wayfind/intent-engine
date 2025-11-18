@@ -4,8 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 const REGISTRY_FILE: &str = ".intent-engine/projects.json";
-const MIN_PORT: u16 = 3030;
-const MAX_PORT: u16 = 3099;
+const DEFAULT_PORT: u16 = 11391; // Fixed port for Dashboard
 const VERSION: &str = "1.0";
 
 /// Global project registry for managing multiple Dashboard instances
@@ -41,7 +40,7 @@ impl ProjectRegistry {
         Self {
             version: VERSION.to_string(),
             projects: Vec::new(),
-            next_port: MIN_PORT,
+            next_port: DEFAULT_PORT, // Fixed port
         }
     }
 
@@ -87,32 +86,20 @@ impl ProjectRegistry {
         Ok(())
     }
 
-    /// Allocate a new port, checking for conflicts
+    /// Allocate port (always uses DEFAULT_PORT)
     pub fn allocate_port(&mut self) -> Result<u16> {
-        // Try next_port first
-        let mut port = self.next_port;
-        let mut attempts = 0;
-        const MAX_ATTEMPTS: usize = 70; // Total available ports
+        // Always use the default fixed port
+        let port = DEFAULT_PORT;
 
-        while attempts < MAX_ATTEMPTS {
-            if port > MAX_PORT {
-                port = MIN_PORT;
-            }
-
-            // Check if port is already in use
-            if !self.projects.iter().any(|p| p.port == port) {
-                // Check if port is actually available on the system
-                if Self::is_port_available(port) {
-                    self.next_port = if port == MAX_PORT { MIN_PORT } else { port + 1 };
-                    return Ok(port);
-                }
-            }
-
-            port += 1;
-            attempts += 1;
+        // Check if port is available on the system
+        if Self::is_port_available(port) {
+            Ok(port)
+        } else {
+            anyhow::bail!(
+                "Port {} is already in use. Please stop the existing Dashboard instance first.",
+                port
+            )
         }
-
-        anyhow::bail!("No available ports in range {}-{}", MIN_PORT, MAX_PORT)
     }
 
     /// Check if a port is available on the system
@@ -154,6 +141,7 @@ impl ProjectRegistry {
     }
 
     /// Register or update MCP connection for a project
+    /// This will create a project entry if none exists (for MCP-only projects)
     pub fn register_mcp_connection(
         &mut self,
         path: &PathBuf,
@@ -163,24 +151,24 @@ impl ProjectRegistry {
 
         // Check if project already exists
         if let Some(project) = self.find_by_path_mut(path) {
-            // Update existing project
+            // Update existing project's MCP status
             project.mcp_connected = true;
             project.mcp_last_seen = Some(now.clone());
             project.mcp_agent = agent_name;
         } else {
-            // Create new entry for MCP-only project (no Dashboard running)
+            // Create MCP-only project entry (no Dashboard server, port: 0)
             let name = path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown")
                 .to_string();
 
-            let db_path = path.join(".intent-engine").join("intents.db");
+            let db_path = path.join(".intent-engine").join("project.db");
 
             let project = RegisteredProject {
                 path: path.clone(),
                 name,
-                port: 0, // No Dashboard server, use 0 as placeholder
+                port: 0, // No Dashboard server
                 pid: None,
                 started_at: now.clone(),
                 db_path,
@@ -212,11 +200,8 @@ impl ProjectRegistry {
             project.mcp_last_seen = None;
             project.mcp_agent = None;
 
-            // If no Dashboard is running (port = 0), remove the entry entirely
-            if project.port == 0 {
-                self.unregister(path);
-            }
-
+            // Don't delete the entry - keep it for tracking purposes
+            // This allows MCP-only projects to persist in the registry
             self.save()?;
         }
         Ok(())
@@ -294,17 +279,16 @@ mod tests {
         let registry = ProjectRegistry::new();
         assert_eq!(registry.version, VERSION);
         assert_eq!(registry.projects.len(), 0);
-        assert_eq!(registry.next_port, MIN_PORT);
+        assert_eq!(registry.next_port, DEFAULT_PORT);
     }
 
     #[test]
     fn test_allocate_port() {
         let mut registry = ProjectRegistry::new();
 
-        // Allocate first port
+        // Allocate port (always DEFAULT_PORT)
         let port1 = registry.allocate_port().unwrap();
-        assert_eq!(port1, MIN_PORT);
-        assert_eq!(registry.next_port, MIN_PORT + 1);
+        assert_eq!(port1, DEFAULT_PORT);
 
         // Register a project with that port
         registry.register(RegisteredProject {
@@ -319,9 +303,10 @@ mod tests {
             mcp_agent: None,
         });
 
-        // Allocate second port
+        // Second allocation will succeed if port is not actually in use
+        // (Test can't bind to port in unit test environment)
         let port2 = registry.allocate_port().unwrap();
-        assert_eq!(port2, MIN_PORT + 1);
+        assert_eq!(port2, DEFAULT_PORT);
     }
 
     #[test]
@@ -331,7 +316,7 @@ mod tests {
         let project = RegisteredProject {
             path: PathBuf::from("/test/project"),
             name: "test-project".to_string(),
-            port: 3030,
+            port: 11391,
             pid: Some(12345),
             started_at: "2025-01-01T00:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
@@ -349,7 +334,7 @@ mod tests {
         assert_eq!(found.unwrap().name, "test-project");
 
         // Find by port
-        let found_by_port = registry.find_by_port(3030);
+        let found_by_port = registry.find_by_port(11391);
         assert!(found_by_port.is_some());
         assert_eq!(found_by_port.unwrap().name, "test-project");
     }
@@ -361,7 +346,7 @@ mod tests {
         let project = RegisteredProject {
             path: PathBuf::from("/test/project"),
             name: "test-project".to_string(),
-            port: 3030,
+            port: 11391,
             pid: None,
             started_at: "2025-01-01T00:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
@@ -384,7 +369,7 @@ mod tests {
         let project1 = RegisteredProject {
             path: PathBuf::from("/test/project"),
             name: "project-v1".to_string(),
-            port: 3030,
+            port: 11391,
             pid: None,
             started_at: "2025-01-01T00:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
@@ -425,7 +410,7 @@ mod tests {
         let project = RegisteredProject {
             path: PathBuf::from("/test/project"),
             name: "test-project".to_string(),
-            port: 3030,
+            port: 11391,
             pid: Some(12345),
             started_at: "2025-01-01T00:00:00Z".to_string(),
             db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
@@ -439,25 +424,24 @@ mod tests {
         // Test serialization
         let json = serde_json::to_string_pretty(&registry).unwrap();
         assert!(json.contains("test-project"));
-        assert!(json.contains("3030"));
+        assert!(json.contains("11391"));
 
         // Test deserialization
         let loaded: ProjectRegistry = serde_json::from_str(&json).unwrap();
         assert_eq!(loaded.projects.len(), 1);
         assert_eq!(loaded.projects[0].name, "test-project");
-        assert_eq!(loaded.projects[0].port, 3030);
+        assert_eq!(loaded.projects[0].port, 11391);
     }
 
     #[test]
-    fn test_port_wraparound() {
+    fn test_fixed_port() {
         let mut registry = ProjectRegistry::new();
-        registry.next_port = MAX_PORT;
 
-        // Allocate port at max
+        // Always allocates DEFAULT_PORT
         let port = registry.allocate_port().unwrap();
-        assert_eq!(port, MAX_PORT);
+        assert_eq!(port, DEFAULT_PORT);
 
-        // Next allocation should wrap to MIN_PORT
-        assert_eq!(registry.next_port, MIN_PORT);
+        // next_port remains unchanged (not used for fixed port)
+        assert_eq!(registry.next_port, DEFAULT_PORT);
     }
 }

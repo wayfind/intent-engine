@@ -32,6 +32,7 @@ pub fn api_routes() -> Router<AppState> {
         .route("/pick-next", get(handlers::pick_next_task))
         .route("/search", get(handlers::search))
         .route("/projects", get(handlers::list_projects))
+        .route("/switch-project", post(handlers::switch_project))
 }
 
 #[cfg(test)]

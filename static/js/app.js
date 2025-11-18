@@ -632,11 +632,16 @@ async function loadProjectTabs() {
             return;
         }
 
-        const currentPort = window.location.port || '3030';
+        // Get current project info to determine which tab is active
+        const infoResponse = await fetch('/api/info');
+        const infoData = await infoResponse.json();
+        const currentProjectPath = infoData.path || '';
 
         const tabsHTML = result.data.map(project => {
-            const isActive = project.port.toString() === currentPort;
-            const activeClass = isActive ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50';
+            const isActive = project.path === currentProjectPath;
+            const activeClass = isActive
+                ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50 cursor-pointer';
             const indicator = isActive ? '<span class="ml-1">●</span>' : '';
 
             // MCP connection status indicator
@@ -648,12 +653,74 @@ async function loadProjectTabs() {
 
             const tooltipText = `${project.path}${mcpConnected ? '\n🟢 Agent: ' + mcpAgent : '\n⚪ No agent connected'}`;
 
-            return `<a href="${project.url}" class="px-4 py-3 text-sm font-medium transition-colors ${activeClass} whitespace-nowrap" title="${tooltipText}">${project.name}${indicator}${mcpIndicator}</a>`;
+            // Use onclick for non-active tabs, prevent default for active tabs
+            const clickHandler = isActive
+                ? 'onclick="return false;"'
+                : `onclick="switchProject('${escapeHtml(project.path)}'); return false;"`;
+
+            return `<a href="#" ${clickHandler} class="px-4 py-3 text-sm font-medium transition-colors ${activeClass} whitespace-nowrap" title="${tooltipText}">${project.name}${indicator}${mcpIndicator}</a>`;
         }).join('');
 
         document.getElementById('project-tabs').innerHTML = tabsHTML;
     } catch (error) {
         console.error('Failed to load project tabs:', error);
         document.getElementById('project-tabs').innerHTML = '<div class="text-sm text-red-500 py-3">Failed to load projects</div>';
+    }
+}
+
+// Switch to a different project
+async function switchProject(projectPath) {
+    try {
+        showNotification('Switching project...', 'info');
+
+        const response = await fetch('/api/switch-project', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project_path: projectPath })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            showNotification(error.message || 'Failed to switch project', 'error');
+            return;
+        }
+
+        const result = await response.json();
+        const newProjectName = result.data.project_name;
+
+        showNotification(`Switched to project: ${newProjectName}`, 'success');
+
+        // Reload all data for the new project
+        await loadProjectInfo();
+        await loadProjectTabs();
+        await loadTasks(currentFilter);
+
+        // Clear task detail view
+        document.getElementById('task-detail-container').innerHTML = `
+            <div class="p-8">
+                <div class="text-center text-gray-400 py-20">
+                    <svg class="mx-auto h-24 w-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <h3 class="mt-4 text-xl font-medium text-gray-500">Select a task to view details</h3>
+                    <p class="mt-2 text-sm text-gray-400">Choose a task from the list on the left</p>
+                </div>
+            </div>
+        `;
+
+        // Clear event history
+        document.getElementById('event-list-container').innerHTML = `
+            <div class="text-center text-gray-400 py-8 text-sm">
+                Select a task to view its event history
+            </div>
+        `;
+
+        // Reset current task
+        currentTaskId = null;
+        currentTask = null;
+
+    } catch (e) {
+        console.error('Failed to switch project:', e);
+        showNotification('Failed to switch project', 'error');
     }
 }
