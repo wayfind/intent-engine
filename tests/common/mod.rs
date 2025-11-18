@@ -106,6 +106,12 @@ pub fn ie_command_with_project_dir(project_dir: &std::path::Path) -> Command {
 /// - An initialized intent-engine database (via auto-init)
 /// - Isolated environment variables to prevent home directory pollution
 ///
+/// # Thread Safety
+///
+/// This function is thread-safe and can be called concurrently from multiple tests.
+/// It uses `ProjectContext::initialize_project_at()` which doesn't rely on the
+/// global current directory, avoiding race conditions in parallel test execution.
+///
 /// # Returns
 ///
 /// A `TempDir` that will be automatically cleaned up when dropped.
@@ -129,21 +135,14 @@ pub fn setup_test_env() -> TempDir {
     // This ensures intent-engine recognizes this as a valid project root
     fs::create_dir(temp_dir.path().join(".git")).unwrap();
 
-    // Initialize the intent-engine project using the proper initialization function
+    // Initialize the intent-engine project using the thread-safe initialization function
     // This creates the .intent-engine directory and database with all tables
-    // We need to temporarily change directory because ProjectContext::initialize_project()
-    // uses std::env::current_dir() to determine the project root
-    let original_dir = std::env::current_dir().unwrap();
-
-    // Change to temp directory
-    std::env::set_current_dir(temp_dir.path()).unwrap();
-
+    // Unlike initialize_project(), this method doesn't change the global current directory,
+    // making it safe for concurrent test execution
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let init_result = runtime.block_on(async { ProjectContext::initialize_project().await });
-
-    // Always try to restore original directory, but don't panic if it fails
-    // (it might have been deleted by another test)
-    let _ = std::env::set_current_dir(&original_dir);
+    let init_result = runtime.block_on(async {
+        ProjectContext::initialize_project_at(temp_dir.path().to_path_buf()).await
+    });
 
     // Verify initialization succeeded
     if let Err(e) = init_result {

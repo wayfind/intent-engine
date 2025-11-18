@@ -2,10 +2,22 @@
 ///
 /// These tests verify that Intent-Engine correctly infers the project root
 /// directory based on common project markers, and initializes in the correct location.
+mod common;
+
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
+
+/// Create an isolated Command that won't fall back to home directory
+fn isolated_command() -> Command {
+    let binary_path = env!("CARGO_BIN_EXE_ie");
+    let mut cmd = Command::new(binary_path);
+    cmd.env("HOME", "/nonexistent") // Prevent fallback to home on Unix
+        .env("USERPROFILE", "/nonexistent") // Prevent fallback to home on Windows
+        .env("INTENT_ENGINE_NO_HOME_FALLBACK", "1"); // Additional flag to prevent home fallback
+    cmd
+}
 
 /// Helper to create a test directory structure and run a command in a subdirectory
 fn run_in_subdirectory<F>(temp_dir: &TempDir, subdir: &str, setup: F) -> std::process::Output
@@ -21,12 +33,8 @@ where
     let subdir_path = root.join(subdir);
     fs::create_dir_all(&subdir_path).expect("Failed to create subdirectory");
 
-    // Use Cargo-provided environment variable for binary path
-    // This works correctly in all test environments (local, CI, llvm-cov, etc.)
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
-    // Run task add command from subdirectory
-    Command::new(binary_path)
+    // Use isolated command to prevent fallback to home directory
+    isolated_command()
         .current_dir(&subdir_path)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -319,10 +327,8 @@ fn test_existing_intent_engine_found_and_reused() {
     // Create .git marker at root
     fs::create_dir(root.join(".git")).expect("Failed to create .git");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // First command: initialize from root
-    let output1 = Command::new(binary_path)
+    let output1 = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "First task"])
         .output()
@@ -348,7 +354,7 @@ fn test_existing_intent_engine_found_and_reused() {
     let subdir = root.join("src/components");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let output2 = Command::new(binary_path)
+    let output2 = isolated_command()
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Second task"])
         .output()
@@ -407,8 +413,7 @@ fn test_initialization_with_symlinked_git_directory() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-    let output = Command::new(binary_path)
+    let output = isolated_command()
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -444,8 +449,7 @@ fn test_initialization_with_git_as_file_submodule() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-    let output = Command::new(binary_path)
+    let output = isolated_command()
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -477,8 +481,7 @@ fn test_initialization_with_empty_marker_files() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-    let output = Command::new(binary_path)
+    let output = isolated_command()
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -522,10 +525,8 @@ fn test_initialization_in_nested_monorepo_structure() {
     )
     .expect("Failed to create frontend package.json");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Test from backend: should find Cargo.toml in backend/ first (nearest marker)
-    let output_backend = Command::new(binary_path)
+    let output_backend = isolated_command()
         .current_dir(root.join("backend/src"))
         .args(["task", "add", "--name", "Backend task"])
         .output()
@@ -544,7 +545,7 @@ fn test_initialization_in_nested_monorepo_structure() {
     );
 
     // Test from frontend: should find package.json in frontend/ first
-    let output_frontend = Command::new(binary_path)
+    let output_frontend = isolated_command()
         .current_dir(root.join("frontend/src"))
         .args(["task", "add", "--name", "Frontend task"])
         .output()
@@ -587,10 +588,8 @@ fn test_initialization_with_multiple_markers_different_levels() {
     )
     .expect("Failed to create Cargo.toml");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Run from deeply nested directory
-    let output = Command::new(binary_path)
+    let output = isolated_command()
         .current_dir(root.join("rust-project/nested/deep"))
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -647,8 +646,11 @@ fn test_concurrent_initialization_attempts() {
             // Add small stagger to reduce exact simultaneity
             thread::sleep(Duration::from_millis(i * 10));
 
-            // Execute command
-            Command::new(binary)
+            // Execute command with environment isolation
+            let mut cmd = Command::new(binary);
+            cmd.env("HOME", "/nonexistent")
+                .env("USERPROFILE", "/nonexistent")
+                .env("INTENT_ENGINE_NO_HOME_FALLBACK", "1")
                 .current_dir(&subdir_clone)
                 .args(["task", "add", "--name", &format!("Concurrent task {}", i)])
                 .output()
@@ -698,7 +700,7 @@ fn test_concurrent_initialization_attempts() {
 
     // Verify database is accessible by trying to read from it
     // This ensures the concurrent operations didn't corrupt it
-    let output = Command::new(binary_path)
+    let output = isolated_command()
         .current_dir(&subdir)
         .args(["task", "list", "todo"])
         .output()
@@ -736,8 +738,7 @@ fn test_initialization_with_symlinked_marker_file() {
     let subdir = root.join("src");
     fs::create_dir_all(&subdir).expect("Failed to create subdirectory");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-    let output = Command::new(binary_path)
+    let output = isolated_command()
         .current_dir(&subdir)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -771,10 +772,8 @@ fn test_partial_initialization_state_handling() {
     let db_path = intent_dir.join("project.db");
     assert!(!db_path.exists(), "Database should not exist initially");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Run command - behavior depends on SQLite
-    let output = Command::new(binary_path)
+    let output = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -816,10 +815,8 @@ fn test_invalid_database_fails_appropriately() {
     fs::write(&db_path, "This is not a valid SQLite database")
         .expect("Failed to create invalid db");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Run command - should fail with database error
-    let output = Command::new(binary_path)
+    let output = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Test task"])
         .output()
@@ -861,10 +858,8 @@ fn test_nested_projects_should_not_share_database() {
     // Setup parent project with .git and .intent_engine
     fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Initialize parent project
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -886,7 +881,7 @@ fn test_nested_projects_should_not_share_database() {
     fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
 
     // Initialize child project
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -929,7 +924,7 @@ fn test_nested_projects_should_not_share_database() {
     );
 
     // List tasks in parent - should only have "Parent task"
-    let parent_list = Command::new(binary_path)
+    let parent_list = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -947,7 +942,7 @@ fn test_nested_projects_should_not_share_database() {
     );
 
     // List tasks in child - should only have "Child task"
-    let child_list = Command::new(binary_path)
+    let child_list = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "list"])
         .output()
@@ -976,10 +971,8 @@ fn test_nested_projects_from_child_subdirectory() {
     // Setup parent project
     fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Initialize parent
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -997,7 +990,7 @@ fn test_nested_projects_from_child_subdirectory() {
     fs::create_dir_all(&child_subdir).expect("Failed to create child subdir");
 
     // Run from child subdirectory
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_subdir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1024,7 +1017,7 @@ fn test_nested_projects_from_child_subdirectory() {
     );
 
     // Verify task isolation
-    let parent_list = Command::new(binary_path)
+    let parent_list = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1049,11 +1042,9 @@ fn test_matrix_2_parent_has_all_child_has_none() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Setup: Parent with .git and .intent
     fs::create_dir(root.join(".git")).expect("Failed to create .git");
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1065,7 +1056,7 @@ fn test_matrix_2_parent_has_all_child_has_none() {
     fs::create_dir_all(&child_dir).expect("Failed to create child");
 
     // Run from child
-    let child_run = Command::new(binary_path)
+    let child_run = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1085,7 +1076,7 @@ fn test_matrix_2_parent_has_all_child_has_none() {
     );
 
     // Both tasks should be in parent's database
-    let list_output = Command::new(binary_path)
+    let list_output = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1104,8 +1095,6 @@ fn test_matrix_3_both_have_git_no_intent() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Setup: Parent with .git only
     fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
 
@@ -1115,7 +1104,7 @@ fn test_matrix_3_both_have_git_no_intent() {
     fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
 
     // Run from child
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1136,7 +1125,7 @@ fn test_matrix_3_both_have_git_no_intent() {
     );
 
     // Run from parent
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1164,11 +1153,9 @@ fn test_matrix_4_parent_intent_only_child_has_git() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Setup: Parent with .intent but no marker
     // Initialize parent first (will create .intent at CWD due to no markers)
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1192,7 +1179,7 @@ fn test_matrix_4_parent_intent_only_child_has_git() {
     fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
 
     // Run from child
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1207,7 +1194,7 @@ fn test_matrix_4_parent_intent_only_child_has_git() {
     );
 
     // Verify isolation - child should NOT have parent's task
-    let child_list = Command::new(binary_path)
+    let child_list = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "list"])
         .output()
@@ -1226,8 +1213,6 @@ fn test_matrix_5_parent_empty_child_has_git() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Parent has nothing (no markers, no .intent)
     // Child has .git
     let child_dir = root.join("child-project");
@@ -1235,7 +1220,7 @@ fn test_matrix_5_parent_empty_child_has_git() {
     fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
 
     // Run from child
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1262,11 +1247,9 @@ fn test_matrix_6_both_have_intent() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Setup parent with .git and .intent
     fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1277,7 +1260,7 @@ fn test_matrix_6_both_have_intent() {
     let child_dir = root.join("child-project");
     fs::create_dir_all(&child_dir).expect("Failed to create child");
     fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1289,7 +1272,7 @@ fn test_matrix_6_both_have_intent() {
     assert!(child_dir.join(".intent-engine").exists());
 
     // Add another task to child
-    let child_add = Command::new(binary_path)
+    let child_add = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task 2"])
         .output()
@@ -1297,7 +1280,7 @@ fn test_matrix_6_both_have_intent() {
     assert!(child_add.status.success());
 
     // Child should only see its own tasks
-    let child_list = Command::new(binary_path)
+    let child_list = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "list"])
         .output()
@@ -1308,7 +1291,7 @@ fn test_matrix_6_both_have_intent() {
     assert!(!child_output.contains("Parent task"));
 
     // Parent should only see its own task
-    let parent_list = Command::new(binary_path)
+    let parent_list = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1325,10 +1308,8 @@ fn test_matrix_7_parent_intent_only_child_nothing() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Parent: manually create .intent (unusual case)
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1340,7 +1321,7 @@ fn test_matrix_7_parent_intent_only_child_nothing() {
     fs::create_dir_all(&child_dir).expect("Failed to create child");
 
     // Run from child
-    let child_add = Command::new(binary_path)
+    let child_add = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1354,7 +1335,7 @@ fn test_matrix_7_parent_intent_only_child_nothing() {
     );
 
     // Both tasks should be in parent's database
-    let list_output = Command::new(binary_path)
+    let list_output = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1373,14 +1354,12 @@ fn test_matrix_8_both_have_nothing() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // No markers anywhere
     let child_dir = root.join("some/deep/path");
     fs::create_dir_all(&child_dir).expect("Failed to create deep path");
 
     // Run from deep path
-    let output = Command::new(binary_path)
+    let output = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Task"])
         .output()
@@ -1413,11 +1392,9 @@ fn test_multi_level_n1_all_have_git() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Grandparent: .git + .intent
     fs::create_dir(root.join(".git")).expect("Failed to create GP .git");
-    let gp_init = Command::new(binary_path)
+    let gp_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "GP task"])
         .output()
@@ -1435,7 +1412,7 @@ fn test_multi_level_n1_all_have_git() {
     fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
 
     // Initialize child
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1449,7 +1426,7 @@ fn test_multi_level_n1_all_have_git() {
     );
 
     // Initialize parent
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(&parent_dir)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1468,7 +1445,7 @@ fn test_multi_level_n1_all_have_git() {
     assert!(child_dir.join(".intent-engine").exists());
 
     // Verify isolation - each sees only their own task
-    let gp_list = Command::new(binary_path)
+    let gp_list = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1486,11 +1463,9 @@ fn test_multi_level_n2_skip_middle_generation() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Grandparent: .git + .intent
     fs::create_dir(root.join(".git")).expect("Failed to create GP .git");
-    let gp_init = Command::new(binary_path)
+    let gp_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "GP task"])
         .output()
@@ -1507,7 +1482,7 @@ fn test_multi_level_n2_skip_middle_generation() {
     fs::create_dir(child_dir.join(".git")).expect("Failed to create child .git");
 
     // Add task from parent (should use GP's .intent)
-    let parent_add = Command::new(binary_path)
+    let parent_add = isolated_command()
         .current_dir(&parent_dir)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1521,7 +1496,7 @@ fn test_multi_level_n2_skip_middle_generation() {
     );
 
     // Add task from child
-    let child_add = Command::new(binary_path)
+    let child_add = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1535,7 +1510,7 @@ fn test_multi_level_n2_skip_middle_generation() {
     );
 
     // GP should see GP + Parent tasks (same database)
-    let gp_list = Command::new(binary_path)
+    let gp_list = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1546,7 +1521,7 @@ fn test_multi_level_n2_skip_middle_generation() {
     assert!(!gp_output.contains("Child task"));
 
     // Child should only see own task
-    let child_list = Command::new(binary_path)
+    let child_list = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "list"])
         .output()
@@ -1564,11 +1539,9 @@ fn test_multi_level_n3_different_markers() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Grandparent: .git + .intent
     fs::create_dir(root.join(".git")).expect("Failed to create .git");
-    let gp_init = Command::new(binary_path)
+    let gp_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "GP task"])
         .output()
@@ -1588,7 +1561,7 @@ fn test_multi_level_n3_different_markers() {
         .expect("Failed to create Cargo.toml");
 
     // Initialize parent
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(&parent_dir)
         .args(["task", "add", "--name", "Node task"])
         .output()
@@ -1602,7 +1575,7 @@ fn test_multi_level_n3_different_markers() {
     );
 
     // Initialize child
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Rust task"])
         .output()
@@ -1629,11 +1602,9 @@ fn test_multi_level_n4_no_middle_boundaries() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Grandparent: .git + .intent
     fs::create_dir(root.join(".git")).expect("Failed to create .git");
-    let gp_init = Command::new(binary_path)
+    let gp_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "GP task"])
         .output()
@@ -1649,14 +1620,14 @@ fn test_multi_level_n4_no_middle_boundaries() {
     fs::create_dir_all(&child_dir).expect("Failed to create child");
 
     // Add tasks from different levels
-    let parent_add = Command::new(binary_path)
+    let parent_add = isolated_command()
         .current_dir(&parent_dir)
         .args(["task", "add", "--name", "Parent task"])
         .output()
         .expect("Failed to add parent");
     assert!(parent_add.status.success());
 
-    let child_add = Command::new(binary_path)
+    let child_add = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1674,7 +1645,7 @@ fn test_multi_level_n4_no_middle_boundaries() {
     );
 
     // All tasks should be in GP's database
-    let gp_list = Command::new(binary_path)
+    let gp_list = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1696,11 +1667,9 @@ fn test_siblings_s1_both_have_git() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Parent with .git + .intent
     fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1718,7 +1687,7 @@ fn test_siblings_s1_both_have_git() {
     fs::create_dir(sib2_dir.join(".git")).expect("Failed to create sib2 .git");
 
     // Initialize sibling 1
-    let sib1_init = Command::new(binary_path)
+    let sib1_init = isolated_command()
         .current_dir(&sib1_dir)
         .args(["task", "add", "--name", "Project A task"])
         .output()
@@ -1726,7 +1695,7 @@ fn test_siblings_s1_both_have_git() {
     assert!(sib1_init.status.success());
 
     // Initialize sibling 2
-    let sib2_init = Command::new(binary_path)
+    let sib2_init = isolated_command()
         .current_dir(&sib2_dir)
         .args(["task", "add", "--name", "Project B task"])
         .output()
@@ -1744,7 +1713,7 @@ fn test_siblings_s1_both_have_git() {
     );
 
     // Verify isolation - sib1 should only see its task
-    let sib1_list = Command::new(binary_path)
+    let sib1_list = isolated_command()
         .current_dir(&sib1_dir)
         .args(["task", "list"])
         .output()
@@ -1755,7 +1724,7 @@ fn test_siblings_s1_both_have_git() {
     assert!(!sib1_output.contains("Parent task"));
 
     // Sib2 should only see its task
-    let sib2_list = Command::new(binary_path)
+    let sib2_list = isolated_command()
         .current_dir(&sib2_dir)
         .args(["task", "list"])
         .output()
@@ -1766,7 +1735,7 @@ fn test_siblings_s1_both_have_git() {
     assert!(!sib2_output.contains("Parent task"));
 
     // Parent should only see its task
-    let parent_list = Command::new(binary_path)
+    let parent_list = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1784,11 +1753,9 @@ fn test_siblings_s2_mixed_markers() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Parent with .git + .intent
     fs::create_dir(root.join(".git")).expect("Failed to create parent .git");
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1811,21 +1778,21 @@ fn test_siblings_s2_mixed_markers() {
     fs::create_dir_all(&sib3_dir).expect("Failed to create sib3");
 
     // Initialize all siblings
-    let sib1_init = Command::new(binary_path)
+    let sib1_init = isolated_command()
         .current_dir(&sib1_dir)
         .args(["task", "add", "--name", "Rust task"])
         .output()
         .expect("Failed to init sib1");
     assert!(sib1_init.status.success());
 
-    let sib2_init = Command::new(binary_path)
+    let sib2_init = isolated_command()
         .current_dir(&sib2_dir)
         .args(["task", "add", "--name", "Node task"])
         .output()
         .expect("Failed to init sib2");
     assert!(sib2_init.status.success());
 
-    let sib3_init = Command::new(binary_path)
+    let sib3_init = isolated_command()
         .current_dir(&sib3_dir)
         .args(["task", "add", "--name", "Docs task"])
         .output()
@@ -1849,7 +1816,7 @@ fn test_siblings_s2_mixed_markers() {
     );
 
     // Verify: Sib3's task should be in parent's database
-    let parent_list = Command::new(binary_path)
+    let parent_list = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1872,8 +1839,6 @@ fn test_edge_e1_very_deep_subdirectory() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Create .git at root
     fs::create_dir(root.join(".git")).expect("Failed to create .git");
 
@@ -1882,7 +1847,7 @@ fn test_edge_e1_very_deep_subdirectory() {
     fs::create_dir_all(&deep_path).expect("Failed to create deep path");
 
     // Initialize from deep path
-    let init = Command::new(binary_path)
+    let init = isolated_command()
         .current_dir(&deep_path)
         .args(["task", "add", "--name", "Deep task"])
         .output()
@@ -1900,7 +1865,7 @@ fn test_edge_e1_very_deep_subdirectory() {
     );
 
     // Verify from root
-    let list = Command::new(binary_path)
+    let list = isolated_command()
         .current_dir(root)
         .args(["task", "list"])
         .output()
@@ -1916,10 +1881,8 @@ fn test_edge_e3_orphaned_parent_intent() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Parent: Initialize without marker (creates .intent at CWD)
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Orphan task"])
         .output()
@@ -1935,7 +1898,7 @@ fn test_edge_e3_orphaned_parent_intent() {
     fs::create_dir(child_dir.join(".git")).expect("Failed to create .git");
 
     // Initialize child
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -1949,7 +1912,7 @@ fn test_edge_e3_orphaned_parent_intent() {
     );
 
     // Verify isolation
-    let child_list = Command::new(binary_path)
+    let child_list = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "list"])
         .output()
@@ -1966,8 +1929,6 @@ fn test_edge_e4_multiple_markers_same_dir() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let root = temp_dir.path();
 
-    let binary_path = env!("CARGO_BIN_EXE_ie");
-
     // Create both .git (priority 1) and package.json (priority 3)
     fs::create_dir(root.join(".git")).expect("Failed to create .git");
     fs::write(root.join("package.json"), r#"{"name": "test"}"#)
@@ -1980,7 +1941,7 @@ fn test_edge_e4_multiple_markers_same_dir() {
         .expect("Failed to create Cargo.toml");
 
     // Initialize parent
-    let parent_init = Command::new(binary_path)
+    let parent_init = isolated_command()
         .current_dir(root)
         .args(["task", "add", "--name", "Parent task"])
         .output()
@@ -1988,7 +1949,7 @@ fn test_edge_e4_multiple_markers_same_dir() {
     assert!(parent_init.status.success());
 
     // Initialize child
-    let child_init = Command::new(binary_path)
+    let child_init = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "add", "--name", "Child task"])
         .output()
@@ -2002,7 +1963,7 @@ fn test_edge_e4_multiple_markers_same_dir() {
     );
 
     // Both should be isolated
-    let child_list = Command::new(binary_path)
+    let child_list = isolated_command()
         .current_dir(&child_dir)
         .args(["task", "list"])
         .output()

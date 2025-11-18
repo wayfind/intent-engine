@@ -12,7 +12,10 @@ use std::fs;
 
 #[test]
 fn test_session_restore_without_workspace() {
-    let temp_dir = common::setup_test_env();
+    // Don't use setup_test_env() here because it initializes the workspace
+    // We want to test the case where there is NO workspace
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    fs::create_dir(temp_dir.path().join(".git")).unwrap();
 
     let mut cmd = common::ie_command();
     cmd.current_dir(temp_dir.path())

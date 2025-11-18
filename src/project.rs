@@ -246,16 +246,19 @@ impl ProjectContext {
         None
     }
 
-    /// Infer the project root directory based on common project markers
+    /// Infer the project root directory starting from a given path
     ///
-    /// This function implements a smart algorithm to find the project root:
-    /// 1. Start from current directory and traverse upwards
-    /// 2. Check each directory for project markers (in priority order)
-    /// 3. Return the first directory that contains any marker
-    /// 4. If no marker found, return None (fallback to CWD handled by caller)
-    fn infer_project_root() -> Option<PathBuf> {
-        let cwd = std::env::current_dir().ok()?;
-        let mut current = cwd.clone();
+    /// This is a helper function that implements the core root-finding logic
+    /// without relying on the global current directory.
+    ///
+    /// # Arguments
+    /// * `start_path` - The directory path to start searching from
+    ///
+    /// # Returns
+    /// * `Some(PathBuf)` - The project root if a marker is found
+    /// * `None` - If no project marker is found up to the filesystem root
+    fn infer_project_root_from(start_path: &std::path::Path) -> Option<PathBuf> {
+        let mut current = start_path.to_path_buf();
 
         loop {
             // Check if any marker exists in current directory
@@ -274,6 +277,18 @@ impl ProjectContext {
         }
 
         None
+    }
+
+    /// Infer the project root directory based on common project markers
+    ///
+    /// This function implements a smart algorithm to find the project root:
+    /// 1. Start from current directory and traverse upwards
+    /// 2. Check each directory for project markers (in priority order)
+    /// 3. Return the first directory that contains any marker
+    /// 4. If no marker found, return None (fallback to CWD handled by caller)
+    fn infer_project_root() -> Option<PathBuf> {
+        let cwd = std::env::current_dir().ok()?;
+        Self::infer_project_root_from(&cwd)
     }
 
     /// Initialize a new Intent-Engine project using smart root inference
@@ -301,6 +316,70 @@ impl ProjectContext {
                     cwd.display()
                 );
                 cwd
+            },
+        };
+
+        let intent_dir = root.join(INTENT_DIR);
+        let db_path = intent_dir.join(DB_FILE);
+
+        // Create .intent-engine directory if it doesn't exist
+        if !intent_dir.exists() {
+            std::fs::create_dir_all(&intent_dir)?;
+        }
+
+        // Create database connection
+        let pool = create_pool(&db_path).await?;
+
+        // Run migrations
+        run_migrations(&pool).await?;
+
+        Ok(ProjectContext {
+            root,
+            db_path,
+            pool,
+        })
+    }
+
+    /// Initialize a new Intent-Engine project at a specific directory
+    ///
+    /// This is a thread-safe alternative to `initialize_project()` that doesn't
+    /// rely on the global current directory. It's particularly useful for:
+    /// - Concurrent tests that need isolated project initialization
+    /// - Tools that need to initialize projects in specific directories
+    /// - Any scenario where changing the global current directory is undesirable
+    ///
+    /// # Arguments
+    /// * `project_dir` - The directory where the project should be initialized
+    ///
+    /// # Algorithm
+    /// 1. Try to infer project root starting from `project_dir`
+    /// 2. If inference succeeds, initialize in the inferred root
+    /// 3. If inference fails, use `project_dir` as the root directly
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use intent_engine::project::ProjectContext;
+    /// use std::path::PathBuf;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let project_dir = PathBuf::from("/tmp/my-project");
+    ///     let ctx = ProjectContext::initialize_project_at(project_dir).await?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn initialize_project_at(project_dir: PathBuf) -> Result<Self> {
+        // Try to infer the project root starting from the provided directory
+        let root = match Self::infer_project_root_from(&project_dir) {
+            Some(inferred_root) => {
+                // Successfully inferred project root
+                inferred_root
+            },
+            None => {
+                // No marker found, use provided directory as root
+                // This is expected for test environments where we explicitly
+                // create a .git marker in a temp directory
+                project_dir
             },
         };
 
