@@ -89,6 +89,9 @@ jobs:
         if: ${{ !inputs.skip_tests }}
         run: cargo test --test mcp_integration_test --verbose -- --test-threads=1
 
+      - name: Clean up test database before doctor command
+        run: rm -rf ~/.intent-engine
+
       - name: Test doctor command
         run: cargo run --bin ie -- doctor
 
