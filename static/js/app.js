@@ -5,7 +5,7 @@ let currentTask = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('Intent-Engine Dashboard initializing...');
+    console.log('CORTEX ENGINE initializing...');
 
     // Configure marked.js
     marked.setOptions({
@@ -47,7 +47,7 @@ window.renderMarkdown = (md) => {
         return DOMPurify.sanitize(html);
     } catch (e) {
         console.error('Markdown render error:', e);
-        return '<p>Error rendering markdown</p>';
+        return '<p class="text-red-500">ERROR_RENDERING_DATA_STREAM</p>';
     }
 };
 
@@ -56,7 +56,7 @@ async function loadProjectInfo() {
     try {
         const response = await fetch('/api/info');
         const data = await response.json();
-        document.getElementById('project-name').textContent = data.name || 'Unknown Project';
+        document.getElementById('project-name').textContent = (data.name || 'UNKNOWN_PROJECT').toUpperCase();
     } catch (e) {
         console.error('Failed to load project info:', e);
     }
@@ -65,7 +65,7 @@ async function loadProjectInfo() {
 // Load tasks with optional filter
 async function loadTasks(status = null) {
     const container = document.getElementById('task-list-items');
-    container.innerHTML = '<div class="text-center text-gray-500 py-4">Loading...</div>';
+    container.innerHTML = '<div class="text-center text-slate-600 font-mono text-xs py-4 animate-pulse">SCANNING_DATABASE...</div>';
 
     try {
         let url = '/api/tasks';
@@ -78,14 +78,14 @@ async function loadTasks(status = null) {
         const tasks = result.data || [];
 
         if (tasks.length === 0) {
-            container.innerHTML = '<div class="text-center text-gray-400 py-8 text-sm">No tasks found</div>';
+            container.innerHTML = '<div class="text-center text-slate-600 font-mono text-xs py-8">NO_TASKS_DETECTED</div>';
             return;
         }
 
         container.innerHTML = tasks.map(task => renderTaskCard(task)).join('');
     } catch (e) {
         console.error('Failed to load tasks:', e);
-        container.innerHTML = '<div class="text-center text-red-500 py-4">Failed to load tasks</div>';
+        container.innerHTML = '<div class="text-center text-neon-red font-mono text-xs py-4">CONNECTION_FAILURE</div>';
     }
 }
 
@@ -95,18 +95,33 @@ function renderTaskCard(task) {
     const priorityLabel = getPriorityLabel(task.priority);
     const isActive = task.id === currentTaskId ? 'active' : '';
 
+    // Priority colors for border/accent
+    let priorityColor = 'border-sci-border';
+    if (task.priority === 1) priorityColor = 'border-neon-red';
+    if (task.priority === 2) priorityColor = 'border-orange-500';
+
     return `
-        <div class="task-card ${isActive} border border-gray-200 rounded-lg p-3 cursor-pointer transition"
+        <div class="task-card ${isActive} p-3 cursor-pointer mb-2 relative overflow-hidden group"
              onclick="loadTaskDetail(${task.id})">
-            <div class="flex items-start justify-between mb-2">
-                <span class="text-xs font-semibold text-gray-500">#${task.id}</span>
-                <span class="text-xs px-2 py-1 rounded ${statusClass} font-medium">${task.status}</span>
+            <div class="flex items-start justify-between mb-1">
+                <span class="font-mono text-[10px] text-slate-500">ID::${task.id.toString().padStart(4, '0')}</span>
+                <span class="status-badge ${statusClass}">${task.status}</span>
             </div>
-            <h3 class="text-sm font-medium text-gray-800 line-clamp-2">${escapeHtml(task.name)}</h3>
-            ${task.parent_id ? `<p class="text-xs text-gray-500 mt-1">Parent: #${task.parent_id}</p>` : ''}
-            ${priorityLabel ? `<span class="inline-block text-xs px-2 py-0.5 rounded mt-2 priority-${priorityLabel.toLowerCase()}">${priorityLabel}</span>` : ''}
+            <h3 class="font-body font-semibold text-slate-200 text-sm leading-tight group-hover:text-neon-blue transition-colors">${escapeHtml(task.name)}</h3>
+            
+            <div class="flex items-center justify-between mt-2">
+                ${task.parent_id ? `<span class="font-mono text-[10px] text-slate-600">PARENT::${task.parent_id}</span>` : '<span></span>'}
+                ${priorityLabel ? `<span class="font-mono text-[10px] ${getPriorityColorClass(task.priority)}">[${priorityLabel.toUpperCase()}]</span>` : ''}
+            </div>
         </div>
     `;
+}
+
+function getPriorityColorClass(priority) {
+    if (priority === 1) return 'text-neon-red animate-pulse';
+    if (priority === 2) return 'text-orange-500';
+    if (priority === 3) return 'text-yellow-500';
+    return 'text-slate-500';
 }
 
 // Get priority label
@@ -120,7 +135,12 @@ function getPriorityLabel(priority) {
 async function loadTaskDetail(taskId) {
     currentTaskId = taskId;
     const container = document.getElementById('task-detail-container');
-    container.innerHTML = '<div class="text-center text-gray-500 py-20">Loading...</div>';
+    container.innerHTML = `
+        <div class="h-full flex flex-col items-center justify-center text-slate-600">
+            <div class="w-16 h-16 border-t-2 border-neon-blue rounded-full animate-spin mb-4"></div>
+            <p class="font-mono text-xs text-neon-blue animate-pulse">ACCESSING_SECURE_DATA...</p>
+        </div>
+    `;
 
     try {
         const response = await fetch(`/api/tasks/${taskId}`);
@@ -142,7 +162,7 @@ async function loadTaskDetail(taskId) {
 
     } catch (e) {
         console.error('Failed to load task detail:', e);
-        container.innerHTML = '<div class="text-center text-red-500 py-20">Failed to load task</div>';
+        container.innerHTML = '<div class="text-center text-neon-red font-mono py-20">DATA_CORRUPTION_DETECTED</div>';
     }
 }
 
@@ -150,86 +170,110 @@ async function loadTaskDetail(taskId) {
 function renderTaskDetail(task) {
     const statusClass = `status-${task.status}`;
     const priorityLabel = getPriorityLabel(task.priority);
-    const spec = task.spec ? renderMarkdown(task.spec) : '<p class="text-gray-400 italic">No specification provided</p>';
+    const spec = task.spec ? renderMarkdown(task.spec) : '<p class="text-slate-600 font-mono italic">// NO_DATA_AVAILABLE</p>';
 
     return `
-        <div class="max-w-4xl mx-auto p-8">
-            <!-- Header -->
-            <div class="mb-6">
+        <div class="max-w-5xl mx-auto pb-20">
+            <!-- Header Panel -->
+            <div class="holo-panel p-6 mb-6 rounded-sm border-l-4 border-l-neon-blue">
                 <div class="flex items-center justify-between mb-4">
-                    <span class="text-sm font-semibold text-gray-500">#${task.id}</span>
-                    <div class="flex items-center space-x-2">
-                        <span class="text-xs px-3 py-1 rounded ${statusClass} font-medium">${task.status}</span>
-                        ${priorityLabel ? `<span class="text-xs px-3 py-1 rounded priority-${priorityLabel.toLowerCase()} font-medium">${priorityLabel}</span>` : ''}
+                    <div class="flex items-center gap-4">
+                        <span class="font-mono text-xs text-neon-blue border border-neon-blue px-2 py-1">ID::${task.id.toString().padStart(4, '0')}</span>
+                        <span class="status-badge ${statusClass} text-sm">${task.status}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        ${priorityLabel ? `<span class="font-mono text-xs px-2 py-1 border ${getPriorityBorderClass(task.priority)} ${getPriorityColorClass(task.priority)}">PRIORITY::${priorityLabel.toUpperCase()}</span>` : ''}
                     </div>
                 </div>
-                <h1 class="text-3xl font-bold text-gray-900">${escapeHtml(task.name)}</h1>
-                ${task.parent_id ? `<p class="text-sm text-gray-500 mt-2">Parent Task: <a href="#" onclick="loadTaskDetail(${task.parent_id}); return false;" class="text-indigo-600 hover:underline">#${task.parent_id}</a></p>` : ''}
+                
+                <h1 class="text-3xl md:text-4xl font-display font-bold text-white mb-4 text-shadow-neon">${escapeHtml(task.name)}</h1>
+                
+                <!-- Temporal Data Bar -->
+                <div class="flex flex-wrap items-center gap-6 border-t border-sci-border pt-4 mt-4">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <span class="font-mono text-[10px] text-slate-500 uppercase tracking-wider">CREATED:</span>
+                        <span class="font-mono text-xs text-neon-blue">${formatDate(task.first_todo_at)}</span>
+                    </div>
+                    ${task.first_doing_at ? `
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11-7-7z"></path></svg>
+                            <span class="font-mono text-[10px] text-slate-500 uppercase tracking-wider">ACTIVATED:</span>
+                            <span class="font-mono text-xs text-yellow-400">${formatDate(task.first_doing_at)}</span>
+                        </div>
+                    ` : ''}
+                    ${task.first_done_at ? `
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span class="font-mono text-[10px] text-slate-500 uppercase tracking-wider">COMPLETED:</span>
+                            <span class="font-mono text-xs text-neon-green">${formatDate(task.first_done_at)}</span>
+                        </div>
+                    ` : ''}
+                    ${task.parent_id ? `
+                        <div class="flex items-center gap-2 ml-auto">
+                            <span class="text-slate-500 font-mono text-[10px] uppercase tracking-wider">LINKED_PARENT:</span>
+                            <a href="#" onclick="loadTaskDetail(${task.parent_id}); return false;" class="text-neon-purple hover:text-white font-mono text-xs transition-colors">#${task.parent_id}</a>
+                        </div>
+                    ` : ''}
+                </div>
             </div>
 
-            <!-- Actions -->
-            <div class="mb-6 flex flex-wrap gap-2">
+            <!-- Command Protocols (Actions) -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
                 ${task.status === 'todo' ? `
-                    <button onclick="startTask(${task.id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-                        ▶ Start Task
+                    <button onclick="startTask(${task.id})" class="col-span-2 py-3 bg-neon-blue/10 border border-neon-blue text-neon-blue hover:bg-neon-blue hover:text-black font-display font-bold tracking-wider transition-all uppercase">
+                        ▶ Initiate_Sequence
                     </button>
                 ` : ''}
                 ${task.status === 'doing' ? `
-                    <button onclick="doneTask()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                        ✓ Complete Task
+                    <button onclick="doneTask()" class="col-span-2 py-3 bg-neon-green/10 border border-neon-green text-neon-green hover:bg-neon-green hover:text-black font-display font-bold tracking-wider transition-all uppercase">
+                        ✓ Mission_Complete
                     </button>
-                    <button onclick="openSpawnSubtaskModal(${task.id})" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
-                        + Spawn Subtask
+                    <button onclick="openSpawnSubtaskModal(${task.id})" class="py-3 bg-neon-purple/10 border border-neon-purple text-neon-purple hover:bg-neon-purple hover:text-white font-mono text-xs font-bold tracking-wider transition-all uppercase">
+                        + Fork_Subprocess
                     </button>
                 ` : ''}
                 ${task.status !== 'doing' ? `
-                    <button onclick="switchTask(${task.id})" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
-                        ⇄ Switch to This
+                    <button onclick="switchTask(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-slate-300 hover:border-neon-blue hover:text-neon-blue font-mono text-xs font-bold tracking-wider transition-all uppercase">
+                        ⇄ Switch_Focus
                     </button>
                 ` : ''}
-                <button onclick="openAddEventModal(${task.id})" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
-                    📝 Add Event
+                <button onclick="openAddEventModal(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-slate-300 hover:border-white hover:text-white font-mono text-xs font-bold tracking-wider transition-all uppercase">
+                    📝 Log_Entry
                 </button>
-                <button onclick="deleteTask(${task.id})" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
-                    🗑 Delete
+                <button onclick="deleteTask(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-neon-red hover:bg-neon-red hover:text-black font-mono text-xs font-bold tracking-wider transition-all uppercase">
+                    🗑 Terminate
                 </button>
             </div>
 
-            <!-- Specification -->
-            <div class="mb-8">
-                <h2 class="text-xl font-semibold text-gray-800 mb-4">Specification</h2>
-                <div class="prose prose-slate bg-gray-50 p-6 rounded-lg border border-gray-200">
-                    ${spec}
-                </div>
-            </div>
-
-            <!-- Metadata -->
-            <div class="mb-8 grid grid-cols-2 gap-4">
-                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <p class="text-xs text-gray-500 mb-1">Created</p>
-                    <p class="text-sm font-medium">${formatDate(task.first_todo_at)}</p>
-                </div>
-                ${task.first_doing_at ? `
-                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <p class="text-xs text-gray-500 mb-1">Started</p>
-                        <p class="text-sm font-medium">${formatDate(task.first_doing_at)}</p>
+            <!-- Main Data Display -->
+            <div class="grid grid-cols-1 gap-6">
+                <!-- Specs -->
+                <div class="w-full">
+                    <div class="flex items-center gap-2 mb-3 border-b border-sci-border pb-2">
+                        <svg class="w-5 h-5 text-neon-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <h2 class="font-display text-lg text-white tracking-wider">MISSION_PARAMETERS</h2>
                     </div>
-                ` : ''}
-                ${task.first_done_at ? `
-                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <p class="text-xs text-gray-500 mb-1">Completed</p>
-                        <p class="text-sm font-medium">${formatDate(task.first_done_at)}</p>
+                    <div class="prose prose-invert max-w-none bg-sci-panel/30 p-6 rounded border border-sci-border/50 min-h-[200px]">
+                        ${spec}
                     </div>
-                ` : ''}
+                </div>
             </div>
         </div>
     `;
 }
 
+function getPriorityBorderClass(priority) {
+    if (priority === 1) return 'border-neon-red';
+    if (priority === 2) return 'border-orange-500';
+    if (priority === 3) return 'border-yellow-500';
+    return 'border-slate-500';
+}
+
 // Load events for a task
 async function loadEvents(taskId) {
     const container = document.getElementById('event-list-container');
-    container.innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">Loading events...</div>';
+    container.innerHTML = '<div class="text-center text-slate-600 font-mono text-xs py-4">DOWNLOADING_LOGS...</div>';
 
     try {
         const response = await fetch(`/api/tasks/${taskId}/events`);
@@ -237,24 +281,24 @@ async function loadEvents(taskId) {
         const events = result.data || [];
 
         if (events.length === 0) {
-            container.innerHTML = '<div class="text-center text-gray-400 py-8 text-sm">No events yet</div>';
+            container.innerHTML = '<div class="text-center text-slate-600 font-mono text-xs py-8">NO_LOGS_FOUND</div>';
             return;
         }
 
         container.innerHTML = events.map(event => renderEventCard(event)).join('');
     } catch (e) {
         console.error('Failed to load events:', e);
-        container.innerHTML = '<div class="text-center text-red-500 py-4 text-sm">Failed to load events</div>';
+        container.innerHTML = '<div class="text-center text-neon-red font-mono text-xs py-4">LOG_RETRIEVAL_ERROR</div>';
     }
 }
 
 // Render event card
 function renderEventCard(event) {
     const typeColors = {
-        decision: 'bg-blue-50 border-blue-200 text-blue-800',
-        blocker: 'bg-red-50 border-red-200 text-red-800',
-        milestone: 'bg-green-50 border-green-200 text-green-800',
-        note: 'bg-gray-50 border-gray-200 text-gray-800'
+        decision: 'border-neon-blue text-neon-blue',
+        blocker: 'border-neon-red text-neon-red',
+        milestone: 'border-neon-green text-neon-green',
+        note: 'border-slate-500 text-slate-400'
     };
     const typeIcons = {
         decision: '💡',
@@ -267,12 +311,12 @@ function renderEventCard(event) {
     const icon = typeIcons[event.log_type] || '📝';
 
     return `
-        <div class="border ${colorClass} rounded-lg p-3 mb-3">
+        <div class="border-l-2 ${colorClass.split(' ')[0]} bg-sci-bg/50 p-4 mb-3 hover:bg-sci-panel transition-colors">
             <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-semibold">${icon} ${event.log_type.toUpperCase()}</span>
-                <span class="text-xs text-gray-500">${formatDate(event.logged_at)}</span>
+                <span class="font-mono text-xs font-bold uppercase tracking-wider ${colorClass.split(' ')[1]}">${icon} ${event.log_type}</span>
+                <span class="font-mono text-xs text-slate-500">${formatDate(event.logged_at)}</span>
             </div>
-            <div class="text-sm prose prose-sm max-w-none">
+            <div class="prose prose-invert max-w-none text-base text-slate-300 leading-relaxed">
                 ${renderMarkdown(event.discussion_data)}
             </div>
         </div>
@@ -287,14 +331,14 @@ async function startTask(taskId) {
             await loadTasks(currentFilter);
             await loadTaskDetail(taskId);
             await loadCurrentTask();
-            showNotification('Task started successfully', 'success');
+            showNotification('SEQUENCE_INITIATED', 'success');
         } else {
             const error = await response.json();
-            showNotification(error.message || 'Failed to start task', 'error');
+            showNotification(error.message || 'INITIATION_FAILED', 'error');
         }
     } catch (e) {
         console.error('Failed to start task:', e);
-        showNotification('Failed to start task', 'error');
+        showNotification('SYSTEM_ERROR', 'error');
     }
 }
 
@@ -308,14 +352,14 @@ async function doneTask() {
                 await loadTaskDetail(result.data.id);
             }
             await loadCurrentTask();
-            showNotification('Task completed successfully', 'success');
+            showNotification('MISSION_COMPLETE', 'success');
         } else {
             const error = await response.json();
-            showNotification(error.message || 'Failed to complete task', 'error');
+            showNotification(error.message || 'COMPLETION_FAILED', 'error');
         }
     } catch (e) {
         console.error('Failed to complete task:', e);
-        showNotification('Failed to complete task', 'error');
+        showNotification('SYSTEM_ERROR', 'error');
     }
 }
 
@@ -326,19 +370,19 @@ async function switchTask(taskId) {
             await loadTasks(currentFilter);
             await loadTaskDetail(taskId);
             await loadCurrentTask();
-            showNotification('Switched to task successfully', 'success');
+            showNotification('FOCUS_SWITCHED', 'success');
         } else {
             const error = await response.json();
-            showNotification(error.message || 'Failed to switch task', 'error');
+            showNotification(error.message || 'SWITCH_FAILED', 'error');
         }
     } catch (e) {
         console.error('Failed to switch task:', e);
-        showNotification('Failed to switch task', 'error');
+        showNotification('SYSTEM_ERROR', 'error');
     }
 }
 
 async function deleteTask(taskId) {
-    if (!confirm('Are you sure you want to delete this task? This cannot be undone.')) {
+    if (!confirm('WARNING: TERMINATING TASK DATA. THIS ACTION IS IRREVERSIBLE. PROCEED?')) {
         return;
     }
 
@@ -347,18 +391,18 @@ async function deleteTask(taskId) {
         if (response.ok) {
             await loadTasks(currentFilter);
             document.getElementById('task-detail-container').innerHTML = `
-                <div class="max-w-4xl mx-auto p-8 text-center">
-                    <p class="text-green-600 text-lg">Task deleted successfully</p>
+                <div class="h-full flex flex-col items-center justify-center text-neon-red">
+                    <p class="font-display text-xl">TARGET_ELIMINATED</p>
                 </div>
             `;
-            showNotification('Task deleted successfully', 'success');
+            showNotification('TASK_TERMINATED', 'success');
         } else {
             const error = await response.json();
-            showNotification(error.message || 'Failed to delete task', 'error');
+            showNotification(error.message || 'TERMINATION_FAILED', 'error');
         }
     } catch (e) {
         console.error('Failed to delete task:', e);
-        showNotification('Failed to delete task', 'error');
+        showNotification('SYSTEM_ERROR', 'error');
     }
 }
 
@@ -377,36 +421,28 @@ async function loadCurrentTask() {
     }
 }
 
-async function pickNextTask() {
-    try {
-        const response = await fetch('/api/pick-next');
-        const result = await response.json();
-
-        if (result.data && result.data.task) {
-            const task = result.data.task;
-            const reason = result.data.reason || 'Recommended next task';
-
-            if (confirm(`Pick next task: #${task.id} "${task.name}"?\n\nReason: ${reason}`)) {
-                await loadTaskDetail(task.id);
-            }
-        } else {
-            showNotification('No tasks available to pick', 'info');
-        }
-    } catch (e) {
-        console.error('Failed to pick next task:', e);
-        showNotification('Failed to pick next task', 'error');
-    }
-}
-
 // Filter tasks
 function filterTasks(status) {
     currentFilter = status;
 
     // Update button styles
-    document.querySelectorAll('[id^="filter-"]').forEach(btn => {
-        btn.className = 'flex-1 px-3 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200';
+    const buttons = {
+        'all': document.getElementById('filter-all'),
+        'todo': document.getElementById('filter-todo'),
+        'doing': document.getElementById('filter-doing'),
+        'done': document.getElementById('filter-done')
+    };
+
+    // Reset all
+    Object.values(buttons).forEach(btn => {
+        btn.className = 'flex-1 py-1 text-xs font-mono border border-sci-border text-slate-400 hover:text-white transition-colors';
     });
-    document.getElementById(`filter-${status}`).className = 'flex-1 px-3 py-2 text-sm font-medium bg-indigo-100 text-indigo-700 rounded-lg';
+
+    // Set active
+    const activeBtn = buttons[status];
+    if (activeBtn) {
+        activeBtn.className = 'flex-1 py-1 text-xs font-mono border border-neon-blue bg-neon-blue/10 text-neon-blue transition-colors';
+    }
 
     loadTasks(status === 'all' ? null : status);
 }
@@ -424,7 +460,7 @@ function handleSearch(event) {
 
     searchTimeout = setTimeout(async () => {
         const container = document.getElementById('task-list-items');
-        container.innerHTML = '<div class="text-center text-gray-500 py-4">Searching...</div>';
+        container.innerHTML = '<div class="text-center text-neon-blue font-mono text-xs py-4 animate-pulse">SEARCHING_DATABASE...</div>';
 
         try {
             const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
@@ -437,32 +473,25 @@ function handleSearch(event) {
             const results = result.data || [];
 
             if (results.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-400 py-8 text-sm">No results found</div>';
+                container.innerHTML = '<div class="text-center text-slate-600 font-mono text-xs py-8">NO_MATCHES_FOUND</div>';
                 return;
             }
 
-            // Extract tasks from search results - handle both old and new API format
+            // Extract tasks from search results
             const tasks = results
                 .filter(r => r.result_type === 'task')
-                .map(r => {
-                    // New format has task as a direct field in the result
-                    if (r.task) {
-                        return r.task;
-                    }
-                    // Old format might have task data directly in result
-                    return r;
-                })
-                .filter(t => t && t.id && t.name && t.status); // Filter out invalid tasks
+                .map(r => r.task || r)
+                .filter(t => t && t.id && t.name && t.status);
 
             if (tasks.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-400 py-8 text-sm">No tasks found (events matched)</div>';
+                container.innerHTML = '<div class="text-center text-slate-600 font-mono text-xs py-8">NO_TASKS_FOUND (EVENTS MATCHED)</div>';
                 return;
             }
 
             container.innerHTML = tasks.map(task => renderTaskCard(task)).join('');
         } catch (e) {
             console.error('Search failed:', e);
-            container.innerHTML = '<div class="text-center text-red-500 py-4">Search failed</div>';
+            container.innerHTML = '<div class="text-center text-neon-red font-mono text-xs py-4">SEARCH_ERROR</div>';
         }
     }, 300);
 }
@@ -501,14 +530,14 @@ async function createTask(event) {
             closeNewTaskModal();
             await loadTasks(currentFilter);
             await loadTaskDetail(result.data.id);
-            showNotification('Task created successfully', 'success');
+            showNotification('TASK_INITIALIZED', 'success');
         } else {
             const error = await response.json();
-            showNotification(error.message || 'Failed to create task', 'error');
+            showNotification(error.message || 'INITIALIZATION_FAILED', 'error');
         }
     } catch (e) {
         console.error('Failed to create task:', e);
-        showNotification('Failed to create task', 'error');
+        showNotification('SYSTEM_ERROR', 'error');
     }
 }
 
@@ -543,22 +572,22 @@ async function addEvent(event) {
         if (response.ok) {
             closeAddEventModal();
             await loadEvents(taskId);
-            showNotification('Event added successfully', 'success');
+            showNotification('LOG_COMMITTED', 'success');
         } else {
             const error = await response.json();
-            showNotification(error.message || 'Failed to add event', 'error');
+            showNotification(error.message || 'LOG_FAILURE', 'error');
         }
     } catch (e) {
         console.error('Failed to add event:', e);
-        showNotification('Failed to add event', 'error');
+        showNotification('SYSTEM_ERROR', 'error');
     }
 }
 
 function openSpawnSubtaskModal(parentId) {
-    const name = prompt('Enter subtask name:');
+    const name = prompt('ENTER_SUBTASK_DESIGNATION:');
     if (!name) return;
 
-    const spec = prompt('Enter subtask specification (optional, Markdown):');
+    const spec = prompt('ENTER_PARAMETERS [MARKDOWN]:');
 
     spawnSubtask(parentId, name, spec);
 }
@@ -581,14 +610,14 @@ async function spawnSubtask(parentId, name, spec) {
             await loadTasks(currentFilter);
             await loadTaskDetail(result.data.subtask.id);
             await loadCurrentTask();
-            showNotification('Subtask created and switched', 'success');
+            showNotification('SUBPROCESS_SPAWNED', 'success');
         } else {
             const error = await response.json();
-            showNotification(error.message || 'Failed to spawn subtask', 'error');
+            showNotification(error.message || 'SPAWN_FAILED', 'error');
         }
     } catch (e) {
         console.error('Failed to spawn subtask:', e);
-        showNotification('Failed to spawn subtask', 'error');
+        showNotification('SYSTEM_ERROR', 'error');
     }
 }
 
@@ -602,23 +631,21 @@ function escapeHtml(text) {
 function formatDate(dateStr) {
     if (!dateStr) return 'N/A';
     const date = new Date(dateStr);
-    return date.toLocaleString();
+    return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).replace(',', '');
 }
 
 function showNotification(message, type = 'info') {
-    // Simple notification using alert for now
-    // In production, use a proper notification library
-    const colors = {
-        success: '✓',
-        error: '✗',
-        info: 'ℹ'
-    };
-    console.log(`${colors[type]} ${message}`);
-
-    // You could implement a toast notification here
-    if (type === 'error') {
-        alert(message);
-    }
+    // In a real app, we'd use a toast. For now, console log or alert for errors.
+    console.log(`[SYSTEM_MSG] ${type.toUpperCase()}: ${message}`);
+    if (type === 'error') alert(`SYSTEM_ERROR: ${message}`);
 }
 
 // Load project tabs
@@ -628,11 +655,11 @@ async function loadProjectTabs() {
         const result = await response.json();
 
         if (!result.data || result.data.length === 0) {
-            document.getElementById('project-tabs').innerHTML = '<div class="text-sm text-gray-500 py-3">No projects found</div>';
+            document.getElementById('project-tabs').innerHTML = '<div class="text-xs font-mono text-slate-500 py-3">NO_PROJECTS_FOUND</div>';
             return;
         }
 
-        // Get current project info to determine which tab is active
+        // Get current project info
         const infoResponse = await fetch('/api/info');
         const infoData = await infoResponse.json();
         const currentProjectPath = infoData.path || '';
@@ -640,38 +667,38 @@ async function loadProjectTabs() {
         const tabsHTML = result.data.map(project => {
             const isActive = project.path === currentProjectPath;
             const activeClass = isActive
-                ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
-                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50 cursor-pointer';
-            const indicator = isActive ? '<span class="ml-1">●</span>' : '';
+                ? 'bg-neon-blue text-black font-bold shadow-neon-blue'
+                : 'bg-sci-panel border border-sci-border text-slate-400 hover:text-white hover:border-white';
 
             // MCP connection status indicator
             const mcpConnected = project.mcp_connected || false;
-            const mcpAgent = project.mcp_agent || 'unknown';
             const mcpIndicator = mcpConnected
-                ? `<span class="ml-1 text-green-500" title="Agent connected: ${mcpAgent}">🟢</span>`
-                : '<span class="ml-1 text-gray-400" title="No agent connected">⚪</span>';
+                ? '<span class="ml-1 text-neon-green" title="AGENT_ONLINE">●</span>'
+                : '<span class="ml-1 text-slate-600" title="AGENT_OFFLINE">○</span>';
 
-            const tooltipText = `${project.path}${mcpConnected ? '\n🟢 Agent: ' + mcpAgent : '\n⚪ No agent connected'}`;
-
-            // Use onclick for non-active tabs, prevent default for active tabs
             const clickHandler = isActive
                 ? 'onclick="return false;"'
                 : `onclick="switchProject('${escapeHtml(project.path)}'); return false;"`;
 
-            return `<a href="#" ${clickHandler} class="px-4 py-3 text-sm font-medium transition-colors ${activeClass} whitespace-nowrap" title="${tooltipText}">${project.name}${indicator}${mcpIndicator}</a>`;
+            return `
+                <a href="#" ${clickHandler} class="px-4 py-2 text-xs font-mono transition-all whitespace-nowrap ${activeClass} flex items-center gap-2">
+                    ${project.name.toUpperCase()}
+                    ${mcpIndicator}
+                </a>
+            `;
         }).join('');
 
         document.getElementById('project-tabs').innerHTML = tabsHTML;
     } catch (error) {
         console.error('Failed to load project tabs:', error);
-        document.getElementById('project-tabs').innerHTML = '<div class="text-sm text-red-500 py-3">Failed to load projects</div>';
+        document.getElementById('project-tabs').innerHTML = '<div class="text-xs font-mono text-neon-red py-3">LOAD_ERROR</div>';
     }
 }
 
 // Switch to a different project
 async function switchProject(projectPath) {
     try {
-        showNotification('Switching project...', 'info');
+        showNotification('REROUTING_SYSTEM...', 'info');
 
         const response = await fetch('/api/switch-project', {
             method: 'POST',
@@ -681,14 +708,14 @@ async function switchProject(projectPath) {
 
         if (!response.ok) {
             const error = await response.json();
-            showNotification(error.message || 'Failed to switch project', 'error');
+            showNotification(error.message || 'REROUTE_FAILED', 'error');
             return;
         }
 
         const result = await response.json();
         const newProjectName = result.data.project_name;
 
-        showNotification(`Switched to project: ${newProjectName}`, 'success');
+        showNotification(`CONNECTED: ${newProjectName.toUpperCase()}`, 'success');
 
         // Reload all data for the new project
         await loadProjectInfo();
@@ -697,21 +724,20 @@ async function switchProject(projectPath) {
 
         // Clear task detail view
         document.getElementById('task-detail-container').innerHTML = `
-            <div class="p-8">
-                <div class="text-center text-gray-400 py-20">
-                    <svg class="mx-auto h-24 w-24 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
-                    <h3 class="mt-4 text-xl font-medium text-gray-500">Select a task to view details</h3>
-                    <p class="mt-2 text-sm text-gray-400">Choose a task from the list on the left</p>
+            <div class="h-full flex flex-col items-center justify-center text-slate-600">
+                <div class="w-24 h-24 border border-sci-border rounded-full flex items-center justify-center mb-4 relative">
+                    <div class="absolute inset-0 border-t border-neon-blue rounded-full animate-spin"></div>
+                    <svg class="w-10 h-10 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
                 </div>
+                <h2 class="font-display text-xl tracking-widest">AWAITING INPUT</h2>
+                <p class="font-mono text-sm mt-2 text-neon-blue opacity-50">SELECT_TASK_MODULE</p>
             </div>
         `;
 
         // Clear event history
         document.getElementById('event-list-container').innerHTML = `
-            <div class="text-center text-gray-400 py-8 text-sm">
-                Select a task to view its event history
+            <div class="text-center text-slate-600 font-mono text-xs py-8">
+                NO_DATA_STREAM
             </div>
         `;
 
@@ -721,6 +747,6 @@ async function switchProject(projectPath) {
 
     } catch (e) {
         console.error('Failed to switch project:', e);
-        showNotification('Failed to switch project', 'error');
+        showNotification('SYSTEM_ERROR', 'error');
     }
 }

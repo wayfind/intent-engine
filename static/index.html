@@ -1,13 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Intent-Engine Dashboard</title>
+    <title>CORTEX // COMMAND CENTER</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 
-    <!-- Basic TailwindCSS -->
-    <link rel="stylesheet" href="/static/vendor/tailwindcss.css">
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
 
     <!-- Local HTMX -->
     <script src="/static/vendor/htmx.min.js"></script>
@@ -17,355 +25,529 @@
     <script src="/static/vendor/highlight.min.js"></script>
     <link rel="stylesheet" href="/static/vendor/github.min.css">
 
-    <!-- Local DOMPurify for XSS protection -->
+    <!-- Local DOMPurify -->
     <script src="/static/vendor/purify.min.js"></script>
 
-    <style>
-        /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #555; }
-
-        /* Prose styles for Markdown */
-        .prose { max-width: none; }
-        .prose pre { background: #f8f9fa; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; border: 1px solid #e5e7eb; }
-        .prose code {
-            background: #f3f4f6;
-            color: #1f2937;
-            padding: 0.2rem 0.4rem;
-            border-radius: 0.25rem;
-            font-size: 0.9em;
-            border: 1px solid #e5e7eb;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'sci-bg': '#030712',
+                        'sci-panel': '#0f172a',
+                        'sci-border': '#1e293b',
+                        'neon-blue': '#00f3ff',
+                        'neon-purple': '#bc13fe',
+                        'neon-green': '#ccff00',
+                        'neon-red': '#ff003c',
+                    },
+                    fontFamily: {
+                        'mono': ['"JetBrains Mono"', 'monospace'],
+                        'display': ['"Orbitron"', 'sans-serif'],
+                        'body': ['"Rajdhani"', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'neon-blue': '0 0 5px #00f3ff, 0 0 10px #00f3ff40',
+                        'neon-purple': '0 0 5px #bc13fe, 0 0 10px #bc13fe40',
+                    }
+                }
+            }
         }
+    </script>
+
+    <style>
+        /* Base Sci-Fi Styles */
+        body {
+            background-color: #020408;
+            background-image:
+                linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            color: #e2e8f0;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f3ff;
+        }
+
+        /* Holographic Effects */
+        .holo-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 243, 255, 0.1);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .holo-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 243, 255, 0.5), transparent);
+        }
+
+        .holo-panel::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 20px;
+            height: 20px;
+            border-bottom: 2px solid rgba(0, 243, 255, 0.3);
+            border-right: 2px solid rgba(0, 243, 255, 0.3);
+        }
+
+        /* Typography */
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.05em;
+        }
+
+        .text-neon-blue {
+            text-shadow: 0 0 5px rgba(0, 243, 255, 0.5);
+        }
+
+        .text-neon-purple {
+            text-shadow: 0 0 5px rgba(188, 19, 254, 0.5);
+        }
+
+        /* Markdown Styles */
+        .prose {
+            color: #cbd5e1;
+            max-width: none;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.1rem;
+        }
+
+        .prose h1,
+        .prose h2,
+        .prose h3 {
+            color: #00f3ff;
+            font-family: 'Orbitron', sans-serif;
+            border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+            padding-bottom: 0.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .prose code {
+            background: rgba(0, 243, 255, 0.1);
+            color: #00f3ff;
+            font-family: 'JetBrains Mono', monospace;
+            padding: 0.2em 0.4em;
+            border-radius: 0.25rem;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+        }
+
+        .prose pre {
+            background: #050a14;
+            border: 1px solid #1e293b;
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+
         .prose pre code {
             background: transparent;
-            padding: 0;
-            color: inherit; /* Use highlight.js colors */
+            color: inherit;
             border: none;
-            box-shadow: none;
+            padding: 0;
         }
 
-        /* Dark mode support for inline code */
-        @media (prefers-color-scheme: dark) {
-            .prose code {
-                background: #374151;
-                color: #f9fafb;
-                border: 1px solid #4b5563;
+        .prose blockquote {
+            border-left: 3px solid #bc13fe;
+            background: linear-gradient(90deg, rgba(188, 19, 254, 0.1), transparent);
+            padding: 0.5rem 1rem;
+            font-style: italic;
+            color: #e2e8f0;
+        }
+
+        .prose ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .prose ul li::before {
+            content: '>';
+            color: #00f3ff;
+            margin-right: 0.5rem;
+            font-weight: bold;
+        }
+
+        .prose a {
+            color: #bc13fe;
+            text-decoration: none;
+            border-bottom: 1px dashed #bc13fe;
+            transition: all 0.2s;
+        }
+
+        .prose a:hover {
+            color: #fff;
+            border-bottom-style: solid;
+            text-shadow: 0 0 5px #bc13fe;
+        }
+
+        /* Animations */
+        @keyframes scanline {
+            0% {
+                transform: translateY(-100%);
+            }
+
+            100% {
+                transform: translateY(100%);
             }
         }
 
-        /* Enhanced visibility for common code patterns */
-        .prose code {
-            /* Ensure better contrast for common programming terms */
-            font-weight: 500;
-            letter-spacing: 0.025em;
+        .scanline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 243, 255, 0.02) 51%, transparent 51%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 50;
         }
-        .prose h1 { font-size: 2em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
-        .prose h2 { font-size: 1.5em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
-        .prose h3 { font-size: 1.25em; font-weight: bold; margin-top: 0.8em; margin-bottom: 0.4em; }
-        .prose p { margin: 0.5em 0; }
-        .prose ul, .prose ol { margin: 0.5em 0; padding-left: 2em; }
-        .prose li { margin: 0.25em 0; }
-        .prose blockquote { border-left: 4px solid #d1d5db; padding-left: 1em; color: #6b7280; }
-        .prose a { color: #3b82f6; text-decoration: underline; }
-        .prose table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-        .prose th, .prose td { border: 1px solid #d1d5db; padding: 0.5em; }
-        .prose th { background: #f3f4f6; font-weight: bold; }
 
-        /* Task card hover effect */
-        .task-card:hover { background: #f9fafb; }
-        .task-card.active { background: #eff6ff; border-color: #3b82f6; }
+        /* Custom Inputs */
+        .sci-input {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #1e293b;
+            color: #00f3ff;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.3s;
+        }
 
-        /* Status badges */
-        .status-todo { background: #fef3c7; color: #92400e; }
-        .status-doing { background: #dbeafe; color: #1e40af; }
-        .status-done { background: #d1fae5; color: #065f46; }
+        .sci-input:focus {
+            border-color: #00f3ff;
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+            outline: none;
+        }
 
-        /* Priority badges */
-        .priority-critical { background: #fee2e2; color: #991b1b; }
-        .priority-high { background: #fed7aa; color: #9a3412; }
-        .priority-medium { background: #fef3c7; color: #92400e; }
-        .priority-low { background: #e0e7ff; color: #3730a3; }
+        /* Task Cards */
+        .task-card {
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.6) 100%);
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .task-card:hover {
+            transform: translateX(5px);
+            background: rgba(30, 41, 59, 0.8);
+            border-left-color: #00f3ff;
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.1);
+        }
+
+        .task-card.active {
+            background: rgba(0, 243, 255, 0.05);
+            border: 1px solid #00f3ff;
+            box-shadow: inset 0 0 20px rgba(0, 243, 255, 0.1);
+        }
+
+        /* Status Badges */
+        .status-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 2px 6px;
+            border-radius: 2px;
+        }
+
+        .status-todo {
+            background: rgba(255, 165, 0, 0.1);
+            color: #ffa500;
+            border: 1px solid rgba(255, 165, 0, 0.3);
+        }
+
+        .status-doing {
+            background: rgba(0, 243, 255, 0.1);
+            color: #00f3ff;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            animation: pulse 2s infinite;
+        }
+
+        .status-done {
+            background: rgba(10, 255, 0, 0.1);
+            color: #0aff00;
+            border: 1px solid rgba(10, 255, 0, 0.3);
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(0, 243, 255, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 5px rgba(0, 243, 255, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(0, 243, 255, 0);
+            }
+        }
     </style>
 </head>
-<body class="bg-gray-50 h-screen overflow-hidden">
-    <!-- Enhanced Header -->
-    <header class="bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 text-white shadow-2xl">
-        <div class="px-8 py-6 flex items-center justify-between">
-            <div class="space-y-1">
-                <h1 class="text-3xl font-bold tracking-wide">Intent-Engine Dashboard</h1>
-                <p class="text-sm text-blue-100 font-medium" id="project-name">Loading project...</p>
+
+<body class="h-screen flex flex-col">
+    <div class="scanline"></div>
+
+    <!-- Top Banner -->
+    <header class="h-16 bg-sci-panel border-b border-sci-border flex items-center justify-between px-6 relative z-10">
+        <div class="flex items-center gap-4">
+            <div class="w-8 h-8 bg-neon-blue rounded-sm flex items-center justify-center shadow-neon-blue">
+                <svg class="w-5 h-5 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13 10V3L4 14h7v7l9-11-7-7z"></path>
+                </svg>
             </div>
-            <div class="flex items-center space-x-4">
-                <button onclick="openNewTaskModal()" class="group bg-white text-blue-600 px-6 py-3 rounded-xl font-semibold hover:bg-blue-50 hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl">
-                    <span class="flex items-center space-x-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                        </svg>
-                        <span>+ New Task</span>
-                    </span>
-                </button>
-                <button onclick="loadCurrentTask()" class="group bg-blue-500 bg-opacity-80 backdrop-blur text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-400 hover:scale-105 transition-all duration-200 shadow-lg">
-                    <span class="flex items-center space-x-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                        </svg>
-                        <span>Current Focus</span>
-                    </span>
-                </button>
-                <button onclick="pickNextTask()" class="group bg-purple-500 bg-opacity-80 backdrop-blur text-white px-6 py-3 rounded-xl font-semibold hover:bg-purple-400 hover:scale-105 transition-all duration-200 shadow-lg">
-                    <span class="flex items-center space-x-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
-                        </svg>
-                        <span>Pick Next</span>
-                    </span>
-                </button>
+            <div>
+                <h1 class="text-xl font-bold text-white tracking-widest">INTENT-ENGINE <span
+                        class="text-neon-blue text-sm font-normal opacity-70">// DASHBOARD</span></h1>
+                <div class="text-xs text-neon-blue font-mono tracking-wider" id="project-name">INITIALIZING...</div>
             </div>
+        </div>
+
+        <!-- Project Tabs -->
+        <div class="flex-1 mx-12 overflow-x-auto no-scrollbar">
+            <div class="flex space-x-1" id="project-tabs">
+                <!-- Tabs injected by JS -->
+            </div>
+        </div>
+
+        <!-- Global Actions -->
+        <div class="flex items-center gap-3">
+            <button onclick="loadCurrentTask()"
+                class="px-4 py-2 bg-sci-bg border border-neon-purple text-neon-purple hover:bg-neon-purple hover:text-white transition-all font-mono text-sm uppercase tracking-wider flex items-center gap-2 group">
+                <span class="w-2 h-2 bg-neon-purple rounded-full animate-pulse"></span>
+                Current Focus
+            </button>
+            <button onclick="openNewTaskModal()"
+                class="px-4 py-2 bg-neon-blue text-black font-bold hover:bg-white hover:shadow-neon-blue transition-all font-display text-sm uppercase tracking-wider clip-path-slant">
+                + New Task
+            </button>
         </div>
     </header>
 
-    <!-- Enhanced Project Tabs -->
-    <div class="bg-white border-b border-slate-200 shadow-sm">
-        <div class="px-6 py-2 flex space-x-1 overflow-x-auto" id="project-tabs">
-            <!-- Project tabs will be dynamically loaded here -->
-            <div class="text-sm text-slate-500 py-3 flex items-center space-x-2">
-                <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                </svg>
-                <span>Loading projects...</span>
-            </div>
-        </div>
-    </div>
+    <!-- Main Layout -->
+    <div class="flex-1 flex overflow-hidden relative z-0">
 
-    <!-- Enhanced Main Layout -->
-    <div class="flex h-[calc(100vh-144px)]">
-        <!-- Left Sidebar: Task List (Fixed 320px) -->
-        <aside class="w-80 bg-gradient-to-b from-white to-slate-50 border-r border-slate-200 flex flex-col" style="flex: 0 0 320px;">
-            <div class="p-5 border-b border-slate-200 bg-white rounded-b-lg shadow-sm">
+        <!-- Left Sidebar: Tasks -->
+        <aside class="w-80 bg-sci-panel border-r border-sci-border flex flex-col">
+            <!-- Search & Filter -->
+            <div class="p-4 border-b border-sci-border space-y-3">
                 <div class="relative">
-                    <svg class="absolute left-3 top-3 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                    </svg>
-                    <input
-                        type="text"
-                        id="search-input"
-                        placeholder="Search tasks and events..."
-                        class="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all"
-                        oninput="handleSearch(event)">
-                </div>
-            </div>
-
-            <div class="p-5 border-b border-slate-200 bg-white">
-                <div class="flex space-x-2">
-                    <button onclick="filterTasks('all')" id="filter-all" class="flex-1 px-3 py-2.5 text-sm font-medium bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg shadow-md hover:shadow-lg transition-all">All</button>
-                    <button onclick="filterTasks('todo')" id="filter-todo" class="flex-1 px-3 py-2.5 text-sm font-medium bg-gradient-to-r from-yellow-400 to-orange-400 text-white rounded-lg shadow-md hover:shadow-lg transition-all">Todo</button>
-                    <button onclick="filterTasks('doing')" id="filter-doing" class="flex-1 px-3 py-2.5 text-sm font-medium bg-gradient-to-r from-green-400 to-emerald-400 text-white rounded-lg shadow-md hover:shadow-lg transition-all">Doing</button>
-                    <button onclick="filterTasks('done')" id="filter-done" class="flex-1 px-3 py-2.5 text-sm font-medium bg-gradient-to-r from-slate-400 to-slate-500 text-white rounded-lg shadow-md hover:shadow-lg transition-all">Done</button>
-                </div>
-            </div>
-
-            <div class="flex-1 overflow-y-auto p-4 space-y-3" id="task-list-container">
-                <div id="task-list-items" class="space-y-3">
-                    <div class="text-center text-slate-400 py-12 flex flex-col items-center space-y-4">
-                        <svg class="w-16 h-16 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    <input type="text" id="search-input" oninput="handleSearch(event)" placeholder="SEARCH_DATABASE..."
+                        class="w-full bg-sci-bg border border-sci-border text-neon-blue px-4 py-2 font-mono text-sm focus:border-neon-blue focus:outline-none focus:shadow-neon-blue transition-all placeholder-slate-600">
+                    <div class="absolute right-3 top-2.5 text-slate-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                         </svg>
-                        <p class="text-lg">Loading tasks...</p>
-                        <p class="text-sm">Connecting to your workspace</p>
+                    </div>
+                </div>
+                <div class="flex gap-1">
+                    <button onclick="filterTasks('all')" id="filter-all"
+                        class="flex-1 py-1 text-xs font-mono border border-neon-blue bg-neon-blue/10 text-neon-blue">ALL</button>
+                    <button onclick="filterTasks('todo')" id="filter-todo"
+                        class="flex-1 py-1 text-xs font-mono border border-sci-border text-slate-400 hover:text-white">TODO</button>
+                    <button onclick="filterTasks('doing')" id="filter-doing"
+                        class="flex-1 py-1 text-xs font-mono border border-sci-border text-slate-400 hover:text-white">DOING</button>
+                    <button onclick="filterTasks('done')" id="filter-done"
+                        class="flex-1 py-1 text-xs font-mono border border-sci-border text-slate-400 hover:text-white">DONE</button>
+                </div>
+            </div>
+
+            <!-- Task List -->
+            <div class="flex-1 overflow-y-auto p-3 space-y-2" id="task-list-container">
+                <div id="task-list-items" class="space-y-2">
+                    <!-- Tasks injected by JS -->
+                    <div class="text-center text-slate-600 font-mono text-xs py-8">
+                        [SYSTEM] CONNECTING TO DATABASE...
                     </div>
                 </div>
             </div>
         </aside>
 
-        <!-- Enhanced Main Content: Task Details -->
-        <main class="flex-[4] bg-gradient-to-br from-white via-slate-50 to-slate-100 flex flex-col overflow-hidden border-r border-slate-200">
-            <div id="task-detail-container" class="flex-1 overflow-y-auto">
-                <div class="p-10">
-                    <div class="text-center text-slate-400 py-32 flex flex-col items-center space-y-6">
-                        <div class="relative">
-                            <div class="absolute inset-0 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full blur-xl opacity-20"></div>
-                            <div class="relative bg-gradient-to-r from-blue-500 to-purple-500 p-6 rounded-full">
-                                <svg class="h-20 w-20 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                </svg>
-                            </div>
-                        </div>
-                        <div class="space-y-2">
-                            <h3 class="text-2xl font-bold text-slate-600">Select a task to view details</h3>
-                            <p class="text-slate-400 max-w-md">Choose a task from the list on the left to see its specifications and progress</p>
-                        </div>
+        <!-- Center: Main Display -->
+        <main class="flex-[4.5] bg-sci-bg relative flex flex-col overflow-hidden border-r border-sci-border">
+            <!-- Grid Background -->
+            <div class="absolute inset-0 pointer-events-none"
+                style="background-image: radial-gradient(circle at 50% 50%, rgba(0, 243, 255, 0.05) 0%, transparent 50%);">
+            </div>
+
+            <div id="task-detail-container" class="flex-1 overflow-y-auto p-8 relative z-10">
+                <!-- Task Details injected by JS -->
+                <div class="h-full flex flex-col items-center justify-center text-slate-600">
+                    <div
+                        class="w-24 h-24 border border-sci-border rounded-full flex items-center justify-center mb-4 relative">
+                        <div class="absolute inset-0 border-t border-neon-blue rounded-full animate-spin"></div>
+                        <svg class="w-10 h-10 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                                d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z">
+                            </path>
+                        </svg>
                     </div>
+                    <h2 class="font-display text-xl tracking-widest">AWAITING INPUT</h2>
+                    <p class="font-mono text-sm mt-2 text-neon-blue opacity-50">SELECT_TASK_MODULE</p>
                 </div>
             </div>
         </main>
 
-        <!-- Enhanced Right Sidebar: Event History -->
-        <aside class="flex-[6] bg-gradient-to-b from-white to-slate-50 border-l border-slate-200 flex flex-col" id="event-sidebar">
-            <div class="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-3">
-                        <div class="bg-gradient-to-r from-indigo-500 to-purple-500 p-2 rounded-lg">
-                            <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                        </div>
-                        <h2 class="text-xl font-bold text-slate-800">Event History</h2>
-                    </div>
-                    <span class="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Timeline</span>
-                </div>
+        <!-- Right Sidebar: Event Log -->
+        <aside class="flex-[5.5] bg-sci-panel border-l border-sci-border flex flex-col">
+            <div class="p-4 border-b border-sci-border flex justify-between items-center bg-sci-panel/50">
+                <h3 class="font-display text-sm text-neon-blue tracking-wider flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    SYSTEM_LOGS
+                </h3>
+                <span class="text-[10px] font-mono text-slate-500">LIVE_FEED</span>
             </div>
-            <div class="flex-1 overflow-y-auto p-6" id="event-list-container">
-                <div class="text-center text-slate-400 py-16 flex flex-col items-center space-y-4">
-                    <div class="bg-slate-100 p-4 rounded-full">
-                        <svg class="h-12 w-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                        </svg>
-                    </div>
-                    <div class="space-y-2 text-center">
-                        <p class="text-lg font-medium text-slate-600">No events yet</p>
-                        <p class="text-slate-400 text-sm">Select a task to view its event history and timeline</p>
-                    </div>
+            <div class="flex-1 overflow-y-auto p-4 space-y-4" id="event-list-container">
+                <!-- Events injected by JS -->
+                <div class="text-center text-slate-600 font-mono text-xs py-8">
+                    NO_DATA_STREAM
                 </div>
             </div>
         </aside>
+
     </div>
 
-    <!-- Enhanced New Task Modal -->
-    <div id="new-task-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 transform transition-all">
-            <div class="px-8 py-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-purple-50 rounded-t-2xl">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-3">
-                        <div class="bg-gradient-to-r from-blue-500 to-purple-500 p-3 rounded-xl">
-                            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                            </svg>
-                        </div>
-                        <h2 class="text-2xl font-bold text-slate-800">Create New Task</h2>
-                    </div>
-                    <button onclick="closeNewTaskModal()" class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-all">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+    <!-- Modals (Hidden by default) -->
+    <div id="new-task-modal"
+        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-sci-panel border border-neon-blue w-full max-w-2xl p-1 shadow-neon-blue relative">
+            <!-- Corner Accents -->
+            <div class="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-neon-blue"></div>
+            <div class="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-neon-blue"></div>
+            <div class="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-neon-blue"></div>
+            <div class="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-neon-blue"></div>
+
+            <div class="bg-sci-bg p-6">
+                <div class="flex justify-between items-center mb-6 border-b border-sci-border pb-4">
+                    <h2 class="font-display text-xl text-white">INITIALIZE_NEW_TASK</h2>
+                    <button onclick="closeNewTaskModal()" class="text-slate-500 hover:text-neon-red transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 </div>
-            </div>
-            <form id="new-task-form" onsubmit="createTask(event)" class="p-8">
-                <div class="space-y-6">
+                <form id="new-task-form" onsubmit="createTask(event)" class="space-y-4">
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
-                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 002.828 0l-7-7A1.994 1.994 0 003.586-1h.01M11 21h5a2 2 0 002-2v-5c0-.513-.196-1.024-.586-1.414l-7-7a1.994 1.994 0 00-1.414-.586H5"/>
-                            </svg>
-                            <span>Task Name *</span>
-                        </label>
-                        <input type="text" name="name" required class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all text-base" placeholder="Enter task name...">
+                        <label class="block font-mono text-xs text-neon-blue mb-1">TASK_DESIGNATION</label>
+                        <input type="text" name="name" required
+                            class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono focus:border-neon-blue focus:outline-none transition-colors"
+                            placeholder="ENTER_TASK_NAME">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
-                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                            </svg>
-                            <span>Specification (Markdown)</span>
-                        </label>
-                        <textarea name="spec" rows="8" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all font-mono text-sm resize-none" placeholder="Describe your task in detail..."></textarea>
+                        <label class="block font-mono text-xs text-neon-blue mb-1">PARAMETERS [MARKDOWN]</label>
+                        <textarea name="spec" rows="6"
+                            class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono text-sm focus:border-neon-blue focus:outline-none transition-colors resize-none"
+                            placeholder="// Enter specifications..."></textarea>
                     </div>
-                    <div class="grid grid-cols-2 gap-6">
+                    <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
-                                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11-7-7z"/>
-                                </svg>
-                                <span>Priority</span>
-                            </label>
-                            <select name="priority" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all">
-                                <option value="">Default</option>
-                                <option value="1" class="text-red-600">🔴 Critical</option>
-                                <option value="2" class="text-orange-600">🟠 High</option>
-                                <option value="3" class="text-yellow-600">🟡 Medium</option>
-                                <option value="4" class="text-green-600">🟢 Low</option>
+                            <label class="block font-mono text-xs text-neon-blue mb-1">PRIORITY_LEVEL</label>
+                            <select name="priority"
+                                class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono focus:border-neon-blue focus:outline-none">
+                                <option value="">DEFAULT</option>
+                                <option value="1">CRITICAL [L1]</option>
+                                <option value="2">HIGH [L2]</option>
+                                <option value="3">MEDIUM [L3]</option>
+                                <option value="4">LOW [L4]</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
-                                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2z"/>
-                                </svg>
-                                <span>Parent Task ID</span>
-                            </label>
-                            <input type="number" name="parent_id" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all" placeholder="Optional">
+                            <label class="block font-mono text-xs text-neon-blue mb-1">PARENT_ID [OPTIONAL]</label>
+                            <input type="number" name="parent_id"
+                                class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono focus:border-neon-blue focus:outline-none">
                         </div>
                     </div>
-                </div>
-                <div class="mt-8 flex justify-end space-x-4">
-                    <button type="button" onclick="closeNewTaskModal()" class="px-6 py-3 border-2 border-slate-300 rounded-xl text-slate-700 hover:bg-slate-50 font-semibold transition-all">Cancel</button>
-                    <button type="submit" class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl hover:from-blue-600 hover:to-purple-600 font-semibold shadow-lg hover:shadow-xl transition-all">Create Task</button>
-                </div>
-            </form>
+                    <div class="flex justify-end gap-4 mt-6 pt-4 border-t border-sci-border">
+                        <button type="button" onclick="closeNewTaskModal()"
+                            class="px-6 py-2 border border-sci-border text-slate-400 font-mono hover:text-white hover:border-white transition-colors">CANCEL</button>
+                        <button type="submit"
+                            class="px-6 py-2 bg-neon-blue text-black font-bold font-display hover:bg-white hover:shadow-neon-blue transition-all">EXECUTE</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
-    <!-- Enhanced Add Event Modal -->
-    <div id="add-event-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 transform transition-all">
-            <div class="px-8 py-6 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-pink-50 rounded-t-2xl">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-3">
-                        <div class="bg-gradient-to-r from-purple-500 to-pink-500 p-3 rounded-xl">
-                            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                        </div>
-                        <h2 class="text-2xl font-bold text-slate-800">Add Event</h2>
-                    </div>
-                    <button onclick="closeAddEventModal()" class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-all">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+    <div id="add-event-modal"
+        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-sci-panel border border-neon-purple w-full max-w-2xl p-1 shadow-neon-purple relative">
+            <div class="bg-sci-bg p-6">
+                <div class="flex justify-between items-center mb-6 border-b border-sci-border pb-4">
+                    <h2 class="font-display text-xl text-white">LOG_SYSTEM_EVENT</h2>
+                    <button onclick="closeAddEventModal()" class="text-slate-500 hover:text-neon-red transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 </div>
-            </div>
-            <form id="add-event-form" onsubmit="addEvent(event)" class="p-8">
-                <input type="hidden" name="task_id" id="event-task-id">
-                <div class="space-y-6">
+                <form id="add-event-form" onsubmit="addEvent(event)" class="space-y-4">
+                    <input type="hidden" name="task_id" id="event-task-id">
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
-                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                            <span>Event Type *</span>
-                        </label>
-                        <select name="type" required class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all">
-                            <option value="decision">💡 Decision</option>
-                            <option value="blocker">🚫 Blocker</option>
-                            <option value="milestone">🏁 Milestone</option>
-                            <option value="note">📝 Note</option>
+                        <label class="block font-mono text-xs text-neon-purple mb-1">EVENT_TYPE</label>
+                        <select name="type" required
+                            class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono focus:border-neon-purple focus:outline-none">
+                            <option value="decision">DECISION</option>
+                            <option value="blocker">BLOCKER</option>
+                            <option value="milestone">MILESTONE</option>
+                            <option value="note">NOTE</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2 flex items-center space-x-2">
-                            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-4m-1.414-1.414a2 2 0 012.828 0L17 10.586V16a2 2 0 01-2 2h-2m-6 0a2 2 0 002 2v-4a2 2 0 012-2m-2.828 0L7 10.586a2 2 0 012.828 0z"/>
-                            </svg>
-                            <span>Event Data (Markdown) *</span>
-                        </label>
-                        <textarea name="data" required rows="6" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-slate-50 focus:bg-white transition-all font-mono text-sm resize-none" placeholder="Document your decision, blocker, or milestone..."></textarea>
+                        <label class="block font-mono text-xs text-neon-purple mb-1">DATA_STREAM [MARKDOWN]</label>
+                        <textarea name="data" required rows="6"
+                            class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono text-sm focus:border-neon-purple focus:outline-none transition-colors resize-none"
+                            placeholder="// Enter event data..."></textarea>
                     </div>
-                </div>
-                <div class="mt-8 flex justify-end space-x-4">
-                    <button type="button" onclick="closeAddEventModal()" class="px-6 py-3 border-2 border-slate-300 rounded-xl text-slate-700 hover:bg-slate-50 font-semibold transition-all">Cancel</button>
-                    <button type="submit" class="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 font-semibold shadow-lg hover:shadow-xl transition-all">Add Event</button>
-                </div>
-            </form>
+                    <div class="flex justify-end gap-4 mt-6 pt-4 border-t border-sci-border">
+                        <button type="button" onclick="closeAddEventModal()"
+                            class="px-6 py-2 border border-sci-border text-slate-400 font-mono hover:text-white hover:border-white transition-colors">CANCEL</button>
+                        <button type="submit"
+                            class="px-6 py-2 bg-neon-purple text-white font-bold font-display hover:bg-white hover:text-black hover:shadow-neon-purple transition-all">COMMIT_LOG</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- JavaScript -->
     <script src="/static/js/app.js"></script>
 </body>
+
 </html>
