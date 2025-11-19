@@ -878,19 +878,26 @@ async fn start_dashboard_background() -> io::Result<()> {
     let current_exe = std::env::current_exe()?;
 
     // Spawn Dashboard process in foreground mode
-    Command::new(current_exe)
+    // IMPORTANT: Must keep Child handle alive to prevent blocking on Windows
+    let mut child = Command::new(current_exe)
         .arg("dashboard")
         .arg("start")
         .arg("--foreground")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
+        .kill_on_drop(false) // Don't kill Dashboard when this function returns
         .spawn()?;
 
     // Wait for Dashboard to start (check health endpoint)
     for _ in 0..10 {
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         if is_dashboard_running().await {
+            // Spawn a background task to hold the Child handle
+            // This prevents the process from being reaped and blocking the parent
+            tokio::spawn(async move {
+                let _ = child.wait().await;
+            });
             return Ok(());
         }
     }
