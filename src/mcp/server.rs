@@ -76,7 +76,10 @@ pub async fn run() -> io::Result<()> {
     };
 
     // Auto-start Dashboard if not running (fully async, non-blocking)
-    if !is_dashboard_running().await {
+    // Skip in test environments to avoid port conflicts and slowdowns
+    let skip_dashboard = std::env::var("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART").is_ok();
+
+    if !skip_dashboard && !is_dashboard_running().await {
         eprintln!("🚀 Dashboard not running, starting automatically...");
         // Spawn Dashboard startup in background task - don't block MCP Server initialization
         tokio::spawn(async {
@@ -87,7 +90,7 @@ pub async fn run() -> io::Result<()> {
                 eprintln!("✓ Dashboard started successfully at http://127.0.0.1:11391");
             }
         });
-    } else {
+    } else if !skip_dashboard {
         // Dashboard already running, show URL for user convenience
         eprintln!("ℹ️  Dashboard is running at http://127.0.0.1:11391");
     }

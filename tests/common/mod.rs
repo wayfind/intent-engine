@@ -70,7 +70,8 @@ pub fn ie_command() -> Command {
     let mut cmd = Command::new(ie_binary());
     cmd.env("HOME", "/nonexistent") // Prevent fallback to home on Unix
         .env("USERPROFILE", "/nonexistent") // Prevent fallback to home on Windows
-        .env("INTENT_ENGINE_NO_HOME_FALLBACK", "1"); // Additional flag to prevent home fallback
+        .env("INTENT_ENGINE_NO_HOME_FALLBACK", "1") // Additional flag to prevent home fallback
+        .env("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART", "1"); // Disable Dashboard auto-start in tests
     cmd
 }
 
