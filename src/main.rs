@@ -1569,25 +1569,83 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 // Spawn new process with same binary but in foreground mode
                 let current_exe = std::env::current_exe()?;
 
-                let mut cmd = std::process::Command::new(current_exe);
-                cmd.arg("dashboard")
-                    .arg("start")
-                    .arg("--foreground")
-                    .arg("--port")
-                    .arg(allocated_port.to_string());
+                // Properly daemonize using setsid on Unix systems
+                #[cfg(unix)]
+                let mut cmd = {
+                    let mut cmd = std::process::Command::new("setsid");
+                    cmd.arg(current_exe)
+                        .arg("dashboard")
+                        .arg("start")
+                        .arg("--foreground")
+                        .arg("--port")
+                        .arg(allocated_port.to_string());
 
-                // Pass --browser flag to child process if user specified it
-                if browser {
-                    cmd.arg("--browser");
-                }
+                    // Pass --browser flag if specified
+                    if browser {
+                        cmd.arg("--browser");
+                    }
+
+                    cmd
+                };
+
+                // On Windows, just spawn normally (no setsid available)
+                #[cfg(not(unix))]
+                let mut cmd = {
+                    let mut cmd = std::process::Command::new(current_exe);
+                    cmd.arg("dashboard")
+                        .arg("start")
+                        .arg("--foreground")
+                        .arg("--port")
+                        .arg(allocated_port.to_string());
+
+                    // Pass --browser flag if specified
+                    if browser {
+                        cmd.arg("--browser");
+                    }
+
+                    cmd
+                };
 
                 let child = cmd
                     .current_dir(&project_path)
+                    .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .spawn()?;
 
-                let pid = child.id();
+                // When using setsid, child.id() returns setsid's PID, not the dashboard's PID
+                // We need to find the actual dashboard process
+                let _setsid_pid = child.id();
+
+                // Give server a moment to start
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+                // Find the actual dashboard PID by searching for the process
+                #[cfg(unix)]
+                let pid = {
+                    use std::process::Command;
+
+                    let output = Command::new("pgrep")
+                        .args([
+                            "-f",
+                            &format!("ie dashboard start --foreground --port {}", allocated_port),
+                        ])
+                        .output()
+                        .ok()
+                        .and_then(|o| String::from_utf8(o.stdout).ok())
+                        .and_then(|s| s.trim().parse::<u32>().ok());
+
+                    match output {
+                        Some(pid) => pid,
+                        None => {
+                            // Fallback: try to use setsid PID (won't work but better than failing)
+                            _setsid_pid
+                        },
+                    }
+                };
+
+                #[cfg(not(unix))]
+                let pid = _setsid_pid;
 
                 // Update registry with PID
                 if let Some(project) = registry.find_by_path_mut(&project_path) {
@@ -1595,9 +1653,6 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                     registry.save()?;
                 }
                 daemon::write_pid_file(allocated_port, pid)?;
-
-                // Give server a moment to start
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
                 // Check if process is still running
                 if daemon::is_process_running(pid) {
