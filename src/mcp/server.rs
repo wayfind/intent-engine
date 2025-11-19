@@ -58,13 +58,10 @@ pub async fn run() -> io::Result<()> {
     let ctx = match ProjectContext::load().await {
         Ok(ctx) => ctx,
         Err(IntentError::NotAProject) => {
-            eprintln!("⚠️  Not in an intent-engine project directory.");
-            eprintln!("   MCP server requires an intent-engine project to function.");
-            eprintln!(
-                "   Run 'ie workspace init' to create a project, or cd to an existing project."
-            );
+            // Error message removed to prevent Windows stderr buffer blocking
+            // The error is returned through the proper error channel below
             return Err(io::Error::other(
-                "MCP server must be run within an intent-engine project directory".to_string(),
+                "MCP server must be run within an intent-engine project directory. Run 'ie workspace init' to create a project, or cd to an existing project.".to_string(),
             ));
         },
         Err(e) => {
@@ -77,36 +74,22 @@ pub async fn run() -> io::Result<()> {
 
     // Auto-start Dashboard if not running (fully async, non-blocking)
     // Skip in test environments to avoid port conflicts and slowdowns
+    // NOTE: All eprintln! output removed to prevent Windows stderr buffer blocking
     let skip_dashboard = std::env::var("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART").is_ok();
 
     if !skip_dashboard && !is_dashboard_running().await {
-        eprintln!("🚀 Dashboard not running, starting automatically...");
         // Spawn Dashboard startup in background task - don't block MCP Server initialization
         tokio::spawn(async {
-            if let Err(e) = start_dashboard_background().await {
-                eprintln!("⚠️  Failed to start Dashboard: {}", e);
-                eprintln!("   You can start it manually with: ie dashboard start");
-            } else {
-                eprintln!("✓ Dashboard started successfully at http://127.0.0.1:11391");
-            }
+            let _ = start_dashboard_background().await;
+            // Silently fail - MCP server can work without Dashboard
         });
-    } else if !skip_dashboard {
-        // Dashboard already running, show URL for user convenience
-        eprintln!("ℹ️  Dashboard is running at http://127.0.0.1:11391");
     }
-
-    // Show prominent notification about Dashboard GUI
-    eprintln!("╭─────────────────────────────────────────────────────────╮");
-    eprintln!("│  💡 Intent-Engine Dashboard GUI is available!          │");
-    eprintln!("│     Visit: http://127.0.0.1:11391                      │");
-    eprintln!("╰─────────────────────────────────────────────────────────╯");
 
     // Register MCP connection in the global registry (non-blocking)
     let project_root = ctx.root.clone();
     tokio::task::spawn_blocking(move || {
-        if let Err(e) = register_mcp_connection(&project_root) {
-            eprintln!("⚠ Failed to register MCP connection: {}", e);
-        }
+        let _ = register_mcp_connection(&project_root);
+        // Silently fail - not critical for MCP server operation
     });
 
     // Start heartbeat task
@@ -119,9 +102,8 @@ pub async fn run() -> io::Result<()> {
     let result = run_server().await;
 
     // Clean up: unregister MCP connection
-    if let Err(e) = unregister_mcp_connection(&ctx.root) {
-        eprintln!("⚠ Failed to unregister MCP connection: {}", e);
-    }
+    let _ = unregister_mcp_connection(&ctx.root);
+    // Silently fail - cleanup error not critical
 
     // Cancel heartbeat task
     heartbeat_handle.abort();
@@ -173,15 +155,13 @@ async fn run_server() -> io::Result<()> {
 
 async fn handle_notification(request: &JsonRpcRequest) {
     // Handle MCP notifications (no response required)
+    // All eprintln! removed to prevent Windows stderr buffer blocking
     match request.method.as_str() {
-        "initialized" => {
-            eprintln!("✓ MCP client initialized");
-        },
-        "notifications/cancelled" => {
-            eprintln!("⚠ Request cancelled");
+        "initialized" | "notifications/cancelled" => {
+            // Silently acknowledge notification
         },
         _ => {
-            eprintln!("⚠ Unknown notification: {}", request.method);
+            // Unknown notification - silently ignore
         },
     }
 }
@@ -772,24 +752,9 @@ fn register_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()>
         .unwrap_or_else(|_| project_path.to_path_buf());
 
     // Register MCP connection - this will create a project entry if none exists
-    let project = registry.find_by_path(&normalized_path);
-    let dashboard_info = if let Some(p) = project {
-        if p.port > 0 {
-            format!("Dashboard: http://127.0.0.1:{}", p.port)
-        } else {
-            "MCP-only mode (no Dashboard)".to_string()
-        }
-    } else {
-        "MCP-only mode (no Dashboard)".to_string()
-    };
+    registry.register_mcp_connection(&normalized_path, agent_name)?;
 
-    registry.register_mcp_connection(&project_path.to_path_buf(), agent_name)?;
-
-    eprintln!(
-        "✓ MCP connection registered for project: {} ({})",
-        project_path.display(),
-        dashboard_info
-    );
+    // Silently register - eprintln! removed to prevent Windows stderr buffer blocking
 
     Ok(())
 }
@@ -807,10 +772,7 @@ fn unregister_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<(
 
     registry.unregister_mcp_connection(&normalized_path)?;
 
-    eprintln!(
-        "✓ MCP connection unregistered for project: {}",
-        project_path.display()
-    );
+    // Silently unregister - eprintln! removed to prevent Windows stderr buffer blocking
 
     Ok(())
 }
@@ -831,9 +793,8 @@ async fn heartbeat_task(project_path: std::path::PathBuf) {
             let normalized_path = path.canonicalize().unwrap_or_else(|_| path.clone());
 
             if let Ok(mut registry) = ProjectRegistry::load() {
-                if let Err(e) = registry.update_mcp_heartbeat(&normalized_path) {
-                    eprintln!("⚠ Failed to update MCP heartbeat: {}", e);
-                }
+                let _ = registry.update_mcp_heartbeat(&normalized_path);
+                // Silently fail - heartbeat error not critical
             }
         });
     }
