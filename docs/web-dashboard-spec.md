@@ -746,7 +746,7 @@ Response: 200 OK
 
 ### 6.2 WebSocket Protocol (Optional)
 
-**Connection**: `ws://localhost:3030/ws`
+**Connection**: `ws://localhost:11391/ws`
 
 **Client → Server (Subscribe)**:
 ```json
@@ -818,7 +818,7 @@ Response: 200 OK
     {
       "path": "/home/user/projects/intent-engine",
       "name": "intent-engine",
-      "port": 3030,
+      "port": 11391,
       "pid": 12345,
       "started_at": "2025-11-16T10:00:00Z",
       "db_path": "/home/user/projects/intent-engine/.intent-engine/intents.db"
@@ -826,13 +826,13 @@ Response: 200 OK
     {
       "path": "/home/user/projects/cortex",
       "name": "cortex",
-      "port": 3031,
+      "port": 11392,
       "pid": 12346,
       "started_at": "2025-11-16T10:05:00Z",
       "db_path": "/home/user/projects/cortex/.intent-engine/intents.db"
     }
   ],
-  "next_port": 3032
+  "next_port": 11393
 }
 ```
 
@@ -840,7 +840,7 @@ Response: 200 OK
 - **Register**: Add project when dashboard starts
 - **Unregister**: Remove project when dashboard stops
 - **Lookup**: Find project by path or port
-- **Port Allocation**: Auto-increment from 3030
+- **Port Allocation**: Fixed port 11391 (custom port available via --port flag)
 
 ### 7.3 Project Identification
 
@@ -852,7 +852,7 @@ ie dashboard start
 # Automatically:
 # 1. Detect project root (has .intent-engine/ or .git/)
 # 2. Use project name from directory name
-# 3. Allocate next available port
+# 3. Use fixed port 11391 (or custom port if specified)
 # 4. Register in global registry
 ```
 
@@ -867,26 +867,19 @@ ie dashboard start --project my-project
 3. Use directory name as project name
 4. Normalize name (lowercase, replace spaces)
 
-### 7.4 Port Management Strategies
+### 7.4 Port Management Strategy
 
-**Strategy A: Sequential Allocation (Simple)**
+**Fixed Port Strategy (Current Implementation)**:
 ```
-Port range: 3030 - 3099 (70 projects max)
-Next port: Increment from last allocated
-Reuse: When project stops, port becomes available again
+Default port: 11391
+Custom ports: Available via --port flag
+Multi-project: Requires manual port specification for additional projects
 ```
 
-**Strategy B: Hash-Based (Deterministic)**
-```rust
-fn project_port(project_path: &str) -> u16 {
-    let hash = hash_path(project_path);
-    3030 + (hash % 70) as u16
-}
-```
-- Same project always gets same port
-- Risk: Port conflicts if hash collision
-
-**Recommendation**: Strategy A (Sequential) with conflict resolution
+**Rationale**:
+- Simplicity: Single well-known port for default usage
+- Predictability: Always know where the dashboard is running
+- Flexibility: Custom ports available when needed via --port flag
 
 ### 7.5 CLI Commands
 
@@ -896,14 +889,14 @@ ie dashboard start [OPTIONS]
 
 Options:
   --project <NAME>      Project name (default: auto-detect)
-  --port <PORT>         Force specific port (default: auto-allocate)
+  --port <PORT>         Force specific port (default: 11391 by default)
   --host <HOST>         Bind address (default: 127.0.0.1)
   --websocket           Enable WebSocket support (default: false)
   --cors                Enable CORS for development (default: false)
   --daemon              Run in background (default: false)
 
 Examples:
-  # Auto-detect project, auto-allocate port
+  # Auto-detect project, use default port 11391
   ie dashboard start
 
   # Specify project name
@@ -927,9 +920,9 @@ Examples:
 **Output Example**:
 ```
 ✓ Detected project: intent-engine
-✓ Allocated port: 3030
+✓ Allocated port: 11391
 ✓ Dashboard starting...
-✓ Running on http://127.0.0.1:3030
+✓ Running on http://127.0.0.1:11391
 
 Open in browser or use:
   ie dashboard open
@@ -971,16 +964,16 @@ Examples:
 **Output Example**:
 ```
 Current Project: intent-engine
-  URL: http://127.0.0.1:3030
+  URL: http://127.0.0.1:11391
   PID: 12345
-  Port: 3030
+  Port: 11391
   Uptime: 2h 15m
   WebSocket: Enabled
   Database: /home/user/projects/intent-engine/.intent-engine/intents.db
 
 Other Running Dashboards:
   cortex
-    URL: http://127.0.0.1:3031
+    URL: http://127.0.0.1:11392
     PID: 12346
     Uptime: 1h 30m
 ```
@@ -991,8 +984,8 @@ ie dashboard list
 
 Output:
   Running Dashboards:
-  ● intent-engine  http://127.0.0.1:3030  (2h 15m)
-  ● cortex         http://127.0.0.1:3031  (1h 30m)
+  ● intent-engine  http://127.0.0.1:11391  (2h 15m)
+  ● cortex         http://127.0.0.1:11392  (1h 30m)
 
   Stopped Projects:
   ○ old-project    (last active: 2 days ago)
@@ -1013,8 +1006,7 @@ ie dashboard open [--project <NAME>]
 ```toml
 [server]
 host = "127.0.0.1"
-port_range_start = 3030
-port_range_end = 3099
+default_port = 11391
 enable_websocket = false
 
 [projects]
@@ -1112,7 +1104,7 @@ if !is_port_available(allocated_port) {
 ```bash
 $ ie dashboard start
 Error: Dashboard already running for this project
-  URL: http://127.0.0.1:3030
+  URL: http://127.0.0.1:11391
   PID: 12345
 
 Tip: Use 'ie dashboard stop' to stop it first
@@ -1138,17 +1130,17 @@ if pid_file.exists() {
 # Terminal 1: Working on intent-engine
 cd ~/projects/intent-engine
 ie dashboard start
-# ✓ Dashboard running on http://127.0.0.1:3030
+# ✓ Dashboard running on http://127.0.0.1:11391
 
 # Terminal 2: Working on cortex
 cd ~/projects/cortex
 ie dashboard start
-# ✓ Dashboard running on http://127.0.0.1:3031
+# ✓ Dashboard running on http://127.0.0.1:11392
 
 # Terminal 3: Check all running dashboards
 ie dashboard status --all
-# intent-engine  http://127.0.0.1:3030  (running)
-# cortex         http://127.0.0.1:3031  (running)
+# intent-engine  http://127.0.0.1:11391  (running)
+# cortex         http://127.0.0.1:11392  (running)
 
 # Stop specific project
 cd ~/projects/cortex
@@ -1173,7 +1165,7 @@ ie dashboard stop --all
 - [ ] **Multi-Project Infrastructure**
   - Global project registry (`~/.intent-engine/projects.json`)
   - Project root auto-detection logic
-  - Port allocation system (3030-3099)
+  - Port management system (fixed port 11391 with --port override)
   - PID/lock file management per project
 - [ ] **Backend Server**
   - Setup Axum server with static file serving
@@ -1412,7 +1404,7 @@ cd static
 npm run dev
 
 # Browser
-open http://localhost:3030
+open http://localhost:11391
 ```
 
 ### 12.2 Production Build
@@ -1564,11 +1556,11 @@ async fn main() {
     let app = Router::new()
         .route("/api/tasks", get(get_tasks).post(create_task));
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3030")
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:11391")
         .await
         .unwrap();
 
-    println!("Dashboard running on http://127.0.0.1:3030");
+    println!("Dashboard running on http://127.0.0.1:11391");
     axum::serve(listener, app).await.unwrap();
 }
 ```

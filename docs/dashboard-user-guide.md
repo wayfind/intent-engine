@@ -34,19 +34,19 @@ ie dashboard start
 The dashboard will automatically:
 - Detect the project database (`.intent-engine/intents.db`)
 - Register the project in `~/.intent-engine/projects.json`
-- Allocate an available port (3030-3099)
+- Use the fixed port 11391
 - Display the URL to access
 
 Example output:
 ```
 Dashboard starting for project: my-project
-  Port: 3030
-  URL: http://127.0.0.1:3030
+  Port: 11391
+  URL: http://127.0.0.1:11391
   Mode: background
 
 ✅ Dashboard server started successfully
    PID: 12345
-   URL: http://127.0.0.1:3030
+   URL: http://127.0.0.1:11391
 
 Tip: Use 'ie dashboard status' to check server status
 Tip: Use 'ie dashboard stop' to stop the server
@@ -54,7 +54,7 @@ Tip: Use 'ie dashboard stop' to stop the server
 
 ### 2. Access the Dashboard
 
-Open your web browser and navigate to the URL shown (e.g., `http://127.0.0.1:3030`).
+Open your web browser and navigate to the URL shown (e.g., `http://127.0.0.1:11391`).
 
 You'll see the Dashboard interface with:
 - **Left Sidebar**: Task list with filters
@@ -230,10 +230,10 @@ The subtask is created and **automatically becomes the new focus**.
 Use the API directly for advanced queries:
 ```bash
 # Search with operators
-curl "http://127.0.0.1:3030/api/search?query=JWT+AND+authentication"
+curl "http://127.0.0.1:11391/api/search?query=JWT+AND+authentication"
 
 # Search events only
-curl "http://127.0.0.1:3030/api/search?query=blocker&include_tasks=false"
+curl "http://127.0.0.1:11391/api/search?query=blocker&include_tasks=false"
 ```
 
 ### Get Task Recommendations
@@ -257,17 +257,17 @@ You can run dashboards for multiple projects simultaneously:
 # Project A
 cd /path/to/project-a
 ie dashboard start
-# Runs on port 3030
+# Runs on port 11391
 
-# Project B
+# Project B (custom port required if Project A is running)
 cd /path/to/project-b
-ie dashboard start
-# Runs on port 3031 (auto-allocated)
+ie dashboard start --port 11392
+# Runs on custom port 11392
 
-# Project C
+# Project C (custom port required)
 cd /path/to/project-c
-ie dashboard start --port 3050
-# Runs on specific port 3050
+ie dashboard start --port 11393
+# Runs on custom port 11393
 ```
 
 ### Check Running Dashboards
@@ -282,14 +282,14 @@ Active Dashboard Servers:
 
   project-a
     Path: /path/to/project-a
-    Port: 3030
-    URL:  http://127.0.0.1:3030
+    Port: 11391
+    URL:  http://127.0.0.1:11391
     PID:  12345
 
   project-b
     Path: /path/to/project-b
-    Port: 3031
-    URL:  http://127.0.0.1:3031
+    Port: 11392
+    URL:  http://127.0.0.1:11392
     PID:  12346
 ```
 
@@ -301,7 +301,7 @@ cd /path/to/project-a
 ie dashboard stop
 
 # Or stop by port
-ie dashboard stop --port 3030
+ie dashboard stop --port 11391
 ```
 
 ### Stop All Dashboards
@@ -403,11 +403,11 @@ ie setup
 ie dashboard start
 ```
 
-**Error**: `Port 3030 already in use`
+**Error**: `Port 11391 already in use`
 
 **Solution**: Use a different port:
 ```bash
-ie dashboard start --port 3040
+ie dashboard start --port 11392
 ```
 
 Or stop the existing dashboard:

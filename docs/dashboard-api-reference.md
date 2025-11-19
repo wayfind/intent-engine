@@ -65,7 +65,7 @@ Get project information.
   "name": "my-project",
   "path": "/path/to/project",
   "database": "/path/to/.intent-engine/intents.db",
-  "port": 3030
+  "port": 11391
 }
 ```
 
@@ -501,22 +501,22 @@ Allowed headers: All
 
 ```bash
 # 1. Create task
-curl -X POST http://127.0.0.1:3030/api/tasks \
+curl -X POST http://127.0.0.1:11391/api/tasks \
   -H "Content-Type: application/json" \
   -d '{"name": "Fix bug #123", "priority": 1}'
 
 # Response: {"data": {"id": 100, ...}}
 
 # 2. Start task
-curl -X POST http://127.0.0.1:3030/api/tasks/100/start
+curl -X POST http://127.0.0.1:11391/api/tasks/100/start
 
 # 3. Add a decision event
-curl -X POST http://127.0.0.1:3030/api/tasks/100/events \
+curl -X POST http://127.0.0.1:11391/api/tasks/100/events \
   -H "Content-Type: application/json" \
   -d '{"type": "decision", "data": "Fixed by reverting commit abc123"}'
 
 # 4. Complete task
-curl -X POST http://127.0.0.1:3030/api/tasks/done
+curl -X POST http://127.0.0.1:11391/api/tasks/done
 
 # Response: {"data": {"id": 100, "status": "done", ...}}
 ```
@@ -525,10 +525,10 @@ curl -X POST http://127.0.0.1:3030/api/tasks/done
 
 ```bash
 # 1. Search for tasks
-curl "http://127.0.0.1:3030/api/search?query=authentication"
+curl "http://127.0.0.1:11391/api/search?query=authentication"
 
 # 2. Update a task
-curl -X PATCH http://127.0.0.1:3030/api/tasks/42 \
+curl -X PATCH http://127.0.0.1:11391/api/tasks/42 \
   -H "Content-Type: application/json" \
   -d '{"priority": 1, "spec": "Updated specification"}'
 ```

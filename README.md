@@ -341,7 +341,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
 ### Quick Start
 
 ```bash
-# Start dashboard (auto-selects available port 3030-3099)
+# Start dashboard (uses fixed port 11391)
 cd /path/to/your/project
 ie dashboard start
 
@@ -349,7 +349,7 @@ ie dashboard start
 ie dashboard open
 
 # Or manually access the URL shown in the output
-# http://127.0.0.1:3030
+# http://127.0.0.1:11391
 
 # Check running dashboards
 ie dashboard list
