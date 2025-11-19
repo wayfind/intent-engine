@@ -34,7 +34,7 @@ pub struct ProjectContext {
 /// Dashboard server state shared across handlers
 #[derive(Clone)]
 pub struct AppState {
-    /// Current active project (wrapped in Arc<RwLock> for dynamic switching)
+    /// Current active project (wrapped in `Arc<RwLock>` for dynamic switching)
     pub current_project: Arc<RwLock<ProjectContext>>,
     pub port: u16,
 }
