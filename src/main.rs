@@ -1060,15 +1060,22 @@ async fn handle_doctor_command() -> Result<()> {
     // }
     checks.push(hooks_check);
 
+    // Determine if there are any real failures (not just warnings)
+    let has_failures = checks.iter().any(|check| {
+        let status = check["status"].as_str().unwrap_or("");
+        status.contains("✗ FAIL")
+    });
+
     let result = json!({
-        "summary": if all_passed { "✓ All checks passed" } else { "✗ Some checks failed" },
-        "overall_status": if all_passed { "healthy" } else { "unhealthy" },
+        "summary": if all_passed { "✓ All checks passed" } else if has_failures { "✗ Some checks failed" } else { "⚠ Some optional features not configured" },
+        "overall_status": if all_passed { "healthy" } else if has_failures { "unhealthy" } else { "warnings" },
         "checks": checks
     });
 
     println!("{}", serde_json::to_string_pretty(&result)?);
 
-    if !all_passed {
+    // Only exit with error code if there are actual failures, not just warnings
+    if has_failures {
         std::process::exit(1);
     }
 

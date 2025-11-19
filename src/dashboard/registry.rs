@@ -280,6 +280,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_allocate_port() {
         let mut registry = ProjectRegistry::new();
 
@@ -431,6 +432,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_fixed_port() {
         let mut registry = ProjectRegistry::new();
 
