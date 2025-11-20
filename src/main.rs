@@ -1439,6 +1439,36 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
     Ok(())
 }
 
+/// Check if Dashboard is healthy by querying the health endpoint
+/// Returns true if Dashboard is running and responding
+async fn check_dashboard_health(port: u16) -> bool {
+    let health_url = format!("http://127.0.0.1:{}/api/health", port);
+
+    match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+    {
+        Ok(client) => match client.get(&health_url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                tracing::debug!("Dashboard health check passed for port {}", port);
+                true
+            },
+            Ok(resp) => {
+                tracing::debug!("Dashboard health check failed: status {}", resp.status());
+                false
+            },
+            Err(e) => {
+                tracing::debug!("Dashboard health check failed: {}", e);
+                false
+            },
+        },
+        Err(e) => {
+            tracing::error!("Failed to create HTTP client: {}", e);
+            false
+        },
+    }
+}
+
 async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()> {
     use chrono::Utc;
     use intent_engine::dashboard::{daemon, registry::*};
@@ -1462,20 +1492,24 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
             // Load or create registry
             let mut registry = ProjectRegistry::load()?;
 
-            // Check if already running
+            // Check if already running using HTTP health check
             if let Some(existing) = registry.find_by_path(&project_path) {
-                if let Some(pid) = existing.pid {
-                    if daemon::is_process_running(pid) {
-                        println!("Dashboard already running for this project:");
-                        println!("  Port: {}", existing.port);
+                if check_dashboard_health(existing.port).await {
+                    println!("Dashboard already running for this project:");
+                    println!("  Port: {}", existing.port);
+                    if let Some(pid) = existing.pid {
                         println!("  PID: {}", pid);
-                        println!("  URL: http://127.0.0.1:{}", existing.port);
-                        return Ok(());
-                    } else {
-                        // Process is dead, clean up
-                        daemon::delete_pid_file(existing.port).ok();
-                        registry.unregister(&project_path);
                     }
+                    println!("  URL: http://127.0.0.1:{}", existing.port);
+                    return Ok(());
+                } else {
+                    // Dashboard not responding, clean up stale state
+                    tracing::info!(
+                        "Cleaning up stale Dashboard state for {}",
+                        project_path.display()
+                    );
+                    daemon::delete_pid_file(existing.port).ok();
+                    registry.unregister(&project_path);
                 }
             }
 
@@ -1654,8 +1688,10 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 }
                 daemon::write_pid_file(allocated_port, pid)?;
 
-                // Check if process is still running
-                if daemon::is_process_running(pid) {
+                // Wait a moment for server to initialize, then check health
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                if check_dashboard_health(allocated_port).await {
                     let dashboard_url = format!("http://127.0.0.1:{}", allocated_port);
                     println!("✓ Dashboard server started successfully");
                     println!("  PID: {}", pid);
@@ -1694,15 +1730,25 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 let mut stopped_count = 0;
 
                 for project in projects {
-                    if let Some(pid) = project.pid {
-                        if daemon::is_process_running(pid) {
+                    // Check if dashboard is actually running via HTTP health check
+                    let is_healthy = check_dashboard_health(project.port).await;
+
+                    if is_healthy {
+                        if let Some(pid) = project.pid {
                             if let Err(e) = daemon::stop_process(pid) {
                                 eprintln!("Failed to stop {} (PID {}): {}", project.name, pid, e);
                             } else {
                                 println!("Stopped dashboard for: {}", project.name);
                                 stopped_count += 1;
                             }
+                        } else {
+                            eprintln!("Dashboard running but no PID recorded for {}", project.name);
                         }
+                    } else {
+                        tracing::debug!(
+                            "Dashboard for {} not responding, cleaning up stale state",
+                            project.name
+                        );
                     }
 
                     daemon::delete_pid_file(project.port).ok();
@@ -1720,15 +1766,18 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                     let port = project.port;
                     let pid = project.pid;
 
-                    if let Some(pid) = pid {
-                        if daemon::is_process_running(pid) {
+                    // Check if dashboard is actually running via HTTP health check
+                    if check_dashboard_health(port).await {
+                        if let Some(pid) = pid {
                             daemon::stop_process(pid)?;
                             println!("Stopped dashboard (PID: {})", pid);
                         } else {
-                            println!("Dashboard process not running (stale PID: {})", pid);
+                            println!("Dashboard running but no PID recorded");
                         }
+                    } else if let Some(pid) = pid {
+                        println!("Dashboard not responding (stale PID: {}), cleaning up", pid);
                     } else {
-                        println!("Dashboard has no PID recorded");
+                        println!("Dashboard not running");
                     }
 
                     daemon::delete_pid_file(port).ok();
@@ -1763,14 +1812,15 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
 
                 println!("Dashboard instances:");
                 for project in projects {
-                    let status = if let Some(pid) = project.pid {
-                        if daemon::is_process_running(pid) {
+                    // Check dashboard health via HTTP
+                    let status = if check_dashboard_health(project.port).await {
+                        if let Some(pid) = project.pid {
                             format!("✓ Running (PID: {})", pid)
                         } else {
-                            "✗ Stopped (stale PID)".to_string()
+                            "✓ Running".to_string()
                         }
                     } else {
-                        "? Unknown (no PID)".to_string()
+                        "✗ Stopped".to_string()
                     };
 
                     println!("\n  Project: {}", project.name);
@@ -1786,14 +1836,15 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 let project_path = project_ctx.root.clone();
 
                 if let Some(project) = registry.find_by_path(&project_path) {
-                    let status = if let Some(pid) = project.pid {
-                        if daemon::is_process_running(pid) {
+                    // Check dashboard health via HTTP
+                    let status = if check_dashboard_health(project.port).await {
+                        if let Some(pid) = project.pid {
                             format!("✓ Running (PID: {})", pid)
                         } else {
-                            "✗ Stopped (stale PID)".to_string()
+                            "✓ Running".to_string()
                         }
                     } else {
-                        "? Unknown (no PID)".to_string()
+                        "✗ Stopped".to_string()
                     };
 
                     println!("Dashboard status:");
@@ -1828,14 +1879,11 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
             println!("{}", "-".repeat(80));
 
             for project in projects {
-                let status = if let Some(pid) = project.pid {
-                    if daemon::is_process_running(pid) {
-                        "Running"
-                    } else {
-                        "Stopped"
-                    }
+                // Check dashboard health via HTTP
+                let status = if check_dashboard_health(project.port).await {
+                    "Running"
                 } else {
-                    "Unknown"
+                    "Stopped"
                 };
 
                 println!(
@@ -1856,17 +1904,13 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
             let project_path = project_ctx.root.clone();
 
             if let Some(project) = registry.find_by_path(&project_path) {
-                // Check if dashboard is running
-                if let Some(pid) = project.pid {
-                    if !daemon::is_process_running(pid) {
-                        eprintln!("Dashboard is not running");
-                        eprintln!("Start it with: ie dashboard start");
-                        return Err(IntentError::InvalidInput(
-                            "Dashboard not running".to_string(),
-                        ));
-                    }
-                } else {
-                    eprintln!("Dashboard status unknown");
+                // Check if dashboard is running via HTTP health check
+                if !check_dashboard_health(project.port).await {
+                    eprintln!("Dashboard is not running");
+                    eprintln!("Start it with: ie dashboard start");
+                    return Err(IntentError::InvalidInput(
+                        "Dashboard not running".to_string(),
+                    ));
                 }
 
                 let url = format!("http://127.0.0.1:{}", project.port);
