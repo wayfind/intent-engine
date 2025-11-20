@@ -37,8 +37,6 @@ pub struct AppState {
     /// Current active project (wrapped in `Arc<RwLock>` for dynamic switching)
     pub current_project: Arc<RwLock<ProjectContext>>,
     pub port: u16,
-    /// WebSocket state for real-time connections
-    pub ws_state: super::websocket::WebSocketState,
 }
 
 /// Dashboard server instance
@@ -111,7 +109,6 @@ impl DashboardServer {
         let state = AppState {
             current_project: Arc::new(RwLock::new(project_context)),
             port: self.port,
-            ws_state: super::websocket::WebSocketState::new(),
         };
 
         // Build router
@@ -145,20 +142,12 @@ impl DashboardServer {
 /// Create the Axum router with all routes and middleware
 fn create_router(state: AppState) -> Router {
     use super::routes;
-    use super::websocket;
 
     // Combine basic API routes with full API routes
     let api_routes = Router::new()
         .route("/health", get(health_handler))
         .route("/info", get(info_handler))
         .merge(routes::api_routes());
-
-    // WebSocket routes with their own state
-    let ws_state = state.ws_state.clone();
-    let ws_routes = Router::new()
-        .route("/ws/mcp", get(websocket::handle_mcp_websocket))
-        .route("/ws/ui", get(websocket::handle_ui_websocket))
-        .with_state(ws_state);
 
     // Main router
     Router::new()
@@ -168,11 +157,9 @@ fn create_router(state: AppState) -> Router {
         .route("/static/*path", get(serve_static))
         // API routes under /api prefix
         .nest("/api", api_routes)
-        // Merge WebSocket routes
-        .merge(ws_routes)
         // Fallback to 404
         .fallback(not_found_handler)
-        // Add state for regular routes
+        // Add state
         .with_state(state)
         // Add middleware
         .layer(

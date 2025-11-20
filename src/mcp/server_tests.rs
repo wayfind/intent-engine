@@ -11,8 +11,12 @@ use serial_test::serial;
 /// Helper function to set up test environment with proper isolation
 async fn setup_test_env() -> TestContext {
     let ctx = TestContext::new().await;
-    // Project directory is automatically detected via project markers (.git, Cargo.toml, etc.)
-    // No need to set environment variables
+    std::env::set_var(
+        "INTENT_ENGINE_PROJECT_DIR",
+        ctx.project_root()
+            .to_str()
+            .expect("Project root should be valid UTF-8"),
+    );
     ctx
 }
 

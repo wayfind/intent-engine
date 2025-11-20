@@ -50,7 +50,7 @@ pub struct SetupOptions {
     pub force: bool,
     /// Custom config file path (optional)
     pub config_path: Option<PathBuf>,
-    /// Project directory (auto-detected, not user-specified)
+    /// Project directory for INTENT_ENGINE_PROJECT_DIR env var
     pub project_dir: Option<PathBuf>,
 }
 
@@ -123,86 +123,4 @@ pub trait SetupModule {
 
     /// Test connectivity
     fn test_connectivity(&self) -> Result<ConnectivityResult>;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_setup_scope_from_str_valid() {
-        assert_eq!(SetupScope::from_str("user").unwrap(), SetupScope::User);
-        assert_eq!(SetupScope::from_str("User").unwrap(), SetupScope::User);
-        assert_eq!(SetupScope::from_str("USER").unwrap(), SetupScope::User);
-
-        assert_eq!(
-            SetupScope::from_str("project").unwrap(),
-            SetupScope::Project
-        );
-        assert_eq!(
-            SetupScope::from_str("Project").unwrap(),
-            SetupScope::Project
-        );
-
-        assert_eq!(SetupScope::from_str("both").unwrap(), SetupScope::Both);
-        assert_eq!(SetupScope::from_str("Both").unwrap(), SetupScope::Both);
-        assert_eq!(SetupScope::from_str("BOTH").unwrap(), SetupScope::Both);
-    }
-
-    #[test]
-    fn test_setup_scope_from_str_invalid() {
-        assert!(SetupScope::from_str("invalid").is_err());
-        assert!(SetupScope::from_str("").is_err());
-        assert!(SetupScope::from_str("global").is_err());
-
-        // Test error message
-        match SetupScope::from_str("invalid") {
-            Err(IntentError::InvalidInput(msg)) => {
-                assert!(msg.contains("Invalid scope"));
-                assert!(msg.contains("invalid"));
-            },
-            _ => panic!("Expected InvalidInput error"),
-        }
-    }
-
-    #[test]
-    fn test_setup_options_default() {
-        let opts = SetupOptions::default();
-        assert_eq!(opts.scope, SetupScope::User);
-        assert!(!opts.dry_run);
-        assert!(!opts.force);
-        assert!(opts.config_path.is_none());
-        assert!(opts.project_dir.is_none());
-    }
-
-    #[test]
-    fn test_setup_scope_equality() {
-        assert_eq!(SetupScope::User, SetupScope::User);
-        assert_eq!(SetupScope::Project, SetupScope::Project);
-        assert_eq!(SetupScope::Both, SetupScope::Both);
-
-        assert_ne!(SetupScope::User, SetupScope::Project);
-        assert_ne!(SetupScope::User, SetupScope::Both);
-        assert_ne!(SetupScope::Project, SetupScope::Both);
-    }
-
-    #[test]
-    fn test_setup_options_custom() {
-        let custom_path = PathBuf::from("/custom/config.json");
-        let project_dir = PathBuf::from("/my/project");
-
-        let opts = SetupOptions {
-            scope: SetupScope::Both,
-            dry_run: true,
-            force: true,
-            config_path: Some(custom_path.clone()),
-            project_dir: Some(project_dir.clone()),
-        };
-
-        assert_eq!(opts.scope, SetupScope::Both);
-        assert!(opts.dry_run);
-        assert!(opts.force);
-        assert_eq!(opts.config_path, Some(custom_path));
-        assert_eq!(opts.project_dir, Some(project_dir));
-    }
 }

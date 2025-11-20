@@ -153,6 +153,10 @@ pub enum Commands {
         /// Custom config file path (advanced)
         #[arg(long)]
         config_path: Option<String>,
+
+        /// Project directory for INTENT_ENGINE_PROJECT_DIR env var
+        #[arg(long)]
+        project_dir: Option<String>,
     },
 
     // ========================================

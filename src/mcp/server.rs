@@ -85,26 +85,30 @@ pub async fn run() -> io::Result<()> {
         });
     }
 
-    // Connect to Dashboard via WebSocket (replaces Registry registration)
-    // This handles both registration and keep-alive (ping/pong)
-    if !skip_dashboard && is_dashboard_running().await {
-        let project_root = ctx.root.clone();
-        let db_path = ctx.db_path.clone();
-        let agent = detect_agent_type();
+    // Register MCP connection in the global registry (non-blocking)
+    let project_root = ctx.root.clone();
+    tokio::task::spawn_blocking(move || {
+        let _ = register_mcp_connection(&project_root);
+        // Silently fail - not critical for MCP server operation
+    });
 
-        tokio::spawn(async move {
-            if let Err(e) =
-                super::ws_client::connect_to_dashboard(project_root, db_path, agent).await
-            {
-                tracing::warn!("Failed to connect to Dashboard WebSocket: {}", e);
-                // Silently fail - MCP server can work without Dashboard connection
-            }
-        });
-    }
+    // Start heartbeat task
+    let project_path = ctx.root.clone();
+    let heartbeat_handle = tokio::spawn(async move {
+        heartbeat_task(project_path).await;
+    });
 
     // Run the MCP server
-    // WebSocket connection will be automatically cleaned up when tasks are dropped
-    run_server().await
+    let result = run_server().await;
+
+    // Clean up: unregister MCP connection
+    let _ = unregister_mcp_connection(&ctx.root);
+    // Silently fail - cleanup error not critical
+
+    // Cancel heartbeat task
+    heartbeat_handle.abort();
+
+    result
 }
 
 async fn run_server() -> io::Result<()> {
@@ -251,7 +255,6 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
         "search" => handle_unified_search(params.arguments).await,
         "current_task_get" => handle_current_task_get(params.arguments).await,
         "report_generate" => handle_report_generate(params.arguments).await,
-        "plan" => handle_plan(params.arguments).await,
         _ => Err(format!("Unknown tool: {}", params.name)),
     }?;
 
@@ -298,29 +301,6 @@ async fn handle_task_add(args: Value) -> Result<Value, String> {
         .map_err(|e| format!("Failed to add task: {}", e))?;
 
     serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
-}
-
-async fn handle_plan(args: Value) -> Result<Value, String> {
-    use crate::plan::{PlanExecutor, PlanRequest};
-
-    // Parse request
-    let request: PlanRequest =
-        serde_json::from_value(args).map_err(|e| format!("Invalid plan request: {}", e))?;
-
-    // Load project context
-    let ctx = ProjectContext::load_or_init()
-        .await
-        .map_err(|e| format!("Failed to load project context: {}", e))?;
-
-    // Execute plan
-    let executor = PlanExecutor::new(&ctx.pool);
-    let result = executor
-        .execute(&request)
-        .await
-        .map_err(|e| format!("Failed to execute plan: {}", e))?;
-
-    // Serialize result
-    serde_json::to_value(&result).map_err(|e| format!("Serialization error: {}", e))
 }
 
 async fn handle_task_add_dependency(args: Value) -> Result<Value, String> {
@@ -758,6 +738,68 @@ async fn handle_report_generate(args: Value) -> Result<Value, String> {
 // ============================================================================
 
 /// Register this MCP server instance with the global project registry
+fn register_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()> {
+    use crate::dashboard::registry::ProjectRegistry;
+
+    let mut registry = ProjectRegistry::load()?;
+
+    // Detect agent type from environment (Claude Code sets specific env vars)
+    let agent_name = detect_agent_type();
+
+    // Normalize the path to handle symlinks (e.g., ~/prj -> /mnt/d/prj)
+    let normalized_path = project_path
+        .canonicalize()
+        .unwrap_or_else(|_| project_path.to_path_buf());
+
+    // Register MCP connection - this will create a project entry if none exists
+    registry.register_mcp_connection(&normalized_path, agent_name)?;
+
+    // Silently register - eprintln! removed to prevent Windows stderr buffer blocking
+
+    Ok(())
+}
+
+/// Unregister this MCP server instance from the global project registry
+fn unregister_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()> {
+    use crate::dashboard::registry::ProjectRegistry;
+
+    let mut registry = ProjectRegistry::load()?;
+
+    // Normalize the path to handle symlinks (e.g., ~/prj -> /mnt/d/prj)
+    let normalized_path = project_path
+        .canonicalize()
+        .unwrap_or_else(|_| project_path.to_path_buf());
+
+    registry.unregister_mcp_connection(&normalized_path)?;
+
+    // Silently unregister - eprintln! removed to prevent Windows stderr buffer blocking
+
+    Ok(())
+}
+
+/// Heartbeat task that keeps the MCP connection alive
+async fn heartbeat_task(project_path: std::path::PathBuf) {
+    use crate::dashboard::registry::ProjectRegistry;
+
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+
+    loop {
+        interval.tick().await;
+
+        // Update heartbeat (non-blocking)
+        let path = project_path.clone();
+        tokio::task::spawn_blocking(move || {
+            // Normalize the path to handle symlinks (e.g., ~/prj -> /mnt/d/prj)
+            let normalized_path = path.canonicalize().unwrap_or_else(|_| path.clone());
+
+            if let Ok(mut registry) = ProjectRegistry::load() {
+                let _ = registry.update_mcp_heartbeat(&normalized_path);
+                // Silently fail - heartbeat error not critical
+            }
+        });
+    }
+}
+
 /// Detect the agent type from environment variables
 fn detect_agent_type() -> Option<String> {
     // Check for Claude Code specific environment variables

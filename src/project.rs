@@ -39,6 +39,9 @@ pub struct DirectoryTraversalInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DatabasePathInfo {
     pub current_working_directory: String,
+    pub env_var_set: bool,
+    pub env_var_path: Option<String>,
+    pub env_var_valid: Option<bool>,
     pub directories_checked: Vec<DirectoryTraversalInfo>,
     pub home_directory: Option<String>,
     pub home_has_intent_engine: bool,
@@ -59,6 +62,9 @@ impl ProjectContext {
 
         let mut info = DatabasePathInfo {
             current_working_directory: cwd.clone(),
+            env_var_set: false,
+            env_var_path: None,
+            env_var_valid: None,
             directories_checked: Vec::new(),
             home_directory: None,
             home_has_intent_engine: false,
@@ -66,7 +72,26 @@ impl ProjectContext {
             resolution_method: None,
         };
 
-        // Check strategy 1: Upward directory traversal
+        // Check strategy 1: Environment variable
+        if let Ok(env_path) = std::env::var("INTENT_ENGINE_PROJECT_DIR") {
+            info.env_var_set = true;
+            info.env_var_path = Some(env_path.clone());
+
+            let path = PathBuf::from(&env_path);
+            let intent_dir = path.join(INTENT_DIR);
+            let has_intent_engine = intent_dir.exists() && intent_dir.is_dir();
+            info.env_var_valid = Some(has_intent_engine);
+
+            if has_intent_engine {
+                let db_path = intent_dir.join(DB_FILE);
+                info.final_database_path = Some(db_path.display().to_string());
+                info.resolution_method =
+                    Some("Environment Variable (INTENT_ENGINE_PROJECT_DIR)".to_string());
+                return info;
+            }
+        }
+
+        // Check strategy 2: Upward directory traversal
         if let Ok(mut current) = std::env::current_dir() {
             loop {
                 let intent_dir = current.join(INTENT_DIR);
@@ -93,7 +118,7 @@ impl ProjectContext {
             }
         }
 
-        // Check strategy 2: Home directory
+        // Check strategy 3: Home directory
         #[cfg(not(target_os = "windows"))]
         let home_path = std::env::var("HOME").ok().map(PathBuf::from);
 
@@ -121,24 +146,41 @@ impl ProjectContext {
     /// Find the project root by searching upwards for .intent-engine directory
     ///
     /// Search strategy (in priority order):
-    /// 1. Search upwards from current directory for .intent-engine/, but:
+    /// 1. Check INTENT_ENGINE_PROJECT_DIR environment variable
+    /// 2. Search upwards from current directory for .intent-engine/, but:
     ///    - Stop at project boundary (defined by PROJECT_ROOT_MARKERS)
     ///    - Do NOT cross into parent projects to prevent database mixing
-    /// 2. If no project boundary detected, check user's home directory for .intent-engine/
+    /// 3. Check user's home directory for .intent-engine/
     ///
-    /// **Important**: This function respects project boundaries to maintain data isolation.
-    /// If inside a project (detected by markers like .git, Cargo.toml, etc.), only that
-    /// project's database will be used, even if not yet initialized.
+    /// **Important**: This function now respects project boundaries to prevent
+    /// nested projects from accidentally using parent project databases.
     pub fn find_project_root() -> Option<PathBuf> {
-        // Strategy 1: Search upwards from current directory
+        // Strategy 1: Check environment variable (highest priority)
+        if let Ok(env_path) = std::env::var("INTENT_ENGINE_PROJECT_DIR") {
+            let path = PathBuf::from(env_path);
+            let intent_dir = path.join(INTENT_DIR);
+            if intent_dir.exists() && intent_dir.is_dir() {
+                eprintln!(
+                    "✓ Using project from INTENT_ENGINE_PROJECT_DIR: {}",
+                    path.display()
+                );
+                return Some(path);
+            } else {
+                eprintln!(
+                    "⚠ INTENT_ENGINE_PROJECT_DIR set but no .intent-engine found: {}",
+                    path.display()
+                );
+            }
+        }
+
+        // Strategy 2: Search upwards from current directory
         // BUT respect project boundaries (don't cross into parent projects)
-
-        // First, find the boundary of the current project (if any)
-        // This is the directory that contains a project marker
-        let project_boundary = Self::infer_project_root();
-
         if let Ok(current_dir) = std::env::current_dir() {
             let start_dir = current_dir.clone();
+
+            // First, find the boundary of the current project (if any)
+            // This is the directory that contains a project marker
+            let project_boundary = Self::infer_project_root();
 
             let mut current = start_dir.clone();
             loop {
@@ -165,14 +207,12 @@ impl ProjectContext {
                 }
 
                 // Check if we've reached the project boundary
-                // If so, return the project root (don't cross into parent projects)
+                // If so, stop searching (don't go into parent projects)
                 if let Some(ref boundary) = project_boundary {
                     if current == *boundary {
-                        // We've reached the project boundary without finding .intent-engine
-                        // Return the project root to maintain data isolation
-                        // The load_or_init mechanism will handle initialization if needed
-                        eprintln!("✓ Detected project root: {}", boundary.display());
-                        return Some(boundary.clone());
+                        // We've reached the boundary without finding .intent-engine
+                        // Stop here and return None (will trigger initialization)
+                        break;
                     }
                 }
 
@@ -182,44 +222,24 @@ impl ProjectContext {
             }
         }
 
-        // Strategy 3: Home directory fallback
-        // ONLY use if no project boundary was detected (maintains data isolation)
-        if project_boundary.is_none() {
-            if let Ok(home) = std::env::var("HOME") {
-                let home_path = PathBuf::from(home);
-                let intent_dir = home_path.join(INTENT_DIR);
-                if intent_dir.exists() && intent_dir.is_dir() {
-                    eprintln!(
-                        "⚠ No project detected, using home database: {}",
-                        home_path.display()
-                    );
-                    eprintln!(
-                        "💡 Run 'ie' inside a project directory (with .git, Cargo.toml, etc.)"
-                    );
-                    eprintln!("   to use project-specific task tracking");
-                    return Some(home_path);
-                }
+        // Strategy 3: Check user's home directory (fallback)
+        if let Ok(home) = std::env::var("HOME") {
+            let home_path = PathBuf::from(home);
+            let intent_dir = home_path.join(INTENT_DIR);
+            if intent_dir.exists() && intent_dir.is_dir() {
+                eprintln!("✓ Using home project: {}", home_path.display());
+                return Some(home_path);
             }
         }
 
         // Windows: also check USERPROFILE
-        // ONLY use if no project boundary was detected (maintains data isolation)
         #[cfg(target_os = "windows")]
-        if project_boundary.is_none() {
-            if let Ok(userprofile) = std::env::var("USERPROFILE") {
-                let home_path = PathBuf::from(userprofile);
-                let intent_dir = home_path.join(INTENT_DIR);
-                if intent_dir.exists() && intent_dir.is_dir() {
-                    eprintln!(
-                        "⚠ No project detected, using home database: {}",
-                        home_path.display()
-                    );
-                    eprintln!(
-                        "💡 Run 'ie' inside a project directory (with .git, Cargo.toml, etc.)"
-                    );
-                    eprintln!("   to use project-specific task tracking");
-                    return Some(home_path);
-                }
+        if let Ok(userprofile) = std::env::var("USERPROFILE") {
+            let home_path = PathBuf::from(userprofile);
+            let intent_dir = home_path.join(INTENT_DIR);
+            if intent_dir.exists() && intent_dir.is_dir() {
+                eprintln!("✓ Using home project: {}", home_path.display());
+                return Some(home_path);
             }
         }
 
@@ -390,11 +410,6 @@ impl ProjectContext {
         let db_path = root.join(INTENT_DIR).join(DB_FILE);
 
         let pool = create_pool(&db_path).await?;
-
-        // Always ensure migrations are run (idempotent operation)
-        // This ensures database schema is always up-to-date and handles cases where
-        // .intent-engine directory exists but database is incomplete
-        run_migrations(&pool).await?;
 
         Ok(ProjectContext {
             root,
@@ -1265,5 +1280,40 @@ mod tests {
         let json = serde_json::to_string(&info).unwrap();
         let deserialized: DatabasePathInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.current_working_directory, long_path);
+    }
+
+    /// Test get_database_path_info env var handling
+    #[test]
+    fn test_get_database_path_info_env_var_detection() {
+        let info = ProjectContext::get_database_path_info();
+
+        // Check if INTENT_ENGINE_PROJECT_DIR is set
+        if std::env::var("INTENT_ENGINE_PROJECT_DIR").is_ok() {
+            assert!(
+                info.env_var_set,
+                "env_var_set should be true when INTENT_ENGINE_PROJECT_DIR is set"
+            );
+            assert!(
+                info.env_var_path.is_some(),
+                "env_var_path should contain the path when env var is set"
+            );
+            assert!(
+                info.env_var_valid.is_some(),
+                "env_var_valid should be set when env var is present"
+            );
+        } else {
+            assert!(
+                !info.env_var_set,
+                "env_var_set should be false when INTENT_ENGINE_PROJECT_DIR is not set"
+            );
+            assert!(
+                info.env_var_path.is_none(),
+                "env_var_path should be None when env var is not set"
+            );
+            assert!(
+                info.env_var_valid.is_none(),
+                "env_var_valid should be None when env var is not set"
+            );
+        }
     }
 }
