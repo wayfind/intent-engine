@@ -175,6 +175,7 @@ impl ProjectContext {
 
         // Strategy 2: Search upwards from current directory
         // BUT respect project boundaries (don't cross into parent projects)
+        // UNLESS we're not inside any project (to support MCP server startup)
         if let Ok(current_dir) = std::env::current_dir() {
             let start_dir = current_dir.clone();
 
@@ -190,6 +191,7 @@ impl ProjectContext {
 
                     // Check if we're within or at the project boundary
                     // If there's a project boundary and we've crossed it, don't use this .intent-engine
+                    // BUT: if project_boundary is None (not in any project), allow searching anywhere
                     if let Some(ref boundary) = project_boundary {
                         // Check if the found .intent-engine is within our project boundary
                         // (current path should be equal to or a child of boundary)

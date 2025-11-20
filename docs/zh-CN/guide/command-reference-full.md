@@ -1122,7 +1122,6 @@ ie setup [OPTIONS]
 - `--force` - 强制覆盖现有配置
 - `--diagnose` - 诊断现有设置而不安装
 - `--config-path <CONFIG_PATH>` - 自定义配置文件路径（高级用法）
-- `--project-dir <PROJECT_DIR>` - 为 INTENT_ENGINE_PROJECT_DIR 环境变量指定项目目录
 
 **特性:**
 - 支持用户级或项目级安装

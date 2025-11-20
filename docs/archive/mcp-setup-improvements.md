@@ -1,5 +1,9 @@
 # MCP 配置和 Doctor 命令改进总结
 
+> **⚠️ ARCHIVED**: This document describes historical implementation that has been superseded.
+>
+> **IMPORTANT**: As of the project boundary detection refactor, `INTENT_ENGINE_PROJECT_DIR` environment variable has been removed. Project directories are now automatically detected via project markers (`.git`, `Cargo.toml`, etc.). See current documentation in `docs/*/integration/mcp-server.md` for up-to-date configuration.
+
 ## 完成的任务
 
 ### 任务 #18: 完善 MCP 安装配置到 ~/.claude.json ✅

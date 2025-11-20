@@ -1085,7 +1085,6 @@ ie setup [OPTIONS]
 - `--force` - Force overwrite existing configuration
 - `--diagnose` - Diagnose existing setup instead of installing
 - `--config-path <CONFIG_PATH>` - Custom config file path (advanced)
-- `--project-dir <PROJECT_DIR>` - Project directory for INTENT_ENGINE_PROJECT_DIR env var
 
 **Features:**
 - Support for user-level or project-level installation

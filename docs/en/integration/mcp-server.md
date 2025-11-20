@@ -66,9 +66,6 @@ Add Intent-Engine server configuration:
     "intent-engine": {
       "command": "/home/user/.cargo/bin/intent-engine",
       "args": ["mcp-server"],
-      "env": {
-        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
-      },
       "description": "Strategic intent and task workflow management for human-AI collaboration"
     }
   }
@@ -80,9 +77,7 @@ Add Intent-Engine server configuration:
   - Using `cargo install`: `~/.cargo/bin/intent-engine`
   - Copied to system path: `/usr/local/bin/intent-engine`
 - `args`: Must include `["mcp-server"]` to start MCP server mode
-- `env`: Environment variables
-  - `INTENT_ENGINE_PROJECT_DIR`: Absolute path to project root
-  - Replace `/path/to/your/project` with your actual project path
+- Project directory is automatically detected (based on `.git`, `Cargo.toml`, etc. markers)
 - Use absolute paths for reliability
 
 #### Step 3: Restart Claude Code
@@ -99,11 +94,8 @@ cd /path/to/your/project
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
   ie mcp-server
 
-# Or using environment variable
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project ie mcp-server
-
 # Should return JSON response with 13 tools
+# Project directory is automatically detected via .git, Cargo.toml, etc.
 ```
 
 ### Verify in Claude Code
@@ -238,10 +230,7 @@ If relative paths or `~` symbols don't work, use **absolute paths**:
   "mcpServers": {
     "intent-engine": {
       "command": "/home/username/.cargo/bin/intent-engine",
-      "args": ["mcp-server"],
-      "env": {
-        "INTENT_ENGINE_PROJECT_DIR": "/home/username/your-project"
-      }
+      "args": ["mcp-server"]
     }
   }
 }
@@ -256,13 +245,9 @@ cat << 'EOF' | ie mcp-server
 {"jsonrpc":"2.0","id":1,"method":"tools/list"}
 EOF
 
-# Or using environment variable
-cat << 'EOF' | INTENT_ENGINE_PROJECT_DIR=/path/to/your/project ie mcp-server
-{"jsonrpc":"2.0","id":1,"method":"tools/list"}
-EOF
-
 # Expected: JSON response with 13 tools
 # Errors will be output to stderr
+# Project directory is automatically detected (via .git, Cargo.toml, etc.)
 ```
 
 ## Uninstall
@@ -301,30 +286,23 @@ Intent-Engine supports multi-project isolation, with each project having its own
 /home/user/project-b/.intent-engine/project.db  # Project B tasks
 ```
 
-**Configuration approach**: Configure separate MCP server instances for each project using different `INTENT_ENGINE_PROJECT_DIR`:
+**Configuration approach**: Use a single configuration, and Intent-Engine will automatically discover the project based on Claude Code's current working directory:
 
 ```json
 {
   "mcpServers": {
-    "intent-engine-project-a": {
+    "intent-engine": {
       "command": "/home/user/.cargo/bin/intent-engine",
-      "args": ["mcp-server"],
-      "env": {
-        "INTENT_ENGINE_PROJECT_DIR": "/home/user/project-a"
-      }
-    },
-    "intent-engine-project-b": {
-      "command": "/home/user/.cargo/bin/intent-engine",
-      "args": ["mcp-server"],
-      "env": {
-        "INTENT_ENGINE_PROJECT_DIR": "/home/user/project-b"
-      }
+      "args": ["mcp-server"]
     }
   }
 }
 ```
 
-Alternatively, use a single configuration and let Intent-Engine automatically discover the project based on Claude Code's current working directory (searches upward for `.intent-engine/` directory).
+**Automatic project discovery**:
+- If in a project directory (detected by `.git`, `Cargo.toml`, etc. markers) → uses that project's database
+- If not in a project → searches upward for nearest `.intent-engine/` directory
+- Data isolation is completely automatic, no manual configuration needed
 
 ### Using with Claude Desktop
 
@@ -340,11 +318,10 @@ Configuration format is the same:
   "mcpServers": {
     "intent-engine": {
       "command": "/home/user/.cargo/bin/intent-engine",
-      "args": ["mcp-server"],
-      "env": {
-        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
-      }
+      "args": ["mcp-server"]
     }
   }
 }
 ```
+
+**Note**: Project directory is automatically detected based on Claude Desktop's working directory, no manual configuration needed.
