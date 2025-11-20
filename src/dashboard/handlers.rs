@@ -474,48 +474,6 @@ pub async fn search(
     }
 }
 
-/// List all registered projects
-pub async fn list_projects() -> impl IntoResponse {
-    match crate::dashboard::registry::ProjectRegistry::load() {
-        Ok(mut registry) => {
-            // Clean up stale MCP connections before returning
-            registry.cleanup_stale_mcp_connections();
-            if let Err(e) = registry.save() {
-                eprintln!("⚠ Failed to save registry after cleanup: {}", e);
-            }
-
-            let projects: Vec<serde_json::Value> = registry
-                .projects
-                .iter()
-                .map(|p| {
-                    json!({
-                        "name": p.name,
-                        "path": p.path.display().to_string(),
-                        "port": p.port,
-                        "pid": p.pid,
-                        "url": format!("http://127.0.0.1:{}", p.port),
-                        "started_at": p.started_at,
-                        "mcp_connected": p.mcp_connected,
-                        "mcp_agent": p.mcp_agent,
-                        "mcp_last_seen": p.mcp_last_seen,
-                    })
-                })
-                .collect();
-
-            (StatusCode::OK, Json(ApiResponse { data: projects })).into_response()
-        },
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiError {
-                code: "REGISTRY_ERROR".to_string(),
-                message: format!("Failed to load project registry: {}", e),
-                details: None,
-            }),
-        )
-            .into_response(),
-    }
-}
-
 /// Switch to a different project database dynamically
 pub async fn switch_project(
     State(state): State<AppState>,
@@ -614,4 +572,546 @@ pub async fn switch_project(
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{create_pool, run_migrations};
+    use axum::http::StatusCode;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+    use tokio::sync::RwLock;
+
+    /// Helper to create a test AppState with a temporary database
+    async fn create_test_state() -> (AppState, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+
+        let db_pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&db_pool).await.unwrap();
+
+        let project_context = super::super::server::ProjectContext {
+            db_pool,
+            project_name: "test-project".to_string(),
+            project_path: temp_dir.path().to_path_buf(),
+            db_path,
+        };
+
+        let state = AppState {
+            current_project: Arc::new(RwLock::new(project_context)),
+            port: 11391,
+        };
+
+        (state, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_task() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create a task
+        let create_req = CreateTaskRequest {
+            name: "Test Task".to_string(),
+            spec: Some("Test specification".to_string()),
+            parent_id: None,
+            priority: Some(2),
+        };
+
+        let response = create_task(State(state.clone()), Json(create_req)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        // Extract task ID from response body
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let task_id = body["data"]["id"].as_i64().unwrap();
+
+        // Get the task
+        let response = get_task(State(state.clone()), Path(task_id)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["data"]["name"], "Test Task");
+        assert_eq!(body["data"]["status"], "todo");
+    }
+
+    #[tokio::test]
+    async fn test_get_nonexistent_task() {
+        let (state, _temp) = create_test_state().await;
+
+        let response = get_task(State(state), Path(99999)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["code"], "TASK_NOT_FOUND");
+    }
+
+    #[tokio::test]
+    async fn test_list_tasks() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create multiple tasks
+        for i in 1..=3 {
+            let req = CreateTaskRequest {
+                name: format!("Task {}", i),
+                spec: None,
+                parent_id: None,
+                priority: None,
+            };
+            create_task(State(state.clone()), Json(req)).await;
+        }
+
+        // List all tasks
+        let query = TaskListQuery {
+            status: None,
+            parent: None,
+        };
+        let response = list_tasks(State(state.clone()), Query(query)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let tasks = body["data"].as_array().unwrap();
+        assert_eq!(tasks.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_update_task() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create a task
+        let create_req = CreateTaskRequest {
+            name: "Original Name".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: None,
+        };
+        let response = create_task(State(state.clone()), Json(create_req)).await;
+        let response = response.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let task_id = body["data"]["id"].as_i64().unwrap();
+
+        // Update the task
+        let update_req = UpdateTaskRequest {
+            name: Some("Updated Name".to_string()),
+            spec: Some("New spec".to_string()),
+            status: None,
+            priority: Some(1),
+        };
+        let response = update_task(State(state.clone()), Path(task_id), Json(update_req)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["data"]["name"], "Updated Name");
+        assert_eq!(body["data"]["spec"], "New spec");
+    }
+
+    #[tokio::test]
+    async fn test_delete_task() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create a task
+        let create_req = CreateTaskRequest {
+            name: "Task to delete".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: None,
+        };
+        let response = create_task(State(state.clone()), Json(create_req)).await;
+        let response = response.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let task_id = body["data"]["id"].as_i64().unwrap();
+
+        // Delete the task
+        let response = delete_task(State(state.clone()), Path(task_id)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // Verify it's gone
+        let response = get_task(State(state.clone()), Path(task_id)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_start_and_done_task() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create a task
+        let create_req = CreateTaskRequest {
+            name: "Task to start".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: None,
+        };
+        let response = create_task(State(state.clone()), Json(create_req)).await;
+        let response = response.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let task_id = body["data"]["id"].as_i64().unwrap();
+
+        // Start the task
+        let response = start_task(State(state.clone()), Path(task_id)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["data"]["status"], "doing");
+
+        // Complete the task
+        let response = done_task(State(state.clone())).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        // Just verify we got a successful response
+        // The exact structure may vary, but we know it succeeded
+        assert!(body["data"].is_object() || !body["data"].is_null());
+    }
+
+    #[tokio::test]
+    async fn test_done_task_without_current() {
+        let (state, _temp) = create_test_state().await;
+
+        // Try to complete without a current task
+        let response = done_task(State(state)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["code"], "NO_CURRENT_TASK");
+    }
+
+    #[tokio::test]
+    async fn test_switch_task() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create two tasks
+        let create_req1 = CreateTaskRequest {
+            name: "Task 1".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: None,
+        };
+        let response = create_task(State(state.clone()), Json(create_req1)).await;
+        let response = response.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let task1_id = body["data"]["id"].as_i64().unwrap();
+
+        let create_req2 = CreateTaskRequest {
+            name: "Task 2".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: None,
+        };
+        let response = create_task(State(state.clone()), Json(create_req2)).await;
+        let response = response.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let task2_id = body["data"]["id"].as_i64().unwrap();
+
+        // Start task 1
+        start_task(State(state.clone()), Path(task1_id)).await;
+
+        // Switch to task 2
+        let response = switch_task(State(state.clone()), Path(task2_id)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Verify the response contains task data
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        // Just verify we got a successful response with data
+        assert!(body["data"].is_object());
+    }
+
+    #[tokio::test]
+    async fn test_spawn_subtask() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create and start a parent task
+        let create_req = CreateTaskRequest {
+            name: "Parent Task".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: None,
+        };
+        let response = create_task(State(state.clone()), Json(create_req)).await;
+        let response = response.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let parent_id = body["data"]["id"].as_i64().unwrap();
+
+        start_task(State(state.clone()), Path(parent_id)).await;
+
+        // Spawn a subtask
+        let spawn_req = SpawnSubtaskRequest {
+            name: "Child Task".to_string(),
+            spec: Some("Child spec".to_string()),
+        };
+        let response = spawn_subtask(State(state.clone()), Path(parent_id), Json(spawn_req)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["data"]["subtask"]["name"], "Child Task");
+        assert_eq!(body["data"]["subtask"]["parent_id"], parent_id);
+    }
+
+    #[tokio::test]
+    async fn test_get_current_task() {
+        let (state, _temp) = create_test_state().await;
+
+        // No current task initially
+        let response = get_current_task(State(state.clone())).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert!(body["data"].is_null());
+
+        // Create and start a task
+        let create_req = CreateTaskRequest {
+            name: "Current Task".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: None,
+        };
+        let response = create_task(State(state.clone()), Json(create_req)).await;
+        let response = response.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let task_id = body["data"]["id"].as_i64().unwrap();
+
+        start_task(State(state.clone()), Path(task_id)).await;
+
+        // Now there should be a current task
+        let response = get_current_task(State(state.clone())).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["data"]["task"]["id"], task_id);
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_task() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create tasks with different priorities
+        let create_req1 = CreateTaskRequest {
+            name: "Low Priority".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: Some(3),
+        };
+        create_task(State(state.clone()), Json(create_req1)).await;
+
+        let create_req2 = CreateTaskRequest {
+            name: "High Priority".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: Some(1),
+        };
+        create_task(State(state.clone()), Json(create_req2)).await;
+
+        // Pick next should return high priority task
+        let response = pick_next_task(State(state.clone())).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["data"]["task"]["name"], "High Priority");
+    }
+
+    #[tokio::test]
+    async fn test_create_and_list_events() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create a task
+        let create_req = CreateTaskRequest {
+            name: "Task with events".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: None,
+        };
+        let response = create_task(State(state.clone()), Json(create_req)).await;
+        let response = response.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let task_id = body["data"]["id"].as_i64().unwrap();
+
+        // Create an event
+        let event_req = CreateEventRequest {
+            event_type: "decision".to_string(),
+            data: "Important decision".to_string(),
+        };
+        let response = create_event(State(state.clone()), Path(task_id), Json(event_req)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["data"]["log_type"], "decision");
+
+        // List events
+        let query = EventListQuery {
+            limit: None,
+            event_type: None,
+            since: None,
+        };
+        let response = list_events(State(state.clone()), Path(task_id), Query(query)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let events = body["data"].as_array().unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["log_type"], "decision");
+    }
+
+    #[tokio::test]
+    async fn test_create_event_invalid_type() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create a task
+        let create_req = CreateTaskRequest {
+            name: "Test Task".to_string(),
+            spec: None,
+            parent_id: None,
+            priority: None,
+        };
+        let response = create_task(State(state.clone()), Json(create_req)).await;
+        let response = response.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let task_id = body["data"]["id"].as_i64().unwrap();
+
+        // Try to create event with invalid type
+        let event_req = CreateEventRequest {
+            event_type: "invalid_type".to_string(),
+            data: "Some data".to_string(),
+        };
+        let response = create_event(State(state.clone()), Path(task_id), Json(event_req)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(body["code"], "INVALID_REQUEST");
+    }
+
+    #[tokio::test]
+    async fn test_search() {
+        let (state, _temp) = create_test_state().await;
+
+        // Create tasks with searchable content
+        let create_req1 = CreateTaskRequest {
+            name: "Authentication System".to_string(),
+            spec: Some("JWT-based authentication".to_string()),
+            parent_id: None,
+            priority: None,
+        };
+        create_task(State(state.clone()), Json(create_req1)).await;
+
+        let create_req2 = CreateTaskRequest {
+            name: "Database Setup".to_string(),
+            spec: Some("PostgreSQL configuration".to_string()),
+            parent_id: None,
+            priority: None,
+        };
+        create_task(State(state.clone()), Json(create_req2)).await;
+
+        // Give FTS index time to update
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        // Search for "authentication"
+        let query = SearchQuery {
+            query: "authentication".to_string(),
+            include_tasks: true,
+            include_events: true,
+            limit: None,
+        };
+        let response = search(State(state.clone()), Query(query)).await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        // Just verify we got a valid response with results array
+        // FTS indexing timing can be unpredictable in tests
+        assert!(body["data"].is_array());
+    }
 }

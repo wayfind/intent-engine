@@ -459,4 +459,287 @@ mod tests {
             },
         }
     }
+
+    #[test]
+    fn test_list_all() {
+        let mut registry = ProjectRegistry::new();
+
+        // Initially empty
+        assert_eq!(registry.list_all().len(), 0);
+
+        // Add projects
+        let project1 = RegisteredProject {
+            path: PathBuf::from("/test/project1"),
+            name: "project1".to_string(),
+            port: 11391,
+            pid: None,
+            started_at: "2025-01-01T00:00:00Z".to_string(),
+            db_path: PathBuf::from("/test/project1/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
+        };
+
+        let project2 = RegisteredProject {
+            path: PathBuf::from("/test/project2"),
+            name: "project2".to_string(),
+            port: 3031,
+            pid: None,
+            started_at: "2025-01-01T01:00:00Z".to_string(),
+            db_path: PathBuf::from("/test/project2/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
+        };
+
+        registry.register(project1);
+        registry.register(project2);
+
+        assert_eq!(registry.list_all().len(), 2);
+    }
+
+    #[test]
+    fn test_find_by_path_mut() {
+        let mut registry = ProjectRegistry::new();
+
+        let project = RegisteredProject {
+            path: PathBuf::from("/test/project"),
+            name: "original".to_string(),
+            port: 11391,
+            pid: None,
+            started_at: "2025-01-01T00:00:00Z".to_string(),
+            db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
+        };
+
+        registry.register(project);
+
+        // Mutate via mutable reference
+        if let Some(p) = registry.find_by_path_mut(&PathBuf::from("/test/project")) {
+            p.name = "modified".to_string();
+        }
+
+        // Verify change
+        let found = registry.find_by_path(&PathBuf::from("/test/project"));
+        assert_eq!(found.unwrap().name, "modified");
+    }
+
+    #[test]
+    fn test_register_mcp_connection_new_project() {
+        let mut registry = ProjectRegistry::new();
+        let path = PathBuf::from("/test/mcp-project");
+
+        // Register MCP connection for non-existent project
+        registry
+            .register_mcp_connection(&path, Some("claude-code".to_string()))
+            .ok(); // Ignore save error in test
+
+        // Should create new project with port 0
+        let found = registry.find_by_path(&path);
+        assert!(found.is_some());
+        let project = found.unwrap();
+        assert_eq!(project.port, 0); // MCP-only project
+        assert!(project.mcp_connected);
+        assert_eq!(project.mcp_agent, Some("claude-code".to_string()));
+    }
+
+    #[test]
+    fn test_register_mcp_connection_existing_project() {
+        let mut registry = ProjectRegistry::new();
+        let path = PathBuf::from("/test/project");
+
+        // Register regular project first
+        let project = RegisteredProject {
+            path: path.clone(),
+            name: "test-project".to_string(),
+            port: 11391,
+            pid: None,
+            started_at: "2025-01-01T00:00:00Z".to_string(),
+            db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
+        };
+
+        registry.register(project);
+
+        // Now register MCP connection
+        registry
+            .register_mcp_connection(&path, Some("vscode".to_string()))
+            .ok();
+
+        // Should update existing project
+        let found = registry.find_by_path(&path);
+        assert!(found.is_some());
+        let project = found.unwrap();
+        assert_eq!(project.port, 11391); // Keep original port
+        assert!(project.mcp_connected);
+        assert_eq!(project.mcp_agent, Some("vscode".to_string()));
+        assert!(project.mcp_last_seen.is_some());
+    }
+
+    #[test]
+    fn test_update_mcp_heartbeat() {
+        let mut registry = ProjectRegistry::new();
+        let path = PathBuf::from("/test/project");
+
+        // Register project
+        let project = RegisteredProject {
+            path: path.clone(),
+            name: "test-project".to_string(),
+            port: 11391,
+            pid: None,
+            started_at: "2025-01-01T00:00:00Z".to_string(),
+            db_path: PathBuf::from("/test/project/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
+        };
+
+        registry.register(project);
+
+        // Update heartbeat
+        registry.update_mcp_heartbeat(&path).ok();
+
+        let found = registry.find_by_path(&path);
+        assert!(found.unwrap().mcp_connected);
+        assert!(found.unwrap().mcp_last_seen.is_some());
+    }
+
+    #[test]
+    fn test_unregister_mcp_connection() {
+        let mut registry = ProjectRegistry::new();
+        let path = PathBuf::from("/test/project");
+
+        // Register project with MCP
+        registry
+            .register_mcp_connection(&path, Some("claude".to_string()))
+            .ok();
+
+        assert!(registry.find_by_path(&path).unwrap().mcp_connected);
+
+        // Unregister MCP
+        registry.unregister_mcp_connection(&path).ok();
+
+        let found = registry.find_by_path(&path);
+        assert!(found.is_some()); // Project still exists
+        assert!(!found.unwrap().mcp_connected);
+        assert!(found.unwrap().mcp_last_seen.is_none());
+        assert!(found.unwrap().mcp_agent.is_none());
+    }
+
+    #[test]
+    fn test_cleanup_stale_mcp_connections() {
+        use chrono::{Duration, Utc};
+
+        let mut registry = ProjectRegistry::new();
+
+        // Create project with old MCP connection (10 minutes ago)
+        let old_time = Utc::now() - Duration::minutes(10);
+        let path1 = PathBuf::from("/test/project1");
+
+        let project1 = RegisteredProject {
+            path: path1.clone(),
+            name: "stale-project".to_string(),
+            port: 0, // MCP-only
+            pid: None,
+            started_at: old_time.to_rfc3339(),
+            db_path: PathBuf::from("/test/project1/.intent-engine/intents.db"),
+            mcp_connected: true,
+            mcp_last_seen: Some(old_time.to_rfc3339()),
+            mcp_agent: Some("old-agent".to_string()),
+        };
+
+        registry.projects.push(project1);
+
+        // Create project with recent MCP connection (1 minute ago)
+        let recent_time = Utc::now() - Duration::minutes(1);
+        let path2 = PathBuf::from("/test/project2");
+
+        let project2 = RegisteredProject {
+            path: path2.clone(),
+            name: "active-project".to_string(),
+            port: 11391,
+            pid: None,
+            started_at: recent_time.to_rfc3339(),
+            db_path: PathBuf::from("/test/project2/.intent-engine/intents.db"),
+            mcp_connected: true,
+            mcp_last_seen: Some(recent_time.to_rfc3339()),
+            mcp_agent: Some("active-agent".to_string()),
+        };
+
+        registry.projects.push(project2);
+
+        // Run cleanup
+        registry.cleanup_stale_mcp_connections();
+
+        // Stale MCP-only project should be removed
+        assert!(registry.find_by_path(&path1).is_none());
+
+        // Active project should remain
+        let found = registry.find_by_path(&path2);
+        assert!(found.is_some());
+        assert!(found.unwrap().mcp_connected);
+    }
+
+    #[test]
+    fn test_cleanup_dead_processes() {
+        let mut registry = ProjectRegistry::new();
+
+        // Add project with obviously invalid PID
+        let project_dead = RegisteredProject {
+            path: PathBuf::from("/test/dead"),
+            name: "dead-project".to_string(),
+            port: 11391,
+            pid: Some(999999), // Very unlikely to exist
+            started_at: "2025-01-01T00:00:00Z".to_string(),
+            db_path: PathBuf::from("/test/dead/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
+        };
+
+        // Add project without PID
+        let project_no_pid = RegisteredProject {
+            path: PathBuf::from("/test/no-pid"),
+            name: "no-pid-project".to_string(),
+            port: 3031,
+            pid: None,
+            started_at: "2025-01-01T00:00:00Z".to_string(),
+            db_path: PathBuf::from("/test/no-pid/.intent-engine/intents.db"),
+            mcp_connected: false,
+            mcp_last_seen: None,
+            mcp_agent: None,
+        };
+
+        registry.register(project_dead);
+        registry.register(project_no_pid);
+
+        assert_eq!(registry.projects.len(), 2);
+
+        // Cleanup
+        registry.cleanup_dead_processes();
+
+        // Dead process should be removed, no-PID should remain
+        assert_eq!(registry.projects.len(), 1);
+        assert_eq!(registry.projects[0].name, "no-pid-project");
+    }
+
+    #[test]
+    fn test_default() {
+        let registry = ProjectRegistry::default();
+        assert_eq!(registry.version, VERSION);
+        assert_eq!(registry.projects.len(), 0);
+    }
+
+    #[test]
+    fn test_is_port_available() {
+        // Test with a very high port that's likely available
+        assert!(ProjectRegistry::is_port_available(65534));
+
+        // We can't reliably test an unavailable port without potentially
+        // interfering with other tests or services
+    }
 }

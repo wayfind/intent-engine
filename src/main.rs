@@ -84,18 +84,8 @@ async fn run(cli: &Cli) -> Result<()> {
             force,
             diagnose,
             config_path,
-            project_dir,
         } => {
-            handle_setup(
-                target,
-                &scope,
-                dry_run,
-                force,
-                diagnose,
-                config_path,
-                project_dir,
-            )
-            .await?;
+            handle_setup(target, &scope, dry_run, force, diagnose, config_path).await?;
         },
 
         // ========================================
@@ -767,12 +757,6 @@ fn check_mcp_configuration() -> serde_json::Value {
         false
     };
 
-    let env_config = ie_config.get("env");
-    let project_dir = env_config
-        .and_then(|e| e.get("INTENT_ENGINE_PROJECT_DIR"))
-        .and_then(|p| p.as_str())
-        .unwrap_or("");
-
     let status = if binary_exists && binary_executable {
         "✓ PASS"
     } else if binary_exists {
@@ -794,7 +778,6 @@ fn check_mcp_configuration() -> serde_json::Value {
             "binary_path": binary_path,
             "binary_exists": binary_exists,
             "binary_executable": binary_executable,
-            "project_dir": project_dir,
             "message": if passed {
                 "MCP server configured correctly"
             } else if !binary_exists {
@@ -1136,7 +1119,6 @@ async fn handle_setup(
     force: bool,
     diagnose: bool,
     config_path: Option<String>,
-    project_dir: Option<String>,
 ) -> Result<()> {
     use intent_engine::setup::claude_code::ClaudeCodeSetup;
     use intent_engine::setup::{SetupModule, SetupOptions, SetupScope};
@@ -1147,13 +1129,16 @@ async fn handle_setup(
     // Parse scope
     let setup_scope = SetupScope::from_str(scope)?;
 
+    // Auto-detect project directory (don't rely on user input or env vars)
+    let project_dir = ProjectContext::find_project_root();
+
     // Build options
     let opts = SetupOptions {
         scope: setup_scope,
         dry_run,
         force,
         config_path: config_path.map(PathBuf::from),
-        project_dir: project_dir.map(PathBuf::from),
+        project_dir,
     };
 
     // Determine target (interactive if not specified)
@@ -1441,7 +1426,13 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
 
 async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()> {
     use chrono::Utc;
-    use intent_engine::dashboard::{daemon, registry::*};
+    use intent_engine::dashboard::daemon;
+
+    // NOTE: Registry mechanism is still used by Dashboard CLI commands
+    // but the core Dashboard/MCP communication now uses WebSocket
+    // TODO: Refactor Dashboard CLI commands to work without Registry
+    #[allow(deprecated)]
+    use intent_engine::dashboard::registry::*;
 
     match dashboard_cmd {
         DashboardCommands::Start {

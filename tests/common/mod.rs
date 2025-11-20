@@ -75,11 +75,11 @@ pub fn ie_command() -> Command {
     cmd
 }
 
-/// Create a Command for `ie` with project directory override
+/// Create a Command for `ie` with project directory set as working directory
 ///
 /// This returns a Command pre-configured with:
 /// - The correct `ie` binary path
-/// - INTENT_ENGINE_PROJECT_DIR set to the specified directory
+/// - Current directory set to the specified project directory
 /// - Environment isolation (HOME=/nonexistent) to prevent home directory fallback
 ///
 /// # Examples
@@ -96,7 +96,7 @@ pub fn ie_command() -> Command {
 #[allow(dead_code)] // Used by MCP tests
 pub fn ie_command_with_project_dir(project_dir: &std::path::Path) -> Command {
     let mut cmd = ie_command();
-    cmd.env("INTENT_ENGINE_PROJECT_DIR", project_dir);
+    cmd.current_dir(project_dir); // Set working directory for automatic project detection
     cmd
 }
 

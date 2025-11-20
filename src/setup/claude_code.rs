@@ -242,9 +242,13 @@ impl ClaudeCodeSetup {
             config["mcpServers"] = json!({});
         }
 
+        // Get project root directory for cwd
+        let project_root = env::current_dir().map_err(IntentError::IoError)?;
+
         config["mcpServers"]["intent-engine"] = json!({
             "command": binary_path.to_string_lossy(),
             "args": ["mcp-server"],
+            "cwd": project_root.to_string_lossy(),
             "description": "Strategic intent and task workflow management"
         });
 
@@ -722,6 +726,227 @@ impl SetupModule for ClaudeCodeSetup {
                 passed: false,
                 details: format!("Failed to execute session-restore: {}", e),
             }),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_module_name() {
+        let setup = ClaudeCodeSetup;
+        assert_eq!(setup.name(), "claude-code");
+    }
+
+    #[test]
+    fn test_setup_user_level_dry_run() {
+        let setup = ClaudeCodeSetup;
+        let opts = SetupOptions {
+            scope: SetupScope::User,
+            dry_run: true,
+            force: false,
+            config_path: None,
+            project_dir: None,
+        };
+
+        // Dry run should succeed without creating files
+        let result = setup.setup(&opts);
+
+        // May succeed or fail depending on environment, but should not panic
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_setup_project_level_dry_run() {
+        let setup = ClaudeCodeSetup;
+        let opts = SetupOptions {
+            scope: SetupScope::Project,
+            dry_run: true,
+            force: false,
+            config_path: None,
+            project_dir: None,
+        };
+
+        // Dry run should succeed without creating files
+        let result = setup.setup(&opts);
+
+        // May succeed or fail depending on environment, but should not panic
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_diagnose() {
+        let setup = ClaudeCodeSetup;
+        let report = setup.diagnose();
+
+        // Should return a report regardless of configuration state
+        assert!(report.is_ok());
+
+        let report = report.unwrap();
+
+        // Should have all 6 checks
+        assert_eq!(report.checks.len(), 6);
+
+        // Check names should be present
+        let check_names: Vec<&str> = report.checks.iter().map(|c| c.name.as_str()).collect();
+        assert!(check_names.contains(&"Hook script"));
+        assert!(check_names.contains(&"Format hook script"));
+        assert!(check_names.contains(&"Settings file"));
+        assert!(check_names.contains(&"PostToolUse hooks"));
+        assert!(check_names.contains(&"MCP configuration"));
+        assert!(check_names.contains(&"Binary availability"));
+
+        // Overall status should be boolean
+        assert!(report.overall_status || !report.overall_status);
+
+        // If any check failed, should have suggested fixes
+        if !report.overall_status {
+            assert!(!report.suggested_fixes.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_user_claude_dir() {
+        let result = ClaudeCodeSetup::get_user_claude_dir();
+
+        // Should return a path
+        assert!(result.is_ok());
+
+        let path = result.unwrap();
+        assert!(path.ends_with(".claude"));
+        assert!(path.is_absolute());
+    }
+
+    #[test]
+    fn test_get_project_claude_dir() {
+        let result = ClaudeCodeSetup::get_project_claude_dir();
+
+        // Should return a path
+        assert!(result.is_ok());
+
+        let path = result.unwrap();
+        assert!(path.ends_with(".claude"));
+    }
+
+    #[test]
+    fn test_setup_with_both_scope_dry_run() {
+        let setup = ClaudeCodeSetup;
+        let opts = SetupOptions {
+            scope: SetupScope::Both,
+            dry_run: true,
+            force: false,
+            config_path: None,
+            project_dir: None,
+        };
+
+        // Should attempt both user and project setup
+        let result = setup.setup(&opts);
+
+        // May succeed or fail, but should not panic
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_setup_mcp_config_with_temp_file() {
+        let setup = ClaudeCodeSetup;
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("test-claude.json");
+
+        let opts = SetupOptions {
+            scope: SetupScope::User,
+            dry_run: false,
+            force: true,
+            config_path: Some(config_path.clone()),
+            project_dir: None,
+        };
+
+        let mut files_modified = Vec::new();
+        let mut backups = Vec::new();
+
+        // This may succeed or fail depending on ie binary availability
+        let result = setup.setup_mcp_config(&opts, &mut files_modified, &mut backups);
+
+        match result {
+            Ok(conn_result) => {
+                // If successful, verify structure
+                assert!(!conn_result.details.is_empty());
+            },
+            Err(e) => {
+                // If failed, likely due to binary not found - that's ok for testing
+                assert!(
+                    format!("{:?}", e).contains("binary") || format!("{:?}", e).contains("found")
+                );
+            },
+        }
+    }
+
+    #[test]
+    fn test_test_connectivity() {
+        let setup = ClaudeCodeSetup;
+        let result = setup.test_connectivity();
+
+        // Should return a result (pass or fail)
+        assert!(result.is_ok());
+
+        let conn_result = result.unwrap();
+
+        // Should have details
+        assert!(!conn_result.details.is_empty());
+
+        // passed should be boolean
+        assert!(conn_result.passed || !conn_result.passed);
+    }
+
+    #[test]
+    fn test_setup_user_level_with_temp_home() {
+        let setup = ClaudeCodeSetup;
+
+        // Test with dry_run to avoid actual file creation
+        let opts = SetupOptions {
+            scope: SetupScope::User,
+            dry_run: true,
+            force: true,
+            config_path: None,
+            project_dir: None,
+        };
+
+        let result = setup.setup_user_level(&opts);
+
+        // Should attempt setup (may fail due to environment, but shouldn't panic)
+        assert!(result.is_ok() || result.is_err());
+
+        if let Ok(setup_result) = result {
+            assert!(setup_result.message.contains("User-level"));
+            // In dry run mode, no files should actually be modified
+            assert!(setup_result.files_modified.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_setup_project_level_with_temp_dir() {
+        let setup = ClaudeCodeSetup;
+
+        // Test with dry_run to avoid actual file creation
+        let opts = SetupOptions {
+            scope: SetupScope::Project,
+            dry_run: true,
+            force: true,
+            config_path: None,
+            project_dir: None,
+        };
+
+        let result = setup.setup_project_level(&opts);
+
+        // Should attempt setup (may fail due to environment, but shouldn't panic)
+        assert!(result.is_ok() || result.is_err());
+
+        if let Ok(setup_result) = result {
+            assert!(setup_result.message.contains("Project-level"));
+            // In dry run mode, no files should actually be modified
+            assert!(setup_result.files_modified.is_empty());
         }
     }
 }

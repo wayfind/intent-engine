@@ -588,6 +588,47 @@ impl<'a> TaskManager<'a> {
         .execute(&mut *tx)
         .await?;
 
+        // Cascade ancestors to 'doing' status
+        // When a child task starts, all its ancestors should also be marked as 'doing'
+        let mut current_id = id;
+        loop {
+            let parent_id: Option<i64> =
+                sqlx::query_scalar("SELECT parent_id FROM tasks WHERE id = ?")
+                    .bind(current_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+
+            match parent_id {
+                Some(pid) => {
+                    // Check if parent is already 'doing'
+                    let parent_status: String =
+                        sqlx::query_scalar("SELECT status FROM tasks WHERE id = ?")
+                            .bind(pid)
+                            .fetch_one(&mut *tx)
+                            .await?;
+
+                    if parent_status != "doing" {
+                        // Update parent to 'doing'
+                        sqlx::query(
+                            r#"
+                            UPDATE tasks
+                            SET status = 'doing', first_doing_at = COALESCE(first_doing_at, ?)
+                            WHERE id = ?
+                            "#,
+                        )
+                        .bind(now)
+                        .bind(pid)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+
+                    // Move up the hierarchy
+                    current_id = pid;
+                },
+                None => break, // Reached root task, stop cascading
+            }
+        }
+
         // Set as current task
         sqlx::query(
             r#"
@@ -669,6 +710,43 @@ impl<'a> TaskManager<'a> {
         sqlx::query("DELETE FROM workspace_state WHERE key = 'current_task_id'")
             .execute(&mut *tx)
             .await?;
+
+        // Cascade parent tasks to 'done' if all their children are complete
+        // This implements automatic parent completion when all subtasks are done
+        let mut current_parent_id = parent_id;
+        while let Some(pid) = current_parent_id {
+            // Check if all children of this parent are done
+            let incomplete_children: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done'",
+            )
+            .bind(pid)
+            .fetch_one(&mut *tx)
+            .await?;
+
+            if incomplete_children == 0 {
+                // All children are done, mark parent as done
+                sqlx::query(
+                    r#"
+                    UPDATE tasks
+                    SET status = 'done', first_done_at = COALESCE(first_done_at, ?)
+                    WHERE id = ?
+                    "#,
+                )
+                .bind(now)
+                .bind(pid)
+                .execute(&mut *tx)
+                .await?;
+
+                // Get grandparent to continue cascading upwards
+                current_parent_id = sqlx::query_scalar("SELECT parent_id FROM tasks WHERE id = ?")
+                    .bind(pid)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            } else {
+                // Parent has incomplete children, stop cascading
+                break;
+            }
+        }
 
         // Determine next step suggestion based on context
         let next_step_suggestion = if let Some(parent_task_id) = parent_id {

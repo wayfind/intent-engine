@@ -196,4 +196,133 @@ mod tests {
         // Invalid PID should not be running
         assert!(!is_process_running(999999));
     }
+
+    #[test]
+    fn test_pid_file_path_format() {
+        let port = 11391;
+        let path = pid_file_path(port);
+
+        // Should be in temp directory
+        assert!(path.starts_with(std::env::temp_dir()));
+
+        // Should contain port number
+        assert!(path.to_string_lossy().contains("11391"));
+
+        // Should have .pid extension
+        assert!(path.to_string_lossy().ends_with(".pid"));
+    }
+
+    #[test]
+    fn test_read_pid_file_nonexistent() {
+        // Use a port unlikely to have a PID file
+        let port = 54321;
+        delete_pid_file(port).ok(); // Ensure clean state
+
+        let result = read_pid_file(port).unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_read_pid_file_invalid_content() {
+        let port = 54322;
+        let path = pid_file_path(port);
+
+        // Write invalid PID content
+        fs::write(&path, "not-a-number").unwrap();
+
+        // Should return error
+        let result = read_pid_file(port);
+        assert!(result.is_err());
+
+        // Cleanup
+        delete_pid_file(port).ok();
+    }
+
+    #[test]
+    fn test_read_pid_file_empty() {
+        let port = 54323;
+        let path = pid_file_path(port);
+
+        // Write empty content
+        fs::write(&path, "").unwrap();
+
+        // Should return error (can't parse empty string as PID)
+        let result = read_pid_file(port);
+        assert!(result.is_err());
+
+        // Cleanup
+        delete_pid_file(port).ok();
+    }
+
+    #[test]
+    fn test_delete_pid_file_nonexistent() {
+        let port = 54324;
+        let path = pid_file_path(port);
+
+        // Ensure file doesn't exist
+        if path.exists() {
+            fs::remove_file(&path).ok();
+        }
+
+        // Should succeed (idempotent)
+        let result = delete_pid_file(port);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_write_pid_file_creates_file() {
+        let port = 54325;
+        let pid = 12345u32;
+
+        // Write PID
+        write_pid_file(port, pid).unwrap();
+
+        // Verify file exists
+        let path = pid_file_path(port);
+        assert!(path.exists());
+
+        // Verify content
+        let content = fs::read_to_string(&path).unwrap();
+        assert_eq!(content, "12345");
+
+        // Cleanup
+        delete_pid_file(port).ok();
+    }
+
+    #[test]
+    fn test_daemonize_returns_ok() {
+        // daemonize is a placeholder in tests, should just return Ok
+        let result = daemonize();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pid_file_path_different_ports() {
+        let path1 = pid_file_path(8000);
+        let path2 = pid_file_path(9000);
+
+        // Different ports should produce different paths
+        assert_ne!(path1, path2);
+
+        // Both should be in temp dir
+        let temp = std::env::temp_dir();
+        assert!(path1.starts_with(&temp));
+        assert!(path2.starts_with(&temp));
+    }
+
+    #[test]
+    fn test_write_read_delete_cycle() {
+        let port = 54326;
+        let pid = std::process::id();
+
+        // Full cycle
+        write_pid_file(port, pid).unwrap();
+        assert!(pid_file_path(port).exists());
+
+        let read = read_pid_file(port).unwrap();
+        assert_eq!(read, Some(pid));
+
+        delete_pid_file(port).unwrap();
+        assert!(!pid_file_path(port).exists());
+    }
 }

@@ -6,6 +6,7 @@ pub mod error;
 pub mod events;
 pub mod logging;
 pub mod mcp;
+pub mod plan;
 pub mod priority;
 pub mod project;
 pub mod report;
