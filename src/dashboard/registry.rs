@@ -150,7 +150,7 @@ impl ProjectRegistry {
         let normalized_path = path.canonicalize().unwrap_or_else(|_| path.clone());
         if normalized_path.starts_with("/tmp") || normalized_path.starts_with(std::env::temp_dir())
         {
-            tracing::warn!(
+            tracing::debug!(
                 "Rejecting MCP connection registration for temporary path: {}",
                 path.display()
             );

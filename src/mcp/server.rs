@@ -778,7 +778,7 @@ fn register_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()>
     // Validate project path - reject temporary directories
     // This prevents test environments from polluting the Dashboard registry (Defense Layer 3)
     if normalized_path.starts_with("/tmp") || normalized_path.starts_with(std::env::temp_dir()) {
-        tracing::warn!(
+        tracing::debug!(
             "Skipping MCP registry registration for temporary path: {}",
             normalized_path.display()
         );
