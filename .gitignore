@@ -18,6 +18,22 @@
 
 # Intent-Engine data
 .intent-engine/
+*.db
+!schema.sql
+
+# Test and coverage artifacts
+.playwright-mcp/
+coverage_report/
+coverage_lib_only/
+coverage.log
+
+# Migration and temporary scripts
+export.log
+migration.log
+export_to_import.py
+import.sh
+migrate_data.py
+test-consistency.sh
 
 # OS
 .DS_Store
