@@ -411,7 +411,15 @@ impl ProjectContext {
     /// Load an existing project context
     pub async fn load() -> Result<Self> {
         let root = Self::find_project_root().ok_or(IntentError::NotAProject)?;
-        let db_path = root.join(INTENT_DIR).join(DB_FILE);
+        let intent_dir = root.join(INTENT_DIR);
+
+        // Check if .intent-engine directory exists
+        // If not, this is not an initialized project yet
+        if !intent_dir.exists() || !intent_dir.is_dir() {
+            return Err(IntentError::NotAProject);
+        }
+
+        let db_path = intent_dir.join(DB_FILE);
 
         let pool = create_pool(&db_path).await?;
 
