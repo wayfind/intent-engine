@@ -58,11 +58,10 @@ pub async fn connect_to_dashboard(
         .unwrap_or_else(|_| project_path.clone());
     let normalized_db_path = db_path.canonicalize().unwrap_or_else(|_| db_path.clone());
 
-    // Validate project path - reject temporary directories
+    // Validate project path - reject temporary directories (Defense Layer 2)
     // This prevents test environments from polluting the Dashboard registry
-    if normalized_project_path.starts_with("/tmp")
-        || normalized_project_path.starts_with(std::env::temp_dir())
-    {
+    let temp_dir = std::env::temp_dir();
+    if normalized_project_path.starts_with(&temp_dir) {
         tracing::warn!(
             "Skipping Dashboard registration for temporary path: {}",
             normalized_project_path.display()

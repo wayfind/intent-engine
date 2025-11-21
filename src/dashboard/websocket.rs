@@ -194,8 +194,8 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                                 .canonicalize()
                                 .unwrap_or_else(|_| project_path_buf.clone());
 
-                            let is_temp_path = normalized_path.starts_with("/tmp")
-                                || normalized_path.starts_with(std::env::temp_dir());
+                            let temp_dir = std::env::temp_dir();
+                            let is_temp_path = normalized_path.starts_with(&temp_dir);
 
                             if is_temp_path {
                                 tracing::warn!(
