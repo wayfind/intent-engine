@@ -194,6 +194,9 @@ async fn serve_index() -> impl IntoResponse {
             Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .header(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                .header(header::PRAGMA, "no-cache")
+                .header(header::EXPIRES, "0")
                 .body(body.into())
                 .unwrap()
         },
@@ -217,6 +220,9 @@ async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
             Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, mime.as_ref())
+                .header(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                .header(header::PRAGMA, "no-cache")
+                .header(header::EXPIRES, "0")
                 .body(body.into())
                 .unwrap()
         },
