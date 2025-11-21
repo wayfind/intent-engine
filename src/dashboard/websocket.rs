@@ -70,10 +70,27 @@ impl WebSocketState {
         }
     }
 
-    /// Get list of currently connected projects
+    /// Get list of currently connected projects from Registry
     pub async fn get_online_projects(&self) -> Vec<ProjectInfo> {
-        let connections = self.mcp_connections.read().await;
-        connections.values().map(|c| c.project.clone()).collect()
+        // Load from Registry to get accurate mcp_connected status
+        // This ensures UI gets complete project list even if WebSocket connections haven't been established yet
+        match crate::dashboard::registry::ProjectRegistry::load() {
+            Ok(registry) => registry
+                .projects
+                .iter()
+                .filter(|p| p.mcp_connected)
+                .map(|p| ProjectInfo {
+                    name: p.name.clone(),
+                    path: p.path.display().to_string(),
+                    db_path: p.db_path.display().to_string(),
+                    agent: p.mcp_agent.clone(),
+                })
+                .collect(),
+            Err(e) => {
+                tracing::warn!("Failed to load registry for online projects: {}", e);
+                Vec::new()
+            },
+        }
     }
 }
 
@@ -181,7 +198,31 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                                 .write()
                                 .await
                                 .insert(path.clone(), conn);
-                            project_path = Some(path);
+                            project_path = Some(path.clone());
+
+                            // Update Registry immediately to set mcp_connected=true
+                            let project_path_buf = std::path::PathBuf::from(&path);
+                            match crate::dashboard::registry::ProjectRegistry::load() {
+                                Ok(mut registry) => {
+                                    if let Err(e) = registry.register_mcp_connection(
+                                        &project_path_buf,
+                                        Some("mcp-client".to_string()),
+                                    ) {
+                                        tracing::warn!(
+                                            "Failed to update Registry for MCP connection: {}",
+                                            e
+                                        );
+                                    } else {
+                                        tracing::info!(
+                                            "✓ Updated Registry: {} is now mcp_connected=true",
+                                            project.name
+                                        );
+                                    }
+                                },
+                                Err(e) => {
+                                    tracing::warn!("Failed to load Registry: {}", e);
+                                },
+                            }
 
                             // Send confirmation
                             let response = McpResponse::Registered { success: true };
@@ -227,6 +268,21 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
             if let Ok(Some(path)) = project_path_result {
                 // Clean up connection
                 state.mcp_connections.write().await.remove(&path);
+
+                // Update Registry immediately to set mcp_connected=false
+                let project_path_buf = std::path::PathBuf::from(&path);
+                match crate::dashboard::registry::ProjectRegistry::load() {
+                    Ok(mut registry) => {
+                        if let Err(e) = registry.unregister_mcp_connection(&project_path_buf) {
+                            tracing::warn!("Failed to update Registry for MCP disconnection: {}", e);
+                        } else {
+                            tracing::info!("✓ Updated Registry: {} is now mcp_connected=false", path);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to load Registry: {}", e);
+                    }
+                }
 
                 // Notify UI clients
                 let ui_msg = UiMessage::ProjectOffline { project_path: path.clone() };

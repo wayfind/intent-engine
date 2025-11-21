@@ -24,6 +24,7 @@ Intent-Engine is a CLI tool + database system for recording, tracking, and revie
 - 🌳 **Hierarchical Problem Decomposition**: Support unlimited levels of parent-child task relationships
 - 📊 **Structured Decision Tracking**: Every key decision is recorded as an event stream
 - 🔄 **JSON-native Interface**: Perfect for AI tool integration
+- ⚡ **Declarative Task Planning** (v0.6): Batch create/update task structures with idempotent `plan` interface
 
 ---
 
@@ -147,6 +148,50 @@ ie task done
 ie report --since 1d --summary-only
 ```
 
+### 3. Declarative Task Planning (v0.6)
+
+Create complex task structures in one go using the `plan` interface:
+
+```bash
+# Create task structure from JSON
+cat > project.json <<'JSON'
+{
+  "tasks": [
+    {
+      "name": "Implement user authentication",
+      "spec": "JWT + OAuth2 support",
+      "priority": "high",
+      "children": [
+        {
+          "name": "JWT Implementation",
+          "spec": "HS256 algorithm, 7-day validity"
+        },
+        {
+          "name": "OAuth2 Integration",
+          "spec": "Google and GitHub providers",
+          "depends_on": ["JWT Implementation"]
+        }
+      ]
+    }
+  ]
+}
+JSON
+
+# Execute the plan (creates all tasks + dependencies)
+ie plan < project.json
+
+# Start working on a specific task
+ie task start 2  # JWT Implementation task
+```
+
+**Key Benefits:**
+- ✅ Batch create entire task trees
+- ✅ Idempotent: run multiple times → same result
+- ✅ Name-based dependencies (no manual ID management)
+- ✅ Automatic cycle detection
+
+> 📖 **Full Plan Interface Guide**: See [docs/PLAN_INTERFACE_GUIDE.md](docs/PLAN_INTERFACE_GUIDE.md)
+
 > 💡 **More Detailed Tutorial**: See [QUICKSTART.md](QUICKSTART.en.md)
 
 ---
@@ -222,9 +267,6 @@ Add configuration:
     "intent-engine": {
       "command": "/home/user/.cargo/bin/intent-engine",
       "args": ["mcp-server"],
-      "env": {
-        "INTENT_ENGINE_PROJECT_DIR": "/path/to/your/project"
-      },
       "description": "Strategic intent and task workflow management"
     }
   }
@@ -309,10 +351,6 @@ Intent-Engine's MCP server uses **Rust native implementation**, compared to trad
 cd /path/to/your/project
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
   ie mcp-server
-
-# Or using environment variable
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  INTENT_ENGINE_PROJECT_DIR=/path/to/your/project ie mcp-server
 
 # Should return JSON response with 13 tools
 ```

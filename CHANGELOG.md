@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-11-21
+
+### Added
+- **Plan Interface**: Declarative task management API for batch operations
+  - New `ie plan` CLI command and `plan` MCP tool
+  - Create entire task trees in one atomic operation
+  - Hierarchical nesting via `children` field (no manual parent_id needed)
+  - Name-based dependency references via `depends_on` field
+  - Automatic dependency resolution and cycle detection (Tarjan's SCC algorithm)
+  - Idempotent updates: run same plan multiple times → same result
+  - Transaction-based atomicity: all-or-nothing execution
+  - Comprehensive guide: `docs/PLAN_INTERFACE_GUIDE.md`
+- **MCP WebSocket Integration**: Real-time connection between Dashboard and MCP server
+  - WebSocket-based communication for live updates
+  - Automatic reconnection with exponential backoff
+  - Enhanced dashboard registry for tracking active sessions
+- **Dashboard UI Redesign**: Complete sci-fi themed interface overhaul
+  - Modern, futuristic design aesthetic
+  - Improved user experience and visual hierarchy
+  - Enhanced task visualization
+
+### Changed
+- **Dependencies**: Added WebSocket and async communication support
+  - `axum` now includes `ws` feature for WebSocket support
+  - Added `tokio-tungstenite` 0.21 for WebSocket client
+  - Added `futures-util` 0.3 for async stream handling
+  - Added `reqwest` with JSON support for HTTP communication
+- **Dashboard**: Fixed port allocation to 11391 (previously dynamic)
+- **MCP Server Schema**: Added `plan` tool to mcp-server.json with comprehensive documentation
+
+### Fixed
+- **MCP → Dashboard WebSocket Connection**: Resolved cross-session connection failures
+  - Improved process lifecycle management
+  - Better PID file and registry synchronization
+  - Enhanced health check mechanisms
+- **Project Boundary Logic**: Clarified support for non-project startup scenarios
+- **Dashboard Daemon Mode**: Proper process detachment using `setsid` on Unix systems
+
+### Documentation
+- **New Guide**: `docs/PLAN_INTERFACE_GUIDE.md` - Comprehensive plan interface documentation with examples
+- **Updated AGENT.md**: Added Plan Interface section (v0.6) with technical details and usage patterns
+- **Updated CLAUDE.md**: Enhanced with plan tool guidance and when to use batch vs imperative operations
+- **Updated README.md**: Added declarative task planning section highlighting v0.6 features
+
+### Migration Notes
+- **Plan Interface** is backward compatible - existing commands work as before
+- For batch task creation, consider migrating to `plan` interface for better ergonomics
+- Phase 1 (v0.6.0) is create-only; idempotent updates coming in v0.6.1
+
 ## [0.4.0] - 2025-11-14
 
 ### Added

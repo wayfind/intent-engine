@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.5
-**Last Updated**: 2025-11-16
+**Version**: 0.6
+**Last Updated**: 2025-11-21
 **Status**: Experimental (Pre-1.0)
 
 ---

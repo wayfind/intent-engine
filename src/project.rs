@@ -209,12 +209,13 @@ impl ProjectContext {
                 }
 
                 // Check if we've reached the project boundary
-                // If so, stop searching (don't go into parent projects)
+                // If so, return the project root (will trigger lazy initialization)
                 if let Some(ref boundary) = project_boundary {
                     if current == *boundary {
                         // We've reached the boundary without finding .intent-engine
-                        // Stop here and return None (will trigger initialization)
-                        break;
+                        // Return the project root to enable lazy initialization
+                        eprintln!("✓ Detected project root: {}", boundary.display());
+                        return Some(boundary.clone());
                     }
                 }
 
@@ -225,6 +226,7 @@ impl ProjectContext {
         }
 
         // Strategy 3: Check user's home directory (fallback)
+        // ONLY use if no project boundary was detected
         if let Ok(home) = std::env::var("HOME") {
             let home_path = PathBuf::from(home);
             let intent_dir = home_path.join(INTENT_DIR);
@@ -412,6 +414,10 @@ impl ProjectContext {
         let db_path = root.join(INTENT_DIR).join(DB_FILE);
 
         let pool = create_pool(&db_path).await?;
+
+        // Always ensure migrations are run (idempotent operation)
+        // This handles cases where the database file exists but hasn't been migrated yet
+        run_migrations(&pool).await?;
 
         Ok(ProjectContext {
             root,

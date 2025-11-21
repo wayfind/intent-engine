@@ -1797,8 +1797,8 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
         DashboardCommands::Status { all } => {
             let mut registry = ProjectRegistry::load()?;
 
-            // Clean up dead processes
-            registry.cleanup_dead_processes();
+            // Clean up unhealthy dashboards via HTTP health checks
+            registry.cleanup_unhealthy_dashboards().await;
             registry.save()?;
 
             if all {
@@ -1863,8 +1863,8 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
         DashboardCommands::List => {
             let mut registry = ProjectRegistry::load()?;
 
-            // Clean up dead processes
-            registry.cleanup_dead_processes();
+            // Clean up unhealthy dashboards via HTTP health checks
+            registry.cleanup_unhealthy_dashboards().await;
             registry.save()?;
 
             let projects = registry.list_all();

@@ -92,17 +92,14 @@ if [ -f "$MCP_CONFIG" ]; then
         # Use jq to update JSON safely
         TEMP_CONFIG=$(mktemp)
         jq --arg cmd "$MCP_BINARY" \
-           --arg projdir "$PROJECT_ROOT" \
            '.mcpServers["intent-engine"] = {
                command: $cmd,
                args: ["mcp-server"],
-               env: {
-                   INTENT_ENGINE_PROJECT_DIR: $projdir
-               },
                description: "Strategic intent and task workflow management for human-AI collaboration"
            }' "$MCP_CONFIG" > "$TEMP_CONFIG"
         mv "$TEMP_CONFIG" "$MCP_CONFIG"
         echo "✓ Configuration updated (using jq)"
+        echo "✓ Project directory will be automatically detected"
     else
         # Fallback: warn and suggest jq
         echo "⚠ Warning: jq not found"
@@ -117,13 +114,12 @@ if [ -f "$MCP_CONFIG" ]; then
         echo '    "intent-engine": {'
         echo "      \"command\": \"$MCP_BINARY\","
         echo '      "args": ["mcp-server"],'
-        echo '      "env": {'
-        echo "        \"INTENT_ENGINE_PROJECT_DIR\": \"$PROJECT_ROOT\""
-        echo '      },'
         echo '      "description": "Strategic intent and task workflow management for human-AI collaboration"'
         echo '    }'
         echo '  }'
         echo '}'
+        echo
+        echo "Note: Project directory will be automatically detected via .git, Cargo.toml, etc."
         exit 1
     fi
 else
@@ -131,16 +127,13 @@ else
 
     if command -v jq &> /dev/null; then
         echo '{}' | jq --arg cmd "$MCP_BINARY" \
-           --arg projdir "$PROJECT_ROOT" \
            '.mcpServers["intent-engine"] = {
                command: $cmd,
                args: ["mcp-server"],
-               env: {
-                   INTENT_ENGINE_PROJECT_DIR: $projdir
-               },
                description: "Strategic intent and task workflow management for human-AI collaboration"
            }' > "$MCP_CONFIG"
         echo "✓ Configuration created"
+        echo "✓ Project directory will be automatically detected"
     else
         echo "❌ Error: jq is required for initial configuration"
         echo "Please install jq first:"
@@ -170,10 +163,9 @@ echo "  1. Restart Claude Code to load the MCP server"
 echo "  2. Verify Intent-Engine tools are available (13 tools)"
 echo "  3. Test: Ask Claude to create a task for you"
 echo
-echo "To test manually:"
-echo "  echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' | \\"
-echo "    INTENT_ENGINE_PROJECT_DIR=$PROJECT_ROOT \\"
-echo "    $MCP_BINARY mcp-server"
+echo "To test manually (from project directory):"
+echo "  cd $PROJECT_ROOT"
+echo "  echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' | $MCP_BINARY mcp-server"
 echo
 echo "Documentation:"
 echo "  README.md - MCP Service section"

@@ -1,6 +1,6 @@
 # Intent-Engine: Claude Integration Guide
 
-**Version**: 0.5
+**Version**: 0.6
 **Target**: Claude Code, Claude Desktop, and AI assistants via MCP
 
 ---
@@ -70,14 +70,40 @@ Intent-Engine works like your brain - **one focused task at a time**:
 
 | Tool | Purpose | Key Parameters |
 |------|---------|----------------|
-| `task_add` | Create strategic task | `name`, `spec`, `priority` |
 | `task_start` | Begin working (sets focus) | `task_id`, `with_events` |
 | `task_done` | Complete current task | (no parameters) |
-| `task_spawn_subtask` | Create and switch to subtask | `name`, `spec` |
 | `task_switch` | Change focus to another task | `task_id` |
 | `task_pick_next` | Get smart recommendation | (no parameters) |
+
+### Planning Tools
+
+| Tool | Purpose | Key Parameters | Use Case |
+|------|---------|----------------|----------|
+| `plan` ⭐ | Declarative batch task creation | `tasks: TaskTree[]` | **Batch operations**, hierarchies, dependencies |
+| `task_add` | Create single task (imperative) | `name`, `spec`, `priority` | **Single tasks**, interactive CLI |
+| `task_spawn_subtask` | Create and focus on subtask | `name`, `spec` | **Dynamic workflows**, interactive |
+| `task_add_dependency` | Add single dependency | `blocked_task_id`, `blocking_task_id` | **Single dependencies**, precise control |
+
+**When to use `plan`**:
+- ✅ Creating multiple related tasks at once
+- ✅ Complex task hierarchies (parent/child relationships)
+- ✅ Tasks with dependencies (automatic cycle detection)
+- ✅ Idempotent operations (safe to run multiple times)
+- ✅ Importing from external systems (YAML/JSON)
+
+**When to use traditional tools** (`task_add`, etc.):
+- ✅ Single task creation
+- ✅ Interactive CLI sessions
+- ✅ Fine-grained control over each step
+- ✅ Simple, straightforward operations
+
+> 💡 **See [PLAN_INTERFACE_GUIDE.md](docs/PLAN_INTERFACE_GUIDE.md) for detailed usage patterns and migration examples**
+
+### Query Tools
+
+| Tool | Purpose | Key Parameters |
+|------|---------|----------------|
 | `task_list` | Filter by status/parent | `status`, `parent` |
-| `task_add_dependency` | Define task dependencies | `blocked_task_id`, `blocking_task_id` |
 
 ### Search and Discovery
 

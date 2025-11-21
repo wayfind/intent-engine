@@ -182,11 +182,17 @@ impl ProjectRegistry {
     }
 
     /// Update MCP heartbeat
+    /// If the project doesn't exist, it will be auto-registered as an MCP-only project
     pub fn update_mcp_heartbeat(&mut self, path: &PathBuf) -> anyhow::Result<()> {
         if let Some(project) = self.find_by_path_mut(path) {
+            // Project exists - update heartbeat
             project.mcp_last_seen = Some(chrono::Utc::now().to_rfc3339());
             project.mcp_connected = true;
             self.save()?;
+        } else {
+            // Project doesn't exist - auto-register it as MCP-only project
+            // This handles the case where Registry was recreated after Dashboard restart
+            self.register_mcp_connection(path, Some("mcp-client".to_string()))?;
         }
         Ok(())
     }
@@ -214,6 +220,51 @@ impl ProjectRegistry {
                 true // Keep projects without PID
             }
         });
+    }
+
+    /// Clean up projects that are not responding to health checks
+    /// This is more reliable than PID-based checking
+    pub async fn cleanup_unhealthy_dashboards(&mut self) {
+        let mut unhealthy_projects = Vec::new();
+
+        for project in &self.projects {
+            // Skip projects without a port (MCP-only connections)
+            if project.port == 0 {
+                continue;
+            }
+
+            // Check if dashboard is healthy via HTTP
+            if !Self::check_health(project.port).await {
+                tracing::debug!(
+                    "Dashboard for {} (port {}) is unhealthy, will be cleaned up",
+                    project.name,
+                    project.port
+                );
+                unhealthy_projects.push(project.path.clone());
+            }
+        }
+
+        // Remove unhealthy projects
+        for path in unhealthy_projects {
+            self.unregister(&path);
+        }
+    }
+
+    /// Check if a Dashboard at the given port is healthy
+    async fn check_health(port: u16) -> bool {
+        let health_url = format!("http://127.0.0.1:{}/api/health", port);
+
+        match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+        {
+            Ok(client) => match client.get(&health_url).send().await {
+                Ok(resp) if resp.status().is_success() => true,
+                Ok(_) => false,
+                Err(_) => false,
+            },
+            Err(_) => false,
+        }
     }
 
     /// Clean up stale MCP connections (no heartbeat for 5 minutes)

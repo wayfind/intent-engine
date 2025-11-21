@@ -477,6 +477,57 @@
       }
     },
     {
+      "name": "plan",
+      "description": "# Core Duty\nCreate or update task structures declaratively using a tree-based API. Simplifies complex multi-task creation into a single atomic operation.\n\n# Tactical Guide\n**Phase 1 (v0.6.0)**: Create-only mode - all task names must be new.\n\nUse this when:\n- Creating a hierarchical task structure (parent → children)\n- Setting up related tasks with dependencies\n- Need atomic multi-task creation\n\n**Key features:**\n- Direct nesting via `children` field (no need for parent_id)\n- Name-based dependency references via `depends_on`\n- Automatic parent-child relationship establishment\n- Transaction-based atomicity (all or nothing)\n\n**Limitations (Phase 1):**\n- Cannot update existing tasks (will error if names exist)\n- task_id field ignored\n- Update mode coming in Phase 2 (v0.6.1)\n\n**Example:**\n```json\n{\n  \"tasks\": [\n    {\n      \"name\": \"User Authentication\",\n      \"priority\": \"high\",\n      \"children\": [\n        {\"name\": \"JWT Implementation\"},\n        {\"name\": \"OAuth2 Integration\", \"depends_on\": [\"JWT Implementation\"]}\n      ]\n    }\n  ]\n}\n```",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "description": "Array of task trees to create. Each task can have nested children and dependency references.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Task name (required). Must be unique (Phase 1 limitation)."
+                },
+                "spec": {
+                  "type": "string",
+                  "description": "Optional task specification in markdown format."
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": ["critical", "high", "medium", "low"],
+                  "description": "Optional priority level. Defaults to medium."
+                },
+                "children": {
+                  "type": "array",
+                  "description": "Optional nested child tasks. Supports arbitrary depth.",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "depends_on": {
+                  "type": "array",
+                  "description": "Optional array of task names this task depends on. Referenced tasks must be in the same plan.",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "task_id": {
+                  "type": "integer",
+                  "description": "Optional explicit task ID (ignored in Phase 1, will be used for updates in Phase 2)."
+                }
+              },
+              "required": ["name"]
+            }
+          }
+        },
+        "required": ["tasks"]
+      }
+    },
+    {
       "name": "report_generate",
       "description": "# Core Duty\nGenerates an analytical summary of project activity.\n\n# Tactical Guide\nUse this for status reports, standups, retrospectives.\n\n**Important:** To save tokens, use `summary_only: true` unless the user explicitly asks for the full task list.\n\n**Returns:**\n- summary: Aggregated statistics (counts by status, date ranges)\n- tasks: Full task list (only if summary_only: false)\n- events: Event list (only if summary_only: false)\n\n**Time ranges:** '1h', '6h', '1d', '7d', '30d'",
       "inputSchema": {

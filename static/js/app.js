@@ -2,6 +2,20 @@
 let currentFilter = 'all';
 let currentTaskId = null;
 let currentTask = null;
+let dashboardWebSocket = null;
+let onlineProjects = new Map(); // project_path → project_info (online projects)
+let isCurrentProjectOffline = false; // Track if current project is in offline/read-only mode
+
+// WebSocket reconnection state
+let wsReconnectAttempts = 0;
+const WS_MAX_RECONNECT_ATTEMPTS = 10;
+const WS_RECONNECT_DELAYS = [1000, 2000, 5000, 10000, 30000]; // Exponential backoff in ms
+let wsHeartbeatTimer = null;
+const WS_HEARTBEAT_TIMEOUT = 60000; // 60 seconds
+
+// LocalStorage heartbeat - check offline projects periodically
+let storageHeartbeatTimer = null;
+const STORAGE_HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -23,8 +37,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Load project tabs
-    await loadProjectTabs();
+    // Connect to Dashboard WebSocket for real-time project updates
+    connectToDashboardWebSocket();
+
+    // Start localStorage heartbeat to check offline projects
+    startStorageHeartbeat();
 
     // Load project info
     await loadProjectInfo();
@@ -34,9 +51,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load current task if exists
     await loadCurrentTask();
-
-    // Refresh project tabs every 30 seconds
-    setInterval(loadProjectTabs, 30000);
 });
 
 // Safe Markdown rendering
@@ -48,6 +62,448 @@ window.renderMarkdown = (md) => {
     } catch (e) {
         console.error('Markdown render error:', e);
         return '<p class="text-red-500">ERROR_RENDERING_DATA_STREAM</p>';
+    }
+};
+
+// ============================================================================
+// LocalStorage Management for Projects
+// ============================================================================
+
+const PROJECT_STORAGE_KEY = 'intent-engine-projects';
+
+function loadProjectsFromStorage() {
+    try {
+        const stored = localStorage.getItem(PROJECT_STORAGE_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+        console.error('Failed to load projects from storage:', e);
+        return [];
+    }
+}
+
+function saveProjectsToStorage(projects) {
+    try {
+        localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(projects));
+    } catch (e) {
+        console.error('Failed to save projects to storage:', e);
+    }
+}
+
+function addProjectToStorage(project) {
+    const projects = loadProjectsFromStorage();
+    // Check if project already exists
+    const existingIndex = projects.findIndex(p => p.path === project.path);
+    if (existingIndex >= 0) {
+        // Update existing project
+        projects[existingIndex] = project;
+    } else {
+        // Add new project
+        projects.push(project);
+    }
+    saveProjectsToStorage(projects);
+}
+
+function removeProjectFromStorage(projectPath) {
+    const projects = loadProjectsFromStorage();
+    const filtered = projects.filter(p => p.path !== projectPath);
+    saveProjectsToStorage(filtered);
+}
+
+// ============================================================================
+// LocalStorage Heartbeat - Detect Offline Projects Coming Back Online
+// ============================================================================
+
+function startStorageHeartbeat() {
+    // Initial check
+    checkOfflineProjects();
+
+    // Set up periodic checks
+    storageHeartbeatTimer = setInterval(checkOfflineProjects, STORAGE_HEARTBEAT_INTERVAL);
+    console.log('📦 LocalStorage heartbeat started (checking every 30s)');
+}
+
+async function checkOfflineProjects() {
+    const storedProjects = loadProjectsFromStorage();
+
+    // Find projects that are stored but not currently online
+    const offlineProjects = storedProjects.filter(p => !onlineProjects.has(p.path));
+
+    if (offlineProjects.length === 0) {
+        return; // All stored projects are already online
+    }
+
+    console.log(`🔍 Checking ${offlineProjects.length} offline project(s)...`);
+
+    // Check each offline project's health
+    for (const project of offlineProjects) {
+        try {
+            // Try to fetch health endpoint (Dashboard must be running on port 11391)
+            const response = await fetch('http://127.0.0.1:11391/api/health', {
+                method: 'GET',
+                signal: AbortSignal.timeout(2000) // 2 second timeout
+            });
+
+            if (response.ok) {
+                // Dashboard is running! Check if our project is now online
+                const infoResponse = await fetch('http://127.0.0.1:11391/api/info');
+                if (infoResponse.ok) {
+                    const info = await infoResponse.json();
+
+                    // If this project matches the running Dashboard's project
+                    if (info.path === project.path) {
+                        console.log(`✓ Project "${project.name}" is now online!`);
+
+                        // Manually update onlineProjects Map since WebSocket may not send
+                        // project_online message when reconnecting (it only sends "init" with empty array)
+                        onlineProjects.set(project.path, project);
+
+                        // Refresh the UI to show updated status (now with green dot)
+                        renderProjectTabs();
+                    }
+                }
+            }
+        } catch (error) {
+            // Dashboard not responding or timeout - project still offline
+            // This is expected for offline projects, no need to log
+        }
+    }
+}
+
+// ============================================================================
+// WebSocket Connection for Real-Time Project Updates
+// ============================================================================
+
+function connectToDashboardWebSocket() {
+    const wsUrl = `ws://${window.location.host}/ws/ui`;
+    console.log(`Connecting to Dashboard WebSocket (attempt ${wsReconnectAttempts + 1}/${WS_MAX_RECONNECT_ATTEMPTS}):`, wsUrl);
+
+    // Clear existing heartbeat timer
+    if (wsHeartbeatTimer) {
+        clearTimeout(wsHeartbeatTimer);
+        wsHeartbeatTimer = null;
+    }
+
+    dashboardWebSocket = new WebSocket(wsUrl);
+
+    dashboardWebSocket.onopen = async () => {
+        console.log('✓ Dashboard WebSocket connected');
+        // Reset reconnect attempts on successful connection
+        wsReconnectAttempts = 0;
+        // Hide connection warning banner
+        hideConnectionWarning();
+        // Start heartbeat timeout timer
+        resetHeartbeatTimer();
+
+        // Fetch current Dashboard project info via HTTP API
+        // This ensures the Dashboard's own project appears in the tabs
+        try {
+            const response = await fetch('/api/info');
+            if (response.ok) {
+                const projectInfo = await response.json();
+                const project = {
+                    name: projectInfo.name,
+                    path: projectInfo.path,
+                    database: projectInfo.database
+                };
+
+                // Add to online projects and storage
+                onlineProjects.set(project.path, project);
+                addProjectToStorage(project);
+
+                console.log('✓ Registered current Dashboard project:', project.name);
+            }
+        } catch (error) {
+            console.warn('Failed to fetch current Dashboard project info:', error);
+        }
+
+        // Fetch all online projects from Registry
+        // This ensures we get accurate mcp_connected status for all projects
+        try {
+            const response = await fetch('/api/projects');
+            if (response.ok) {
+                const result = await response.json();
+                const projects = result.data || [];
+
+                console.log(`✓ Fetched ${projects.length} project(s) from Registry`);
+
+                // Register all mcp_connected projects as online
+                projects.forEach(p => {
+                    if (p.mcp_connected) {
+                        const project = {
+                            name: p.name,
+                            path: p.path,
+                            database: p.path + '/.intent-engine/project.db' // Reconstruct database path
+                        };
+                        onlineProjects.set(project.path, project);
+                        addProjectToStorage(project);
+                        console.log(`✓ Registered MCP-connected project: ${project.name}`);
+                    }
+                });
+
+                // Re-render tabs to show all projects
+                renderProjectTabs();
+            }
+        } catch (error) {
+            console.warn('Failed to fetch projects from Registry:', error);
+        }
+    };
+
+    dashboardWebSocket.onmessage = (event) => {
+        // Reset heartbeat timer on any message
+        resetHeartbeatTimer();
+
+        try {
+            const message = JSON.parse(event.data);
+            handleDashboardMessage(message);
+        } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
+        }
+    };
+
+    dashboardWebSocket.onerror = (error) => {
+        console.error('✗ Dashboard WebSocket error:', error);
+    };
+
+    dashboardWebSocket.onclose = () => {
+        console.log('✗ Dashboard WebSocket closed');
+
+        // Clear heartbeat timer
+        if (wsHeartbeatTimer) {
+            clearTimeout(wsHeartbeatTimer);
+            wsHeartbeatTimer = null;
+        }
+
+        // Mark all projects as offline (gray lights)
+        onlineProjects.clear();
+        renderProjectTabs();
+
+        // Attempt reconnection with exponential backoff
+        if (wsReconnectAttempts < WS_MAX_RECONNECT_ATTEMPTS) {
+            const delayIndex = Math.min(wsReconnectAttempts, WS_RECONNECT_DELAYS.length - 1);
+            const delay = WS_RECONNECT_DELAYS[delayIndex];
+            console.log(`⟳ Reconnecting in ${delay/1000}s... (attempt ${wsReconnectAttempts + 1}/${WS_MAX_RECONNECT_ATTEMPTS})`);
+
+            // Show reconnecting banner
+            showReconnectingBanner(wsReconnectAttempts + 1, WS_MAX_RECONNECT_ATTEMPTS, delay);
+
+            wsReconnectAttempts++;
+            setTimeout(connectToDashboardWebSocket, delay);
+        } else {
+            console.error('✗ Maximum reconnection attempts reached. Please refresh the page.');
+            // Show connection failed banner
+            showConnectionFailedBanner();
+        }
+    };
+}
+
+function resetHeartbeatTimer() {
+    // Clear existing timer
+    if (wsHeartbeatTimer) {
+        clearTimeout(wsHeartbeatTimer);
+    }
+
+    // Set new timer - if no message received in 60s, consider connection dead
+    wsHeartbeatTimer = setTimeout(() => {
+        console.warn('⚠ WebSocket heartbeat timeout - no message received for 60s');
+        if (dashboardWebSocket && dashboardWebSocket.readyState === WebSocket.OPEN) {
+            dashboardWebSocket.close();
+        }
+    }, WS_HEARTBEAT_TIMEOUT);
+}
+
+// ============================================================================
+// WebSocket UI Feedback Functions
+// ============================================================================
+
+function showReconnectingBanner(attempt, maxAttempts, delay) {
+    const banner = document.getElementById('connection-status-banner');
+    if (!banner) return;
+
+    banner.className = 'bg-yellow-900/30 border-b border-yellow-600/50 px-6 py-3';
+    banner.innerHTML = `
+        <div class="flex items-center gap-3">
+            <div class="text-yellow-300 text-xl animate-spin">⟳</div>
+            <div class="flex-1">
+                <div class="font-mono text-sm text-yellow-300 font-bold tracking-wider">RECONNECTING...</div>
+                <div class="font-mono text-xs text-yellow-400/80 mt-0.5">
+                    Connection lost. Retrying in ${delay/1000}s (attempt ${attempt}/${maxAttempts})
+                </div>
+            </div>
+        </div>
+    `;
+    banner.classList.remove('hidden');
+}
+
+function showConnectionFailedBanner() {
+    const banner = document.getElementById('connection-status-banner');
+    if (!banner) return;
+
+    banner.className = 'bg-red-900/30 border-b border-red-600/50 px-6 py-3';
+    banner.innerHTML = `
+        <div class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div class="flex-1">
+                <div class="font-mono text-sm text-red-300 font-bold tracking-wider">⚠️ CONNECTION FAILED</div>
+                <div class="font-mono text-xs text-red-400/80 mt-0.5">
+                    Dashboard server is not responding. Please refresh the page or restart the Dashboard.
+                </div>
+            </div>
+            <button onclick="window.location.reload()" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded font-mono text-xs text-white font-bold transition-colors uppercase tracking-wider">
+                REFRESH
+            </button>
+        </div>
+    `;
+    banner.classList.remove('hidden');
+}
+
+function hideConnectionWarning() {
+    const banner = document.getElementById('connection-status-banner');
+    if (banner) {
+        banner.classList.add('hidden');
+    }
+}
+
+function handleDashboardMessage(message) {
+    console.log('Dashboard message:', message);
+
+    switch (message.type) {
+        case 'init':
+            // Initial project list from Dashboard
+            handleInitMessage(message.projects);
+            break;
+        case 'project_online':
+            // Project came online
+            handleProjectOnline(message.project);
+            break;
+        case 'project_offline':
+            // Project went offline
+            handleProjectOffline(message.project_path);
+            break;
+        case 'ping':
+            // Heartbeat ping from server - respond with pong
+            console.log('♥ Received heartbeat ping');
+            if (dashboardWebSocket && dashboardWebSocket.readyState === WebSocket.OPEN) {
+                dashboardWebSocket.send(JSON.stringify({ type: 'pong' }));
+            }
+            break;
+        default:
+            console.warn('Unknown message type:', message.type);
+    }
+}
+
+function handleInitMessage(projects) {
+    console.log('Received initial project list:', projects);
+
+    // Clear online projects map
+    onlineProjects.clear();
+
+    // Add all online projects to map
+    projects.forEach(project => {
+        onlineProjects.set(project.path, project);
+        // Also add to storage if not already there
+        addProjectToStorage(project);
+    });
+
+    // Render tabs
+    renderProjectTabs();
+}
+
+function handleProjectOnline(project) {
+    console.log('Project came online:', project);
+
+    // Add to online projects map
+    onlineProjects.set(project.path, project);
+
+    // Add to storage if not already there
+    addProjectToStorage(project);
+
+    // Re-render tabs
+    renderProjectTabs();
+}
+
+function handleProjectOffline(projectPath) {
+    console.log('Project went offline:', projectPath);
+
+    // Remove from online projects map
+    onlineProjects.delete(projectPath);
+
+    // Re-render tabs (project stays in storage, just shown as offline)
+    renderProjectTabs();
+}
+
+// Render project tabs from storage + online state
+function renderProjectTabs() {
+    const container = document.getElementById('project-tabs');
+    const storedProjects = loadProjectsFromStorage();
+
+    if (storedProjects.length === 0 && onlineProjects.size === 0) {
+        container.innerHTML = '<div class="text-xs font-mono text-slate-500 py-3">NO_PROJECTS_FOUND</div>';
+        return;
+    }
+
+    // Helper function to render tabs
+    const renderTabs = (currentProjectPath = '') => {
+        const tabsHTML = storedProjects.map(project => {
+            const isOnline = onlineProjects.has(project.path);
+            const isActive = project.path === currentProjectPath;
+            const activeClass = isActive
+                ? 'bg-neon-blue text-black font-bold shadow-neon-blue'
+                : 'bg-sci-panel border border-sci-border text-slate-400 hover:text-white hover:border-white';
+
+            // Status indicator: green for online, gray for offline
+            const statusIndicator = isOnline
+                ? '<span class="ml-1 text-neon-green animate-pulse" title="ONLINE">●</span>'
+                : '<span class="ml-1 text-slate-600" title="OFFLINE">●</span>';
+
+            // Delete button (X) for offline projects - shows on hover
+            const deleteButton = !isOnline
+                ? `<span class="ml-2 text-red-500 hover:text-red-300 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity" onclick="deleteProject('${escapeHtml(project.path)}'); event.stopPropagation();" title="DELETE">×</span>`
+                : '';
+
+            // Allow offline projects to be clicked (for read-only access)
+            const clickHandler = isActive
+                ? 'onclick="return false;"'
+                : `onclick="switchProject('${escapeHtml(project.path)}', ${isOnline}); return false;"`;
+
+            return `
+                <a href="#" ${clickHandler} class="group px-4 py-2 text-xs font-mono transition-all whitespace-nowrap ${activeClass} flex items-center gap-1">
+                    ${project.name.toUpperCase()}
+                    ${statusIndicator}
+                    ${deleteButton}
+                </a>
+            `;
+        }).join('');
+
+        container.innerHTML = tabsHTML;
+    };
+
+    // Try to get current project info, but gracefully degrade if it fails
+    fetch('/api/info')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(infoData => {
+            const currentProjectPath = infoData.path || '';
+            renderTabs(currentProjectPath);
+        })
+        .catch(error => {
+            console.warn('Cannot fetch current project info, using cached data:', error);
+            // Gracefully degrade: render tabs without knowing which is current
+            renderTabs('');
+        });
+}
+
+// Delete project from storage and UI
+window.deleteProject = function(projectPath) {
+    if (confirm(`Delete project tab for:\n${projectPath}\n\nThis will remove it from your browser storage.`)) {
+        removeProjectFromStorage(projectPath);
+        renderProjectTabs();
+        showNotification('PROJECT_TAB_DELETED', 'success');
     }
 };
 
@@ -219,32 +675,38 @@ function renderTaskDetail(task) {
             </div>
 
             <!-- Command Protocols (Actions) -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-                ${task.status === 'todo' ? `
-                    <button onclick="startTask(${task.id})" class="col-span-2 py-3 bg-neon-blue/10 border border-neon-blue text-neon-blue hover:bg-neon-blue hover:text-black font-display font-bold tracking-wider transition-all uppercase">
-                        ▶ Initiate_Sequence
+            ${isCurrentProjectOffline ? `
+                <div class="bg-amber-900/20 border border-amber-600/50 rounded px-4 py-3 mb-8">
+                    <p class="font-mono text-xs text-amber-400">⚠️ READ-ONLY MODE: All editing operations are disabled while project is offline.</p>
+                </div>
+            ` : `
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+                    ${task.status === 'todo' ? `
+                        <button onclick="startTask(${task.id})" class="col-span-2 py-3 bg-neon-blue/10 border border-neon-blue text-neon-blue hover:bg-neon-blue hover:text-black font-display font-bold tracking-wider transition-all uppercase">
+                            ▶ Initiate_Sequence
+                        </button>
+                    ` : ''}
+                    ${task.status === 'doing' ? `
+                        <button onclick="doneTask()" class="col-span-2 py-3 bg-neon-green/10 border border-neon-green text-neon-green hover:bg-neon-green hover:text-black font-display font-bold tracking-wider transition-all uppercase">
+                            ✓ Mission_Complete
+                        </button>
+                        <button onclick="openSpawnSubtaskModal(${task.id})" class="py-3 bg-neon-purple/10 border border-neon-purple text-neon-purple hover:bg-neon-purple hover:text-white font-mono text-xs font-bold tracking-wider transition-all uppercase">
+                            + Fork_Subprocess
+                        </button>
+                    ` : ''}
+                    ${task.status !== 'doing' ? `
+                        <button onclick="switchTask(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-slate-300 hover:border-neon-blue hover:text-neon-blue font-mono text-xs font-bold tracking-wider transition-all uppercase">
+                            ⇄ Switch_Focus
+                        </button>
+                    ` : ''}
+                    <button onclick="openAddEventModal(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-slate-300 hover:border-white hover:text-white font-mono text-xs font-bold tracking-wider transition-all uppercase">
+                        📝 Log_Entry
                     </button>
-                ` : ''}
-                ${task.status === 'doing' ? `
-                    <button onclick="doneTask()" class="col-span-2 py-3 bg-neon-green/10 border border-neon-green text-neon-green hover:bg-neon-green hover:text-black font-display font-bold tracking-wider transition-all uppercase">
-                        ✓ Mission_Complete
+                    <button onclick="deleteTask(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-neon-red hover:bg-neon-red hover:text-black font-mono text-xs font-bold tracking-wider transition-all uppercase">
+                        🗑 Terminate
                     </button>
-                    <button onclick="openSpawnSubtaskModal(${task.id})" class="py-3 bg-neon-purple/10 border border-neon-purple text-neon-purple hover:bg-neon-purple hover:text-white font-mono text-xs font-bold tracking-wider transition-all uppercase">
-                        + Fork_Subprocess
-                    </button>
-                ` : ''}
-                ${task.status !== 'doing' ? `
-                    <button onclick="switchTask(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-slate-300 hover:border-neon-blue hover:text-neon-blue font-mono text-xs font-bold tracking-wider transition-all uppercase">
-                        ⇄ Switch_Focus
-                    </button>
-                ` : ''}
-                <button onclick="openAddEventModal(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-slate-300 hover:border-white hover:text-white font-mono text-xs font-bold tracking-wider transition-all uppercase">
-                    📝 Log_Entry
-                </button>
-                <button onclick="deleteTask(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-neon-red hover:bg-neon-red hover:text-black font-mono text-xs font-bold tracking-wider transition-all uppercase">
-                    🗑 Terminate
-                </button>
-            </div>
+                </div>
+            `}
 
             <!-- Main Data Display -->
             <div class="grid grid-cols-1 gap-6">
@@ -648,56 +1110,12 @@ function showNotification(message, type = 'info') {
     if (type === 'error') alert(`SYSTEM_ERROR: ${message}`);
 }
 
-// Load project tabs
-async function loadProjectTabs() {
-    try {
-        const response = await fetch('/api/projects');
-        const result = await response.json();
-
-        if (!result.data || result.data.length === 0) {
-            document.getElementById('project-tabs').innerHTML = '<div class="text-xs font-mono text-slate-500 py-3">NO_PROJECTS_FOUND</div>';
-            return;
-        }
-
-        // Get current project info
-        const infoResponse = await fetch('/api/info');
-        const infoData = await infoResponse.json();
-        const currentProjectPath = infoData.path || '';
-
-        const tabsHTML = result.data.map(project => {
-            const isActive = project.path === currentProjectPath;
-            const activeClass = isActive
-                ? 'bg-neon-blue text-black font-bold shadow-neon-blue'
-                : 'bg-sci-panel border border-sci-border text-slate-400 hover:text-white hover:border-white';
-
-            // MCP connection status indicator
-            const mcpConnected = project.mcp_connected || false;
-            const mcpIndicator = mcpConnected
-                ? '<span class="ml-1 text-neon-green" title="AGENT_ONLINE">●</span>'
-                : '<span class="ml-1 text-slate-600" title="AGENT_OFFLINE">○</span>';
-
-            const clickHandler = isActive
-                ? 'onclick="return false;"'
-                : `onclick="switchProject('${escapeHtml(project.path)}'); return false;"`;
-
-            return `
-                <a href="#" ${clickHandler} class="px-4 py-2 text-xs font-mono transition-all whitespace-nowrap ${activeClass} flex items-center gap-2">
-                    ${project.name.toUpperCase()}
-                    ${mcpIndicator}
-                </a>
-            `;
-        }).join('');
-
-        document.getElementById('project-tabs').innerHTML = tabsHTML;
-    } catch (error) {
-        console.error('Failed to load project tabs:', error);
-        document.getElementById('project-tabs').innerHTML = '<div class="text-xs font-mono text-neon-red py-3">LOAD_ERROR</div>';
-    }
-}
-
 // Switch to a different project
-async function switchProject(projectPath) {
+async function switchProject(projectPath, isOnline = true) {
     try {
+        // Set offline mode state
+        isCurrentProjectOffline = !isOnline;
+
         showNotification('REROUTING_SYSTEM...', 'info');
 
         const response = await fetch('/api/switch-project', {
@@ -715,11 +1133,16 @@ async function switchProject(projectPath) {
         const result = await response.json();
         const newProjectName = result.data.project_name;
 
-        showNotification(`CONNECTED: ${newProjectName.toUpperCase()}`, 'success');
+        // Show different notification based on online/offline mode
+        if (isOnline) {
+            showNotification(`CONNECTED: ${newProjectName.toUpperCase()}`, 'success');
+        } else {
+            showNotification(`READ_ONLY MODE: ${newProjectName.toUpperCase()} (OFFLINE)`, 'info');
+        }
 
         // Reload all data for the new project
         await loadProjectInfo();
-        await loadProjectTabs();
+        renderProjectTabs();
         await loadTasks(currentFilter);
 
         // Clear task detail view
@@ -745,8 +1168,50 @@ async function switchProject(projectPath) {
         currentTaskId = null;
         currentTask = null;
 
+        // Update offline mode UI
+        updateOfflineModeUI();
+
     } catch (e) {
         console.error('Failed to switch project:', e);
         showNotification('SYSTEM_ERROR', 'error');
+    }
+}
+
+// Update UI based on offline mode state
+function updateOfflineModeUI() {
+    const banner = document.getElementById('offline-mode-banner');
+    const newTaskBtn = document.querySelector('button[onclick="openNewTaskModal()"]');
+    const currentFocusBtn = document.querySelector('button[onclick="loadCurrentTask()"]');
+
+    if (isCurrentProjectOffline) {
+        // Show offline banner
+        banner.classList.remove('hidden');
+
+        // Disable edit buttons
+        if (newTaskBtn) {
+            newTaskBtn.disabled = true;
+            newTaskBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            newTaskBtn.classList.remove('hover:bg-white', 'hover:shadow-neon-blue');
+        }
+        if (currentFocusBtn) {
+            currentFocusBtn.disabled = true;
+            currentFocusBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            currentFocusBtn.classList.remove('hover:bg-neon-purple', 'hover:text-white');
+        }
+    } else {
+        // Hide offline banner
+        banner.classList.add('hidden');
+
+        // Enable edit buttons
+        if (newTaskBtn) {
+            newTaskBtn.disabled = false;
+            newTaskBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            newTaskBtn.classList.add('hover:bg-white', 'hover:shadow-neon-blue');
+        }
+        if (currentFocusBtn) {
+            currentFocusBtn.disabled = false;
+            currentFocusBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            currentFocusBtn.classList.add('hover:bg-neon-purple', 'hover:text-white');
+        }
     }
 }

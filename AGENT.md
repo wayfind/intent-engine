@@ -254,6 +254,95 @@ search "JWT" --include-events
 - Event matches with full task ancestry chain
 - FTS5 highlighting with `**keywords**`
 
+### Plan Interface (v0.6)
+
+The `plan` command enables **declarative task creation** with batch operations, idempotency, and automatic dependency resolution:
+
+```bash
+# Create task structure from JSON stdin
+cat > project.json <<'JSON'
+{
+  "tasks": [
+    {
+      "name": "User Authentication",
+      "spec": "Implement full auth system",
+      "priority": "high",
+      "children": [
+        {"name": "JWT Implementation"},
+        {"name": "OAuth2 Integration", "depends_on": ["JWT Implementation"]}
+      ]
+    }
+  ]
+}
+JSON
+
+ie plan < project.json
+```
+
+**Key Capabilities**:
+- **Batch Creation**: Create entire task trees in one transaction
+- **Idempotent Updates**: Run same plan multiple times → same result
+- **Name-Based Identity**: Tasks identified by name, not ID
+- **Dependency Resolution**: Automatic name-to-ID mapping
+- **Cycle Detection**: Tarjan's SCC algorithm prevents circular dependencies
+- **Hierarchical Nesting**: `children` field creates parent-child relationships
+
+**TaskTree Structure**:
+```typescript
+interface TaskTree {
+  name: string                 // Required: unique task identifier
+  spec?: string                // Optional: task specification
+  priority?: "critical" | "high" | "medium" | "low"
+  children?: TaskTree[]        // Optional: nested child tasks
+  depends_on?: string[]        // Optional: dependency task names
+  task_id?: number             // Optional: explicit ID for updates
+}
+```
+
+**Example: Complex Project Setup**
+```json
+{
+  "tasks": [
+    {
+      "name": "Backend API",
+      "priority": "critical",
+      "children": [
+        {"name": "Database Schema"},
+        {"name": "REST Endpoints", "depends_on": ["Database Schema"]},
+        {"name": "Authentication", "depends_on": ["Database Schema"]}
+      ]
+    },
+    {
+      "name": "Frontend",
+      "depends_on": ["Backend API"]
+    }
+  ]
+}
+```
+
+**Idempotent Updates**:
+```bash
+# First run: Creates all tasks
+ie plan < project.json
+# Output: Created: 5, Updated: 0
+
+# Modify specs, run again: Updates existing tasks
+ie plan < project_v2.json
+# Output: Created: 0, Updated: 5
+
+# No changes, run again: No-op, same result
+ie plan < project_v2.json
+# Output: Created: 0, Updated: 5
+```
+
+**Error Handling**:
+- ❌ Circular dependencies detected automatically
+- ❌ Missing dependency references rejected
+- ❌ Duplicate task names in request rejected
+- ✅ All operations atomic (all-or-nothing)
+
+**See**: [docs/PLAN_INTERFACE_GUIDE.md](docs/PLAN_INTERFACE_GUIDE.md) for comprehensive guide and migration examples.
+
 ---
 
 ## 🛠️ Essential Commands
@@ -262,7 +351,8 @@ search "JWT" --include-events
 
 | Command | Purpose | Parameters | Focus-Driven? |
 |---------|---------|------------|---------------|
-| `task add` | Create task | `--name`, `--parent`, `--spec-stdin` | ❌ |
+| `task add` | Create single task | `--name`, `--parent`, `--spec-stdin` | ❌ |
+| `plan` | Batch create/update tasks (v0.6) | JSON from stdin | ❌ (declarative) |
 | `task start <ID>` | Start task | `<TASK_ID>`, `--with-events` | Sets focus |
 | `task done` | Complete current | None | ✅ Yes |
 | `task switch <ID>` | Switch focus | `<TASK_ID>` | Changes focus |

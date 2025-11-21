@@ -72,20 +72,10 @@ run_test "从深层子目录运行 (src/mcp/)" \
     "cd '$SCRIPT_DIR/src/mcp' && echo '$TEST_CMD' | '$BINARY' mcp-server" \
     "success"
 
-# 测试 4: 使用环境变量
-run_test "使用环境变量 INTENT_ENGINE_PROJECT_DIR" \
-    "cd /tmp && INTENT_ENGINE_PROJECT_DIR='$SCRIPT_DIR' echo '$TEST_CMD' | '$BINARY' mcp-server" \
-    "success"
-
-# 测试 5: 从完全不相关的目录运行（应该失败）
-run_test "从不相关目录运行（无环境变量）" \
+# 测试 4: 从完全不相关的目录运行（应该使用 home database fallback）
+run_test "从不相关目录运行（使用 home fallback）" \
     "cd /tmp && echo '$TEST_CMD' | '$BINARY' mcp-server" \
-    "failure"
-
-# 测试 6: 环境变量指向错误路径（应该失败）
-run_test "环境变量指向不存在的项目" \
-    "INTENT_ENGINE_PROJECT_DIR='/nonexistent/path' echo '$TEST_CMD' | '$BINARY' mcp-server" \
-    "failure"
+    "success"
 
 # 测试 7: CLI 模式（不依赖项目目录）
 run_test "CLI 模式: --help" \

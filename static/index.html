@@ -354,6 +354,22 @@
         </div>
     </header>
 
+    <!-- Connection Status Banner (hidden by default, shown during reconnection attempts) -->
+    <div id="connection-status-banner" class="hidden"></div>
+
+    <!-- Offline Mode Warning Banner -->
+    <div id="offline-mode-banner" class="hidden bg-gradient-to-r from-amber-900/30 to-amber-800/30 border-b border-amber-600/50 px-6 py-3">
+        <div class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div class="flex-1">
+                <div class="font-mono text-sm text-amber-300 font-bold tracking-wider">⚠️ READ-ONLY MODE</div>
+                <div class="font-mono text-xs text-amber-400/80 mt-0.5">Project is offline. You can view data but cannot create, modify, or delete tasks.</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Layout -->
     <div class="flex-1 flex overflow-hidden relative z-0">
 
