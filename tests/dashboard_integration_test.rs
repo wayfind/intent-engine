@@ -246,7 +246,11 @@ fn test_temporary_paths_are_rejected() {
     let count_after = registry_after.projects.len();
 
     // Check for temporary paths using platform-agnostic method
-    let temp_dir = std::env::temp_dir();
+    // IMPORTANT: Both paths must be canonicalized for comparison to work on macOS/Windows
+    // (e.g., macOS: /var → /private/var symlink)
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::temp_dir());
     let has_temp_path = registry_after.projects.iter().any(|p| {
         let normalized = p.path.canonicalize().unwrap_or_else(|_| p.path.clone());
         normalized.starts_with(&temp_dir)
