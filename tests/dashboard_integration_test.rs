@@ -10,6 +10,7 @@ mod common;
 
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
@@ -57,16 +58,30 @@ fn init_project(path: &Path) {
     );
 }
 
-/// Start Dashboard in the background
-fn start_dashboard(project_path: &Path) -> Child {
-    Command::new(common::ie_binary())
+/// Start Dashboard in the background with logging
+/// Returns (Child, stdout_path, stderr_path)
+fn start_dashboard(project_path: &Path) -> (Child, PathBuf, PathBuf) {
+    // Create log files for diagnostics
+    let stdout_path = std::env::temp_dir().join(format!("dashboard-{}.stdout", std::process::id()));
+    let stderr_path = std::env::temp_dir().join(format!("dashboard-{}.stderr", std::process::id()));
+
+    let stdout_file = File::create(&stdout_path).expect("Failed to create stdout log");
+    let stderr_file = File::create(&stderr_path).expect("Failed to create stderr log");
+
+    let child = Command::new(common::ie_binary())
         .arg("dashboard")
         .arg("start")
         .current_dir(project_path)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file))
         .spawn()
-        .expect("Failed to start Dashboard")
+        .expect("Failed to start Dashboard");
+
+    eprintln!("Dashboard started with PID: {:?}", child.id());
+    eprintln!("  stdout: {}", stdout_path.display());
+    eprintln!("  stderr: {}", stderr_path.display());
+
+    (child, stdout_path, stderr_path)
 }
 
 /// Start MCP server
@@ -88,7 +103,8 @@ fn start_mcp_server(project_path: &Path, isolated: bool) -> Child {
 }
 
 /// Wait for Dashboard to be ready (polls /api/health)
-fn wait_for_dashboard_ready() {
+/// If timeout occurs, prints diagnostic information
+fn wait_for_dashboard_ready(stdout_path: &Path, stderr_path: &Path, child: &mut Child) {
     for attempt in 0..30 {
         if check_dashboard_health(11391) {
             // Give it a bit more time to fully initialize
@@ -100,6 +116,55 @@ fn wait_for_dashboard_ready() {
         }
         std::thread::sleep(Duration::from_millis(500));
     }
+
+    // Dashboard didn't start - gather diagnostics
+    eprintln!("\n========== DASHBOARD STARTUP FAILED ==========");
+
+    // Check if process is still running
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            eprintln!("Dashboard process exited with: {}", status);
+        },
+        Ok(None) => {
+            eprintln!("Dashboard process is still running (PID: {})", child.id());
+        },
+        Err(e) => {
+            eprintln!("Failed to check Dashboard process status: {}", e);
+        },
+    }
+
+    // Read stdout
+    eprintln!("\n--- Dashboard stdout ---");
+    if let Ok(mut stdout_content) = std::fs::read_to_string(stdout_path) {
+        if stdout_content.is_empty() {
+            stdout_content = "(empty)".to_string();
+        }
+        eprintln!("{}", stdout_content);
+    } else {
+        eprintln!("(failed to read stdout log)");
+    }
+
+    // Read stderr
+    eprintln!("\n--- Dashboard stderr ---");
+    if let Ok(mut stderr_content) = std::fs::read_to_string(stderr_path) {
+        if stderr_content.is_empty() {
+            stderr_content = "(empty)".to_string();
+        }
+        eprintln!("{}", stderr_content);
+    } else {
+        eprintln!("(failed to read stderr log)");
+    }
+
+    // Check port binding
+    eprintln!("\n--- Port check ---");
+    eprintln!("Attempting to connect to http://127.0.0.1:11391/api/health");
+    match reqwest::blocking::get("http://127.0.0.1:11391/api/health") {
+        Ok(resp) => eprintln!("Response: {:?}", resp),
+        Err(e) => eprintln!("Error: {}", e),
+    }
+
+    eprintln!("==============================================\n");
+
     panic!("Dashboard did not start in time (15 seconds)");
 }
 
@@ -177,8 +242,8 @@ fn test_mcp_connects_to_dashboard_and_registers_project() {
         .any(|p| p.path.to_string_lossy() == project_path_str);
 
     // Start Dashboard
-    let dashboard = start_dashboard(&test_dir);
-    wait_for_dashboard_ready();
+    let (mut dashboard, stdout_path, stderr_path) = start_dashboard(&test_dir);
+    wait_for_dashboard_ready(&stdout_path, &stderr_path, &mut dashboard);
 
     // Start MCP server (NOT isolated - allows WebSocket connection)
     let mcp = start_mcp_server(&test_dir, false);
@@ -228,8 +293,8 @@ fn test_temporary_paths_are_rejected() {
 
     // Start Dashboard (using current directory, not temp)
     let real_dir = std::env::current_dir().expect("Failed to get current directory");
-    let dashboard = start_dashboard(&real_dir);
-    wait_for_dashboard_ready();
+    let (mut dashboard, stdout_path, stderr_path) = start_dashboard(&real_dir);
+    wait_for_dashboard_ready(&stdout_path, &stderr_path, &mut dashboard);
 
     // Get registry state before
     let registry_before = load_registry();
@@ -291,8 +356,8 @@ fn test_dashboard_autostart_env_prevents_connection() {
     init_project(&test_dir);
 
     // Start Dashboard
-    let dashboard = start_dashboard(&test_dir);
-    wait_for_dashboard_ready();
+    let (mut dashboard, stdout_path, stderr_path) = start_dashboard(&test_dir);
+    wait_for_dashboard_ready(&stdout_path, &stderr_path, &mut dashboard);
 
     // Get initial MCP connection state
     let registry_before = load_registry();
@@ -358,8 +423,8 @@ fn test_mcp_reconnects_after_dashboard_restart() {
     init_project(&test_dir);
 
     // First startup
-    let mut dashboard = start_dashboard(&test_dir);
-    wait_for_dashboard_ready();
+    let (mut dashboard, stdout_path, stderr_path) = start_dashboard(&test_dir);
+    wait_for_dashboard_ready(&stdout_path, &stderr_path, &mut dashboard);
 
     let mcp = start_mcp_server(&test_dir, false);
     std::thread::sleep(Duration::from_secs(3));
@@ -382,8 +447,8 @@ fn test_mcp_reconnects_after_dashboard_restart() {
     let _ = dashboard.wait();
     std::thread::sleep(Duration::from_secs(2));
 
-    let dashboard2 = start_dashboard(&test_dir);
-    wait_for_dashboard_ready();
+    let (mut dashboard2, stdout_path2, stderr_path2) = start_dashboard(&test_dir);
+    wait_for_dashboard_ready(&stdout_path2, &stderr_path2, &mut dashboard2);
 
     // Wait for potential reconnection
     std::thread::sleep(Duration::from_secs(5));
