@@ -101,7 +101,7 @@ fn test_ping_returns_empty_result() {
 
 #[test]
 #[serial]
-fn test_tools_list_returns_16_tools() {
+fn test_tools_list_returns_17_tools() {
     // Load expected tools from mcp-server.json (single source of truth)
     let mcp_schema_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("mcp-server.json");
     let mcp_schema_content =

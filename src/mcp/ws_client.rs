@@ -72,7 +72,7 @@ pub async fn connect_to_dashboard(
         .await
         .context("Failed to connect to Dashboard WebSocket")?;
 
-    tracing::info!("Connected to Dashboard at {}", url);
+    tracing::debug!("Connected to Dashboard at {}", url);
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -90,13 +90,13 @@ pub async fn connect_to_dashboard(
     if let Some(Ok(Message::Text(text))) = read.next().await {
         match serde_json::from_str::<DashboardResponse>(&text) {
             Ok(DashboardResponse::Registered { success: true }) => {
-                tracing::info!("Successfully registered with Dashboard");
+                tracing::debug!("Successfully registered with Dashboard");
             },
             Ok(DashboardResponse::Registered { success: false }) => {
                 anyhow::bail!("Dashboard rejected registration");
             },
             _ => {
-                tracing::warn!("Unexpected response during registration: {}", text);
+                tracing::debug!("Unexpected response during registration: {}", text);
             },
         }
     }

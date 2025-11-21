@@ -103,7 +103,7 @@ pub async fn run() -> io::Result<()> {
         )
         .await
         {
-            tracing::warn!("Failed to connect to Dashboard WebSocket: {}", e);
+            tracing::debug!("Failed to connect to Dashboard WebSocket: {}", e);
             // Non-fatal: MCP server can operate without Dashboard
         }
     });
