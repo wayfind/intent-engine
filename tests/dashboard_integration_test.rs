@@ -68,12 +68,16 @@ fn start_dashboard(project_path: &Path) -> (Child, PathBuf, PathBuf) {
     let stdout_file = File::create(&stdout_path).expect("Failed to create stdout log");
     let stderr_file = File::create(&stderr_path).expect("Failed to create stderr log");
 
-    // Set INTENT_ENGINE_PROJECT_DIR for test environment only
-    // This helps Dashboard child process find the project on macOS where setsid
-    // prevents std::env::current_dir() from working correctly
+    // Start Dashboard in FOREGROUND mode to avoid setsid issues on macOS
+    // In foreground mode:
+    // - No child process forking (setsid not used)
+    // - Stdout/stderr properly captured by test
+    // - Environment variables correctly inherited
+    // - Working directory preserved
     let child = Command::new(common::ie_binary())
         .arg("dashboard")
         .arg("start")
+        .arg("--foreground") // Run in foreground mode for tests
         .current_dir(project_path)
         .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .stdout(Stdio::from(stdout_file))
