@@ -216,11 +216,11 @@ fn test_mcp_connects_to_dashboard_and_registers_project() {
 /// Test 2: Temporary paths are correctly rejected (validates Defense Layer 2)
 ///
 /// This test verifies that the path validation logic in src/mcp/ws_client.rs
-/// correctly rejects temporary directory paths.
+/// correctly rejects temporary directory paths across all platforms.
 #[test]
 #[serial]
 fn test_temporary_paths_are_rejected() {
-    let temp_dir = common::setup_test_env(); // Creates /tmp/.tmpXXX
+    let temp_dir = common::setup_test_env(); // Creates platform-specific temp dir
     let project_path = temp_dir.path();
 
     // Initialize project in temporary directory
@@ -245,14 +245,17 @@ fn test_temporary_paths_are_rejected() {
     let registry_after = load_registry();
     let count_after = registry_after.projects.len();
 
-    let has_tmp_path = registry_after
-        .projects
-        .iter()
-        .any(|p| p.path.to_string_lossy().starts_with("/tmp"));
+    // Check for temporary paths using platform-agnostic method
+    let temp_dir = std::env::temp_dir();
+    let has_temp_path = registry_after.projects.iter().any(|p| {
+        let normalized = p.path.canonicalize().unwrap_or_else(|_| p.path.clone());
+        normalized.starts_with(&temp_dir)
+    });
 
     assert!(
-        !has_tmp_path,
-        "Registry should not contain /tmp paths (Defense Layer 2 failed)"
+        !has_temp_path,
+        "Registry should not contain temporary paths (Defense Layer 2 failed). Temp dir: {:?}",
+        temp_dir
     );
 
     eprintln!(

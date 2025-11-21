@@ -38,6 +38,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: 'docs: update CHANGELOG for ${{ github.ref_name }}'
           branch: docs/changelog-${{ github.ref_name }}
+          base: main
           delete-branch: true
           title: 'docs: Update CHANGELOG for ${{ github.ref_name }}'
           body: |
