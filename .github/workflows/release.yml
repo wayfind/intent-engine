@@ -29,6 +29,7 @@ jobs:
 
   build-linux-arm64:
     uses: ./.github/workflows/_build-release.yml
+    continue-on-error: true  # Allow ARM64 build to fail without blocking release
     with:
       os: ubuntu-latest
       target: aarch64-unknown-linux-gnu
@@ -69,7 +70,14 @@ jobs:
       - build-macos-arm64
       - build-windows-x64
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    # Run if any build succeeds (ARM64 may fail due to cross-compilation issues)
+    if: |
+      always() &&
+      (needs.build-linux-x64.result == 'success' ||
+       needs.build-macos-x64.result == 'success' ||
+       needs.build-macos-arm64.result == 'success' ||
+       needs.build-windows-x64.result == 'success') &&
+      (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Checkout code
