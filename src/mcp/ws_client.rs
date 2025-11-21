@@ -60,7 +60,10 @@ pub async fn connect_to_dashboard(
 
     // Validate project path - reject temporary directories (Defense Layer 2)
     // This prevents test environments from polluting the Dashboard registry
-    let temp_dir = std::env::temp_dir();
+    // IMPORTANT: Canonicalize temp_dir to match normalized_project_path format (fixes Windows UNC paths)
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::temp_dir());
     if normalized_project_path.starts_with(&temp_dir) {
         tracing::warn!(
             "Skipping Dashboard registration for temporary path: {}",

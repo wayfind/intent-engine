@@ -148,7 +148,10 @@ impl ProjectRegistry {
         // Validate project path - reject temporary directories (Defense Layer 6)
         // This prevents test environments from polluting the Dashboard registry
         let normalized_path = path.canonicalize().unwrap_or_else(|_| path.clone());
-        let temp_dir = std::env::temp_dir();
+        // IMPORTANT: Canonicalize temp_dir to match normalized_path format (fixes Windows UNC paths)
+        let temp_dir = std::env::temp_dir()
+            .canonicalize()
+            .unwrap_or_else(|_| std::env::temp_dir());
         if normalized_path.starts_with(&temp_dir) {
             tracing::debug!(
                 "Rejecting MCP connection registration for temporary path: {}",

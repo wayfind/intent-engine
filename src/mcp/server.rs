@@ -79,7 +79,10 @@ pub async fn run() -> io::Result<()> {
 
     // Validate project path - don't auto-start Dashboard from temporary directories (Defense Layer 4)
     let normalized_path = ctx.root.canonicalize().unwrap_or_else(|_| ctx.root.clone());
-    let temp_dir = std::env::temp_dir();
+    // IMPORTANT: Canonicalize temp_dir to match normalized_path format (fixes Windows UNC paths)
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::temp_dir());
     let is_temp_path = normalized_path.starts_with(&temp_dir);
 
     if !skip_dashboard && !is_temp_path && !is_dashboard_running().await {
@@ -777,7 +780,10 @@ fn register_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()>
 
     // Validate project path - reject temporary directories (Defense Layer 3)
     // This prevents test environments from polluting the Dashboard registry
-    let temp_dir = std::env::temp_dir();
+    // IMPORTANT: Canonicalize temp_dir to match normalized_path format (fixes Windows UNC paths)
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::temp_dir());
     if normalized_path.starts_with(&temp_dir) {
         tracing::debug!(
             "Skipping MCP registry registration for temporary path: {}",

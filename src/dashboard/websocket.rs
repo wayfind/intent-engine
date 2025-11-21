@@ -194,7 +194,10 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                                 .canonicalize()
                                 .unwrap_or_else(|_| project_path_buf.clone());
 
-                            let temp_dir = std::env::temp_dir();
+                            // IMPORTANT: Canonicalize temp_dir to match normalized_path format (fixes Windows UNC paths)
+                            let temp_dir = std::env::temp_dir()
+                                .canonicalize()
+                                .unwrap_or_else(|_| std::env::temp_dir());
                             let is_temp_path = normalized_path.starts_with(&temp_dir);
 
                             if is_temp_path {

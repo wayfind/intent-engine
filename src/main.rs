@@ -1695,6 +1695,11 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                         cmd.arg("--browser");
                     }
 
+                    // Pass project path via environment variable to ensure child process
+                    // can find the project even if current_dir is not inherited correctly
+                    // (fixes macOS setsid issue where std::env::current_dir() fails in child)
+                    cmd.env("INTENT_ENGINE_PROJECT_DIR", &project_path);
+
                     cmd
                 };
 
@@ -1712,6 +1717,9 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                     if browser {
                         cmd.arg("--browser");
                     }
+
+                    // Pass project path via environment variable for consistency
+                    cmd.env("INTENT_ENGINE_PROJECT_DIR", &project_path);
 
                     cmd
                 };
