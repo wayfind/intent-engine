@@ -93,20 +93,23 @@ pub async fn run() -> io::Result<()> {
     });
 
     // Connect to Dashboard via WebSocket
-    let ws_root = ctx.root.clone();
-    let ws_db_path = ctx.db_path.clone();
-    tokio::spawn(async move {
-        if let Err(e) = crate::mcp::ws_client::connect_to_dashboard(
-            ws_root,
-            ws_db_path,
-            Some("mcp-client".to_string()),
-        )
-        .await
-        {
-            tracing::debug!("Failed to connect to Dashboard WebSocket: {}", e);
-            // Non-fatal: MCP server can operate without Dashboard
-        }
-    });
+    // Skip in test environments to prevent temporary test projects from being registered
+    if !skip_dashboard {
+        let ws_root = ctx.root.clone();
+        let ws_db_path = ctx.db_path.clone();
+        tokio::spawn(async move {
+            if let Err(e) = crate::mcp::ws_client::connect_to_dashboard(
+                ws_root,
+                ws_db_path,
+                Some("mcp-client".to_string()),
+            )
+            .await
+            {
+                tracing::debug!("Failed to connect to Dashboard WebSocket: {}", e);
+                // Non-fatal: MCP server can operate without Dashboard
+            }
+        });
+    }
 
     // Start heartbeat task
     let project_path = ctx.root.clone();

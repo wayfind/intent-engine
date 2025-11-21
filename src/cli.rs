@@ -64,6 +64,23 @@ pub enum Commands {
         summary_only: bool,
     },
 
+    /// Create or update task structures declaratively
+    ///
+    /// Reads a JSON plan from stdin and creates/updates tasks atomically.
+    /// Supports hierarchical nesting and name-based dependencies.
+    ///
+    /// Example:
+    ///   echo '{"tasks": [{"name": "Task A", "children": [{"name": "Task B"}]}]}' | ie plan
+    Plan {
+        /// Show what would be created without actually doing it
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
     /// Event logging commands
     #[command(subcommand)]
     Event(EventCommands),

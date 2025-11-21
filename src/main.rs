@@ -6,6 +6,7 @@ use intent_engine::db::models::TaskContext;
 use intent_engine::error::{IntentError, Result};
 use intent_engine::events::EventManager;
 use intent_engine::logging::LoggingConfig;
+use intent_engine::plan::{PlanExecutor, PlanRequest};
 use intent_engine::project::ProjectContext;
 use intent_engine::report::ReportManager;
 use intent_engine::tasks::TaskManager;
@@ -96,6 +97,55 @@ async fn run(cli: &Cli) -> Result<()> {
                 project_dir,
             )
             .await?;
+        },
+
+        Commands::Plan { dry_run, format } => {
+            // Read JSON from stdin
+            let json_input = read_stdin()?;
+
+            // Parse JSON into PlanRequest
+            let request: PlanRequest = serde_json::from_str(&json_input)
+                .map_err(|e| IntentError::InvalidInput(format!("Invalid JSON: {}", e)))?;
+
+            if dry_run {
+                // Dry-run mode: just validate and show what would be created
+                println!("DRY RUN - no changes will be made");
+                println!();
+                println!("Would create/update:");
+                for task in &request.tasks {
+                    print_task_tree(task, 0);
+                }
+            } else {
+                // Execute the plan
+                let ctx = ProjectContext::load_or_init().await?;
+                let executor = PlanExecutor::new(&ctx.pool);
+                let result = executor.execute(&request).await?;
+
+                // Format output
+                if format == "json" {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                } else {
+                    // Text format
+                    if result.success {
+                        println!("✓ Plan executed successfully");
+                        println!();
+                        println!("Created: {} tasks", result.created_count);
+                        println!("Updated: {} tasks", result.updated_count);
+                        println!("Dependencies: {}", result.dependency_count);
+                        println!();
+                        println!("Task ID mapping:");
+                        for (name, id) in &result.task_id_map {
+                            println!("  {} → #{}", name, id);
+                        }
+                    } else {
+                        eprintln!("✗ Plan execution failed");
+                        if let Some(error) = result.error {
+                            eprintln!("Error: {}", error);
+                        }
+                        std::process::exit(1);
+                    }
+                }
+            }
         },
 
         // ========================================
@@ -1437,6 +1487,32 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Print task tree in a hierarchical format (for dry-run mode)
+fn print_task_tree(task: &intent_engine::plan::TaskTree, indent: usize) {
+    let prefix = "  ".repeat(indent);
+    println!("{}• {}", prefix, task.name);
+
+    if let Some(spec) = &task.spec {
+        println!("{}  Spec: {}", prefix, spec);
+    }
+
+    if let Some(priority) = &task.priority {
+        println!("{}  Priority: {}", prefix, priority.as_str());
+    }
+
+    if let Some(depends_on) = &task.depends_on {
+        if !depends_on.is_empty() {
+            println!("{}  Depends on: {}", prefix, depends_on.join(", "));
+        }
+    }
+
+    if let Some(children) = &task.children {
+        for child in children {
+            print_task_tree(child, indent + 1);
+        }
+    }
 }
 
 /// Check if Dashboard is healthy by querying the health endpoint

@@ -598,6 +598,7 @@ impl<'a> PlanExecutor<'a> {
         let mut on_stack = vec![false; n];
         let mut sccs = Vec::new();
 
+        #[allow(clippy::too_many_arguments)]
         fn strongconnect(
             v: usize,
             graph: &[Vec<usize>],
@@ -1248,8 +1249,8 @@ mod tests {
         assert_eq!(flat.len(), 11); // 1 parent + 10 children
 
         // All children should have same parent
-        for i in 1..=10 {
-            assert_eq!(flat[i].parent_name, Some("Parent".to_string()));
+        for child in flat.iter().skip(1).take(10) {
+            assert_eq!(child.parent_name, Some("Parent".to_string()));
         }
     }
 
