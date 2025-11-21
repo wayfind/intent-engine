@@ -68,10 +68,14 @@ fn start_dashboard(project_path: &Path) -> (Child, PathBuf, PathBuf) {
     let stdout_file = File::create(&stdout_path).expect("Failed to create stdout log");
     let stderr_file = File::create(&stderr_path).expect("Failed to create stderr log");
 
+    // Set INTENT_ENGINE_PROJECT_DIR for test environment only
+    // This helps Dashboard child process find the project on macOS where setsid
+    // prevents std::env::current_dir() from working correctly
     let child = Command::new(common::ie_binary())
         .arg("dashboard")
         .arg("start")
         .current_dir(project_path)
+        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .stdout(Stdio::from(stdout_file))
         .stderr(Stdio::from(stderr_file))
         .spawn()
