@@ -185,8 +185,32 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                         Ok(McpMessage::Register { project }) => {
                             tracing::info!("MCP registering project: {}", project.name);
 
-                            // Store connection
                             let path = project.path.clone();
+                            let project_path_buf = std::path::PathBuf::from(&path);
+
+                            // Validate project path - reject temporary directories (Defense Layer 5)
+                            // This prevents test environments from polluting the Dashboard registry
+                            let normalized_path = project_path_buf
+                                .canonicalize()
+                                .unwrap_or_else(|_| project_path_buf.clone());
+
+                            let is_temp_path = normalized_path.starts_with("/tmp")
+                                || normalized_path.starts_with(std::env::temp_dir());
+
+                            if is_temp_path {
+                                tracing::warn!(
+                                    "Rejecting MCP registration for temporary/invalid path: {}",
+                                    path
+                                );
+
+                                // Send rejection response
+                                let response = McpResponse::Registered { success: false };
+                                let _ = tx
+                                    .send(Message::Text(serde_json::to_string(&response).unwrap()));
+                                continue; // Skip registration
+                            }
+
+                            // Store connection
                             let conn = McpConnection {
                                 tx: tx.clone(),
                                 project: project.clone(),
@@ -201,12 +225,11 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                             project_path = Some(path.clone());
 
                             // Update Registry immediately to set mcp_connected=true
-                            let project_path_buf = std::path::PathBuf::from(&path);
                             match crate::dashboard::registry::ProjectRegistry::load() {
                                 Ok(mut registry) => {
                                     if let Err(e) = registry.register_mcp_connection(
                                         &project_path_buf,
-                                        Some("mcp-client".to_string()),
+                                        project.agent.clone(),
                                     ) {
                                         tracing::warn!(
                                             "Failed to update Registry for MCP connection: {}",

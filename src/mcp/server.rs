@@ -77,7 +77,12 @@ pub async fn run() -> io::Result<()> {
     // NOTE: All eprintln! output removed to prevent Windows stderr buffer blocking
     let skip_dashboard = std::env::var("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART").is_ok();
 
-    if !skip_dashboard && !is_dashboard_running().await {
+    // Validate project path - don't auto-start Dashboard from temporary directories (Defense Layer 4)
+    let normalized_path = ctx.root.canonicalize().unwrap_or_else(|_| ctx.root.clone());
+    let is_temp_path =
+        normalized_path.starts_with("/tmp") || normalized_path.starts_with(std::env::temp_dir());
+
+    if !skip_dashboard && !is_temp_path && !is_dashboard_running().await {
         // Spawn Dashboard startup in background task - don't block MCP Server initialization
         tokio::spawn(async {
             let _ = start_dashboard_background().await;
@@ -769,6 +774,16 @@ fn register_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()>
     let normalized_path = project_path
         .canonicalize()
         .unwrap_or_else(|_| project_path.to_path_buf());
+
+    // Validate project path - reject temporary directories
+    // This prevents test environments from polluting the Dashboard registry (Defense Layer 3)
+    if normalized_path.starts_with("/tmp") || normalized_path.starts_with(std::env::temp_dir()) {
+        tracing::warn!(
+            "Skipping MCP registry registration for temporary path: {}",
+            normalized_path.display()
+        );
+        return Ok(()); // Silently skip, don't error - non-fatal for MCP server
+    }
 
     // Register MCP connection - this will create a project entry if none exists
     registry.register_mcp_connection(&normalized_path, agent_name)?;

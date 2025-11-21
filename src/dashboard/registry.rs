@@ -145,6 +145,18 @@ impl ProjectRegistry {
         path: &PathBuf,
         agent_name: Option<String>,
     ) -> anyhow::Result<()> {
+        // Validate project path - reject temporary directories (Defense Layer 6)
+        // This prevents test environments from polluting the Dashboard registry
+        let normalized_path = path.canonicalize().unwrap_or_else(|_| path.clone());
+        if normalized_path.starts_with("/tmp") || normalized_path.starts_with(std::env::temp_dir())
+        {
+            tracing::warn!(
+                "Rejecting MCP connection registration for temporary path: {}",
+                path.display()
+            );
+            return Ok(()); // Silently skip - non-fatal
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
 
         // Check if project already exists
