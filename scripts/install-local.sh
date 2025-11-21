@@ -22,6 +22,17 @@ echo ""
 echo "📦 开始安装..."
 cargo install --path . --force
 
+# 清理旧的 dashboard registry（v0.5.x -> v0.6.0 迁移）
+REGISTRY_FILE="$HOME/.intent-engine/projects.json"
+if [ -f "$REGISTRY_FILE" ]; then
+    echo ""
+    echo "🧹 清理旧的 dashboard registry（v0.6.0 升级）..."
+    BACKUP_FILE="$HOME/.intent-engine/projects.json.backup.$(date +%Y%m%d_%H%M%S)"
+    cp "$REGISTRY_FILE" "$BACKUP_FILE" 2>/dev/null || true
+    rm -f "$REGISTRY_FILE"
+    echo "  ✓ 旧 registry 已备份到: ${BACKUP_FILE##*/}"
+fi
+
 echo ""
 echo "✅ 安装完成！"
 echo ""
