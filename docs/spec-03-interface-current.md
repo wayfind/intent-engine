@@ -1038,6 +1038,7 @@ The installed hook (`session-start.sh`) will:
 | `task_done` | Complete task | `ie task done` | ✓ Full parity |
 | `task_update` | Update task | `ie task update` | ✓ Full parity |
 | `task_list` | List/filter tasks | `ie task list` | ✓ Full parity |
+| `plan` | Declarative batch task creation | `ie plan` | Added in v0.6 |
 | `search` | Unified search across tasks and events (FTS5) | `ie search` | Added in v0.4 |
 | `task_get` | Get task by ID | `ie task get` | ✓ Full parity |
 | `task_context` | Get task family tree | `ie task context` | Added in v0.4 |
