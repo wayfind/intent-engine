@@ -43,6 +43,7 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }
+tracing-appender = "0.2"
 tokio = { version = "1.35", features = ["full"] }
 anyhow = "1.0"
 encoding_rs = "0.8"

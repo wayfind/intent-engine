@@ -32,7 +32,22 @@ async fn main() {
     let cli = Cli::parse();
 
     // Initialize logging system
-    let log_config = LoggingConfig::from_args(cli.quiet, cli.verbose > 0, cli.json);
+    let mut log_config = LoggingConfig::from_args(cli.quiet, cli.verbose > 0, cli.json);
+
+    // Check if this is dashboard mode with stdout redirected (daemon mode)
+    // In daemon mode, parent spawns child with --foreground but redirects stdout to /dev/null
+    if matches!(
+        cli.command,
+        Commands::Dashboard(DashboardCommands::Start { .. })
+    ) {
+        // Check if stdout is not a TTY (redirected to /dev/null in daemon mode)
+        if !atty::is(atty::Stream::Stdout) {
+            use intent_engine::logging::{log_file_path, ApplicationMode};
+            log_config = LoggingConfig::for_mode(ApplicationMode::Dashboard);
+            log_config.file_output = Some(log_file_path(ApplicationMode::Dashboard));
+        }
+    }
+
     if let Err(e) = intent_engine::logging::init_logging(log_config) {
         eprintln!("Failed to initialize logging: {}", e);
         std::process::exit(1);

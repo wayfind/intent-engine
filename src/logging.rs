@@ -27,6 +27,8 @@ pub struct LoggingConfig {
     pub json_format: bool,
     /// Enable span events for tracing
     pub enable_spans: bool,
+    /// Output to file instead of stdout (for daemon mode)
+    pub file_output: Option<std::path::PathBuf>,
 }
 
 impl Default for LoggingConfig {
@@ -38,6 +40,7 @@ impl Default for LoggingConfig {
             show_target: false,
             json_format: false,
             enable_spans: false,
+            file_output: None,
         }
     }
 }
@@ -53,6 +56,7 @@ impl LoggingConfig {
                 show_target: true,
                 json_format: true,   // Machine-readable for MCP
                 enable_spans: false, // Avoid noise in JSON-RPC
+                file_output: None,
             },
             ApplicationMode::Dashboard => Self {
                 level: Level::INFO,
@@ -61,6 +65,7 @@ impl LoggingConfig {
                 show_target: true,
                 json_format: false,
                 enable_spans: true, // Good for debugging dashboard
+                file_output: None,
             },
             ApplicationMode::Cli => Self {
                 level: Level::INFO,
@@ -69,6 +74,7 @@ impl LoggingConfig {
                 show_target: false,
                 json_format: false,
                 enable_spans: false,
+                file_output: None,
             },
             ApplicationMode::Test => Self {
                 level: Level::DEBUG,
@@ -77,6 +83,7 @@ impl LoggingConfig {
                 show_target: true,
                 json_format: false,
                 enable_spans: true,
+                file_output: None,
             },
         }
     }
@@ -98,6 +105,7 @@ impl LoggingConfig {
             show_target: verbose,
             json_format: json,
             enable_spans: verbose,
+            file_output: None,
         }
     }
 }
@@ -272,4 +280,20 @@ macro_rules! log_warning {
     ($message:expr, $details:expr) => {
         tracing::warn!(message = $message, details = $details, "Warning");
     };
+}
+
+/// Get log file path for a given application mode
+pub fn log_file_path(mode: ApplicationMode) -> std::path::PathBuf {
+    let home = dirs::home_dir().expect("Failed to get home directory");
+    let log_dir = home.join(".intent-engine").join("logs");
+
+    // Create log directory if it doesn't exist
+    std::fs::create_dir_all(&log_dir).ok();
+
+    match mode {
+        ApplicationMode::Dashboard => log_dir.join("dashboard.log"),
+        ApplicationMode::McpServer => log_dir.join("mcp-server.log"),
+        ApplicationMode::Cli => log_dir.join("cli.log"),
+        ApplicationMode::Test => log_dir.join("test.log"),
+    }
 }
