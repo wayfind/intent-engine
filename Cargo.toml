@@ -76,6 +76,7 @@ predicates = "3.0"
 criterion = { version = "0.7", features = ["async_tokio"] }
 rand = "0.9"
 serial_test = "3.0"
+filetime = "0.2"
 reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
 [[bin]]
