@@ -77,11 +77,72 @@ impl ProjectRegistry {
             fs::create_dir_all(parent).context("Failed to create registry directory")?;
         }
 
+        // Serialize to JSON first (fail fast if serialization fails)
         let content = serde_json::to_string_pretty(self).context("Failed to serialize registry")?;
 
-        fs::write(&path, content).context("Failed to write registry file")?;
+        // Backup existing file if it exists
+        let backup_path = path.with_extension("json.backup");
+        if path.exists() {
+            fs::copy(&path, &backup_path).context("Failed to create backup")?;
+            tracing::debug!("Created registry backup at: {}", backup_path.display());
+        }
 
-        Ok(())
+        // Write to file
+        match fs::write(&path, &content) {
+            Ok(_) => {
+                // Verify the written file can be parsed back
+                match fs::read_to_string(&path) {
+                    Ok(written_content) => {
+                        match serde_json::from_str::<ProjectRegistry>(&written_content) {
+                            Ok(_) => {
+                                // Success - remove backup
+                                if backup_path.exists() {
+                                    let _ = fs::remove_file(&backup_path);
+                                }
+                                tracing::debug!("Registry saved and verified successfully");
+                                Ok(())
+                            },
+                            Err(e) => {
+                                // Verification failed - rollback
+                                tracing::error!("Registry verification failed after write - rolling back. Error: {}, OS: {}, Path: {}",
+                                e,
+                                std::env::consts::OS,
+                                path.display());
+                                if backup_path.exists() {
+                                    fs::copy(&backup_path, &path)
+                                        .context("Failed to rollback from backup")?;
+                                    tracing::warn!("Rolled back registry from backup");
+                                }
+                                anyhow::bail!("Registry verification failed: {}", e)
+                            },
+                        }
+                    },
+                    Err(e) => {
+                        // Read failed - rollback
+                        tracing::error!("Failed to read registry after write - rolling back. Error: {}, OS: {}, Path: {}",
+                        e,
+                        std::env::consts::OS,
+                        path.display());
+                        if backup_path.exists() {
+                            fs::copy(&backup_path, &path)
+                                .context("Failed to rollback from backup")?;
+                            tracing::warn!("Rolled back registry from backup");
+                        }
+                        anyhow::bail!("Failed to read registry after write: {}", e)
+                    },
+                }
+            },
+            Err(e) => {
+                // Write failed
+                tracing::error!(
+                    "Failed to write registry. Error: {}, OS: {}, Path: {}",
+                    e,
+                    std::env::consts::OS,
+                    path.display()
+                );
+                anyhow::bail!("Failed to write registry file: {}", e)
+            },
+        }
     }
 
     /// Allocate port (always uses DEFAULT_PORT)
