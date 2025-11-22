@@ -57,6 +57,25 @@ async fn main() {
         std::process::exit(1);
     }
 
+    // Clean up old log files for Dashboard mode (after logging init)
+    if matches!(
+        cli.command,
+        Commands::Dashboard(DashboardCommands::Start { .. })
+    ) {
+        use intent_engine::logging::cleanup_old_logs;
+        let log_dir = dirs::home_dir().map(|h| h.join(".intent-engine").join("logs"));
+
+        if let Some(dir) = log_dir {
+            // Default retention: 7 days
+            let retention_days = std::env::var("IE_LOG_RETENTION_DAYS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(7);
+
+            cleanup_old_logs(&dir, retention_days).ok();
+        }
+    }
+
     // Continue with main application logic
     if let Err(e) = run(&cli).await {
         let error_response = e.to_error_response();

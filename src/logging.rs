@@ -209,6 +209,84 @@ pub fn init_from_env() -> io::Result<()> {
     init_logging(config)
 }
 
+/// Clean up old log files based on retention policy
+///
+/// Scans the log directory and removes files older than the specified retention period.
+/// Only removes files matching the pattern `.log.YYYY-MM-DD` (rotated log files).
+///
+/// # Arguments
+/// * `log_dir` - Directory containing log files
+/// * `retention_days` - Number of days to retain logs (default: 7)
+///
+/// # Example
+/// ```no_run
+/// use std::path::Path;
+/// use intent_engine::logging::cleanup_old_logs;
+///
+/// let log_dir = Path::new("/home/user/.intent-engine/logs");
+/// cleanup_old_logs(log_dir, 7).ok();
+/// ```
+pub fn cleanup_old_logs(log_dir: &std::path::Path, retention_days: u32) -> io::Result<()> {
+    use std::fs;
+    use std::time::SystemTime;
+
+    if !log_dir.exists() {
+        return Ok(()); // Nothing to clean if directory doesn't exist
+    }
+
+    let now = SystemTime::now();
+    let retention_duration = std::time::Duration::from_secs(retention_days as u64 * 24 * 60 * 60);
+
+    let mut cleaned_count = 0;
+    let mut cleaned_size: u64 = 0;
+
+    for entry in fs::read_dir(log_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        // Only process rotated log files (containing .log. followed by a date)
+        // Examples: dashboard.log.2025-11-22, mcp-server.log.2025-11-21
+        let path_str = path.to_string_lossy();
+        if !path_str.contains(".log.") || !path.is_file() {
+            continue;
+        }
+
+        let metadata = entry.metadata()?;
+        let modified = metadata.modified()?;
+
+        if let Ok(age) = now.duration_since(modified) {
+            if age > retention_duration {
+                let size = metadata.len();
+                match fs::remove_file(&path) {
+                    Ok(_) => {
+                        cleaned_count += 1;
+                        cleaned_size += size;
+                        tracing::info!(
+                            "Cleaned up old log file: {} (age: {} days, size: {} bytes)",
+                            path.display(),
+                            age.as_secs() / 86400,
+                            size
+                        );
+                    },
+                    Err(e) => {
+                        tracing::warn!("Failed to remove old log file {}: {}", path.display(), e);
+                    },
+                }
+            }
+        }
+    }
+
+    if cleaned_count > 0 {
+        tracing::info!(
+            "Log cleanup completed: removed {} files, freed {} bytes",
+            cleaned_count,
+            cleaned_size
+        );
+    }
+
+    Ok(())
+}
+
 /// Log macros for common intent-engine operations
 #[macro_export]
 macro_rules! log_project_operation {
