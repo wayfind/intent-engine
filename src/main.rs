@@ -52,6 +52,13 @@ async fn main() {
         }
     }
 
+    // Enable file logging for MCP Server mode
+    if matches!(cli.command, Commands::McpServer) {
+        use intent_engine::logging::{log_file_path, ApplicationMode};
+        log_config = LoggingConfig::for_mode(ApplicationMode::McpServer);
+        log_config.file_output = Some(log_file_path(ApplicationMode::McpServer));
+    }
+
     if let Err(e) = intent_engine::logging::init_logging(log_config) {
         eprintln!("Failed to initialize logging: {}", e);
         std::process::exit(1);

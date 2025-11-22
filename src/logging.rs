@@ -50,7 +50,7 @@ impl LoggingConfig {
     pub fn for_mode(mode: ApplicationMode) -> Self {
         match mode {
             ApplicationMode::McpServer => Self {
-                level: Level::INFO,
+                level: Level::DEBUG,
                 color: false, // MCP output should be clean
                 show_timestamps: true,
                 show_target: true,
