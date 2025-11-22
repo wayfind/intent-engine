@@ -40,6 +40,54 @@ pub struct TaskTree {
     /// Optional explicit task ID (for forced updates)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<i64>,
+
+    /// Optional task status (for TodoWriter compatibility)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<TaskStatus>,
+
+    /// Optional active form description (for TodoWriter compatibility)
+    /// Used for UI display when task is in_progress
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_form: Option<String>,
+}
+
+/// Task status for workflow management
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    Todo,
+    Doing,
+    Done,
+}
+
+impl TaskStatus {
+    /// Convert to database string representation
+    pub fn as_db_str(&self) -> &'static str {
+        match self {
+            TaskStatus::Todo => "todo",
+            TaskStatus::Doing => "doing",
+            TaskStatus::Done => "done",
+        }
+    }
+
+    /// Create from database string representation
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "todo" => Some(TaskStatus::Todo),
+            "doing" => Some(TaskStatus::Doing),
+            "done" => Some(TaskStatus::Done),
+            _ => None,
+        }
+    }
+
+    /// Convert to string representation for JSON API
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TaskStatus::Todo => "todo",
+            TaskStatus::Doing => "doing",
+            TaskStatus::Done => "done",
+        }
+    }
 }
 
 /// Priority value as string enum for JSON API
@@ -167,6 +215,8 @@ pub struct FlatTask {
     pub parent_name: Option<String>,
     pub depends_on: Vec<String>,
     pub task_id: Option<i64>,
+    pub status: Option<TaskStatus>,
+    pub active_form: Option<String>,
 }
 
 pub fn flatten_task_tree(tasks: &[TaskTree]) -> Vec<FlatTask> {
@@ -184,6 +234,8 @@ fn flatten_task_tree_recursive(tasks: &[TaskTree], parent_name: Option<String>) 
             parent_name: parent_name.clone(),
             depends_on: task.depends_on.clone().unwrap_or_default(),
             task_id: task.task_id,
+            status: task.status.clone(),
+            active_form: task.active_form.clone(),
         };
 
         flat.push(flat_task);
@@ -312,7 +364,15 @@ impl<'a> PlanExecutor<'a> {
             return Ok(PlanResult::error(e.to_string()));
         }
 
-        // 7. Execute in transaction
+        // 7. Validate single in_progress constraint (TodoWriter compatibility)
+        if let Err(e) = self
+            .validate_single_in_progress(&flat_tasks, &existing)
+            .await
+        {
+            return Ok(PlanResult::error(e.to_string()));
+        }
+
+        // 8. Execute in transaction
         let mut tx = self.pool.begin().await?;
 
         // 8. Create or update tasks based on existence
@@ -396,15 +456,23 @@ impl<'a> PlanExecutor<'a> {
         let now = Utc::now();
         let priority = task.priority.as_ref().map(|p| p.to_int()).unwrap_or(3); // Default: medium
 
+        // Determine status - use provided status or default to 'todo'
+        let status_str = match &task.status {
+            Some(status) => status.as_db_str(),
+            None => "todo",
+        };
+
         let result = sqlx::query(
             r#"
-            INSERT INTO tasks (name, spec, priority, status, first_todo_at)
-            VALUES (?, ?, ?, 'todo', ?)
+            INSERT INTO tasks (name, spec, priority, status, active_form, first_todo_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&task.name)
         .bind(&task.spec)
         .bind(priority)
+        .bind(status_str)
+        .bind(&task.active_form)
         .bind(now)
         .execute(&mut **tx)
         .await?;
@@ -438,9 +506,26 @@ impl<'a> PlanExecutor<'a> {
                 .await?;
         }
 
-        // Note: We don't update name, status, or timestamps
+        // Update status if provided (for TodoWriter compatibility)
+        if let Some(status) = &task.status {
+            sqlx::query("UPDATE tasks SET status = ? WHERE id = ?")
+                .bind(status.as_db_str())
+                .bind(task_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+
+        // Update active_form if provided (for TodoWriter compatibility)
+        if let Some(active_form) = &task.active_form {
+            sqlx::query("UPDATE tasks SET active_form = ? WHERE id = ?")
+                .bind(active_form)
+                .bind(task_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+
+        // Note: We don't update name or timestamps
         // - name: Used for identity, changing it would break references
-        // - status: Should be managed through task lifecycle commands
         // - timestamps: Should preserve original creation time
 
         Ok(())
@@ -527,6 +612,79 @@ impl<'a> PlanExecutor<'a> {
                     )));
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    /// Validate single in_progress constraint (TodoWriter compatibility)
+    /// Ensures only one task can be in 'in_progress' status at a time
+    async fn validate_single_in_progress(
+        &self,
+        flat_tasks: &[FlatTask],
+        existing: &HashMap<String, i64>,
+    ) -> Result<()> {
+        // Find all tasks in the request that want to be in_progress
+        let in_progress_tasks: Vec<&FlatTask> = flat_tasks
+            .iter()
+            .filter(|task| matches!(task.status, Some(TaskStatus::Doing)))
+            .collect();
+
+        // If no tasks want to be in_progress, no constraint check needed
+        if in_progress_tasks.is_empty() {
+            return Ok(());
+        }
+
+        // If more than one task in the request wants to be in_progress, that's an error
+        if in_progress_tasks.len() > 1 {
+            let names: Vec<&str> = in_progress_tasks.iter().map(|t| t.name.as_str()).collect();
+            return Err(IntentError::InvalidInput(format!(
+                "Single in_progress constraint violated: multiple tasks in request want in_progress status: {}",
+                names.join(", ")
+            )));
+        }
+
+        // Get the single task that wants to be in_progress
+        let requesting_task = in_progress_tasks[0];
+
+        // Check if there's already a task in 'doing' status in the database
+        // Exclude the task being updated (if it exists)
+        let requesting_task_id = existing.get(&requesting_task.name).copied();
+
+        let query = if let Some(id) = requesting_task_id {
+            // Exclude the task being updated
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM tasks WHERE status = 'doing' AND id != ?",
+            )
+            .bind(id)
+        } else {
+            // No exclusion needed (new task)
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
+        };
+
+        let count = query.fetch_one(self.pool).await?;
+
+        if count > 0 {
+            // There's already another task in progress
+            let existing_task: Option<(String,)> = if let Some(id) = requesting_task_id {
+                sqlx::query_as("SELECT name FROM tasks WHERE status = 'doing' AND id != ? LIMIT 1")
+                    .bind(id)
+                    .fetch_optional(self.pool)
+                    .await?
+            } else {
+                sqlx::query_as("SELECT name FROM tasks WHERE status = 'doing' LIMIT 1")
+                    .fetch_optional(self.pool)
+                    .await?
+            };
+
+            let existing_name = existing_task
+                .map(|(name,)| name)
+                .unwrap_or_else(|| "<unknown>".to_string());
+
+            return Err(IntentError::InvalidInput(format!(
+                "Single in_progress constraint violated: task '{}' is already in_progress. Complete it before starting '{}'.",
+                existing_name, requesting_task.name
+            )));
         }
 
         Ok(())
@@ -750,6 +908,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             }],
         };
 
@@ -801,6 +961,8 @@ mod tests {
                     children: None,
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Child 2".to_string(),
@@ -809,10 +971,14 @@ mod tests {
                     children: None,
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
             ]),
             depends_on: None,
             task_id: None,
+            status: None,
+            active_form: None,
         };
 
         let json = serde_json::to_string_pretty(&tree).unwrap();
@@ -843,6 +1009,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             },
             TaskTree {
                 name: "Task 2".to_string(),
@@ -851,6 +1019,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             },
         ];
 
@@ -872,6 +1042,8 @@ mod tests {
                     children: None,
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Child 2".to_string(),
@@ -884,13 +1056,19 @@ mod tests {
                         children: None,
                         depends_on: None,
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     }]),
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
             ]),
             depends_on: None,
             task_id: None,
+            status: None,
+            active_form: None,
         }];
 
         let names = extract_all_names(&tasks);
@@ -906,6 +1084,8 @@ mod tests {
             children: None,
             depends_on: Some(vec!["Task 0".to_string()]),
             task_id: None,
+            status: None,
+            active_form: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -931,6 +1111,8 @@ mod tests {
                     children: None,
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Child 2".to_string(),
@@ -939,10 +1121,14 @@ mod tests {
                     children: None,
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
             ]),
             depends_on: None,
             task_id: None,
+            status: None,
+            active_form: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -970,6 +1156,8 @@ mod tests {
                 parent_name: None,
                 depends_on: vec![],
                 task_id: None,
+                status: None,
+                active_form: None,
             },
             FlatTask {
                 name: "Task 2".to_string(),
@@ -978,6 +1166,8 @@ mod tests {
                 parent_name: None,
                 depends_on: vec![],
                 task_id: None,
+                status: None,
+                active_form: None,
             },
         ];
 
@@ -999,6 +1189,8 @@ mod tests {
                 parent_name: None,
                 depends_on: vec![],
                 task_id: None,
+                status: None,
+                active_form: None,
             },
             FlatTask {
                 name: "Task 2".to_string(),
@@ -1007,6 +1199,8 @@ mod tests {
                 parent_name: None,
                 depends_on: vec![],
                 task_id: None,
+                status: None,
+                active_form: None,
             },
         ];
 
@@ -1037,6 +1231,8 @@ mod tests {
                 parent_name: None,
                 depends_on: vec![],
                 task_id: None,
+                status: None,
+                active_form: None,
             },
             FlatTask {
                 name: "New Task".to_string(),
@@ -1045,6 +1241,8 @@ mod tests {
                 parent_name: None,
                 depends_on: vec![],
                 task_id: None,
+                status: None,
+                active_form: None,
             },
         ];
 
@@ -1070,6 +1268,8 @@ mod tests {
             parent_name: None,
             depends_on: vec![],
             task_id: Some(99), // Explicit task_id
+            status: None,
+            active_form: None,
         }];
 
         let existing = HashMap::new(); // Not in existing
@@ -1094,6 +1294,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             },
             TaskTree {
                 name: "Task 2".to_string(),
@@ -1102,6 +1304,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             },
         ];
 
@@ -1119,6 +1323,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             },
             TaskTree {
                 name: "Unique".to_string(),
@@ -1127,6 +1333,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             },
             TaskTree {
                 name: "Duplicate".to_string(),
@@ -1135,6 +1343,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             },
         ];
 
@@ -1156,9 +1366,13 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             }]),
             depends_on: None,
             task_id: None,
+            status: None,
+            active_form: None,
         }];
 
         let duplicates = find_duplicate_names(&tasks);
@@ -1195,15 +1409,23 @@ mod tests {
                         children: None,
                         depends_on: None,
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     }]),
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 }]),
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             }]),
             depends_on: None,
             task_id: None,
+            status: None,
+            active_form: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -1233,6 +1455,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             })
             .collect();
 
@@ -1243,6 +1467,8 @@ mod tests {
             children: Some(children),
             depends_on: None,
             task_id: None,
+            status: None,
+            active_form: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -1270,6 +1496,8 @@ mod tests {
                         children: None,
                         depends_on: None,
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     },
                     TaskTree {
                         name: "Task 1.2".to_string(),
@@ -1282,13 +1510,19 @@ mod tests {
                             children: None,
                             depends_on: None,
                             task_id: None,
+                            status: None,
+                            active_form: None,
                         }]),
                         depends_on: None,
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     },
                 ]),
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             },
             TaskTree {
                 name: "Task 2".to_string(),
@@ -1297,6 +1531,8 @@ mod tests {
                 children: None,
                 depends_on: Some(vec!["Task 1".to_string()]),
                 task_id: None,
+                status: None,
+                active_form: None,
             },
         ];
 
@@ -1341,6 +1577,8 @@ mod tests {
                         children: None,
                         depends_on: None,
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     },
                     TaskTree {
                         name: "Subtask B".to_string(),
@@ -1349,10 +1587,14 @@ mod tests {
                         children: None,
                         depends_on: Some(vec!["Subtask A".to_string()]),
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     },
                 ]),
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             }],
         };
 
@@ -1435,6 +1677,8 @@ mod tests {
                         children: None,
                         depends_on: None,
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     },
                     TaskTree {
                         name: "Child 2".to_string(),
@@ -1443,10 +1687,14 @@ mod tests {
                         children: None,
                         depends_on: None,
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     },
                 ]),
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             }],
         };
 
@@ -1504,6 +1752,8 @@ mod tests {
                         children: None,
                         depends_on: None,
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     },
                     TaskTree {
                         name: "Child 2".to_string(),
@@ -1512,10 +1762,14 @@ mod tests {
                         children: None,
                         depends_on: None,
                         task_id: None,
+                        status: None,
+                        active_form: None,
                     },
                 ]),
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             }],
         };
 
@@ -1560,6 +1814,8 @@ mod tests {
                     children: None,
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Layer 1".to_string(),
@@ -1568,6 +1824,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Foundation".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Layer 2".to_string(),
@@ -1576,6 +1834,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Layer 1".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Integration".to_string(),
@@ -1584,6 +1844,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Foundation".to_string(), "Layer 2".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
             ],
         };
@@ -1656,6 +1918,8 @@ mod tests {
                 children: None,
                 depends_on: Some(vec!["NonExistent".to_string()]),
                 task_id: None,
+                status: None,
+                active_form: None,
             }],
         };
 
@@ -1688,6 +1952,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Task B".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Task B".to_string(),
@@ -1696,6 +1962,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Task A".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
             ],
         };
@@ -1734,6 +2002,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Task B".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Task B".to_string(),
@@ -1742,6 +2012,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Task C".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Task C".to_string(),
@@ -1750,6 +2022,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Task A".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
             ],
         };
@@ -1793,6 +2067,8 @@ mod tests {
                     children: None,
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Task B".to_string(),
@@ -1801,6 +2077,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Task A".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Task C".to_string(),
@@ -1809,6 +2087,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Task A".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Task D".to_string(),
@@ -1817,6 +2097,8 @@ mod tests {
                     children: None,
                     depends_on: Some(vec!["Task B".to_string(), "Task C".to_string()]),
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
             ],
         };
@@ -1847,6 +2129,8 @@ mod tests {
                 children: None,
                 depends_on: Some(vec!["Task A".to_string()]),
                 task_id: None,
+                status: None,
+                active_form: None,
             }],
         };
 
@@ -1895,6 +2179,8 @@ mod tests {
                     children: None,
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
                 TaskTree {
                     name: "Task B".to_string(),
@@ -1903,6 +2189,8 @@ mod tests {
                     children: None,
                     depends_on: None,
                     task_id: None,
+                    status: None,
+                    active_form: None,
                 },
             ],
         };
@@ -1940,6 +2228,8 @@ mod tests {
                 children: None,
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             });
         }
 
@@ -1980,6 +2270,8 @@ mod tests {
                 },
                 depends_on: None,
                 task_id: None,
+                status: None,
+                active_form: None,
             }
         }
 
@@ -2014,6 +2306,8 @@ mod tests {
             children: None,
             depends_on: Some(vec!["Dep1".to_string(), "Dep2".to_string()]),
             task_id: Some(42),
+            status: None,
+            active_form: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -2025,5 +2319,63 @@ mod tests {
         assert_eq!(task.priority, Some(PriorityValue::Critical));
         assert_eq!(task.depends_on, vec!["Dep1", "Dep2"]);
         assert_eq!(task.task_id, Some(42));
+    }
+}
+
+#[cfg(test)]
+mod dataflow_tests {
+    use super::*;
+    use crate::tasks::TaskManager;
+    use crate::test_utils::test_helpers::TestContext;
+
+    #[tokio::test]
+    async fn test_complete_dataflow_status_and_active_form() {
+        // 创建测试环境
+        let ctx = TestContext::new().await;
+
+        // 第1步：使用Plan工具创建带status和active_form的任务
+        let request = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Test Active Form Task".to_string(),
+                spec: Some("Testing complete dataflow".to_string()),
+                priority: Some(PriorityValue::High),
+                children: None,
+                depends_on: None,
+                task_id: None,
+                status: Some(TaskStatus::Doing),
+                active_form: Some("Testing complete dataflow now".to_string()),
+            }],
+        };
+
+        let executor = PlanExecutor::new(&ctx.pool);
+        let result = executor.execute(&request).await.unwrap();
+
+        assert!(result.success);
+        assert_eq!(result.created_count, 1);
+
+        // 第2步：使用TaskManager读取任务（模拟MCP task_list工具）
+        let task_mgr = TaskManager::new(&ctx.pool);
+        let tasks = task_mgr.find_tasks(None, None).await.unwrap();
+
+        assert_eq!(tasks.len(), 1);
+        let task = &tasks[0];
+
+        // 第3步：验证所有字段都正确传递
+        assert_eq!(task.name, "Test Active Form Task");
+        assert_eq!(task.status, "doing"); // InProgress maps to "doing"
+        assert_eq!(
+            task.active_form,
+            Some("Testing complete dataflow now".to_string())
+        );
+
+        // 第4步：验证序列化为JSON（模拟MCP输出）
+        let json = serde_json::to_value(task).unwrap();
+        assert_eq!(json["name"], "Test Active Form Task");
+        assert_eq!(json["status"], "doing");
+        assert_eq!(json["active_form"], "Testing complete dataflow now");
+
+        println!("✅ 完整数据流验证成功！");
+        println!("   Plan工具写入 -> Task读取 -> JSON序列化 -> MCP输出");
+        println!("   active_form: {:?}", task.active_form);
     }
 }

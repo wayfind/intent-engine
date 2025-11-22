@@ -47,6 +47,12 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Add active_form column if it doesn't exist (migration for existing databases)
+    // This column stores the present progressive form of task description for UI display
+    let _ = sqlx::query("ALTER TABLE tasks ADD COLUMN active_form TEXT")
+        .execute(pool)
+        .await; // Ignore error if column already exists
+
     // Create FTS5 virtual table for tasks with trigram tokenizer for better CJK support
     // For existing databases, we need to drop and recreate if tokenizer changed
     let _ = sqlx::query("DROP TABLE IF EXISTS tasks_fts")

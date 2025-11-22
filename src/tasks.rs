@@ -51,7 +51,7 @@ impl<'a> TaskManager<'a> {
     pub async fn get_task(&self, id: i64) -> Result<Task> {
         let task = sqlx::query_as::<_, Task>(
             r#"
-            SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at
+            SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form
             FROM tasks
             WHERE id = ?
             "#,
@@ -122,7 +122,7 @@ impl<'a> TaskManager<'a> {
             sqlx::query_as::<_, Task>(
                 r#"
                 SELECT id, parent_id, name, spec, status, complexity, priority,
-                       first_todo_at, first_doing_at, first_done_at
+                       first_todo_at, first_doing_at, first_done_at, active_form
                 FROM tasks
                 WHERE parent_id = ? AND id != ?
                 ORDER BY priority ASC NULLS LAST, id ASC
@@ -137,7 +137,7 @@ impl<'a> TaskManager<'a> {
             sqlx::query_as::<_, Task>(
                 r#"
                 SELECT id, parent_id, name, spec, status, complexity, priority,
-                       first_todo_at, first_doing_at, first_done_at
+                       first_todo_at, first_doing_at, first_done_at, active_form
                 FROM tasks
                 WHERE parent_id IS NULL AND id != ?
                 ORDER BY priority ASC NULLS LAST, id ASC
@@ -152,7 +152,7 @@ impl<'a> TaskManager<'a> {
         let children = sqlx::query_as::<_, Task>(
             r#"
             SELECT id, parent_id, name, spec, status, complexity, priority,
-                   first_todo_at, first_doing_at, first_done_at
+                   first_todo_at, first_doing_at, first_done_at, active_form
             FROM tasks
             WHERE parent_id = ?
             ORDER BY priority ASC NULLS LAST, id ASC
@@ -166,7 +166,7 @@ impl<'a> TaskManager<'a> {
         let blocking_tasks = sqlx::query_as::<_, Task>(
             r#"
             SELECT t.id, t.parent_id, t.name, t.spec, t.status, t.complexity, t.priority,
-                   t.first_todo_at, t.first_doing_at, t.first_done_at
+                   t.first_todo_at, t.first_doing_at, t.first_done_at, t.active_form
             FROM tasks t
             JOIN dependencies d ON t.id = d.blocking_task_id
             WHERE d.blocked_task_id = ?
@@ -181,7 +181,7 @@ impl<'a> TaskManager<'a> {
         let blocked_by_tasks = sqlx::query_as::<_, Task>(
             r#"
             SELECT t.id, t.parent_id, t.name, t.spec, t.status, t.complexity, t.priority,
-                   t.first_todo_at, t.first_doing_at, t.first_done_at
+                   t.first_todo_at, t.first_doing_at, t.first_done_at, t.active_form
             FROM tasks t
             JOIN dependencies d ON t.id = d.blocked_task_id
             WHERE d.blocking_task_id = ?
@@ -370,7 +370,7 @@ impl<'a> TaskManager<'a> {
         parent_id: Option<Option<i64>>,
     ) -> Result<Vec<Task>> {
         let mut query = String::from(
-            "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at FROM tasks WHERE 1=1"
+            "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form FROM tasks WHERE 1=1"
         );
         let mut conditions = Vec::new();
 
@@ -446,6 +446,7 @@ impl<'a> TaskManager<'a> {
                 t.first_todo_at,
                 t.first_doing_at,
                 t.first_done_at,
+                t.active_form,
                 COALESCE(
                     snippet(tasks_fts, 1, '**', '**', '...', 15),
                     snippet(tasks_fts, 0, '**', '**', '...', 15)
@@ -473,6 +474,7 @@ impl<'a> TaskManager<'a> {
                 first_todo_at: row.get("first_todo_at"),
                 first_doing_at: row.get("first_doing_at"),
                 first_done_at: row.get("first_done_at"),
+                active_form: row.get("active_form"),
             };
             let match_snippet: String = row.get("match_snippet");
 
@@ -501,7 +503,8 @@ impl<'a> TaskManager<'a> {
                 priority,
                 first_todo_at,
                 first_doing_at,
-                first_done_at
+                first_done_at,
+                active_form
             FROM tasks
             WHERE name LIKE ? OR spec LIKE ?
             ORDER BY name
@@ -525,6 +528,7 @@ impl<'a> TaskManager<'a> {
                 first_todo_at: row.get("first_todo_at"),
                 first_doing_at: row.get("first_doing_at"),
                 first_done_at: row.get("first_done_at"),
+                active_form: row.get("active_form"),
             };
 
             // Create a simple snippet showing the matched part
@@ -977,7 +981,7 @@ impl<'a> TaskManager<'a> {
         // Select tasks from todo, prioritizing by priority DESC, complexity ASC
         let todo_tasks = sqlx::query_as::<_, Task>(
             r#"
-            SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at
+            SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form
             FROM tasks
             WHERE status = 'todo'
             ORDER BY
@@ -1019,7 +1023,7 @@ impl<'a> TaskManager<'a> {
         let task_ids: Vec<i64> = todo_tasks.iter().map(|t| t.id).collect();
         let placeholders = vec!["?"; task_ids.len()].join(",");
         let query = format!(
-            "SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at
+            "SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form
              FROM tasks WHERE id IN ({})
              ORDER BY
                  COALESCE(priority, 0) DESC,
@@ -1059,7 +1063,7 @@ impl<'a> TaskManager<'a> {
                 let subtasks = sqlx::query_as::<_, Task>(
                     r#"
                     SELECT id, parent_id, name, spec, status, complexity, priority,
-                           first_todo_at, first_doing_at, first_done_at
+                           first_todo_at, first_doing_at, first_done_at, active_form
                     FROM tasks
                     WHERE parent_id = ? AND status = 'todo'
                       AND NOT EXISTS (
@@ -1087,7 +1091,7 @@ impl<'a> TaskManager<'a> {
         let top_level_task = sqlx::query_as::<_, Task>(
             r#"
             SELECT id, parent_id, name, spec, status, complexity, priority,
-                   first_todo_at, first_doing_at, first_done_at
+                   first_todo_at, first_doing_at, first_done_at, active_form
             FROM tasks
             WHERE parent_id IS NULL AND status = 'todo'
               AND NOT EXISTS (

@@ -25,6 +25,10 @@ pub struct Task {
     pub first_todo_at: Option<DateTime<Utc>>,
     pub first_doing_at: Option<DateTime<Utc>>,
     pub first_done_at: Option<DateTime<Utc>>,
+    /// Present progressive form for UI display when task is in_progress
+    /// Example: "Implementing authentication" vs "Implement authentication"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_form: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -364,6 +368,7 @@ mod tests {
             first_todo_at: None,
             first_doing_at: None,
             first_done_at: None,
+            active_form: None,
         }
     }
 

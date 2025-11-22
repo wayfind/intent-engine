@@ -9,6 +9,7 @@
 
 use crate::error::IntentError;
 use crate::events::EventManager;
+use crate::plan::{PlanExecutor, PlanRequest};
 use crate::project::ProjectContext;
 use crate::report::ReportManager;
 use crate::tasks::TaskManager;
@@ -282,6 +283,7 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
         "search" => handle_unified_search(params.arguments).await,
         "current_task_get" => handle_current_task_get(params.arguments).await,
         "report_generate" => handle_report_generate(params.arguments).await,
+        "plan" => handle_plan(params.arguments).await,
         _ => Err(format!("Unknown tool: {}", params.name)),
     }?;
 
@@ -758,6 +760,24 @@ async fn handle_report_generate(args: Value) -> Result<Value, String> {
         .map_err(|e| format!("Failed to generate report: {}", e))?;
 
     serde_json::to_value(&report).map_err(|e| format!("Serialization error: {}", e))
+}
+
+async fn handle_plan(args: Value) -> Result<Value, String> {
+    // Deserialize the plan request
+    let request: PlanRequest =
+        serde_json::from_value(args).map_err(|e| format!("Invalid plan request: {}", e))?;
+
+    let ctx = ProjectContext::load_or_init()
+        .await
+        .map_err(|e| format!("Failed to load project context: {}", e))?;
+
+    let plan_executor = PlanExecutor::new(&ctx.pool);
+    let result = plan_executor
+        .execute(&request)
+        .await
+        .map_err(|e| format!("Failed to execute plan: {}", e))?;
+
+    serde_json::to_value(&result).map_err(|e| format!("Serialization error: {}", e))
 }
 
 // ============================================================================

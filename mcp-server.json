@@ -478,7 +478,7 @@
     },
     {
       "name": "plan",
-      "description": "# Core Duty\nCreate or update task structures declaratively using a tree-based API. Simplifies complex multi-task creation into a single atomic operation.\n\n# Tactical Guide\n**Phase 1 (v0.6.0)**: Create-only mode - all task names must be new.\n\nUse this when:\n- Creating a hierarchical task structure (parent → children)\n- Setting up related tasks with dependencies\n- Need atomic multi-task creation\n\n**Key features:**\n- Direct nesting via `children` field (no need for parent_id)\n- Name-based dependency references via `depends_on`\n- Automatic parent-child relationship establishment\n- Transaction-based atomicity (all or nothing)\n\n**Limitations (Phase 1):**\n- Cannot update existing tasks (will error if names exist)\n- task_id field ignored\n- Update mode coming in Phase 2 (v0.6.1)\n\n**Example:**\n```json\n{\n  \"tasks\": [\n    {\n      \"name\": \"User Authentication\",\n      \"priority\": \"high\",\n      \"children\": [\n        {\"name\": \"JWT Implementation\"},\n        {\"name\": \"OAuth2 Integration\", \"depends_on\": [\"JWT Implementation\"]}\n      ]\n    }\n  ]\n}\n```",
+      "description": "# Core Duty\nCreate or update task structures declaratively using a tree-based API. Simplifies complex multi-task creation into a single atomic operation with full workflow support.\n\n# Tactical Guide\n**Current Version (v0.6.4)**: Full create and update mode with idempotent operations.\n\nUse this when:\n- Creating a hierarchical task structure (parent → children)\n- Setting up related tasks with dependencies\n- Managing task workflow states (pending/in_progress/completed)\n- Need atomic multi-task creation or updates\n\n**Key features:**\n- Direct nesting via `children` field (no need for parent_id)\n- Name-based dependency references via `depends_on`\n- Automatic parent-child relationship establishment\n- Transaction-based atomicity (all or nothing)\n- **Idempotent updates**: Re-running with same names updates existing tasks\n- **Workflow management**: Support for status and active_form fields\n- **Single in_progress constraint**: Only one task can be in_progress at a time\n\n**Workflow Features:**\n- `status`: Control task state (pending/in_progress/completed)\n- `active_form`: Present progressive description for UI display (e.g., \"Implementing auth\" vs \"Implement auth\")\n- Constraint: At most one task can have status=\"in_progress\" globally\n\n**Example:**\n```json\n{\n  \"tasks\": [\n    {\n      \"name\": \"User Authentication\",\n      \"priority\": \"high\",\n      \"status\": \"in_progress\",\n      \"active_form\": \"Implementing user authentication\",\n      \"children\": [\n        {\n          \"name\": \"JWT Implementation\",\n          \"status\": \"pending\",\n          \"active_form\": \"Implementing JWT\"\n        },\n        {\n          \"name\": \"OAuth2 Integration\",\n          \"depends_on\": [\"JWT Implementation\"],\n          \"status\": \"pending\",\n          \"active_form\": \"Integrating OAuth2\"\n        }\n      ]\n    }\n  ]\n}\n```\n\n**Important Constraints:**\n- Only ONE task can have `status: \"in_progress\"` at any time\n- Attempting to create/update multiple in_progress tasks will fail with a clear error\n- This enforces focused, single-task workflow",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -490,7 +490,7 @@
               "properties": {
                 "name": {
                   "type": "string",
-                  "description": "Task name (required). Must be unique (Phase 1 limitation)."
+                  "description": "Task name (required). Used as identity key for idempotent updates - tasks with same name will be updated rather than creating duplicates."
                 },
                 "spec": {
                   "type": "string",
@@ -517,7 +517,16 @@
                 },
                 "task_id": {
                   "type": "integer",
-                  "description": "Optional explicit task ID (ignored in Phase 1, will be used for updates in Phase 2)."
+                  "description": "Optional explicit task ID. Currently reserved for future use. Tasks are identified by name for idempotent operations."
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["todo", "doing", "done"],
+                  "description": "Optional task status for workflow management. Defaults to 'todo'. IMPORTANT: Only ONE task can be 'doing' globally - attempting to create multiple will fail with an error. Use this to enforce focused, single-task workflow."
+                },
+                "active_form": {
+                  "type": "string",
+                  "description": "Optional present progressive form of the task description for UI display. This field enhances TodoWriter interface by showing what's actively being done. Example: 'Implementing authentication' (active_form) vs 'Implement authentication' (name). Best practice: Always provide when status='doing'."
                 }
               },
               "required": ["name"]
