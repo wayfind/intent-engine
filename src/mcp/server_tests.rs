@@ -563,49 +563,6 @@ mod handler_tests {
 
     #[tokio::test]
     #[serial]
-    async fn test_handle_task_switch_success() {
-        let ctx = setup_test_env().await;
-
-        let task_mgr = TaskManager::new(ctx.pool());
-        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
-        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
-
-        // Start task 1
-        task_mgr.start_task(task1.id, false).await.unwrap();
-
-        // Switch to task 2
-        let args = json!({
-            "task_id": task2.id
-        });
-
-        let result = handle_task_switch(args).await;
-        assert!(result.is_ok(), "task_switch should succeed");
-
-        let response = result.unwrap();
-        // SwitchTaskResponse has previous_task and current_task
-        assert!(response.get("current_task").is_some());
-        assert_eq!(
-            response
-                .get("current_task")
-                .unwrap()
-                .get("id")
-                .unwrap()
-                .as_i64()
-                .unwrap(),
-            task2.id
-        );
-    }
-
-    #[tokio::test]
-    async fn test_handle_task_switch_missing_task_id() {
-        let args = json!({});
-        let result = handle_task_switch(args).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("task_id"));
-    }
-
-    #[tokio::test]
-    #[serial]
     async fn test_handle_task_pick_next_success() {
         let ctx = setup_test_env().await;
 

@@ -216,17 +216,6 @@ pub enum Commands {
     #[command(alias = "d")]
     Done,
 
-    /// Switch to a different task (alias for 'task switch')
-    #[command(alias = "sw")]
-    Switch {
-        /// Task ID
-        id: i64,
-
-        /// Include events summary
-        #[arg(long)]
-        with_events: bool,
-    },
-
     /// Record an event for current task (alias for 'event add')
     Log {
         /// Event type (decision, blocker, milestone, note)
@@ -421,11 +410,6 @@ pub enum TaskCommands {
     },
 
     /// Switch to a specific task (atomic: update to doing + set current)
-    Switch {
-        /// Task ID
-        id: i64,
-    },
-
     /// Add a dependency between tasks
     ///
     /// Creates a dependency where BLOCKED_TASK depends on BLOCKING_TASK.

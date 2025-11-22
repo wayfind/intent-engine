@@ -271,7 +271,6 @@ async fn handle_tool_call(params: Option<Value>) -> Result<Value, String> {
         "task_start" => handle_task_start(params.arguments).await,
         "task_pick_next" => handle_task_pick_next(params.arguments).await,
         "task_spawn_subtask" => handle_task_spawn_subtask(params.arguments).await,
-        "task_switch" => handle_task_switch(params.arguments).await,
         "task_done" => handle_task_done(params.arguments).await,
         "task_update" => handle_task_update(params.arguments).await,
         "task_list" => handle_task_list(params.arguments).await,
@@ -417,25 +416,6 @@ async fn handle_task_spawn_subtask(args: Value) -> Result<Value, String> {
     serde_json::to_value(&subtask).map_err(|e| format!("Serialization error: {}", e))
 }
 
-async fn handle_task_switch(args: Value) -> Result<Value, String> {
-    let task_id = args
-        .get("task_id")
-        .and_then(|v| v.as_i64())
-        .ok_or("Missing required parameter: task_id")?;
-
-    let ctx = ProjectContext::load_or_init()
-        .await
-        .map_err(|e| format!("Failed to load project context: {}", e))?;
-
-    let task_mgr = TaskManager::new(&ctx.pool);
-    let task = task_mgr
-        .switch_to_task(task_id)
-        .await
-        .map_err(|e| format!("Failed to switch task: {}", e))?;
-
-    serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
-}
-
 async fn handle_task_done(args: Value) -> Result<Value, String> {
     let task_id = args.get("task_id").and_then(|v| v.as_i64());
 
@@ -574,7 +554,7 @@ async fn handle_task_context(args: Value) -> Result<Value, String> {
             .and_then(|s| s.parse::<i64>().ok())
             .ok_or_else(|| {
                 "No current task is set and task_id was not provided. \
-                 Use task_start or task_switch to set a task first, or provide task_id parameter."
+                 Use task_start to set a task first, or provide task_id parameter."
                     .to_string()
             })?
     };
@@ -643,7 +623,7 @@ async fn handle_event_add(args: Value) -> Result<Value, String> {
             .and_then(|s| s.parse::<i64>().ok())
             .ok_or_else(|| {
                 "No current task is set and task_id was not provided. \
-                 Use task_start or task_switch to set a task first."
+                 Use task_start to set a task first."
                     .to_string()
             })?
     };

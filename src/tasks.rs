@@ -1,7 +1,7 @@
 use crate::db::models::{
-    CurrentTaskInfo, DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, ParentTaskInfo,
-    PickNextResponse, PreviousTaskInfo, SpawnSubtaskResponse, SubtaskInfo, SwitchTaskResponse,
-    Task, TaskContext, TaskSearchResult, TaskWithEvents, WorkspaceStatus,
+    DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, ParentTaskInfo, PickNextResponse,
+    SpawnSubtaskResponse, SubtaskInfo, Task, TaskContext, TaskSearchResult, TaskWithEvents,
+    WorkspaceStatus,
 };
 use crate::error::{IntentError, Result};
 use chrono::Utc;
@@ -815,92 +815,6 @@ impl<'a> TaskManager<'a> {
 
         Ok(())
     }
-
-    /// Switch to a specific task (atomic: update status to doing + set as current)
-    /// If the task is not in 'doing' status, it will be transitioned to 'doing'
-    /// Returns response with previous task info (if any) and current task info
-    pub async fn switch_to_task(&self, id: i64) -> Result<SwitchTaskResponse> {
-        // Verify task exists
-        self.check_task_exists(id).await?;
-
-        let mut tx = self.pool.begin().await?;
-        let now = Utc::now();
-
-        // Get current task info before switching (if any)
-        let current_task_id: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
-                .fetch_optional(&mut *tx)
-                .await?;
-
-        let previous_task = if let Some(prev_id_str) = current_task_id {
-            if let Ok(prev_id) = prev_id_str.parse::<i64>() {
-                // Set previous task back to 'todo' if it was 'doing'
-                sqlx::query(
-                    r#"
-                    UPDATE tasks
-                    SET status = 'todo'
-                    WHERE id = ? AND status = 'doing'
-                    "#,
-                )
-                .bind(prev_id)
-                .execute(&mut *tx)
-                .await?;
-
-                Some(PreviousTaskInfo {
-                    id: prev_id,
-                    status: "todo".to_string(),
-                })
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // Update new task to doing status if not already
-        sqlx::query(
-            r#"
-            UPDATE tasks
-            SET status = 'doing',
-                first_doing_at = COALESCE(first_doing_at, ?)
-            WHERE id = ? AND status != 'doing'
-            "#,
-        )
-        .bind(now)
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-
-        // Get new task name for response
-        let (task_name, task_status): (String, String) =
-            sqlx::query_as("SELECT name, status FROM tasks WHERE id = ?")
-                .bind(id)
-                .fetch_one(&mut *tx)
-                .await?;
-
-        // Set as current task
-        sqlx::query(
-            r#"
-            INSERT OR REPLACE INTO workspace_state (key, value)
-            VALUES ('current_task_id', ?)
-            "#,
-        )
-        .bind(id.to_string())
-        .execute(&mut *tx)
-        .await?;
-
-        tx.commit().await?;
-
-        Ok(SwitchTaskResponse {
-            previous_task,
-            current_task: CurrentTaskInfo {
-                id,
-                name: task_name,
-                status: task_status,
-            },
-        })
-    }
-
     /// Create a subtask under the current task and switch to it (atomic operation)
     /// Returns error if there is no current task
     /// Returns response with subtask info and parent task info
@@ -928,8 +842,9 @@ impl<'a> TaskManager<'a> {
         // Create the subtask
         let subtask = self.add_task(name, spec, Some(parent_id)).await?;
 
-        // Switch to the new subtask (sets status to doing and updates current_task_id)
-        self.switch_to_task(subtask.id).await?;
+        // Start the new subtask (sets status to doing and updates current_task_id)
+        // This keeps the parent task in 'doing' status (multi-doing design)
+        self.start_task(subtask.id, false).await?;
 
         Ok(SpawnSubtaskResponse {
             subtask: SubtaskInfo {
@@ -1460,46 +1375,6 @@ mod tests {
 
         assert_eq!(updated.complexity, Some(8));
         assert_eq!(updated.priority, Some(10));
-    }
-
-    #[tokio::test]
-    async fn test_switch_to_task() {
-        let ctx = TestContext::new().await;
-        let manager = TaskManager::new(ctx.pool());
-
-        // Create a task
-        let task = manager.add_task("Test task", None, None).await.unwrap();
-        assert_eq!(task.status, "todo");
-
-        // Switch to it
-        let response = manager.switch_to_task(task.id).await.unwrap();
-        assert_eq!(response.current_task.id, task.id);
-        assert_eq!(response.current_task.status, "doing");
-        assert!(response.previous_task.is_none());
-
-        // Verify it's set as current task
-        let current: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
-                .fetch_optional(ctx.pool())
-                .await
-                .unwrap();
-
-        assert_eq!(current, Some(task.id.to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_switch_to_task_already_doing() {
-        let ctx = TestContext::new().await;
-        let manager = TaskManager::new(ctx.pool());
-
-        // Create and start a task
-        let task = manager.add_task("Test task", None, None).await.unwrap();
-        manager.start_task(task.id, false).await.unwrap();
-
-        // Switch to it again (should be idempotent)
-        let response = manager.switch_to_task(task.id).await.unwrap();
-        assert_eq!(response.current_task.id, task.id);
-        assert_eq!(response.current_task.status, "doing");
     }
 
     #[tokio::test]

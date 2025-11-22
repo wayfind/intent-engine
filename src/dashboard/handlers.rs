@@ -259,34 +259,6 @@ pub async fn done_task(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
-/// Switch to a different task
-pub async fn switch_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
-    let task_mgr = TaskManager::new(&db_pool);
-
-    match task_mgr.switch_to_task(id).await {
-        Ok(task) => (StatusCode::OK, Json(ApiResponse { data: task })).into_response(),
-        Err(e) if e.to_string().contains("not found") => (
-            StatusCode::NOT_FOUND,
-            Json(ApiError {
-                code: "TASK_NOT_FOUND".to_string(),
-                message: format!("Task {} not found", id),
-                details: None,
-            }),
-        )
-            .into_response(),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(ApiError {
-                code: "INVALID_REQUEST".to_string(),
-                message: format!("Failed to switch task: {}", e),
-                details: None,
-            }),
-        )
-            .into_response(),
-    }
-}
-
 /// Spawn a subtask and switch to it
 /// Note: This creates a subtask of the CURRENT task, not an arbitrary parent
 pub async fn spawn_subtask(

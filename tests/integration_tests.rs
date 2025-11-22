@@ -437,68 +437,6 @@ fn test_multiple_tasks_with_priorities() {
 }
 
 #[test]
-fn test_task_switch_between_tasks() {
-    let temp_dir = common::setup_test_env();
-
-    // Add two tasks
-    let mut add1 = common::ie_command();
-    add1.current_dir(temp_dir.path())
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Task 1")
-        .assert()
-        .success();
-
-    let mut add2 = common::ie_command();
-    add2.current_dir(temp_dir.path())
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Task 2")
-        .assert()
-        .success();
-
-    // Switch to task 1
-    let mut switch1 = common::ie_command();
-    switch1
-        .current_dir(temp_dir.path())
-        .arg("task")
-        .arg("switch")
-        .arg("1");
-
-    switch1.assert().success();
-
-    // Verify current task is 1
-    let mut current = common::ie_command();
-    current.current_dir(temp_dir.path()).arg("current");
-
-    current
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("\"current_task_id\": 1"));
-
-    // Switch to task 2
-    let mut switch2 = common::ie_command();
-    switch2
-        .current_dir(temp_dir.path())
-        .arg("task")
-        .arg("switch")
-        .arg("2");
-
-    switch2.assert().success();
-
-    // Verify current task is 2
-    let mut current2 = common::ie_command();
-    current2.current_dir(temp_dir.path()).arg("current");
-
-    current2
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("\"current_task_id\": 2"));
-}
-
-#[test]
 fn test_spawn_subtask_workflow() {
     let temp_dir = common::setup_test_env();
 

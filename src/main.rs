@@ -233,21 +233,6 @@ async fn run(cli: &Cli) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&task)?);
         },
 
-        Commands::Switch { id, with_events } => {
-            let ctx = ProjectContext::load_or_init().await?;
-            let task_mgr = TaskManager::new(&ctx.pool);
-
-            if with_events {
-                // Switch and then get task with events
-                task_mgr.switch_to_task(id).await?;
-                let task = task_mgr.get_task_with_events(id).await?;
-                println!("{}", serde_json::to_string_pretty(&task)?);
-            } else {
-                let task = task_mgr.switch_to_task(id).await?;
-                println!("{}", serde_json::to_string_pretty(&task)?);
-            }
-        },
-
         Commands::Log {
             event_type,
             data,
@@ -505,14 +490,6 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
             let subtask = task_mgr.spawn_subtask(&name, spec.as_deref()).await?;
             println!("{}", serde_json::to_string_pretty(&subtask)?);
-        },
-
-        TaskCommands::Switch { id } => {
-            let ctx = ProjectContext::load_or_init().await?;
-            let task_mgr = TaskManager::new(&ctx.pool);
-
-            let task = task_mgr.switch_to_task(id).await?;
-            println!("{}", serde_json::to_string_pretty(&task)?);
         },
 
         TaskCommands::DependsOn {

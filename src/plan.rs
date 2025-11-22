@@ -364,11 +364,8 @@ impl<'a> PlanExecutor<'a> {
             return Ok(PlanResult::error(e.to_string()));
         }
 
-        // 7. Validate single in_progress constraint (TodoWriter compatibility)
-        if let Err(e) = self
-            .validate_single_in_progress(&flat_tasks, &existing)
-            .await
-        {
+        // 7. Validate batch-level single doing constraint
+        if let Err(e) = self.validate_batch_single_doing(&flat_tasks) {
             return Ok(PlanResult::error(e.to_string()));
         }
 
@@ -406,7 +403,23 @@ impl<'a> PlanExecutor<'a> {
         // 11. Commit transaction
         tx.commit().await?;
 
-        // 12. Return success result
+        // 12. Auto-focus the doing task if present
+        // Find the doing task in the batch
+        let doing_task = flat_tasks
+            .iter()
+            .find(|task| matches!(task.status, Some(TaskStatus::Doing)));
+
+        if let Some(doing_task) = doing_task {
+            // Get the task ID from the map
+            if let Some(&task_id) = task_id_map.get(&doing_task.name) {
+                // Call task_start to set focus (inherits doing status)
+                use crate::tasks::TaskManager;
+                let task_mgr = TaskManager::new(self.pool);
+                task_mgr.start_task(task_id, false).await?;
+            }
+        }
+
+        // 13. Return success result
         Ok(PlanResult::success(
             task_id_map,
             created_count,
@@ -617,73 +630,22 @@ impl<'a> PlanExecutor<'a> {
         Ok(())
     }
 
-    /// Validate single in_progress constraint (TodoWriter compatibility)
-    /// Ensures only one task can be in 'in_progress' status at a time
-    async fn validate_single_in_progress(
-        &self,
-        flat_tasks: &[FlatTask],
-        existing: &HashMap<String, i64>,
-    ) -> Result<()> {
-        // Find all tasks in the request that want to be in_progress
-        let in_progress_tasks: Vec<&FlatTask> = flat_tasks
+    /// Validate batch-level single doing constraint
+    /// Ensures only one task in the request batch can have status='doing'
+    /// (Database can have multiple 'doing' tasks to support hierarchical workflows)
+    fn validate_batch_single_doing(&self, flat_tasks: &[FlatTask]) -> Result<()> {
+        // Find all tasks in the request that want to be doing
+        let doing_tasks: Vec<&FlatTask> = flat_tasks
             .iter()
             .filter(|task| matches!(task.status, Some(TaskStatus::Doing)))
             .collect();
 
-        // If no tasks want to be in_progress, no constraint check needed
-        if in_progress_tasks.is_empty() {
-            return Ok(());
-        }
-
-        // If more than one task in the request wants to be in_progress, that's an error
-        if in_progress_tasks.len() > 1 {
-            let names: Vec<&str> = in_progress_tasks.iter().map(|t| t.name.as_str()).collect();
+        // If more than one task in the request wants to be doing, that's an error
+        if doing_tasks.len() > 1 {
+            let names: Vec<&str> = doing_tasks.iter().map(|t| t.name.as_str()).collect();
             return Err(IntentError::InvalidInput(format!(
-                "Single in_progress constraint violated: multiple tasks in request want in_progress status: {}",
+                "Batch single doing constraint violated: only one task per batch can have status='doing'. Found: {}",
                 names.join(", ")
-            )));
-        }
-
-        // Get the single task that wants to be in_progress
-        let requesting_task = in_progress_tasks[0];
-
-        // Check if there's already a task in 'doing' status in the database
-        // Exclude the task being updated (if it exists)
-        let requesting_task_id = existing.get(&requesting_task.name).copied();
-
-        let query = if let Some(id) = requesting_task_id {
-            // Exclude the task being updated
-            sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM tasks WHERE status = 'doing' AND id != ?",
-            )
-            .bind(id)
-        } else {
-            // No exclusion needed (new task)
-            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
-        };
-
-        let count = query.fetch_one(self.pool).await?;
-
-        if count > 0 {
-            // There's already another task in progress
-            let existing_task: Option<(String,)> = if let Some(id) = requesting_task_id {
-                sqlx::query_as("SELECT name FROM tasks WHERE status = 'doing' AND id != ? LIMIT 1")
-                    .bind(id)
-                    .fetch_optional(self.pool)
-                    .await?
-            } else {
-                sqlx::query_as("SELECT name FROM tasks WHERE status = 'doing' LIMIT 1")
-                    .fetch_optional(self.pool)
-                    .await?
-            };
-
-            let existing_name = existing_task
-                .map(|(name,)| name)
-                .unwrap_or_else(|| "<unknown>".to_string());
-
-            return Err(IntentError::InvalidInput(format!(
-                "Single in_progress constraint violated: task '{}' is already in_progress. Complete it before starting '{}'.",
-                existing_name, requesting_task.name
             )));
         }
 
