@@ -125,23 +125,52 @@ pub enum ApplicationMode {
 
 /// Initialize the logging system
 pub fn init_logging(config: LoggingConfig) -> io::Result<()> {
-    // Create environment filter from config
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(format!("intent_engine={}", config.level)));
 
     let registry = Registry::default().with(env_filter);
 
-    if config.json_format {
-        // JSON format for machine processing
+    if let Some(log_file) = config.file_output {
+        let file_appender = tracing_appender::rolling::never(
+            log_file.parent().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Invalid log file path")
+            })?,
+            log_file.file_name().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Invalid log file name")
+            })?,
+        );
+
+        if config.json_format {
+            let json_layer = tracing_subscriber::fmt::layer()
+                .json()
+                .with_current_span(config.enable_spans)
+                .with_span_events(FmtSpan::CLOSE)
+                .with_writer(file_appender);
+            json_layer.with_subscriber(registry).init();
+        } else {
+            let fmt_layer = fmt::layer()
+                .with_target(config.show_target)
+                .with_level(true)
+                .with_ansi(false)
+                .with_writer(file_appender);
+
+            if config.show_timestamps {
+                fmt_layer
+                    .with_timer(fmt::time::ChronoUtc::rfc_3339())
+                    .with_subscriber(registry)
+                    .init();
+            } else {
+                fmt_layer.with_subscriber(registry).init();
+            }
+        }
+    } else if config.json_format {
         let json_layer = tracing_subscriber::fmt::layer()
             .json()
             .with_current_span(config.enable_spans)
             .with_span_events(FmtSpan::CLOSE)
             .with_writer(io::stdout);
-
         json_layer.with_subscriber(registry).init();
     } else {
-        // Human-readable format
         let fmt_layer = fmt::layer()
             .with_target(config.show_target)
             .with_level(true)

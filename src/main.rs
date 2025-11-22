@@ -36,12 +36,16 @@ async fn main() {
 
     // Check if this is dashboard mode with stdout redirected (daemon mode)
     // In daemon mode, parent spawns child with --foreground but redirects stdout to /dev/null
+    // Also support IE_DASHBOARD_LOG_FILE env var for testing
     if matches!(
         cli.command,
         Commands::Dashboard(DashboardCommands::Start { .. })
     ) {
+        // Force enable file logging if env var is set (for testing)
+        let force_file_log = std::env::var("IE_DASHBOARD_LOG_FILE").is_ok();
+
         // Check if stdout is not a TTY (redirected to /dev/null in daemon mode)
-        if !atty::is(atty::Stream::Stdout) {
+        if force_file_log || !atty::is(atty::Stream::Stdout) {
             use intent_engine::logging::{log_file_path, ApplicationMode};
             log_config = LoggingConfig::for_mode(ApplicationMode::Dashboard);
             log_config.file_output = Some(log_file_path(ApplicationMode::Dashboard));
