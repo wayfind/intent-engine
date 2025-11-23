@@ -446,46 +446,49 @@ pub async fn search(
     }
 }
 
-/// List all registered projects
-pub async fn list_projects() -> impl IntoResponse {
-    match crate::dashboard::registry::ProjectRegistry::load() {
-        Ok(mut registry) => {
-            // Clean up stale MCP connections before returning
-            registry.cleanup_stale_mcp_connections();
-            if let Err(e) = registry.save() {
-                eprintln!("⚠ Failed to save registry after cleanup: {}", e);
-            }
+/// List all registered projects (from in-memory state)
+pub async fn list_projects(State(state): State<AppState>) -> impl IntoResponse {
+    // Use the same method as WebSocket init for consistency
+    let projects_info = {
+        let current_project = state.current_project.read().await;
+        state
+            .ws_state
+            .get_online_projects_with_current(
+                &current_project.project_name,
+                &current_project.project_path,
+                &current_project.db_path,
+                state.port,
+            )
+            .await
+    };
 
-            let projects: Vec<serde_json::Value> = registry
-                .projects
-                .iter()
-                .map(|p| {
-                    json!({
-                        "name": p.name,
-                        "path": p.path.display().to_string(),
-                        "port": p.port,
-                        "pid": p.pid,
-                        "url": format!("http://127.0.0.1:{}", p.port),
-                        "started_at": p.started_at,
-                        "mcp_connected": p.mcp_connected,
-                        "mcp_agent": p.mcp_agent,
-                        "mcp_last_seen": p.mcp_last_seen,
-                    })
-                })
-                .collect();
+    // Convert ProjectInfo to API response format with additional metadata
+    let port = state.port;
+    let pid = std::process::id();
 
-            (StatusCode::OK, Json(ApiResponse { data: projects })).into_response()
-        },
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiError {
-                code: "REGISTRY_ERROR".to_string(),
-                message: format!("Failed to load project registry: {}", e),
-                details: None,
-            }),
-        )
-            .into_response(),
-    }
+    let projects: Vec<serde_json::Value> = projects_info
+        .iter()
+        .map(|proj| {
+            json!({
+                "name": proj.name,
+                "path": proj.path,
+                "port": port,
+                "pid": pid,
+                "url": format!("http://127.0.0.1:{}", port),
+                "started_at": chrono::Utc::now().to_rfc3339(),
+                "mcp_connected": proj.mcp_connected,
+                "is_online": proj.is_online,  // Now included!
+                "mcp_agent": proj.agent,
+                "mcp_last_seen": if proj.mcp_connected {
+                    Some(chrono::Utc::now().to_rfc3339())
+                } else {
+                    None::<String>
+                },
+            })
+        })
+        .collect();
+
+    (StatusCode::OK, Json(ApiResponse { data: projects })).into_response()
 }
 
 /// Switch to a different project database dynamically

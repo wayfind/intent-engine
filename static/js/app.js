@@ -8,10 +8,10 @@ let isCurrentProjectOffline = false; // Track if current project is in offline/r
 
 // WebSocket reconnection state
 let wsReconnectAttempts = 0;
-const WS_MAX_RECONNECT_ATTEMPTS = 10;
-const WS_RECONNECT_DELAYS = [1000, 2000, 5000, 10000, 30000]; // Exponential backoff in ms
+const WS_RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000, 32000]; // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s (max)
 let wsHeartbeatTimer = null;
-const WS_HEARTBEAT_TIMEOUT = 60000; // 60 seconds
+const WS_HEARTBEAT_TIMEOUT = 90000; // 90 seconds (protocol spec)
+const PROTOCOL_VERSION = "1.0"; // Intent-Engine Protocol version
 
 // LocalStorage heartbeat - check offline projects periodically
 let storageHeartbeatTimer = null;
@@ -175,7 +175,7 @@ async function checkOfflineProjects() {
 
 function connectToDashboardWebSocket() {
     const wsUrl = `ws://${window.location.host}/ws/ui`;
-    console.log(`Connecting to Dashboard WebSocket (attempt ${wsReconnectAttempts + 1}/${WS_MAX_RECONNECT_ATTEMPTS}):`, wsUrl);
+    console.log(`Connecting to Dashboard WebSocket (attempt ${wsReconnectAttempts + 1}):`, wsUrl);
 
     // Clear existing heartbeat timer
     if (wsHeartbeatTimer) {
@@ -194,58 +194,9 @@ function connectToDashboardWebSocket() {
         // Start heartbeat timeout timer
         resetHeartbeatTimer();
 
-        // Fetch current Dashboard project info via HTTP API
-        // This ensures the Dashboard's own project appears in the tabs
-        try {
-            const response = await fetch('/api/info');
-            if (response.ok) {
-                const projectInfo = await response.json();
-                const project = {
-                    name: projectInfo.name,
-                    path: projectInfo.path,
-                    database: projectInfo.database
-                };
-
-                // Add to online projects and storage
-                onlineProjects.set(project.path, project);
-                addProjectToStorage(project);
-
-                console.log('✓ Registered current Dashboard project:', project.name);
-            }
-        } catch (error) {
-            console.warn('Failed to fetch current Dashboard project info:', error);
-        }
-
-        // Fetch all online projects from Registry
-        // This ensures we get accurate mcp_connected status for all projects
-        try {
-            const response = await fetch('/api/projects');
-            if (response.ok) {
-                const result = await response.json();
-                const projects = result.data || [];
-
-                console.log(`✓ Fetched ${projects.length} project(s) from Registry`);
-
-                // Register all mcp_connected projects as online
-                projects.forEach(p => {
-                    if (p.mcp_connected) {
-                        const project = {
-                            name: p.name,
-                            path: p.path,
-                            database: p.path + '/.intent-engine/project.db' // Reconstruct database path
-                        };
-                        onlineProjects.set(project.path, project);
-                        addProjectToStorage(project);
-                        console.log(`✓ Registered MCP-connected project: ${project.name}`);
-                    }
-                });
-
-                // Re-render tabs to show all projects
-                renderProjectTabs();
-            }
-        } catch (error) {
-            console.warn('Failed to fetch projects from Registry:', error);
-        }
+        // WebSocket is the single source of truth for project status
+        // The 'init' message will provide all project info automatically
+        console.log('✓ Waiting for WebSocket init message...');
     };
 
     dashboardWebSocket.onmessage = (event) => {
@@ -277,22 +228,21 @@ function connectToDashboardWebSocket() {
         onlineProjects.clear();
         renderProjectTabs();
 
-        // Attempt reconnection with exponential backoff
-        if (wsReconnectAttempts < WS_MAX_RECONNECT_ATTEMPTS) {
-            const delayIndex = Math.min(wsReconnectAttempts, WS_RECONNECT_DELAYS.length - 1);
-            const delay = WS_RECONNECT_DELAYS[delayIndex];
-            console.log(`⟳ Reconnecting in ${delay/1000}s... (attempt ${wsReconnectAttempts + 1}/${WS_MAX_RECONNECT_ATTEMPTS})`);
+        // Infinite reconnection with exponential backoff + jitter
+        const delayIndex = Math.min(wsReconnectAttempts, WS_RECONNECT_DELAYS.length - 1);
+        const baseDelay = WS_RECONNECT_DELAYS[delayIndex];
 
-            // Show reconnecting banner
-            showReconnectingBanner(wsReconnectAttempts + 1, WS_MAX_RECONNECT_ATTEMPTS, delay);
+        // Add jitter: ±25% random variance to prevent thundering herd
+        const jitter = baseDelay * 0.25 * (Math.random() * 2 - 1); // Range: -25% to +25%
+        const delay = Math.max(0, baseDelay + jitter);
 
-            wsReconnectAttempts++;
-            setTimeout(connectToDashboardWebSocket, delay);
-        } else {
-            console.error('✗ Maximum reconnection attempts reached. Please refresh the page.');
-            // Show connection failed banner
-            showConnectionFailedBanner();
-        }
+        console.log(`⟳ Reconnecting in ${(delay/1000).toFixed(1)}s... (attempt ${wsReconnectAttempts + 1}, base: ${baseDelay/1000}s + jitter: ${(jitter/1000).toFixed(1)}s)`);
+
+        // Show reconnecting banner
+        showReconnectingBanner(wsReconnectAttempts + 1, delay);
+
+        wsReconnectAttempts++;
+        setTimeout(connectToDashboardWebSocket, delay);
     };
 }
 
@@ -302,9 +252,9 @@ function resetHeartbeatTimer() {
         clearTimeout(wsHeartbeatTimer);
     }
 
-    // Set new timer - if no message received in 60s, consider connection dead
+    // Set new timer - if no message received in 90s, consider connection dead
     wsHeartbeatTimer = setTimeout(() => {
-        console.warn('⚠ WebSocket heartbeat timeout - no message received for 60s');
+        console.warn('⚠ WebSocket heartbeat timeout - no message received for 90s');
         if (dashboardWebSocket && dashboardWebSocket.readyState === WebSocket.OPEN) {
             dashboardWebSocket.close();
         }
@@ -315,7 +265,7 @@ function resetHeartbeatTimer() {
 // WebSocket UI Feedback Functions
 // ============================================================================
 
-function showReconnectingBanner(attempt, maxAttempts, delay) {
+function showReconnectingBanner(attempt, delay) {
     const banner = document.getElementById('connection-status-banner');
     if (!banner) return;
 
@@ -326,7 +276,7 @@ function showReconnectingBanner(attempt, maxAttempts, delay) {
             <div class="flex-1">
                 <div class="font-mono text-sm text-yellow-300 font-bold tracking-wider">RECONNECTING...</div>
                 <div class="font-mono text-xs text-yellow-400/80 mt-0.5">
-                    Connection lost. Retrying in ${delay/1000}s (attempt ${attempt}/${maxAttempts})
+                    Connection lost. Retrying in ${(delay/1000).toFixed(1)}s (attempt ${attempt})
                 </div>
             </div>
         </div>
@@ -368,24 +318,45 @@ function hideConnectionWarning() {
 function handleDashboardMessage(message) {
     console.log('Dashboard message:', message);
 
+    // Parse protocol message
+    if (!message.version || !message.type || !message.payload) {
+        console.warn('Invalid protocol message format:', message);
+        return;
+    }
+
+    // Validate protocol version (major version must match)
+    const expectedMajor = PROTOCOL_VERSION.split('.')[0];
+    const receivedMajor = message.version.split('.')[0];
+    if (expectedMajor !== receivedMajor) {
+        console.error(`Protocol version mismatch: expected ${PROTOCOL_VERSION}, got ${message.version}`);
+        return;
+    }
+
+    // Handle message based on type
     switch (message.type) {
         case 'init':
             // Initial project list from Dashboard
-            handleInitMessage(message.projects);
+            handleInitMessage(message.payload.projects);
             break;
         case 'project_online':
             // Project came online
-            handleProjectOnline(message.project);
+            handleProjectOnline(message.payload.project);
             break;
         case 'project_offline':
             // Project went offline
-            handleProjectOffline(message.project_path);
+            handleProjectOffline(message.payload.project_path);
             break;
         case 'ping':
             // Heartbeat ping from server - respond with pong
             console.log('♥ Received heartbeat ping');
             if (dashboardWebSocket && dashboardWebSocket.readyState === WebSocket.OPEN) {
-                dashboardWebSocket.send(JSON.stringify({ type: 'pong' }));
+                const pongMsg = {
+                    version: PROTOCOL_VERSION,
+                    type: 'pong',
+                    payload: {},
+                    timestamp: new Date().toISOString()
+                };
+                dashboardWebSocket.send(JSON.stringify(pongMsg));
             }
             break;
         default:
@@ -446,7 +417,9 @@ function renderProjectTabs() {
     // Helper function to render tabs
     const renderTabs = (currentProjectPath = '') => {
         const tabsHTML = storedProjects.map(project => {
-            const isOnline = onlineProjects.has(project.path);
+            // Check if project is online based on is_online field (Dashboard running)
+            const onlineProject = onlineProjects.get(project.path);
+            const isOnline = onlineProject ? onlineProject.is_online : false;
             const isActive = project.path === currentProjectPath;
             const activeClass = isActive
                 ? 'bg-neon-blue text-black font-bold shadow-neon-blue'

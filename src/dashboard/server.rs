@@ -66,6 +66,8 @@ struct ProjectInfo {
     path: String,
     database: String,
     port: u16,
+    is_online: bool,
+    mcp_connected: bool,
 }
 
 impl DashboardServer {
@@ -155,14 +157,7 @@ fn create_router(state: AppState) -> Router {
         .route("/info", get(info_handler))
         .merge(routes::api_routes());
 
-    // WebSocket routes with their own state
-    let ws_state = state.ws_state.clone();
-    let ws_routes = Router::new()
-        .route("/ws/mcp", get(websocket::handle_mcp_websocket))
-        .route("/ws/ui", get(websocket::handle_ui_websocket))
-        .with_state(ws_state);
-
-    // Main router
+    // Main router - all routes share the same AppState
     Router::new()
         // Root route - serve index.html
         .route("/", get(serve_index))
@@ -170,8 +165,9 @@ fn create_router(state: AppState) -> Router {
         .route("/static/*path", get(serve_static))
         // API routes under /api prefix
         .nest("/api", api_routes)
-        // WebSocket routes
-        .merge(ws_routes)
+        // WebSocket routes (now use full AppState)
+        .route("/ws/mcp", get(websocket::handle_mcp_websocket))
+        .route("/ws/ui", get(websocket::handle_ui_websocket))
         // Fallback to 404
         .fallback(not_found_handler)
         // Add state
@@ -375,13 +371,31 @@ async fn health_handler() -> Json<HealthResponse> {
 }
 
 /// Project info handler
+/// Returns current Dashboard project info from the single source of truth (WebSocketState)
 async fn info_handler(State(state): State<AppState>) -> Json<ProjectInfo> {
     let project = state.current_project.read().await;
+
+    // Get project info from WebSocketState (single source of truth)
+    let projects = state
+        .ws_state
+        .get_online_projects_with_current(
+            &project.project_name,
+            &project.project_path,
+            &project.db_path,
+            state.port,
+        )
+        .await;
+
+    // Return the first project (which is always the current Dashboard project)
+    let current_project = projects.first().expect("Current project must exist");
+
     Json(ProjectInfo {
-        name: project.project_name.clone(),
-        path: project.project_path.display().to_string(),
-        database: project.db_path.display().to_string(),
+        name: current_project.name.clone(),
+        path: current_project.path.clone(),
+        database: current_project.db_path.clone(),
         port: state.port,
+        is_online: current_project.is_online,
+        mcp_connected: current_project.mcp_connected,
     })
 }
 
@@ -420,6 +434,8 @@ mod tests {
             path: "/path/to/project".to_string(),
             database: "/path/to/db".to_string(),
             port: 11391,
+            is_online: true,
+            mcp_connected: false,
         };
 
         let json = serde_json::to_string(&info).unwrap();

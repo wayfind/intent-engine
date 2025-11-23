@@ -1,6 +1,9 @@
 // WebSocket support for Dashboard
 // Handles real-time communication between MCP servers and UI clients
 
+/// Intent-Engine Protocol Version
+pub const PROTOCOL_VERSION: &str = "1.0";
+
 use axum::{
     extract::{
         ws::{Message, WebSocket},
@@ -14,6 +17,64 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+/// Protocol message wrapper - wraps all WebSocket messages with version and timestamp
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProtocolMessage<T> {
+    /// Protocol version (e.g., "1.0")
+    pub version: String,
+    /// Message type identifier
+    #[serde(rename = "type")]
+    pub message_type: String,
+    /// Message payload
+    pub payload: T,
+    /// ISO 8601 timestamp when message was created
+    pub timestamp: String,
+}
+
+impl<T> ProtocolMessage<T>
+where
+    T: Serialize,
+{
+    /// Create a new protocol message with current timestamp
+    pub fn new(message_type: impl Into<String>, payload: T) -> Self {
+        Self {
+            version: PROTOCOL_VERSION.to_string(),
+            message_type: message_type.into(),
+            payload,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    /// Serialize to JSON string
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
+}
+
+impl<T> ProtocolMessage<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    /// Deserialize from JSON string with version validation
+    pub fn from_json(json: &str) -> Result<Self, String> {
+        let msg: Self = serde_json::from_str(json)
+            .map_err(|e| format!("Failed to parse protocol message: {}", e))?;
+
+        // Validate protocol version (major version must match)
+        let expected_major = PROTOCOL_VERSION.split('.').next().unwrap_or("1");
+        let received_major = msg.version.split('.').next().unwrap_or("0");
+
+        if expected_major != received_major {
+            return Err(format!(
+                "Protocol version mismatch: expected {}, got {}",
+                PROTOCOL_VERSION, msg.version
+            ));
+        }
+
+        Ok(msg)
+    }
+}
+
 /// Project information sent by MCP servers
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectInfo {
@@ -22,6 +83,10 @@ pub struct ProjectInfo {
     pub db_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// Whether this project has an active MCP connection
+    pub mcp_connected: bool,
+    /// Whether the Dashboard serving this project is online
+    pub is_online: bool,
 }
 
 /// MCP connection entry
@@ -70,70 +135,155 @@ impl WebSocketState {
         }
     }
 
-    /// Get list of currently connected projects from Registry
+    /// Get list of all online projects from in-memory state
     pub async fn get_online_projects(&self) -> Vec<ProjectInfo> {
-        // Load from Registry to get accurate mcp_connected status
-        // This ensures UI gets complete project list even if WebSocket connections haven't been established yet
-        match crate::dashboard::registry::ProjectRegistry::load() {
-            Ok(registry) => registry
-                .projects
-                .iter()
-                .filter(|p| p.mcp_connected)
-                .map(|p| ProjectInfo {
-                    name: p.name.clone(),
-                    path: p.path.display().to_string(),
-                    db_path: p.db_path.display().to_string(),
-                    agent: p.mcp_agent.clone(),
-                })
-                .collect(),
-            Err(e) => {
-                tracing::warn!("Failed to load registry for online projects: {}", e);
-                Vec::new()
-            },
+        // Read from in-memory MCP connections
+        let connections = self.mcp_connections.read().await;
+
+        connections
+            .values()
+            .map(|conn| {
+                let mut project = conn.project.clone();
+                project.mcp_connected = true; // All projects in the map are connected
+                project
+            })
+            .collect()
+    }
+
+    /// Get list of all online projects
+    /// Always includes the current Dashboard project plus all MCP-connected projects
+    /// This is the single source of truth for project status
+    pub async fn get_online_projects_with_current(
+        &self,
+        current_project_name: &str,
+        current_project_path: &std::path::Path,
+        current_db_path: &std::path::Path,
+        _port: u16,
+    ) -> Vec<ProjectInfo> {
+        let connections = self.mcp_connections.read().await;
+        let current_path_str = current_project_path.display().to_string();
+
+        let mut projects = Vec::new();
+
+        // 1. Always add current Dashboard project first
+        // Check if this project also has an MCP connection
+        let current_has_mcp = connections
+            .values()
+            .any(|conn| conn.project.path == current_path_str);
+
+        projects.push(ProjectInfo {
+            name: current_project_name.to_string(),
+            path: current_path_str.clone(),
+            db_path: current_db_path.display().to_string(),
+            agent: None, // Dashboard itself doesn't have an agent name
+            mcp_connected: current_has_mcp,
+            is_online: true, // Dashboard is online (serving this response)
+        });
+
+        // 2. Add all other MCP-connected projects (excluding current project to avoid duplication)
+        for conn in connections.values() {
+            if conn.project.path != current_path_str {
+                let mut project = conn.project.clone();
+                project.mcp_connected = true;
+                project.is_online = true; // MCP connection means project is online
+                projects.push(project);
+            }
         }
+
+        projects
     }
 }
 
-/// Message types from MCP to Dashboard
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-enum McpMessage {
-    #[serde(rename = "register")]
-    Register { project: ProjectInfo },
-    #[serde(rename = "ping")]
-    Ping,
+// ============================================================================
+// Payload Structures (used inside ProtocolMessage)
+// ============================================================================
+
+/// Payload for MCP register message
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegisterPayload {
+    pub project: ProjectInfo,
 }
 
-/// Message types from Dashboard to MCP
-#[derive(Debug, Serialize)]
-#[serde(tag = "type")]
-enum McpResponse {
-    #[serde(rename = "registered")]
-    Registered { success: bool },
-    #[serde(rename = "pong")]
-    Pong,
+/// Payload for MCP registered response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegisteredPayload {
+    pub success: bool,
 }
 
-/// Message types from Dashboard to UI
-#[derive(Debug, Serialize)]
-#[serde(tag = "type")]
-enum UiMessage {
-    #[serde(rename = "init")]
-    Init { projects: Vec<ProjectInfo> },
-    #[serde(rename = "project_online")]
-    ProjectOnline { project: ProjectInfo },
-    #[serde(rename = "project_offline")]
-    ProjectOffline { project_path: String },
-    #[serde(rename = "ping")]
-    Ping,
+/// Empty payload for ping/pong messages
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EmptyPayload {}
+
+/// Payload for UI init message
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InitPayload {
+    pub projects: Vec<ProjectInfo>,
+}
+
+/// Payload for UI project_online message
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProjectOnlinePayload {
+    pub project: ProjectInfo,
+}
+
+/// Payload for UI project_offline message
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProjectOfflinePayload {
+    pub project_path: String,
+}
+
+/// Payload for hello message (client → server)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HelloPayload {
+    /// Client entity type ("mcp" or "ui")
+    pub entity_type: String,
+    /// Client capabilities (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
+}
+
+/// Payload for welcome message (server → client)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WelcomePayload {
+    /// Server capabilities
+    pub capabilities: Vec<String>,
+    /// Session ID
+    pub session_id: String,
+}
+
+/// Payload for goodbye message
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GoodbyePayload {
+    /// Reason for closing (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+// ============================================================================
+// Helper Functions for Sending Protocol Messages
+// ============================================================================
+
+/// Send a protocol message through a channel
+fn send_protocol_message<T: Serialize>(
+    tx: &tokio::sync::mpsc::UnboundedSender<Message>,
+    message_type: &str,
+    payload: T,
+) -> Result<(), String> {
+    let protocol_msg = ProtocolMessage::new(message_type, payload);
+    let json = protocol_msg
+        .to_json()
+        .map_err(|e| format!("Failed to serialize message: {}", e))?;
+
+    tx.send(Message::Text(json))
+        .map_err(|_| "Failed to send message: channel closed".to_string())
 }
 
 /// Handle MCP WebSocket connections
 pub async fn handle_mcp_websocket(
     ws: WebSocketUpgrade,
-    State(state): State<WebSocketState>,
+    State(app_state): State<crate::dashboard::server::AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_mcp_socket(socket, state))
+    ws.on_upgrade(move |socket| handle_mcp_socket(socket, app_state.ws_state))
 }
 
 async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
@@ -158,20 +308,17 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
     // Clone tx for heartbeat task
     let heartbeat_tx = tx.clone();
 
-    // Spawn heartbeat task - send ping every 30 seconds
+    // Spawn heartbeat task - send pong every 30 seconds
     let mut heartbeat_task = tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
         loop {
             interval.tick().await;
-            let ping_msg = McpResponse::Pong; // Use Pong as keepalive for MCP
-            if heartbeat_tx
-                .send(Message::Text(serde_json::to_string(&ping_msg).unwrap()))
-                .is_err()
-            {
+            // Send pong as heartbeat keepalive
+            if send_protocol_message(&heartbeat_tx, "pong", EmptyPayload {}).is_err() {
                 // Connection closed
                 break;
             }
-            tracing::trace!("Sent heartbeat to MCP client");
+            tracing::trace!("Sent heartbeat pong to MCP client");
         }
     });
 
@@ -180,9 +327,26 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 Message::Text(text) => {
-                    // Parse incoming message
-                    match serde_json::from_str::<McpMessage>(&text) {
-                        Ok(McpMessage::Register { project }) => {
+                    // Parse incoming protocol message
+                    let parsed_msg = match ProtocolMessage::<serde_json::Value>::from_json(&text) {
+                        Ok(msg) => msg,
+                        Err(e) => {
+                            tracing::warn!("Failed to parse protocol message: {}", e);
+                            continue;
+                        },
+                    };
+
+                    match parsed_msg.message_type.as_str() {
+                        "register" => {
+                            // Parse register payload
+                            let project: ProjectInfo =
+                                match serde_json::from_value(parsed_msg.payload.clone()) {
+                                    Ok(p) => p,
+                                    Err(e) => {
+                                        tracing::warn!("Failed to parse register payload: {}", e);
+                                        continue;
+                                    },
+                                };
                             tracing::info!("MCP registering project: {}", project.name);
 
                             let path = project.path.clone();
@@ -207,9 +371,11 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                                 );
 
                                 // Send rejection response
-                                let response = McpResponse::Registered { success: false };
-                                let _ = tx
-                                    .send(Message::Text(serde_json::to_string(&response).unwrap()));
+                                let _ = send_protocol_message(
+                                    &tx,
+                                    "registered",
+                                    RegisteredPayload { success: false },
+                                );
                                 continue; // Skip registration
                             }
 
@@ -227,52 +393,53 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                                 .insert(path.clone(), conn);
                             project_path = Some(path.clone());
 
-                            // Update Registry immediately to set mcp_connected=true
-                            match crate::dashboard::registry::ProjectRegistry::load() {
-                                Ok(mut registry) => {
-                                    if let Err(e) = registry.register_mcp_connection(
-                                        &project_path_buf,
-                                        project.agent.clone(),
-                                    ) {
-                                        tracing::warn!(
-                                            "Failed to update Registry for MCP connection: {}",
-                                            e
-                                        );
-                                    } else {
-                                        tracing::info!(
-                                            "✓ Updated Registry: {} is now mcp_connected=true",
-                                            project.name
-                                        );
-                                    }
-                                },
-                                Err(e) => {
-                                    tracing::warn!("Failed to load Registry: {}", e);
-                                },
-                            }
+                            tracing::info!("✓ MCP connected: {} ({})", project.name, path);
 
                             // Send confirmation
-                            let response = McpResponse::Registered { success: true };
-                            let _ =
-                                tx.send(Message::Text(serde_json::to_string(&response).unwrap()));
+                            let _ = send_protocol_message(
+                                &tx,
+                                "registered",
+                                RegisteredPayload { success: true },
+                            );
 
-                            // Broadcast to UI clients
-                            let ui_msg = UiMessage::ProjectOnline { project };
+                            // Broadcast to UI clients with mcp_connected=true
+                            let mut project_info = project.clone();
+                            project_info.mcp_connected = true;
+                            let ui_msg = ProtocolMessage::new(
+                                "project_online",
+                                ProjectOnlinePayload {
+                                    project: project_info,
+                                },
+                            );
                             state_for_recv
-                                .broadcast_to_ui(&serde_json::to_string(&ui_msg).unwrap())
+                                .broadcast_to_ui(&ui_msg.to_json().unwrap())
                                 .await;
                         },
-                        Ok(McpMessage::Ping) => {
+                        "ping" => {
                             // Respond with pong
-                            let response = McpResponse::Pong;
-                            let _ =
-                                tx.send(Message::Text(serde_json::to_string(&response).unwrap()));
+                            let _ = send_protocol_message(&tx, "pong", EmptyPayload {});
                         },
-                        Err(e) => {
-                            tracing::warn!("Failed to parse MCP message: {}", e);
+                        "goodbye" => {
+                            // Client is closing connection gracefully
+                            if let Ok(goodbye_payload) =
+                                serde_json::from_value::<GoodbyePayload>(parsed_msg.payload)
+                            {
+                                if let Some(reason) = goodbye_payload.reason {
+                                    tracing::info!("MCP client closing connection: {}", reason);
+                                } else {
+                                    tracing::info!("MCP client closing connection gracefully");
+                                }
+                            }
+                            // Break loop to close connection
+                            break;
+                        },
+                        _ => {
+                            tracing::warn!("Unknown message type: {}", parsed_msg.message_type);
                         },
                     }
                 },
                 Message::Close(_) => {
+                    tracing::info!("MCP client closed WebSocket");
                     break;
                 },
                 _ => {},
@@ -295,25 +462,15 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                 // Clean up connection
                 state.mcp_connections.write().await.remove(&path);
 
-                // Update Registry immediately to set mcp_connected=false
-                let project_path_buf = std::path::PathBuf::from(&path);
-                match crate::dashboard::registry::ProjectRegistry::load() {
-                    Ok(mut registry) => {
-                        if let Err(e) = registry.unregister_mcp_connection(&project_path_buf) {
-                            tracing::warn!("Failed to update Registry for MCP disconnection: {}", e);
-                        } else {
-                            tracing::info!("✓ Updated Registry: {} is now mcp_connected=false", path);
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to load Registry: {}", e);
-                    }
-                }
+                tracing::info!("MCP disconnected: {}", path);
 
                 // Notify UI clients
-                let ui_msg = UiMessage::ProjectOffline { project_path: path.clone() };
+                let ui_msg = ProtocolMessage::new(
+                    "project_offline",
+                    ProjectOfflinePayload { project_path: path.clone() },
+                );
                 state
-                    .broadcast_to_ui(&serde_json::to_string(&ui_msg).unwrap())
+                    .broadcast_to_ui(&ui_msg.to_json().unwrap())
                     .await;
 
                 tracing::info!("MCP disconnected: {}", path);
@@ -329,12 +486,12 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
 /// Handle UI WebSocket connections
 pub async fn handle_ui_websocket(
     ws: WebSocketUpgrade,
-    State(state): State<WebSocketState>,
+    State(app_state): State<crate::dashboard::server::AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_ui_socket(socket, state))
+    ws.on_upgrade(move |socket| handle_ui_socket(socket, app_state))
 }
 
-async fn handle_ui_socket(socket: WebSocket, state: WebSocketState) {
+async fn handle_ui_socket(socket: WebSocket, app_state: crate::dashboard::server::AppState) {
     let (mut sender, mut receiver) = socket.split();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
@@ -347,10 +504,21 @@ async fn handle_ui_socket(socket: WebSocket, state: WebSocketState) {
         }
     });
 
-    // Send initial project list
-    let projects = state.get_online_projects().await;
-    let init_msg = UiMessage::Init { projects };
-    let _ = tx.send(Message::Text(serde_json::to_string(&init_msg).unwrap()));
+    // Send initial project list (include current Dashboard project)
+    let projects = {
+        let current_project = app_state.current_project.read().await;
+        let port = app_state.port;
+        app_state
+            .ws_state
+            .get_online_projects_with_current(
+                &current_project.project_name,
+                &current_project.project_path,
+                &current_project.db_path,
+                port,
+            )
+            .await
+    };
+    let _ = send_protocol_message(&tx, "init", InitPayload { projects });
 
     // Register this UI connection
     let conn = UiConnection {
@@ -358,7 +526,7 @@ async fn handle_ui_socket(socket: WebSocket, state: WebSocketState) {
         connected_at: chrono::Utc::now(),
     };
     let conn_index = {
-        let mut connections = state.ui_connections.write().await;
+        let mut connections = app_state.ws_state.ui_connections.write().await;
         connections.push(conn);
         connections.len() - 1
     };
@@ -373,11 +541,7 @@ async fn handle_ui_socket(socket: WebSocket, state: WebSocketState) {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
         loop {
             interval.tick().await;
-            let ping_msg = UiMessage::Ping;
-            if heartbeat_tx
-                .send(Message::Text(serde_json::to_string(&ping_msg).unwrap()))
-                .is_err()
-            {
+            if send_protocol_message(&heartbeat_tx, "ping", EmptyPayload {}).is_err() {
                 // Connection closed
                 break;
             }
@@ -390,13 +554,44 @@ async fn handle_ui_socket(socket: WebSocket, state: WebSocketState) {
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 Message::Text(text) => {
-                    // UI can send pong or other messages
-                    tracing::trace!("Received from UI: {}", text);
+                    // Parse protocol message from UI
+                    if let Ok(parsed_msg) =
+                        serde_json::from_str::<ProtocolMessage<serde_json::Value>>(&text)
+                    {
+                        match parsed_msg.message_type.as_str() {
+                            "pong" => {
+                                tracing::trace!("Received pong from UI");
+                            },
+                            "goodbye" => {
+                                // UI client closing gracefully
+                                if let Ok(goodbye_payload) =
+                                    serde_json::from_value::<GoodbyePayload>(parsed_msg.payload)
+                                {
+                                    if let Some(reason) = goodbye_payload.reason {
+                                        tracing::info!("UI client closing: {}", reason);
+                                    } else {
+                                        tracing::info!("UI client closing gracefully");
+                                    }
+                                }
+                                break;
+                            },
+                            _ => {
+                                tracing::trace!(
+                                    "Received from UI: {} ({})",
+                                    parsed_msg.message_type,
+                                    text
+                                );
+                            },
+                        }
+                    } else {
+                        tracing::trace!("Received non-protocol message from UI: {}", text);
+                    }
                 },
                 Message::Pong(_) => {
-                    tracing::trace!("Received pong from UI");
+                    tracing::trace!("Received WebSocket pong from UI");
                 },
                 Message::Close(_) => {
+                    tracing::info!("UI client closed WebSocket");
                     break;
                 },
                 _ => {},
@@ -421,6 +616,11 @@ async fn handle_ui_socket(socket: WebSocket, state: WebSocketState) {
     }
 
     // Clean up UI connection
-    state.ui_connections.write().await.swap_remove(conn_index);
+    app_state
+        .ws_state
+        .ui_connections
+        .write()
+        .await
+        .swap_remove(conn_index);
     tracing::info!("UI client disconnected");
 }
