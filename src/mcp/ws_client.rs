@@ -53,6 +53,31 @@ struct GoodbyePayload {
     reason: Option<String>,
 }
 
+/// Payload for hello message (client → server)
+#[derive(Debug, Serialize, Deserialize)]
+struct HelloPayload {
+    entity_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capabilities: Option<Vec<String>>,
+}
+
+/// Payload for welcome message (server → client)
+#[derive(Debug, Serialize, Deserialize)]
+struct WelcomePayload {
+    session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capabilities: Option<Vec<String>>,
+}
+
+/// Payload for error message (server → client)
+#[derive(Debug, Serialize, Deserialize)]
+struct ErrorPayload {
+    code: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<serde_json::Value>,
+}
+
 /// Project information sent to Dashboard
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectInfo {
@@ -170,7 +195,43 @@ async fn connect_and_run(
 
     let (mut write, mut read) = ws_stream.split();
 
-    // Send registration message
+    // Step 1: Send hello message (Protocol v1.0 handshake)
+    let hello_msg = ProtocolMessage::new(
+        "hello",
+        HelloPayload {
+            entity_type: "mcp_server".to_string(),
+            capabilities: Some(vec![]),
+        },
+    );
+    write
+        .send(Message::Text(hello_msg.to_json()?))
+        .await
+        .context("Failed to send hello message")?;
+    tracing::debug!("Sent hello message");
+
+    // Step 2: Wait for welcome response
+    if let Some(Ok(Message::Text(text))) = read.next().await {
+        match serde_json::from_str::<ProtocolMessage<WelcomePayload>>(&text) {
+            Ok(msg) if msg.message_type == "welcome" => {
+                tracing::debug!(
+                    "Received welcome from Dashboard (session: {})",
+                    msg.payload.session_id
+                );
+            },
+            Ok(msg) => {
+                tracing::warn!(
+                    "Expected welcome, received: {} (legacy Dashboard?)",
+                    msg.message_type
+                );
+                // Continue anyway for backward compatibility
+            },
+            Err(e) => {
+                tracing::warn!("Failed to parse welcome message: {}", e);
+            },
+        }
+    }
+
+    // Step 3: Send registration message
     let register_msg = ProtocolMessage::new("register", project_info.clone());
     let register_json = register_msg.to_json()?;
     write
@@ -178,7 +239,7 @@ async fn connect_and_run(
         .await
         .context("Failed to send register message")?;
 
-    // Wait for registration confirmation
+    // Step 4: Wait for registration confirmation
     if let Some(Ok(Message::Text(text))) = read.next().await {
         match serde_json::from_str::<ProtocolMessage<RegisteredPayload>>(&text) {
             Ok(msg) if msg.message_type == "registered" && msg.payload.success => {
@@ -193,25 +254,8 @@ async fn connect_and_run(
         }
     }
 
-    // Spawn ping task
-    let mut write_clone = write;
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(30));
-
-        loop {
-            interval.tick().await;
-
-            let ping_msg = ProtocolMessage::new("ping", EmptyPayload {});
-            if let Ok(ping_json) = ping_msg.to_json() {
-                if write_clone.send(Message::Text(ping_json)).await.is_err() {
-                    tracing::warn!("Failed to send ping - Dashboard connection lost");
-                    break;
-                }
-            }
-        }
-    });
-
-    // Spawn read task to handle pongs and other messages
+    // Spawn read/write task to handle messages and respond to pings
+    // Protocol v1.0 Section 4.1.3: Dashboard sends ping, client responds with pong
     tokio::spawn(async move {
         while let Some(Ok(msg)) = read.next().await {
             match msg {
@@ -220,8 +264,52 @@ async fn connect_and_run(
                         serde_json::from_str::<ProtocolMessage<serde_json::Value>>(&text)
                     {
                         match msg.message_type.as_str() {
-                            "pong" => {
-                                tracing::debug!("Received pong from Dashboard");
+                            "ping" => {
+                                // Dashboard sent ping - respond with pong
+                                tracing::debug!(
+                                    "Received ping from Dashboard, responding with pong"
+                                );
+                                let pong_msg = ProtocolMessage::new("pong", EmptyPayload {});
+                                if let Ok(pong_json) = pong_msg.to_json() {
+                                    if write.send(Message::Text(pong_json)).await.is_err() {
+                                        tracing::warn!(
+                                            "Failed to send pong - Dashboard connection lost"
+                                        );
+                                        break;
+                                    }
+                                }
+                            },
+                            "error" => {
+                                // Dashboard sent an error
+                                if let Ok(error) =
+                                    serde_json::from_value::<ErrorPayload>(msg.payload)
+                                {
+                                    tracing::error!(
+                                        "Dashboard error [{}]: {}",
+                                        error.code,
+                                        error.message
+                                    );
+                                    if let Some(details) = error.details {
+                                        tracing::error!("  Details: {}", details);
+                                    }
+
+                                    // Handle critical errors
+                                    match error.code.as_str() {
+                                        "unsupported_version" => {
+                                            tracing::error!(
+                                                "Protocol version mismatch - connection will close"
+                                            );
+                                            break;
+                                        },
+                                        "invalid_path" => {
+                                            tracing::error!("Project path rejected by Dashboard");
+                                            break;
+                                        },
+                                        _ => {
+                                            // Non-critical errors, continue
+                                        },
+                                    }
+                                }
                             },
                             "goodbye" => {
                                 // Dashboard is closing connection gracefully

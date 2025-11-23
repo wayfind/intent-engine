@@ -259,6 +259,27 @@ pub struct GoodbyePayload {
     pub reason: Option<String>,
 }
 
+/// Payload for error message (Protocol v1.0 Section 4.5)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ErrorPayload {
+    /// Machine-readable error code
+    pub code: String,
+    /// Human-readable error message
+    pub message: String,
+    /// Optional additional details (for debugging)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
+}
+
+/// Standard error codes (Protocol v1.0 Section 4.5)
+pub mod error_codes {
+    pub const UNSUPPORTED_VERSION: &str = "unsupported_version";
+    pub const INVALID_MESSAGE: &str = "invalid_message";
+    pub const INVALID_PATH: &str = "invalid_path";
+    pub const REGISTRATION_FAILED: &str = "registration_failed";
+    pub const INTERNAL_ERROR: &str = "internal_error";
+}
+
 // ============================================================================
 // Helper Functions for Sending Protocol Messages
 // ============================================================================
@@ -301,6 +322,7 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
 
     // Variables to track this connection
     let mut project_path: Option<String> = None;
+    let mut session_welcomed = false; // Track if welcome handshake completed
 
     // Clone state for use inside recv_task
     let state_for_recv = state.clone();
@@ -308,17 +330,20 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
     // Clone tx for heartbeat task
     let heartbeat_tx = tx.clone();
 
-    // Spawn heartbeat task - send pong every 30 seconds
+    // Spawn heartbeat task - send ping every 30 seconds (Protocol v1.0 Section 4.1.3)
     let mut heartbeat_task = tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        // Skip the first tick (which completes immediately)
+        interval.tick().await;
+
         loop {
             interval.tick().await;
-            // Send pong as heartbeat keepalive
-            if send_protocol_message(&heartbeat_tx, "pong", EmptyPayload {}).is_err() {
+            // Send ping to request heartbeat from client
+            if send_protocol_message(&heartbeat_tx, "ping", EmptyPayload {}).is_err() {
                 // Connection closed
                 break;
             }
-            tracing::trace!("Sent heartbeat pong to MCP client");
+            tracing::trace!("Sent heartbeat ping to MCP client");
         }
     });
 
@@ -331,13 +356,68 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                     let parsed_msg = match ProtocolMessage::<serde_json::Value>::from_json(&text) {
                         Ok(msg) => msg,
                         Err(e) => {
-                            tracing::warn!("Failed to parse protocol message: {}", e);
+                            tracing::warn!("Protocol error: {}", e);
+
+                            // Send error message to client
+                            let error_code = if e.contains("version mismatch") {
+                                error_codes::UNSUPPORTED_VERSION
+                            } else {
+                                error_codes::INVALID_MESSAGE
+                            };
+
+                            let error_payload = ErrorPayload {
+                                code: error_code.to_string(),
+                                message: e.to_string(),
+                                details: None,
+                            };
+
+                            let _ = send_protocol_message(&tx, "error", error_payload);
                             continue;
                         },
                     };
 
                     match parsed_msg.message_type.as_str() {
+                        "hello" => {
+                            // Parse hello payload
+                            let hello: HelloPayload =
+                                match serde_json::from_value(parsed_msg.payload.clone()) {
+                                    Ok(h) => h,
+                                    Err(e) => {
+                                        tracing::warn!("Failed to parse hello payload: {}", e);
+                                        continue;
+                                    },
+                                };
+
+                            tracing::info!("Received hello from {} client", hello.entity_type);
+
+                            // Generate session ID
+                            let session_id = format!(
+                                "{}-{}",
+                                hello.entity_type,
+                                chrono::Utc::now().timestamp_millis()
+                            );
+
+                            // Send welcome response
+                            let welcome_payload = WelcomePayload {
+                                session_id,
+                                capabilities: vec![], // TODO: Add actual capabilities
+                            };
+
+                            if send_protocol_message(&tx, "welcome", welcome_payload).is_ok() {
+                                session_welcomed = true;
+                                tracing::debug!("Sent welcome message");
+                            } else {
+                                tracing::error!("Failed to send welcome message");
+                            }
+                        },
                         "register" => {
+                            // Check if handshake completed (backward compatibility: allow register without hello for now)
+                            if !session_welcomed {
+                                tracing::warn!(
+                                    "MCP client registered without hello handshake (legacy client detected)"
+                                );
+                            }
+
                             // Parse register payload
                             let project: ProjectInfo =
                                 match serde_json::from_value(parsed_msg.payload.clone()) {
@@ -369,6 +449,14 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                                     "Rejecting MCP registration for temporary/invalid path: {}",
                                     path
                                 );
+
+                                // Send error message
+                                let error_payload = ErrorPayload {
+                                    code: error_codes::INVALID_PATH.to_string(),
+                                    message: "Path is in temporary directory".to_string(),
+                                    details: Some(serde_json::json!({"path": path})),
+                                };
+                                let _ = send_protocol_message(&tx, "error", error_payload);
 
                                 // Send rejection response
                                 let _ = send_protocol_message(
@@ -415,9 +503,9 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                                 .broadcast_to_ui(&ui_msg.to_json().unwrap())
                                 .await;
                         },
-                        "ping" => {
-                            // Respond with pong
-                            let _ = send_protocol_message(&tx, "pong", EmptyPayload {});
+                        "pong" => {
+                            // Client responded to our ping - heartbeat confirmed
+                            tracing::trace!("Received pong from MCP client - heartbeat confirmed");
                         },
                         "goodbye" => {
                             // Client is closing connection gracefully
@@ -504,21 +592,9 @@ async fn handle_ui_socket(socket: WebSocket, app_state: crate::dashboard::server
         }
     });
 
-    // Send initial project list (include current Dashboard project)
-    let projects = {
-        let current_project = app_state.current_project.read().await;
-        let port = app_state.port;
-        app_state
-            .ws_state
-            .get_online_projects_with_current(
-                &current_project.project_name,
-                &current_project.project_path,
-                &current_project.db_path,
-                port,
-            )
-            .await
-    };
-    let _ = send_protocol_message(&tx, "init", InitPayload { projects });
+    // Protocol v1.0 Compliance: Wait for client to send "hello" first
+    // The "init" message will be sent after receiving "hello" and sending "welcome"
+    // This is handled in the message loop below
 
     // Register this UI connection
     let conn = UiConnection {
@@ -533,12 +609,18 @@ async fn handle_ui_socket(socket: WebSocket, app_state: crate::dashboard::server
 
     tracing::info!("UI client connected");
 
+    // Clone app_state for use inside recv_task
+    let app_state_for_recv = app_state.clone();
+
     // Clone tx for heartbeat task
     let heartbeat_tx = tx.clone();
 
-    // Spawn heartbeat task - send ping every 30 seconds
+    // Spawn heartbeat task - send ping every 30 seconds (Protocol v1.0 Section 4.1.3)
     let mut heartbeat_task = tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        // Skip the first tick (which completes immediately)
+        interval.tick().await;
+
         loop {
             interval.tick().await;
             if send_protocol_message(&heartbeat_tx, "ping", EmptyPayload {}).is_err() {
@@ -559,6 +641,57 @@ async fn handle_ui_socket(socket: WebSocket, app_state: crate::dashboard::server
                         serde_json::from_str::<ProtocolMessage<serde_json::Value>>(&text)
                     {
                         match parsed_msg.message_type.as_str() {
+                            "hello" => {
+                                // Parse hello payload
+                                if let Ok(hello) =
+                                    serde_json::from_value::<HelloPayload>(parsed_msg.payload)
+                                {
+                                    tracing::info!(
+                                        "Received hello from {} client",
+                                        hello.entity_type
+                                    );
+
+                                    // Generate session ID
+                                    let session_id = format!(
+                                        "{}-{}",
+                                        hello.entity_type,
+                                        chrono::Utc::now().timestamp_millis()
+                                    );
+
+                                    // Send welcome response
+                                    let welcome_payload = WelcomePayload {
+                                        session_id,
+                                        capabilities: vec![],
+                                    };
+
+                                    let _ = send_protocol_message(&tx, "welcome", welcome_payload);
+                                    tracing::debug!("Sent welcome message to UI");
+
+                                    // Send init after welcome (protocol-compliant flow)
+                                    // Re-fetch projects in case state changed
+                                    let current_projects = {
+                                        let current_project =
+                                            app_state_for_recv.current_project.read().await;
+                                        let port = app_state_for_recv.port;
+                                        app_state_for_recv
+                                            .ws_state
+                                            .get_online_projects_with_current(
+                                                &current_project.project_name,
+                                                &current_project.project_path,
+                                                &current_project.db_path,
+                                                port,
+                                            )
+                                            .await
+                                    };
+                                    let _ = send_protocol_message(
+                                        &tx,
+                                        "init",
+                                        InitPayload {
+                                            projects: current_projects,
+                                        },
+                                    );
+                                }
+                            },
                             "pong" => {
                                 tracing::trace!("Received pong from UI");
                             },

@@ -53,6 +53,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCurrentTask();
 });
 
+// Protocol v1.0: Send goodbye when page closes
+window.addEventListener('beforeunload', () => {
+    if (dashboardWebSocket && dashboardWebSocket.readyState === WebSocket.OPEN) {
+        try {
+            const goodbyeMessage = {
+                version: PROTOCOL_VERSION,
+                type: 'goodbye',
+                payload: {
+                    reason: 'Page closing'
+                },
+                timestamp: new Date().toISOString()
+            };
+            dashboardWebSocket.send(JSON.stringify(goodbyeMessage));
+            console.log('✓ Sent goodbye message (page closing)');
+        } catch (e) {
+            console.error('Failed to send goodbye message:', e);
+        }
+    }
+});
+
 // Safe Markdown rendering
 window.renderMarkdown = (md) => {
     if (!md) return '';
@@ -194,9 +214,21 @@ function connectToDashboardWebSocket() {
         // Start heartbeat timeout timer
         resetHeartbeatTimer();
 
-        // WebSocket is the single source of truth for project status
-        // The 'init' message will provide all project info automatically
-        console.log('✓ Waiting for WebSocket init message...');
+        // Protocol v1.0: Send hello message for handshake
+        const helloMessage = {
+            version: PROTOCOL_VERSION,
+            type: 'hello',
+            payload: {
+                entity_type: 'web_ui',
+                capabilities: null
+            },
+            timestamp: new Date().toISOString()
+        };
+        dashboardWebSocket.send(JSON.stringify(helloMessage));
+        console.log('✓ Sent hello message');
+
+        // WebSocket will send welcome, then init
+        console.log('✓ Waiting for welcome and init messages...');
     };
 
     dashboardWebSocket.onmessage = (event) => {
@@ -315,6 +347,27 @@ function hideConnectionWarning() {
     }
 }
 
+function showErrorBanner(message) {
+    const banner = document.getElementById('connection-status-banner');
+    if (!banner) return;
+
+    banner.className = 'bg-red-900/30 border-b border-red-600/50 px-6 py-3';
+    banner.innerHTML = `
+        <div class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div class="flex-1">
+                <div class="font-mono text-sm text-red-300 font-bold tracking-wider">ERROR</div>
+                <div class="font-mono text-xs text-red-400/80 mt-0.5">
+                    ${message}
+                </div>
+            </div>
+        </div>
+    `;
+    banner.classList.remove('hidden');
+}
+
 function handleDashboardMessage(message) {
     console.log('Dashboard message:', message);
 
@@ -334,6 +387,28 @@ function handleDashboardMessage(message) {
 
     // Handle message based on type
     switch (message.type) {
+        case 'error':
+            // Dashboard sent an error
+            console.error(`Dashboard error [${message.payload.code}]: ${message.payload.message}`);
+            if (message.payload.details) {
+                console.error('  Details:', message.payload.details);
+            }
+
+            // Handle critical errors
+            if (message.payload.code === 'unsupported_version') {
+                showErrorBanner('Protocol version mismatch. Please refresh the page or upgrade.');
+            } else if (message.payload.code === 'invalid_path') {
+                showErrorBanner(`Invalid project path: ${message.payload.message}`);
+            }
+            break;
+        case 'welcome':
+            // Protocol v1.0 handshake response
+            console.log('✓ Received welcome from Dashboard');
+            if (message.payload.session_id) {
+                console.log(`  Session ID: ${message.payload.session_id}`);
+            }
+            // Init message will follow
+            break;
         case 'init':
             // Initial project list from Dashboard
             handleInitMessage(message.payload.projects);
@@ -358,6 +433,15 @@ function handleDashboardMessage(message) {
                 };
                 dashboardWebSocket.send(JSON.stringify(pongMsg));
             }
+            break;
+        case 'goodbye':
+            // Dashboard is closing connection gracefully
+            if (message.payload.reason) {
+                console.log(`✓ Dashboard closing connection: ${message.payload.reason}`);
+            } else {
+                console.log('✓ Dashboard closing connection gracefully');
+            }
+            // Connection will close - this is expected, not an error
             break;
         default:
             console.warn('Unknown message type:', message.type);
