@@ -2,14 +2,122 @@ use crate::db::models::Event;
 use crate::error::{IntentError, Result};
 use chrono::Utc;
 use sqlx::{Row, SqlitePool};
+use std::sync::Arc;
 
 pub struct EventManager<'a> {
     pool: &'a SqlitePool,
+    ws_state: Option<Arc<crate::dashboard::websocket::WebSocketState>>,
+    project_path: Option<String>,
+    mcp_notifier: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 }
 
 impl<'a> EventManager<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            ws_state: None,
+            project_path: None,
+            mcp_notifier: None,
+        }
+    }
+
+    /// Create an EventManager with MCP notification support
+    pub fn with_mcp_notifier(
+        pool: &'a SqlitePool,
+        project_path: String,
+        mcp_notifier: tokio::sync::mpsc::UnboundedSender<String>,
+    ) -> Self {
+        Self {
+            pool,
+            ws_state: None,
+            project_path: Some(project_path),
+            mcp_notifier: Some(mcp_notifier),
+        }
+    }
+
+    /// Create an EventManager with WebSocket notification support
+    pub fn with_websocket(
+        pool: &'a SqlitePool,
+        ws_state: Arc<crate::dashboard::websocket::WebSocketState>,
+        project_path: String,
+    ) -> Self {
+        Self {
+            pool,
+            ws_state: Some(ws_state),
+            project_path: Some(project_path),
+            mcp_notifier: None,
+        }
+    }
+
+    /// Internal helper: Notify UI about event creation
+    async fn notify_event_created(&self, event: &Event) {
+        use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage};
+
+        // Prepare notification payload
+        let event_json = match serde_json::to_value(event) {
+            Ok(json) => json,
+            Err(e) => {
+                tracing::warn!("Failed to serialize event for notification: {}", e);
+                return;
+            },
+        };
+
+        let project_path = match &self.project_path {
+            Some(path) => path.clone(),
+            None => return, // No project path configured
+        };
+
+        let payload =
+            DatabaseOperationPayload::event_created(event.id, event_json, project_path.clone());
+        let msg = ProtocolMessage::new("db_operation", payload);
+        let json = match msg.to_json() {
+            Ok(j) => j,
+            Err(e) => {
+                tracing::warn!("Failed to serialize notification message: {}", e);
+                return;
+            },
+        };
+
+        // Send via Dashboard WebSocket (if available)
+        if let Some(ws) = &self.ws_state {
+            ws.broadcast_to_ui(&json).await;
+        }
+
+        // Send via MCP WebSocket (if available) - non-blocking
+        if let Some(notifier) = &self.mcp_notifier {
+            if let Err(e) = notifier.send(json) {
+                tracing::debug!("Failed to send MCP notification (channel closed): {}", e);
+            }
+        }
+    }
+
+    /// Internal helper: Notify UI about event update
+    async fn notify_event_updated(&self, event: &Event) {
+        if let (Some(ws), Some(path)) = (&self.ws_state, &self.project_path) {
+            use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage};
+
+            if let Ok(event_json) = serde_json::to_value(event) {
+                let payload =
+                    DatabaseOperationPayload::event_updated(event.id, event_json, path.clone());
+                let msg = ProtocolMessage::new("event_updated", payload);
+                if let Ok(json) = msg.to_json() {
+                    ws.broadcast_to_ui(&json).await;
+                }
+            }
+        }
+    }
+
+    /// Internal helper: Notify UI about event deletion
+    async fn notify_event_deleted(&self, event_id: i64) {
+        if let (Some(ws), Some(path)) = (&self.ws_state, &self.project_path) {
+            use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage};
+
+            let payload = DatabaseOperationPayload::event_deleted(event_id, path.clone());
+            let msg = ProtocolMessage::new("event_deleted", payload);
+            if let Ok(json) = msg.to_json() {
+                ws.broadcast_to_ui(&json).await;
+            }
+        }
     }
 
     /// Add a new event
@@ -47,13 +155,102 @@ impl<'a> EventManager<'a> {
 
         let id = result.last_insert_rowid();
 
-        Ok(Event {
+        let event = Event {
             id,
             task_id,
             timestamp: now,
             log_type: log_type.to_string(),
             discussion_data: discussion_data.to_string(),
-        })
+        };
+
+        // Notify WebSocket clients about the new event
+        self.notify_event_created(&event).await;
+
+        Ok(event)
+    }
+
+    /// Update an existing event
+    pub async fn update_event(
+        &self,
+        event_id: i64,
+        log_type: Option<&str>,
+        discussion_data: Option<&str>,
+    ) -> Result<Event> {
+        // First, get the existing event to check if it exists
+        let existing_event: Option<Event> = sqlx::query_as(
+            "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE id = ?",
+        )
+        .bind(event_id)
+        .fetch_optional(self.pool)
+        .await?;
+
+        let existing_event = existing_event.ok_or(IntentError::InvalidInput(format!(
+            "Event {} not found",
+            event_id
+        )))?;
+
+        // Update only the fields that are provided
+        let new_log_type = log_type.unwrap_or(&existing_event.log_type);
+        let new_discussion_data = discussion_data.unwrap_or(&existing_event.discussion_data);
+
+        sqlx::query(
+            r#"
+            UPDATE events
+            SET log_type = ?, discussion_data = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(new_log_type)
+        .bind(new_discussion_data)
+        .bind(event_id)
+        .execute(self.pool)
+        .await?;
+
+        let updated_event = Event {
+            id: existing_event.id,
+            task_id: existing_event.task_id,
+            timestamp: existing_event.timestamp,
+            log_type: new_log_type.to_string(),
+            discussion_data: new_discussion_data.to_string(),
+        };
+
+        // Notify WebSocket clients about the update
+        self.notify_event_updated(&updated_event).await;
+
+        Ok(updated_event)
+    }
+
+    /// Delete an event
+    pub async fn delete_event(&self, event_id: i64) -> Result<()> {
+        // First, get the event to check if it exists and get task_id for notification
+        let event: Option<Event> = sqlx::query_as(
+            "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE id = ?",
+        )
+        .bind(event_id)
+        .fetch_optional(self.pool)
+        .await?;
+
+        let _event = event.ok_or(IntentError::InvalidInput(format!(
+            "Event {} not found",
+            event_id
+        )))?;
+
+        // Delete from FTS index first (if it exists)
+        let _ = sqlx::query("DELETE FROM events_fts WHERE rowid = ?")
+            .bind(event_id)
+            .execute(self.pool)
+            .await;
+
+        // Delete the event
+        sqlx::query("DELETE FROM events WHERE id = ?")
+            .bind(event_id)
+            .execute(self.pool)
+            .await?;
+
+        // Notify WebSocket clients about the deletion
+        self.notify_event_deleted(event_id).await;
+
+        Ok(())
     }
 
     /// List events for a task (or globally if task_id is None)

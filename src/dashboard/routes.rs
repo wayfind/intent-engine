@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, post},
+    routing::{get, patch, post},
     Router,
 };
 
@@ -25,6 +25,10 @@ pub fn api_routes() -> Router<AppState> {
         .route(
             "/tasks/:id/events",
             get(handlers::list_events).post(handlers::create_event),
+        )
+        .route(
+            "/tasks/:id/events/:event_id",
+            patch(handlers::update_event).delete(handlers::delete_event),
         )
         // Global routes
         .route("/current-task", get(handlers::get_current_task))

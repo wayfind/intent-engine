@@ -78,8 +78,16 @@ pub async fn create_task(
     State(state): State<AppState>,
     Json(req): Json<CreateTaskRequest>,
 ) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
-    let task_mgr = TaskManager::new(&db_pool);
+    let project = state.current_project.read().await;
+    let db_pool = project.db_pool.clone();
+    let project_path = project.project_path.to_string_lossy().to_string();
+    drop(project);
+
+    let task_mgr = TaskManager::with_websocket(
+        &db_pool,
+        std::sync::Arc::new(state.ws_state.clone()),
+        project_path,
+    );
 
     // Note: add_task doesn't support priority - it's set separately via update_task
     let result = task_mgr
@@ -118,8 +126,16 @@ pub async fn update_task(
     Path(id): Path<i64>,
     Json(req): Json<UpdateTaskRequest>,
 ) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
-    let task_mgr = TaskManager::new(&db_pool);
+    let project = state.current_project.read().await;
+    let db_pool = project.db_pool.clone();
+    let project_path = project.project_path.to_string_lossy().to_string();
+    drop(project);
+
+    let task_mgr = TaskManager::with_websocket(
+        &db_pool,
+        std::sync::Arc::new(state.ws_state.clone()),
+        project_path,
+    );
 
     // First check if task exists
     match task_mgr.get_task(id).await {
@@ -177,8 +193,16 @@ pub async fn update_task(
 
 /// Delete a task
 pub async fn delete_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
-    let task_mgr = TaskManager::new(&db_pool);
+    let project = state.current_project.read().await;
+    let db_pool = project.db_pool.clone();
+    let project_path = project.project_path.to_string_lossy().to_string();
+    drop(project);
+
+    let task_mgr = TaskManager::with_websocket(
+        &db_pool,
+        std::sync::Arc::new(state.ws_state.clone()),
+        project_path,
+    );
 
     match task_mgr.delete_task(id).await {
         Ok(_) => (StatusCode::NO_CONTENT).into_response(),
@@ -205,8 +229,16 @@ pub async fn delete_task(State(state): State<AppState>, Path(id): Path<i64>) -> 
 
 /// Start a task (set as current)
 pub async fn start_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
-    let task_mgr = TaskManager::new(&db_pool);
+    let project = state.current_project.read().await;
+    let db_pool = project.db_pool.clone();
+    let project_path = project.project_path.to_string_lossy().to_string();
+    drop(project);
+
+    let task_mgr = TaskManager::with_websocket(
+        &db_pool,
+        std::sync::Arc::new(state.ws_state.clone()),
+        project_path,
+    );
 
     match task_mgr.start_task(id, false).await {
         Ok(task) => (StatusCode::OK, Json(ApiResponse { data: task })).into_response(),
@@ -233,8 +265,16 @@ pub async fn start_task(State(state): State<AppState>, Path(id): Path<i64>) -> i
 
 /// Complete the current task
 pub async fn done_task(State(state): State<AppState>) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
-    let task_mgr = TaskManager::new(&db_pool);
+    let project = state.current_project.read().await;
+    let db_pool = project.db_pool.clone();
+    let project_path = project.project_path.to_string_lossy().to_string();
+    drop(project);
+
+    let task_mgr = TaskManager::with_websocket(
+        &db_pool,
+        std::sync::Arc::new(state.ws_state.clone()),
+        project_path,
+    );
 
     match task_mgr.done_task().await {
         Ok(task) => (StatusCode::OK, Json(ApiResponse { data: task })).into_response(),
@@ -266,8 +306,16 @@ pub async fn spawn_subtask(
     Path(_parent_id): Path<i64>, // Ignored - uses current task
     Json(req): Json<SpawnSubtaskRequest>,
 ) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
-    let task_mgr = TaskManager::new(&db_pool);
+    let project = state.current_project.read().await;
+    let db_pool = project.db_pool.clone();
+    let project_path = project.project_path.to_string_lossy().to_string();
+    drop(project);
+
+    let task_mgr = TaskManager::with_websocket(
+        &db_pool,
+        std::sync::Arc::new(state.ws_state.clone()),
+        project_path,
+    );
 
     // spawn_subtask uses the current task as parent automatically
     match task_mgr.spawn_subtask(&req.name, req.spec.as_deref()).await {
@@ -382,8 +430,16 @@ pub async fn create_event(
     Path(task_id): Path<i64>,
     Json(req): Json<CreateEventRequest>,
 ) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
-    let event_mgr = EventManager::new(&db_pool);
+    let project = state.current_project.read().await;
+    let db_pool = project.db_pool.clone();
+    let project_path = project.project_path.to_string_lossy().to_string();
+    drop(project);
+
+    let event_mgr = EventManager::with_websocket(
+        &db_pool,
+        std::sync::Arc::new(state.ws_state.clone()),
+        project_path,
+    );
 
     // Validate event type
     if !["decision", "blocker", "milestone", "note"].contains(&req.event_type.as_str()) {
@@ -409,6 +465,144 @@ pub async fn create_event(
             Json(ApiError {
                 code: "INVALID_REQUEST".to_string(),
                 message: format!("Failed to create event: {}", e),
+                details: None,
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// Update an event
+pub async fn update_event(
+    State(state): State<AppState>,
+    Path((task_id, event_id)): Path<(i64, i64)>,
+    Json(req): Json<UpdateEventRequest>,
+) -> impl IntoResponse {
+    let project = state.current_project.read().await;
+    let db_pool = project.db_pool.clone();
+    let project_path = project.project_path.to_string_lossy().to_string();
+    drop(project);
+
+    let event_mgr = EventManager::with_websocket(
+        &db_pool,
+        std::sync::Arc::new(state.ws_state.clone()),
+        project_path,
+    );
+
+    // Validate event type if provided
+    if let Some(ref event_type) = req.event_type {
+        if !["decision", "blocker", "milestone", "note"].contains(&event_type.as_str()) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiError {
+                    code: "INVALID_REQUEST".to_string(),
+                    message: format!("Invalid event type: {}", event_type),
+                    details: None,
+                }),
+            )
+                .into_response();
+        }
+    }
+
+    match event_mgr
+        .update_event(event_id, req.event_type.as_deref(), req.data.as_deref())
+        .await
+    {
+        Ok(event) => {
+            // Verify the event belongs to the specified task
+            if event.task_id != task_id {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiError {
+                        code: "INVALID_REQUEST".to_string(),
+                        message: format!("Event {} does not belong to task {}", event_id, task_id),
+                        details: None,
+                    }),
+                )
+                    .into_response();
+            }
+            (StatusCode::OK, Json(ApiResponse { data: event })).into_response()
+        },
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "INVALID_REQUEST".to_string(),
+                message: format!("Failed to update event: {}", e),
+                details: None,
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// Delete an event
+pub async fn delete_event(
+    State(state): State<AppState>,
+    Path((task_id, event_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let project = state.current_project.read().await;
+    let db_pool = project.db_pool.clone();
+    let project_path = project.project_path.to_string_lossy().to_string();
+    drop(project);
+
+    let event_mgr = EventManager::with_websocket(
+        &db_pool,
+        std::sync::Arc::new(state.ws_state.clone()),
+        project_path,
+    );
+
+    // First verify the event exists and belongs to the task
+    match sqlx::query_as::<_, crate::db::models::Event>(
+        "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE id = ?",
+    )
+    .bind(event_id)
+    .fetch_optional(&db_pool)
+    .await
+    {
+        Ok(Some(event)) => {
+            if event.task_id != task_id {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiError {
+                        code: "INVALID_REQUEST".to_string(),
+                        message: format!("Event {} does not belong to task {}", event_id, task_id),
+                        details: None,
+                    }),
+                )
+                    .into_response();
+            }
+        },
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiError {
+                    code: "EVENT_NOT_FOUND".to_string(),
+                    message: format!("Event {} not found", event_id),
+                    details: None,
+                }),
+            )
+                .into_response();
+        },
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: format!("Database error: {}", e),
+                    details: None,
+                }),
+            )
+                .into_response();
+        },
+    }
+
+    match event_mgr.delete_event(event_id).await {
+        Ok(_) => (StatusCode::NO_CONTENT).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "INVALID_REQUEST".to_string(),
+                message: format!("Failed to delete event: {}", e),
                 details: None,
             }),
         )

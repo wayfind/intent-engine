@@ -39,3 +39,6 @@ test-consistency.sh
 .DS_Store
 Thumbs.db
 .claude/
+
+# Intent-Engine local database and state
+.intent-engine/

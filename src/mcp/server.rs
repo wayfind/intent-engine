@@ -17,6 +17,11 @@ use crate::workspace::WorkspaceManager;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::io;
+use std::sync::OnceLock;
+
+/// Global notification channel sender
+/// This is set once during MCP server initialization
+static MCP_NOTIFIER: OnceLock<tokio::sync::mpsc::UnboundedSender<String>> = OnceLock::new();
 
 #[derive(Debug, Deserialize)]
 struct JsonRpcRequest {
@@ -101,6 +106,14 @@ pub async fn run() -> io::Result<()> {
         // Silently fail - not critical for MCP server operation
     });
 
+    // Create notification channel for database operations
+    // This channel allows EventManager/TaskManager to send real-time notifications
+    // to Dashboard via WebSocket without blocking
+    let (notification_tx, notification_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+
+    // Set global notifier (used by tool handlers)
+    let _ = MCP_NOTIFIER.set(notification_tx.clone());
+
     // Connect to Dashboard via WebSocket
     // Skip in test environments to prevent temporary test projects from being registered
     if !skip_dashboard {
@@ -111,6 +124,7 @@ pub async fn run() -> io::Result<()> {
                 ws_root,
                 ws_db_path,
                 Some("mcp-client".to_string()),
+                Some(notification_rx),
             )
             .await
             {
@@ -120,11 +134,8 @@ pub async fn run() -> io::Result<()> {
         });
     }
 
-    // Start heartbeat task
-    let project_path = ctx.root.clone();
-    let heartbeat_handle = tokio::spawn(async move {
-        heartbeat_task(project_path).await;
-    });
+    // Heartbeat is now handled by WebSocket ping/pong (Protocol v1.0 Section 4.1.3)
+    // No need for separate Registry heartbeat task
 
     // Run the MCP server
     let result = run_server().await;
@@ -132,9 +143,7 @@ pub async fn run() -> io::Result<()> {
     // Clean up: unregister MCP connection
     let _ = unregister_mcp_connection(&ctx.root);
     // Silently fail - cleanup error not critical
-
-    // Cancel heartbeat task
-    heartbeat_handle.abort();
+    // Heartbeat is now handled by WebSocket ping/pong, no task to cancel
 
     result
 }
@@ -322,7 +331,15 @@ async fn handle_task_add(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
     let task = task_mgr
         .add_task(name, spec, parent_id)
         .await
@@ -369,7 +386,15 @@ async fn handle_task_start(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
     let task = task_mgr
         .start_task(task_id, with_events)
         .await
@@ -386,7 +411,15 @@ async fn handle_task_pick_next(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
     let response = task_mgr
         .pick_next()
         .await
@@ -407,7 +440,15 @@ async fn handle_task_spawn_subtask(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
     let subtask = task_mgr
         .spawn_subtask(name, spec)
         .await
@@ -423,7 +464,15 @@ async fn handle_task_done(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
 
     // If task_id is provided, set it as current first
     if let Some(id) = task_id {
@@ -468,7 +517,15 @@ async fn handle_task_update(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
     let task = task_mgr
         .update_task(task_id, name, spec, parent_id, status, complexity, priority)
         .await
@@ -493,7 +550,15 @@ async fn handle_task_list(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
     let tasks = task_mgr
         .find_tasks(status, parent_opt)
         .await
@@ -517,7 +582,15 @@ async fn handle_task_get(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
 
     if with_events {
         let task = task_mgr
@@ -563,7 +636,15 @@ async fn handle_task_context(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
     let context = task_mgr
         .get_task_context(task_id)
         .await
@@ -582,7 +663,15 @@ async fn handle_task_delete(args: Value) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
-    let task_mgr = TaskManager::new(&ctx.pool);
+    let task_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        TaskManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        TaskManager::new(&ctx.pool)
+    };
     task_mgr
         .delete_task(task_id)
         .await
@@ -628,7 +717,16 @@ async fn handle_event_add(args: Value) -> Result<Value, String> {
             })?
     };
 
-    let event_mgr = EventManager::new(&ctx.pool);
+    // Create EventManager with MCP notification support (if available)
+    let event_mgr = if let Some(notifier) = MCP_NOTIFIER.get() {
+        EventManager::with_mcp_notifier(
+            &ctx.pool,
+            ctx.root.to_string_lossy().to_string(),
+            notifier.clone(),
+        )
+    } else {
+        EventManager::new(&ctx.pool)
+    };
     let event = event_mgr
         .add_event(target_task_id, event_type, data)
         .await
@@ -764,98 +862,52 @@ async fn handle_plan(args: Value) -> Result<Value, String> {
 // MCP Connection Registry Integration
 // ============================================================================
 
-/// Register this MCP server instance with the global project registry
+/// Register this MCP server instance (now handled via WebSocket Protocol v1.0)
+/// This function only validates project path - actual registration happens via WebSocket
 fn register_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()> {
-    use crate::dashboard::registry::ProjectRegistry;
-
-    let mut registry = ProjectRegistry::load()?;
-
-    // Detect agent type from environment (Claude Code sets specific env vars)
-    let agent_name = detect_agent_type();
-
     // Normalize the path to handle symlinks (e.g., ~/prj -> /mnt/d/prj)
     let normalized_path = project_path
         .canonicalize()
         .unwrap_or_else(|_| project_path.to_path_buf());
 
-    // Validate project path - reject temporary directories (Defense Layer 3)
-    // This prevents test environments from polluting the Dashboard registry
+    // Validate project path - reject temporary directories
+    // This prevents test environments from polluting the Dashboard
     // IMPORTANT: Canonicalize temp_dir to match normalized_path format (fixes Windows UNC paths)
     let temp_dir = std::env::temp_dir()
         .canonicalize()
         .unwrap_or_else(|_| std::env::temp_dir());
     if normalized_path.starts_with(&temp_dir) {
         tracing::debug!(
-            "Skipping MCP registry registration for temporary path: {}",
+            "Skipping MCP connection for temporary path: {}",
             normalized_path.display()
         );
         return Ok(()); // Silently skip, don't error - non-fatal for MCP server
     }
 
-    // Register MCP connection - this will create a project entry if none exists
-    registry.register_mcp_connection(&normalized_path, agent_name)?;
-
-    // Silently register - eprintln! removed to prevent Windows stderr buffer blocking
+    // Registration now happens automatically via WebSocket connection in ws_client.rs
+    // No need to write to Registry file
+    tracing::debug!("MCP server initialized for {}", normalized_path.display());
 
     Ok(())
 }
 
-/// Unregister this MCP server instance from the global project registry
+/// Unregister this MCP server instance (now handled via WebSocket close)
+/// This function is a no-op - actual cleanup happens when WebSocket connection closes
 fn unregister_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<()> {
-    use crate::dashboard::registry::ProjectRegistry;
-
-    let mut registry = ProjectRegistry::load()?;
-
-    // Normalize the path to handle symlinks (e.g., ~/prj -> /mnt/d/prj)
+    // Normalize the path for logging
     let normalized_path = project_path
         .canonicalize()
         .unwrap_or_else(|_| project_path.to_path_buf());
 
-    registry.unregister_mcp_connection(&normalized_path)?;
-
-    // Silently unregister - eprintln! removed to prevent Windows stderr buffer blocking
+    // Unregistration now happens automatically when WebSocket connection closes
+    // No need to write to Registry file
+    tracing::debug!("MCP server shutting down for {}", normalized_path.display());
 
     Ok(())
 }
 
-/// Heartbeat task that keeps the MCP connection alive
-async fn heartbeat_task(project_path: std::path::PathBuf) {
-    use crate::dashboard::registry::ProjectRegistry;
-
-    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
-
-    loop {
-        interval.tick().await;
-
-        // Update heartbeat (non-blocking)
-        let path = project_path.clone();
-        tokio::task::spawn_blocking(move || {
-            // Normalize the path to handle symlinks (e.g., ~/prj -> /mnt/d/prj)
-            let normalized_path = path.canonicalize().unwrap_or_else(|_| path.clone());
-
-            if let Ok(mut registry) = ProjectRegistry::load() {
-                let _ = registry.update_mcp_heartbeat(&normalized_path);
-                // Silently fail - heartbeat error not critical
-            }
-        });
-    }
-}
-
 /// Detect the agent type from environment variables
-fn detect_agent_type() -> Option<String> {
-    // Check for Claude Code specific environment variables
-    if std::env::var("CLAUDE_CODE_VERSION").is_ok() {
-        return Some("claude-code".to_string());
-    }
-
-    // Check for Claude Desktop
-    if std::env::var("CLAUDE_DESKTOP").is_ok() {
-        return Some("claude-desktop".to_string());
-    }
-
-    // Generic MCP client
-    Some("mcp-client".to_string())
-}
+// detect_agent_type() removed - agent detection now happens in WebSocket client (ws_client.rs)
 
 /// Check if Dashboard is running by testing the health endpoint
 async fn is_dashboard_running() -> bool {
