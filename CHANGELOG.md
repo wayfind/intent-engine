@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7] - 2025-11-23
+
+### Fixed
+- **Critical**: Fixed log rotation file discovery in `ie logs` command
+  - `list_log_files()` now correctly identifies rotated files (e.g., `dashboard.log.2025-11-23`)
+  - `query_logs()` now includes all rotated log files when filtering by mode
+  - Previous behavior: `ie logs --mode dashboard` would return empty results as it only read the main (often empty) log file
+  - Impact: Log query functionality is now fully operational for historical logs
+- **Code Quality**: Fixed Clippy warnings
+  - Use `strip_suffix()` instead of manual string slicing in `parse_duration()`
+  - Use struct initialization pattern in `handle_logs_command()`
+  - Added `#[allow(dead_code)]` for unused helper functions in tests
+
+### Added
+- **Documentation**: Complete logging system guide (`docs/logging-guide.md`, 458 lines)
+  - Comprehensive usage examples for `ie logs` command
+  - Log rotation and cleanup instructions
+  - Troubleshooting guide and FAQ
+  - Common use cases with copy-paste examples
+- **Deployment**: Production-ready logrotate configuration (`docs/deployment/logrotate.conf`)
+  - Daily rotation with 7-day retention
+  - Automatic compression of old logs
+  - SIGHUP signal handling for graceful log file reopening
+
+### Tests
+- All 24 logging tests passing (100% coverage)
+  - `logging_integration_test.rs`: 6 tests for basic file logging
+  - `logging_rotation_test.rs`: 6 tests for rotation and cleanup
+  - `logs_integration_test.rs`: 12 tests for query functionality
+
+## [0.6.6] - 2025-11-23
+
+### Added
+- **Unified Logging System**: Comprehensive file-based logging for all modes
+  - Dashboard daemon mode logs to `~/.intent-engine/logs/dashboard.log`
+  - MCP Server logs to `~/.intent-engine/logs/mcp-server.log` (JSON format)
+  - Automatic log directory creation
+  - Environment variable `IE_DASHBOARD_LOG_FILE=1` to force file logging (for testing)
+- **Log Rotation**: Built-in daily rotation with automatic cleanup
+  - Uses `tracing-appender` for cross-platform daily rotation
+  - Creates dated files: `dashboard.log.2025-11-23`
+  - Automatic cleanup of logs older than 7 days (configurable via `IE_LOG_RETENTION_DAYS`)
+  - Recommended: Use `logrotate` on Linux for production (config provided)
+- **Log Query Command**: New `ie logs` CLI command for querying historical logs
+  - Filter by mode: `--mode dashboard|mcp-server|cli`
+  - Filter by level: `--level error|warn|info|debug|trace`
+  - Filter by time: `--since 1h|24h|7d`
+  - Limit results: `--limit N`
+  - Real-time monitoring: `--follow` (like `tail -f`)
+  - Export formats: `--export text|json`
+- **MCP Server Logging**: Dual output mechanism
+  - Logs written to file in JSON format
+  - JSON-RPC communication remains clean on stdout
+  - Prevents log noise in AI assistant interactions
+
+### Dependencies
+- Added `tracing-appender = "0.2"` for log rotation support
+
 ## [0.6.0] - 2025-11-21
 
 ### Added
