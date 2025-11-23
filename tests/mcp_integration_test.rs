@@ -36,12 +36,15 @@ fn mcp_request(request: &Value) -> Value {
         String::from_utf8_lossy(&init_output.stderr)
     );
 
+    // Create a temporary home directory for MCP server (needed for log files)
+    let temp_home = tempfile::TempDir::new().unwrap();
+
     // Send request to MCP server
     let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
         .current_dir(project_path)
-        .env("HOME", "/nonexistent")
-        .env("USERPROFILE", "/nonexistent")
+        .env("HOME", temp_home.path())
+        .env("USERPROFILE", temp_home.path())
         .env("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -56,7 +59,15 @@ fn mcp_request(request: &Value) -> Value {
 
     let output = child.wait_with_output().unwrap();
     let response = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(response.lines().next().unwrap_or("{}")).unwrap()
+
+    // Parse first non-empty line as JSON (skip any status messages)
+    for line in response.lines() {
+        if let Ok(json) = serde_json::from_str::<Value>(line) {
+            return json;
+        }
+    }
+
+    serde_json::from_str("{}").unwrap()
 }
 
 #[test]

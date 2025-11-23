@@ -836,56 +836,9 @@ fn test_cli_spawn_subtask() {
         .stdout(predicate::str::contains("\"current_task_id\": 2"));
 }
 
-#[test]
-fn test_cli_switch_task() {
-    let temp_dir = setup_empty_project();
-
-    // Add two tasks
-    let mut add_cmd1 = Command::new(cargo::cargo_bin!("ie"));
-    add_cmd1
-        .current_dir(temp_dir.path())
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Task 1")
-        .assert()
-        .success();
-
-    let mut add_cmd2 = Command::new(cargo::cargo_bin!("ie"));
-    add_cmd2
-        .current_dir(temp_dir.path())
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Task 2")
-        .assert()
-        .success();
-
-    // Switch to task 2 - should have current_task but no previous_task
-    let mut switch_cmd = Command::new(cargo::cargo_bin!("ie"));
-    switch_cmd
-        .current_dir(temp_dir.path())
-        .arg("task")
-        .arg("switch")
-        .arg("2");
-
-    switch_cmd
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("\"current_task\""))
-        .stdout(predicate::str::contains("\"id\": 2"))
-        .stdout(predicate::str::contains("\"name\": \"Task 2\""))
-        .stdout(predicate::str::contains("\"status\": \"doing\""));
-
-    // Verify current task was set
-    let mut current_cmd = Command::new(cargo::cargo_bin!("ie"));
-    current_cmd
-        .current_dir(temp_dir.path())
-        .arg("current")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("\"current_task_id\": 2"));
-}
+// Test removed: task switch command was removed in favor of multi-doing + single-focus design
+// See commit a4fcffc: refactor: Implement multi-doing + single-focus design and remove task_switch
+// Use task start instead to focus on a different task
 
 #[test]
 fn test_cli_pick_next_json_format() {

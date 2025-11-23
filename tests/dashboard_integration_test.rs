@@ -202,6 +202,33 @@ fn load_registry() -> ProjectRegistry {
     serde_json::from_str(&content).expect("Failed to parse registry file")
 }
 
+/// Clean temporary paths from the registry (for test isolation)
+fn clean_temp_paths_from_registry() {
+    let registry_path = dirs::home_dir()
+        .expect("Failed to get home directory")
+        .join(".intent-engine")
+        .join("projects.json");
+
+    if !registry_path.exists() {
+        return;
+    }
+
+    let mut registry = load_registry();
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::temp_dir());
+
+    // Remove all temp paths
+    registry.projects.retain(|p| {
+        let normalized = p.path.canonicalize().unwrap_or_else(|_| p.path.clone());
+        !normalized.starts_with(&temp_dir)
+    });
+
+    // Save cleaned registry
+    let content = serde_json::to_string_pretty(&registry).expect("Failed to serialize registry");
+    std::fs::write(&registry_path, content).expect("Failed to write registry file");
+}
+
 /// Clean up processes
 fn cleanup(mut dashboard: Child, mut mcp: Child) {
     mcp.kill().ok();
@@ -293,6 +320,9 @@ fn test_mcp_connects_to_dashboard_and_registers_project() {
 #[test]
 #[serial]
 fn test_temporary_paths_are_rejected() {
+    // Clean any temp paths left by previous tests (test isolation)
+    clean_temp_paths_from_registry();
+
     let temp_dir = common::setup_test_env(); // Creates platform-specific temp dir
     let project_path = temp_dir.path();
 
