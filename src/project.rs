@@ -1128,17 +1128,30 @@ mod tests {
         assert!(info.resolution_method.is_some());
     }
 
-    /// Test get_database_path_info home directory field is set
+    /// Test get_database_path_info home directory field is set when HOME is available
     #[test]
     fn test_get_database_path_info_home_directory() {
+        // Capture env vars before calling get_database_path_info to avoid TOCTOU issues
+        let home_val = std::env::var("HOME");
+        let userprofile_val = std::env::var("USERPROFILE");
+        let has_home = home_val.is_ok();
+        let has_userprofile = userprofile_val.is_ok();
         let info = ProjectContext::get_database_path_info();
 
-        // Home directory should typically be set (unless in very restricted environment)
-        // This tests that the home directory detection logic runs
-        if std::env::var("HOME").is_ok() {
+        // Note: home_directory is only populated if the function reaches strategy 3 (home directory check)
+        // If INTENT_ENGINE_PROJECT_DIR or upward traversal finds a match first,
+        // the function returns early and home_directory remains None.
+        // This test verifies that when HOME/USERPROFILE is set, the function can detect it
+        // (though it may not populate home_directory if an earlier strategy matches)
+        if (has_home || has_userprofile) && !info.env_var_set && info.directories_checked.is_empty()
+        {
+            // If no earlier strategy was tried, home_directory should be set
             assert!(
                 info.home_directory.is_some(),
-                "HOME env var is set, so home_directory should be Some"
+                "HOME or USERPROFILE env var is set (HOME={:?}, USERPROFILE={:?}), but home_directory is None. Full info: {:?}",
+                home_val.as_ref().map(|s| s.as_str()),
+                userprofile_val.as_ref().map(|s| s.as_str()),
+                info
             );
         }
     }

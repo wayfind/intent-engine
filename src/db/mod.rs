@@ -39,6 +39,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             first_todo_at DATETIME,
             first_doing_at DATETIME,
             first_done_at DATETIME,
+            active_form TEXT,
             FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE,
             CHECK (status IN ('todo', 'doing', 'done'))
         )
