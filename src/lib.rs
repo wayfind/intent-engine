@@ -5,6 +5,7 @@ pub mod dependencies;
 pub mod error;
 pub mod events;
 pub mod logging;
+pub mod logs;
 pub mod mcp;
 pub mod plan;
 pub mod priority;

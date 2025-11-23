@@ -124,6 +124,10 @@ pub enum ApplicationMode {
 }
 
 /// Initialize the logging system
+///
+/// Note: For production use on Linux/Unix, consider using `logrotate` for log rotation.
+/// See `docs/deployment/logrotate.conf` for configuration example.
+/// The built-in daily rotation is provided as a fallback for Windows or simple deployments.
 pub fn init_logging(config: LoggingConfig) -> io::Result<()> {
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(format!("intent_engine={}", config.level)));
@@ -131,14 +135,16 @@ pub fn init_logging(config: LoggingConfig) -> io::Result<()> {
     let registry = Registry::default().with(env_filter);
 
     if let Some(log_file) = config.file_output {
-        let file_appender = tracing_appender::rolling::never(
-            log_file.parent().ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidInput, "Invalid log file path")
-            })?,
-            log_file.file_name().ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidInput, "Invalid log file name")
-            })?,
-        );
+        let log_dir = log_file
+            .parent()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Invalid log file path"))?;
+
+        let file_name = log_file
+            .file_name()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Invalid log file name"))?;
+
+        // Use daily rotation (recommended to configure logrotate on Linux)
+        let file_appender = tracing_appender::rolling::daily(log_dir, file_name);
 
         if config.json_format {
             let json_layer = tracing_subscriber::fmt::layer()

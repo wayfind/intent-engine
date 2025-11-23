@@ -271,6 +271,43 @@ pub enum Commands {
         #[arg(long)]
         with_events: bool,
     },
+
+    /// Query and view application logs
+    ///
+    /// Examples:
+    ///   ie logs                           # Show recent logs from all modes
+    ///   ie logs --mode dashboard          # Show dashboard logs only
+    ///   ie logs --level error --since 1h  # Show errors from last hour
+    ///   ie logs --follow                  # Real-time log monitoring
+    Logs {
+        /// Filter by application mode (dashboard, mcp-server, cli)
+        #[arg(long)]
+        mode: Option<String>,
+
+        /// Filter by log level (error, warn, info, debug, trace)
+        #[arg(long)]
+        level: Option<String>,
+
+        /// Show logs since duration (e.g., "1h", "24h", "7d")
+        #[arg(long)]
+        since: Option<String>,
+
+        /// Show logs until timestamp (ISO8601 format)
+        #[arg(long)]
+        until: Option<String>,
+
+        /// Maximum number of log entries to show
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Follow logs in real-time (like tail -f)
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Export format (text or json)
+        #[arg(long, default_value = "text")]
+        export: String,
+    },
 }
 
 #[derive(Subcommand, Clone)]

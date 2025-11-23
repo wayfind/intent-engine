@@ -337,6 +337,18 @@ async fn run(cli: &Cli) -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&task)?);
             }
         },
+
+        Commands::Logs {
+            mode,
+            level,
+            since,
+            until,
+            limit,
+            follow,
+            export,
+        } => {
+            handle_logs_command(mode, level, since, until, limit, follow, export)?;
+        },
     }
 
     Ok(())
@@ -2034,4 +2046,85 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
             Ok(())
         },
     }
+}
+
+fn handle_logs_command(
+    mode: Option<String>,
+    level: Option<String>,
+    since: Option<String>,
+    until: Option<String>,
+    limit: Option<usize>,
+    follow: bool,
+    export: String,
+) -> Result<()> {
+    use intent_engine::logs::{
+        follow_logs, format_entry_json, format_entry_text, parse_duration, query_logs, LogQuery,
+    };
+
+    // Build query
+    let mut query = LogQuery {
+        mode,
+        level,
+        limit,
+        ..Default::default()
+    };
+
+    if let Some(since_str) = since {
+        query.since = parse_duration(&since_str);
+        if query.since.is_none() {
+            return Err(IntentError::InvalidInput(format!(
+                "Invalid duration format: {}. Use format like '1h', '24h', '7d'",
+                since_str
+            )));
+        }
+    }
+
+    if let Some(until_str) = until {
+        use chrono::DateTime;
+        match DateTime::parse_from_rfc3339(&until_str) {
+            Ok(dt) => query.until = Some(dt.with_timezone(&chrono::Utc)),
+            Err(e) => {
+                return Err(IntentError::InvalidInput(format!(
+                    "Invalid timestamp format: {}. Error: {}",
+                    until_str, e
+                )))
+            },
+        }
+    }
+
+    // Handle follow mode
+    if follow {
+        return follow_logs(&query).map_err(IntentError::IoError);
+    }
+
+    // Query logs
+    let entries = query_logs(&query).map_err(IntentError::IoError)?;
+
+    if entries.is_empty() {
+        eprintln!("No log entries found matching the criteria");
+        return Ok(());
+    }
+
+    // Display results
+    match export.as_str() {
+        "json" => {
+            println!("[");
+            for (i, entry) in entries.iter().enumerate() {
+                print!("  {}", format_entry_json(entry));
+                if i < entries.len() - 1 {
+                    println!(",");
+                } else {
+                    println!();
+                }
+            }
+            println!("]");
+        },
+        _ => {
+            for entry in entries {
+                println!("{}", format_entry_text(&entry));
+            }
+        },
+    }
+
+    Ok(())
 }
