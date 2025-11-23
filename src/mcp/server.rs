@@ -906,9 +906,6 @@ fn unregister_mcp_connection(project_path: &std::path::Path) -> anyhow::Result<(
     Ok(())
 }
 
-/// Detect the agent type from environment variables
-// detect_agent_type() removed - agent detection now happens in WebSocket client (ws_client.rs)
-
 /// Check if Dashboard is running by testing the health endpoint
 async fn is_dashboard_running() -> bool {
     // Use a timeout to prevent blocking - Dashboard check should be fast
