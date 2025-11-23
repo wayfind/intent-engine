@@ -1,7 +1,7 @@
 {
   "name": "intent-engine",
   "version": "0.6",
-  "description": "An expert task management assistant that provides a persistent, intent-driven context layer. Use this toolset to maintain strategic clarity in complex projects\u2014one focused task at a time, with complete decision history. Think of it as your external brain for project management.",
+  "description": "An expert task management assistant that provides a persistent, intent-driven context layer. Use this toolset to maintain strategic clarity in complex projects—one focused task at a time, with complete decision history. Think of it as your external brain for project management.",
   "cli_info": {
     "primary_command": "intent-engine",
     "alias": "ie",
@@ -45,7 +45,7 @@
           "thought": "Process the decision events in context, synthesize into a coherent summary, and present to the user."
         }
       ],
-      "pattern": "Discovery \u2192 Recall \u2192 Synthesize"
+      "pattern": "Discovery → Recall → Synthesize"
     },
     {
       "scenario": "User says: 'Let's start working on refactoring the authentication module'",
@@ -82,7 +82,7 @@
           "arguments": {}
         }
       ],
-      "pattern": "Activation \u2192 Orientation \u2192 Pick Next"
+      "pattern": "Activation → Orientation → Pick Next"
     },
     {
       "scenario": "While working on a task, discover a prerequisite sub-problem",
@@ -102,7 +102,7 @@
         },
         {
           "step": 3,
-          "thought": "The subtask is complete. Call task_done (no parameters\u2014operates on current focus).",
+          "thought": "The subtask is complete. Call task_done (no parameters—operates on current focus).",
           "tool": "task_done",
           "arguments": {}
         },
@@ -113,7 +113,7 @@
           "arguments": {}
         }
       ],
-      "pattern": "Spawn \u2192 Work \u2192 Done \u2192 Pick Next"
+      "pattern": "Spawn → Work → Done → Pick Next"
     }
   ],
   "tools": [
@@ -205,7 +205,7 @@
     },
     {
       "name": "task_spawn_subtask",
-      "description": "# Core Duty\nCreates a subtask under the CURRENT FOCUSED task and IMMEDIATELY switches focus to it.\n\n# Tactical Guide\nThis is a powerful atomic workflow operation for 'on-the-fly' problem decomposition. Use when:\n- You identify a prerequisite that must be solved first\n- You discover a sub-problem while working\n- You need to break down current work into smaller steps\n\n**The operation:**\n1. Creates subtask with parent_id = current task\n2. Switches focus to new subtask\n3. Sets new subtask status to 'doing'\n\n**Design Pattern:** Enables depth-first work style\u2014dive into sub-problems immediately, complete them, then return to parent.",
+      "description": "# Core Duty\nCreates a subtask under the CURRENT FOCUSED task and IMMEDIATELY switches focus to it.\n\n# Tactical Guide\nThis is a powerful atomic workflow operation for 'on-the-fly' problem decomposition. Use when:\n- You identify a prerequisite that must be solved first\n- You discover a sub-problem while working\n- You need to break down current work into smaller steps\n\n**The operation:**\n1. Creates subtask with parent_id = current task\n2. Switches focus to new subtask\n3. Sets new subtask status to 'doing'\n\n**Design Pattern:** Enables depth-first work style—dive into sub-problems immediately, complete them, then return to parent.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -234,7 +234,7 @@
     },
     {
       "name": "task_list",
-      "description": "# Core Duty\nPerforms STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\n# Tactical Guide\nUse this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\n**NOT for text search:**\n- \u274c task_list: For structured metadata filtering only\n- \u2705 search: For full-text searching by keywords across tasks and events\n\n**Examples:**\n- List all in-progress work: `{status: 'doing'}`\n- List all top-level tasks: `{parent: 'null'}`\n- List subtasks of task 42: `{parent: '42'}`",
+      "description": "# Core Duty\nPerforms STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\n# Tactical Guide\nUse this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\n**NOT for text search:**\n- ❌ task_list: For structured metadata filtering only\n- ✅ search: For full-text searching by keywords across tasks and events\n\n**Examples:**\n- List all in-progress work: `{status: 'doing'}`\n- List all top-level tasks: `{parent: 'null'}`\n- List subtasks of task 42: `{parent: '42'}`",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -256,7 +256,7 @@
     },
     {
       "name": "task_get",
-      "description": "# Core Duty\nRetrieves the full details of a SINGLE, KNOWN task by its ID.\n\n# Tactical Guide\nUse this after task_list or task_search to get complete information before starting work.\n\nReturns complete task object with all fields (name, spec, status, timestamps, etc.).\n\n**Best Practice:** If you need event history too, use `task_start({task_id: ID, with_events: true})` directly\u2014it's more efficient than calling task_get and event_list separately.",
+      "description": "# Core Duty\nRetrieves the full details of a SINGLE, KNOWN task by its ID.\n\n# Tactical Guide\nUse this after task_list or task_search to get complete information before starting work.\n\nReturns complete task object with all fields (name, spec, status, timestamps, etc.).\n\n**Best Practice:** If you need event history too, use `task_start({task_id: ID, with_events: true})` directly—it's more efficient than calling task_get and event_list separately.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -290,7 +290,7 @@
     },
     {
       "name": "task_update",
-      "description": "# Core Duty\nA general-purpose tool to modify attributes of an existing task.\n\n# Tactical Guide\nUse this for minor corrections:\n- Fixing a typo in a name\n- Updating priority\n- Refining the spec\n\n**For status changes, prefer atomic commands:**\n- \u274c `task_update({task_id: 42, status: 'doing'})`\n- \u2705 `task_start({task_id: 42})`\n\n**Why?** Atomic commands ensure consistency (e.g., task_start also sets current_task_id, task_done verifies subtasks).",
+      "description": "# Core Duty\nA general-purpose tool to modify attributes of an existing task.\n\n# Tactical Guide\nUse this for minor corrections:\n- Fixing a typo in a name\n- Updating priority\n- Refining the spec\n\n**For status changes, prefer atomic commands:**\n- ❌ `task_update({task_id: 42, status: 'doing'})`\n- ✅ `task_start({task_id: 42})`\n\n**Why?** Atomic commands ensure consistency (e.g., task_start also sets current_task_id, task_done verifies subtasks).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -353,7 +353,7 @@
     },
     {
       "name": "event_add",
-      "description": "# Core Duty\nRecords a significant event to an intent's history. This is your long-term memory.\n\n# Tactical Guide\nUse this frequently. Every key decision, blocker, milestone, or piece of human feedback should be recorded. This is how you maintain context and avoid repeating mistakes.\n\n**Event Types:**\n- `decision`: Choices made and reasoning ('Chose algorithm X because...')\n- `blocker`: Problems encountered ('API rate limit blocking feature Y')\n- `milestone`: Progress markers ('Completed MVP, ready for testing')\n- `note`: General thoughts, temporary docs, analysis results\n\n**Two Modes:**\n1. During active work: Omit task_id \u2192 records for current focused task\n2. Cross-task: Include task_id \u2192 records for any task (e.g., project retrospectives)\n\n**Best Practice:** Record immediately after the decision/event. Don't batch them up.\n\n**Important:** When you need to create design docs, summaries, or temporary documentation, prefer storing them as events (type: 'note' or 'milestone') rather than creating separate files. This keeps documentation tightly coupled with tasks.",
+      "description": "# Core Duty\nRecords a significant event to an intent's history. This is your long-term memory.\n\n# Tactical Guide\nUse this frequently. Every key decision, blocker, milestone, or piece of human feedback should be recorded. This is how you maintain context and avoid repeating mistakes.\n\n**Event Types:**\n- `decision`: Choices made and reasoning ('Chose algorithm X because...')\n- `blocker`: Problems encountered ('API rate limit blocking feature Y')\n- `milestone`: Progress markers ('Completed MVP, ready for testing')\n- `note`: General thoughts, temporary docs, analysis results\n\n**Two Modes:**\n1. During active work: Omit task_id → records for current focused task\n2. Cross-task: Include task_id → records for any task (e.g., project retrospectives)\n\n**Best Practice:** Record immediately after the decision/event. Don't batch them up.\n\n**Important:** When you need to create design docs, summaries, or temporary documentation, prefer storing them as events (type: 'note' or 'milestone') rather than creating separate files. This keeps documentation tightly coupled with tasks.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -384,7 +384,7 @@
     },
     {
       "name": "event_list",
-      "description": "# Core Duty\nRetrieves the historical event stream for a task, or globally across all tasks.\n\n# Tactical Guide\nUse this to:\n- Review decision-making process for a specific task\n- Search events globally (e.g., all recent blockers, all decisions)\n- Recover context when resuming old work\n- Prepare project retrospectives\n\n**Two modes:**\n1. **Task-specific:** Provide `task_id` to get events for one task\n2. **Global:** Omit `task_id` to search across all tasks\n\n**Performance Optimization:**\nFor tasks with hundreds of events, use filters to reduce token usage:\n- Filter by type (e.g., 'decision') to focus on specific event categories\n- Filter by since (e.g., '7d') to get recent events only\n- Combine filters for maximum efficiency\n\n**Examples:**\n- `{task_id: 42, type: 'decision'}` - All decisions for task 42\n- `{type: 'blocker', since: '7d'}` - All blockers in last 7 days (global)\n- `{since: '24h'}` - All events from last 24 hours (global)\n\nReturns array of events sorted by timestamp (newest first).\n\n**Best Practice:** When resuming work on a task, call `task_start` with `with_events: true` instead of separately calling event_list\u2014it's more efficient.",
+      "description": "# Core Duty\nRetrieves the historical event stream for a task, or globally across all tasks.\n\n# Tactical Guide\nUse this to:\n- Review decision-making process for a specific task\n- Search events globally (e.g., all recent blockers, all decisions)\n- Recover context when resuming old work\n- Prepare project retrospectives\n\n**Two modes:**\n1. **Task-specific:** Provide `task_id` to get events for one task\n2. **Global:** Omit `task_id` to search across all tasks\n\n**Performance Optimization:**\nFor tasks with hundreds of events, use filters to reduce token usage:\n- Filter by type (e.g., 'decision') to focus on specific event categories\n- Filter by since (e.g., '7d') to get recent events only\n- Combine filters for maximum efficiency\n\n**Examples:**\n- `{task_id: 42, type: 'decision'}` - All decisions for task 42\n- `{type: 'blocker', since: '7d'}` - All blockers in last 7 days (global)\n- `{since: '24h'}` - All events from last 24 hours (global)\n\nReturns array of events sorted by timestamp (newest first).\n\n**Best Practice:** When resuming work on a task, call `task_start` with `with_events: true` instead of separately calling event_list—it's more efficient.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -457,7 +457,7 @@
     },
     {
       "name": "plan",
-      "description": "# Core Duty\nCreate or update task structures declaratively using a tree-based API. Simplifies complex multi-task creation into a single atomic operation with full workflow support.\n\n# Tactical Guide\n**Current Version (v0.6.4)**: Full create and update mode with idempotent operations.\n\nUse this when:\n- Creating a hierarchical task structure (parent \u2192 children)\n- Setting up related tasks with dependencies\n- Managing task workflow states (todo/doing/done)\n- Need atomic multi-task creation or updates\n\n**Key features:**\n- Direct nesting via `children` field (no need for parent_id)\n- Name-based dependency references via `depends_on`\n- Automatic parent-child relationship establishment\n- Transaction-based atomicity (all or nothing)\n- **Idempotent updates**: Re-running with same names updates existing tasks\n- **Workflow management**: Support for status and active_form fields\n- **Single doing constraint**: Only one task can be doing at a time\n\n**Workflow Features:**\n- `status`: Control task state (todo/doing/done)\n- `active_form`: Present progressive description for UI display (e.g., \"Implementing auth\" vs \"Implement auth\")\n- Constraint: At most one task can have status=\"doing\" globally\n\n**Example:**\n```json\n{\n  \"tasks\": [\n    {\n      \"name\": \"User Authentication\",\n      \"priority\": \"high\",\n      \"status\": \"doing\",\n      \"active_form\": \"Implementing user authentication\",\n      \"children\": [\n        {\n          \"name\": \"JWT Implementation\",\n          \"status\": \"todo\",\n          \"active_form\": \"Implementing JWT\"\n        },\n        {\n          \"name\": \"OAuth2 Integration\",\n          \"depends_on\": [\"JWT Implementation\"],\n          \"status\": \"todo\",\n          \"active_form\": \"Integrating OAuth2\"\n        }\n      ]\n    }\n  ]\n}\n```\n\n**Important Constraints:**\n- Only ONE task can have `status: \"doing\"` at any time\n- Attempting to create/update multiple doing tasks will fail with a clear error\n- This enforces focused, single-task workflow",
+      "description": "# Core Duty\nCreate or update task structures declaratively using a tree-based API. Simplifies complex multi-task creation into a single atomic operation with full workflow support.\n\n# Tactical Guide\n**Current Version (v0.6.4)**: Full create and update mode with idempotent operations.\n\nUse this when:\n- Creating a hierarchical task structure (parent → children)\n- Setting up related tasks with dependencies\n- Managing task workflow states (todo/doing/done)\n- Need atomic multi-task creation or updates\n\n**Key features:**\n- Direct nesting via `children` field (no need for parent_id)\n- Name-based dependency references via `depends_on`\n- Automatic parent-child relationship establishment\n- Transaction-based atomicity (all or nothing)\n- **Idempotent updates**: Re-running with same names updates existing tasks\n- **Workflow management**: Support for status and active_form fields\n- **Single doing constraint**: Only one task can be doing at a time\n\n**Workflow Features:**\n- `status`: Control task state (todo/doing/done)\n- `active_form`: Present progressive description for UI display (e.g., \"Implementing auth\" vs \"Implement auth\")\n- Constraint: At most one task can have status=\"doing\" globally\n\n**Example:**\n```json\n{\n  \"tasks\": [\n    {\n      \"name\": \"User Authentication\",\n      \"priority\": \"high\",\n      \"status\": \"doing\",\n      \"active_form\": \"Implementing user authentication\",\n      \"children\": [\n        {\n          \"name\": \"JWT Implementation\",\n          \"status\": \"todo\",\n          \"active_form\": \"Implementing JWT\"\n        },\n        {\n          \"name\": \"OAuth2 Integration\",\n          \"depends_on\": [\"JWT Implementation\"],\n          \"status\": \"todo\",\n          \"active_form\": \"Integrating OAuth2\"\n        }\n      ]\n    }\n  ]\n}\n```\n\n**Important Constraints:**\n- Only ONE task can have `status: \"doing\"` at any time\n- Attempting to create/update multiple doing tasks will fail with a clear error\n- This enforces focused, single-task workflow",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -565,7 +565,7 @@
   ],
   "important_patterns": {
     "focus_driven_workflow": "## Focus-Driven Workflow\nMost operations revolve around current_task_id. Always establish focus with task_start before working, and clear it with task_done when complete.",
-    "atomic_operations": "## Atomic Operations\nCommands like task_start, task_done, and task_spawn_subtask are atomic\u2014they combine multiple state changes to ensure consistency. Prefer these over manual task_update for status changes.",
+    "atomic_operations": "## Atomic Operations\nCommands like task_start, task_done, and task_spawn_subtask are atomic—they combine multiple state changes to ensure consistency. Prefer these over manual task_update for status changes.",
     "depth_first_strategy": "## Depth-First Strategy\ntask_pick_next prioritizes subtasks of current work. This encourages completing branches before starting new trees.",
     "event_history_is_memory": "## Event History is Memory\nEvents are your persistent memory. Record decisions, blockers, and milestones liberally. Use with_events: true when starting tasks to recover context.",
     "hierarchy_for_complexity": "## Hierarchy for Complexity\nBreak down complex tasks using parent_id (via task_add) or task_spawn_subtask. Keep hierarchy shallow (2-3 levels max) for manageability."

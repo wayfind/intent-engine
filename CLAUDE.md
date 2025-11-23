@@ -1,6 +1,6 @@
 # Intent-Engine: Claude Integration Guide
 
-**Version**: 0.6.3
+**Version**: 0.6
 **Target**: Claude Code, Claude Desktop, and AI assistants via MCP
 
 ---
@@ -418,6 +418,6 @@ Intent-Engine is designed for **strategic intent tracking**, not tactical todo l
 ---
 
 **Last Updated**: 2025-11-17
-**Spec Version**: 0.6.3
+**Spec Version**: 0.6
 **MCP Tools**: 14 available (search tool for unified search)
 **Status**: Experimental (Pre-1.0)
