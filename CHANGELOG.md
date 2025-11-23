@@ -5,285 +5,720 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
 ## [0.6.7] - 2025-11-23
 
-### Fixed
-- **Critical**: Fixed log rotation file discovery in `ie logs` command
-  - `list_log_files()` now correctly identifies rotated files (e.g., `dashboard.log.2025-11-23`)
-  - `query_logs()` now includes all rotated log files when filtering by mode
-  - Previous behavior: `ie logs --mode dashboard` would return empty results as it only read the main (often empty) log file
-  - Impact: Log query functionality is now fully operational for historical logs
-- **Code Quality**: Fixed Clippy warnings
-  - Use `strip_suffix()` instead of manual string slicing in `parse_duration()`
-  - Use struct initialization pattern in `handle_logs_command()`
-  - Added `#[allow(dead_code)]` for unused helper functions in tests
+### Bug Fixes
 
-### Added
-- **Documentation**: Complete logging system guide (`docs/logging-guide.md`, 458 lines)
-  - Comprehensive usage examples for `ie logs` command
-  - Log rotation and cleanup instructions
-  - Troubleshooting guide and FAQ
-  - Common use cases with copy-paste examples
-- **Deployment**: Production-ready logrotate configuration (`docs/deployment/logrotate.conf`)
-  - Daily rotation with 7-day retention
-  - Automatic compression of old logs
-  - SIGHUP signal handling for graceful log file reopening
+- Support rotated log files in query operations
 
-### Tests
-- All 24 logging tests passing (100% coverage)
-  - `logging_integration_test.rs`: 6 tests for basic file logging
-  - `logging_rotation_test.rs`: 6 tests for rotation and cleanup
-  - `logs_integration_test.rs`: 12 tests for query functionality
+### Documentation
+
+- Add missing documentation and test files
+
+### Miscellaneous Tasks
+
+- Bump version to 0.6.7
 
 ## [0.6.6] - 2025-11-23
 
-### Added
-- **Unified Logging System**: Comprehensive file-based logging for all modes
-  - Dashboard daemon mode logs to `~/.intent-engine/logs/dashboard.log`
-  - MCP Server logs to `~/.intent-engine/logs/mcp-server.log` (JSON format)
-  - Automatic log directory creation
-  - Environment variable `IE_DASHBOARD_LOG_FILE=1` to force file logging (for testing)
-- **Log Rotation**: Built-in daily rotation with automatic cleanup
-  - Uses `tracing-appender` for cross-platform daily rotation
-  - Creates dated files: `dashboard.log.2025-11-23`
-  - Automatic cleanup of logs older than 7 days (configurable via `IE_LOG_RETENTION_DAYS`)
-  - Recommended: Use `logrotate` on Linux for production (config provided)
-- **Log Query Command**: New `ie logs` CLI command for querying historical logs
-  - Filter by mode: `--mode dashboard|mcp-server|cli`
-  - Filter by level: `--level error|warn|info|debug|trace`
-  - Filter by time: `--since 1h|24h|7d`
-  - Limit results: `--limit N`
-  - Real-time monitoring: `--follow` (like `tail -f`)
-  - Export formats: `--export text|json`
-- **MCP Server Logging**: Dual output mechanism
-  - Logs written to file in JSON format
-  - JSON-RPC communication remains clean on stdout
-  - Prevents log noise in AI assistant interactions
+### Bug Fixes
 
-### Dependencies
-- Added `tracing-appender = "0.2"` for log rotation support
+- Update integration tests for MCP server file logging and remove obsolete switch command test
+
+### Documentation
+
+- Add Intent-Engine protocol specification and migration plan
+
+### Features
+
+- Implement Intent-Engine Protocol v1.0 compliance (90%)
+
+### Miscellaneous Tasks
+
+- Bump version to 0.6.6
+
+### Refactor
+
+- Implement single source of truth for project status
+
+## [0.6.5] - 2025-11-23
+
+### Bug Fixes
+
+- Canonicalize temp_dir for path comparison in Dashboard tests
+- Resolve Dashboard integration test failures on macOS/Windows
+- Set INTENT_ENGINE_PROJECT_DIR in Dashboard tests for macOS
+- Use foreground mode for Dashboard in tests to fix macOS failures
+- Add defensive programming to registry.rs save() method
+- Add active_form column to schema and fix report queries
+
+### Documentation
+
+- Add comprehensive logging system documentation
+
+### Features
+
+- Add file logging infrastructure for Dashboard daemon mode (Phase 1)
+- Implement Phase 1 - Dashboard file logging
+- Implement Phase 2 - Log rotation and cleanup
+- Enable file logging for MCP Server mode
+- Add TodoWriter replacement with status management and active_form
+
+### Miscellaneous Tasks
+
+- Bump version to 0.6.5
+
+### Refactor
+
+- Implement multi-doing + single-focus design and remove task_switch
+
+### Testing
+
+- Add comprehensive integration tests for file logging
+- Add comprehensive integration tests for Phase 2 and Phase 4
+
+### Debug
+
+- Add comprehensive Dashboard diagnostics for CI failures
+
+## [0.6.4] - 2025-11-21
+
+### Bug Fixes
+
+- Cross-platform compatibility fixes for tests and CI
+- Remove redundant /tmp path checks for cross-platform compatibility
+
+### Miscellaneous Tasks
+
+- Bump version to 0.6.4 - Cross-platform compatibility fixes
+
+## [0.6.3] - 2025-11-21
+
+### Bug Fixes
+
+- Prevent MCP tests from registering temporary projects to Dashboard
+- Downgrade temp path log messages to debug level to prevent MCP test failures
+
+### Miscellaneous Tasks
+
+- Bump version to 0.6.3 - MCP test fixes and temporary path protection
+
+### Testing
+
+- Add Dashboard WebSocket integration tests and fix temporary path pollution
+
+## [0.6.2] - 2025-11-21
+
+### Bug Fixes
+
+- Add dashboard registry cleanup for v0.6.0 upgrade
+- Add Cache-Control headers to prevent browser caching of Dashboard UI
+- Exclude unimplemented tests from release script
+
+### Miscellaneous Tasks
+
+- Bump version to 0.6.1
+- Update Cargo.lock for version 0.6.1
+- Bump version to 0.6.2 - Dashboard upgrade fixes
 
 ## [0.6.0] - 2025-11-21
 
-### Added
-- **Plan Interface**: Declarative task management API for batch operations
-  - New `ie plan` CLI command and `plan` MCP tool
-  - Create entire task trees in one atomic operation
-  - Hierarchical nesting via `children` field (no manual parent_id needed)
-  - Name-based dependency references via `depends_on` field
-  - Automatic dependency resolution and cycle detection (Tarjan's SCC algorithm)
-  - Idempotent updates: run same plan multiple times → same result
-  - Transaction-based atomicity: all-or-nothing execution
-  - Comprehensive guide: `docs/PLAN_INTERFACE_GUIDE.md`
-- **MCP WebSocket Integration**: Real-time connection between Dashboard and MCP server
-  - WebSocket-based communication for live updates
-  - Automatic reconnection with exponential backoff
-  - Enhanced dashboard registry for tracking active sessions
-- **Dashboard UI Redesign**: Complete sci-fi themed interface overhaul
-  - Modern, futuristic design aesthetic
-  - Improved user experience and visual hierarchy
-  - Enhanced task visualization
+### Bug Fixes
 
-### Changed
-- **Dependencies**: Added WebSocket and async communication support
-  - `axum` now includes `ws` feature for WebSocket support
-  - Added `tokio-tungstenite` 0.21 for WebSocket client
-  - Added `futures-util` 0.3 for async stream handling
-  - Added `reqwest` with JSON support for HTTP communication
-- **Dashboard**: Fixed port allocation to 11391 (previously dynamic)
-- **MCP Server Schema**: Added `plan` tool to mcp-server.json with comprehensive documentation
-
-### Fixed
-- **MCP → Dashboard WebSocket Connection**: Resolved cross-session connection failures
-  - Improved process lifecycle management
-  - Better PID file and registry synchronization
-  - Enhanced health check mechanisms
-- **Project Boundary Logic**: Clarified support for non-project startup scenarios
-- **Dashboard Daemon Mode**: Proper process detachment using `setsid` on Unix systems
+- Add cwd field to MCP server configuration for proper project detection
+- Integrate MCP → Dashboard WebSocket connection
+- Check .intent-engine directory existence before loading database
+- MCP test failures - downgrade WebSocket logs to debug level
+- Exclude unimplemented tests from code coverage workflow
+- Replace OpenSSL with rustls for ARM64 cross-compilation
+- Revert workflow modifications that caused validation errors
 
 ### Documentation
-- **New Guide**: `docs/PLAN_INTERFACE_GUIDE.md` - Comprehensive plan interface documentation with examples
-- **Updated AGENT.md**: Added Plan Interface section (v0.6) with technical details and usage patterns
-- **Updated CLAUDE.md**: Enhanced with plan tool guidance and when to use batch vs imperative operations
-- **Updated README.md**: Added declarative task planning section highlighting v0.6 features
 
-### Migration Notes
-- **Plan Interface** is backward compatible - existing commands work as before
-- For batch task creation, consider migrating to `plan` interface for better ergonomics
-- Phase 1 (v0.6.0) is create-only; idempotent updates coming in v0.6.1
+- Clarify project boundary logic supports non-project startup
+- Add plan tool to MCP tools table in spec
+
+### Features
+
+- Complete Dashboard UI redesign with sci-fi theme
+
+### Miscellaneous Tasks
+
+- Release v0.6.0 - Plan Interface and Dashboard Enhancements
+- Add release notes for v0.6.0
+- Add .claude to gitignore
+
+## [0.5.5] - 2025-11-19
+
+### Bug Fixes
+
+- Dashboard daemon mode now properly detaches using setsid
+
+### Documentation
+
+- Update Dashboard port from dynamic allocation to fixed 11391
+
+### Miscellaneous Tasks
+
+- Bump version to 0.5.5
+
+## [0.5.4] - 2025-11-19
+
+### Bug Fixes
+
+- 确保多项目注册表和界面数据一致性
+- 修复MCP连接注册中的路径规范化问题
+- MCP integration tests now use current project directory
+- 修复CI/CD测试数据库初始化失败问题
+- 修复 CI 并发测试中的目录切换竞争条件
+- CI test failures - Windows port collision and doctor warnings
+- Clean up test database before doctor command in CI
+- Prevent Dashboard child process from blocking MCP server on Windows
+- Disable Dashboard auto-start in test environments to prevent timeouts
+- Handle port-in-use gracefully in test_allocate_port (Fix 6)
+- Apply port-in-use graceful handling to test_fixed_port (Fix 6 complete)
+- Initialize project before running coverage tests (Fix 7)
+- Remove all eprintln! calls from MCP server to prevent Windows blocking
+
+### Documentation
+
+- 修复 rustdoc 警告 - 在文档中转义 HTML 标签
+
+### Miscellaneous Tasks
+
+- Add code coverage report
+- Bump version to 0.5.4
+
+### Refactor
+
+- Rename MCP tool 'unified_search' to 'search'
+- 本地化所有静态资源并优化UI设计
+- 更新Dashboard UI为浅色主题并刷新静态资源
+
+## [0.5.3] - 2025-11-17
+
+### Features
+
+- Add MCP auto-registration and browser auto-open for Dashboard
+
+### Miscellaneous Tasks
+
+- Bump which from 6.0.3 to 8.0.0 (#99)
+- Bump tower from 0.4.13 to 0.5.2 (#98)
+- Bump dirs from 5.0.1 to 6.0.0 (#94)
+- Bump peter-evans/create-pull-request from 6 to 7 (#93)
+- Bump actions/checkout from 4 to 5 (#92)
+- Bump codecov/codecov-action from 4 to 5 (#91)
+- Bump actions/labeler from 5 to 6 (#90)
+- Bump version to 0.5.3
+
+## [0.5.2] - 2025-11-17
+
+### Bug Fixes
+
+- Add PostToolUse Hook formatting for task mutation tools
+- Resolve test failures caused by home project fallback
+- Dashboard integration tests - 6/9 now passing
+- Temporarily ignore 3 failing Dashboard tests to unblock CI
+- Resolve CI test failures in dependency_tests
+- Apply common test utilities to doctor_command_tests
+- Comprehensive test suite migration to shared test utilities
+- Migrate dashboard_integration_tests to use common test utilities
+- Complete migration of mcp_integration_test to common utilities
+- Dashboard tests failing in CI coverage environment
+
+### Documentation
+
+- Add optional UI tests to CI/CD workflow
+- Add Dashboard documentation and test suite
+
+### Features
+
+- Add Dashboard web UI module
+
+### Miscellaneous Tasks
+
+- Bump version to 0.5.2
+
+## [0.5.1] - 2025-11-16
+
+### Bug Fixes
+
+- PostToolUse hook JSON parsing and output mechanism
+- Update spec file paths after docs reorganization
+- Prevent nested projects from sharing databases
+
+### Documentation
+
+- Reorganize documentation with English as default and categorized naming
+
+### Features
+
+- Implement hybrid command model with optimized parameter syntax
+
+### Miscellaneous Tasks
+
+- Bump version to 0.4.1
+- Bump version to 0.5.0 and update interface spec
+- Bump version to 0.5.1
+
+### Testing
+
+- Add comprehensive nested project test matrix (17 new tests)
+
+## [0.4.1] - 2025-11-15
+
+### Bug Fixes
+
+- Align CLI and MCP interface output formats
+
+### Documentation
+
+- Add AI feedback collection directory
 
 ## [0.4.0] - 2025-11-14
 
-### Added
-- **Unified Search**: New `ie search` command searches across both tasks and events
-  - Full-text search using FTS5 in both task specs/names and event discussion_data
-  - Mixed results with task and event variants in a tagged union structure
-  - Event results include full task ancestry chain for hierarchical context
-  - Configurable search scope: tasks only, events only, or both (default)
-  - Snippet highlighting with `**` markers for matched keywords
-  - New `UnifiedSearchResult` data model with discriminated union
-- **Global Event Queries**: `event list` now supports omitting task_id
-  - Query events across all tasks with `--type` and `--since` filters
-  - Useful for finding all recent blockers, decisions, or notes globally
-  - Default limit changed from 100 to 50 for better performance
-- **Enhanced MCP Parameter Validation**: Improved error messages for `task_add`
-  - Specific messages distinguish between missing, null, empty, and wrong-type parameters
-  - Error message examples:
-    - "Missing required parameter: name"
-    - "Parameter 'name' cannot be null"
-    - "Parameter 'name' cannot be empty"
-    - "Parameter 'name' must be a string, got: 123"
-  - Makes debugging MCP tool calls much easier
+### Miscellaneous Tasks
 
-### Changed
-- **CLI Commands**: Replaced `ie task search` with `ie search` (top-level command)
-- **MCP Tools**: Replaced `task_search` with `unified_search` tool
-- **Event List**: `task_id` parameter is now optional (breaking for strict type checkers)
-- **Atomic Commands Hidden**: Low-level atomic commands are now hidden from `--help` to guide users toward safer composite commands
-  - `ie current set` and `ie current clear` are hidden (prefer `ie task start` and `ie task done`)
-  - These commands still work but show deprecation warnings
-  - MCP tools never exposed these atomic operations (already aligned)
-  - Design principle: Expose only commands that ensure business logic consistency
+- Bump version to 0.3.6
 
-### Removed
-- **CLI**: `ie task search` command (use `ie search` instead)
-- **MCP**: `task_search` tool (use `unified_search` instead)
+## [0.3.5] - 2025-11-14
 
-### Fixed
-- Improved parameter validation error messages for better debugging
-- **PostToolUse Hook Cross-Platform Compatibility**:
-  - Fixed macOS Bash 3.2 compatibility: Replaced `${var:offset:length}` syntax with POSIX-compliant `head -c`
-  - Enhanced jq path detection with multi-platform fallback (macOS Intel/M1, Linux, Git Bash, custom installations)
-  - Hook now works on macOS default Bash (3.2.57) without requiring Bash 4+ upgrade
-  - Improved jq discovery for Homebrew installations on both Intel (`/usr/local/bin`) and Apple Silicon (`/opt/homebrew/bin`)
+### Miscellaneous Tasks
+
+- Bump version to 0.3.5
+
+## [0.3.4] - 2025-11-14
+
+### Fix
+
+- Serialize MCP integration tests to avoid env var races
+
+### Miscellaneous Tasks
+
+- Bump version to 0.3.4
+
+## [0.3.3] - 2025-11-13
+
+### Bug Fixes
+
+- Address clippy warnings for cleaner code
+- Replace map_or with is_some_and for clippy compliance
+- Remove orphaned test code causing syntax error
+- Remove unused imports and dead code
+- Use CARGO_BIN_EXE for doctor test to fix CI failures
+- Use CARGO_BIN_EXE in smart_initialization_tests for CI compatibility
+
+### Features
+
+- Add database path resolution diagnostics to doctor command
+
+### Miscellaneous Tasks
+
+- Bump version to 0.3.3
+
+### Performance
+
+- Optimize test_cli_help_matches_spec from 100s to 0.06s
+
+### Testing
+
+- Add comprehensive tests for database path diagnostics
+- Add 17 additional tests for near-100% coverage
+
+## [0.3.2] - 2025-11-13
+
+### Bug Fixes
+
+- Update MCP config path to ~/.claude.json for Claude Code v2.0.37+
+
+### Features
+
+- Add 'setup-mcp' command for automatic MCP server configuration
+
+### Miscellaneous Tasks
+
+- Bump version to 0.3.2
+
+## [0.3.1] - 2025-11-13
+
+### Bug Fixes
+
+- Correct Claude Code config path from ~/.config/claude-code to ~/.claude/
+
+### Miscellaneous Tasks
+
+- Bump version to 0.3.1
+
+## [0.3.0] - 2025-11-13
+
+### Bug Fixes
+
+- Add 'ie' binary alias and fix session-start hook
+- Update MCP server version to 0.3
 
 ### Documentation
-- Updated CLAUDE.md to version 0.4 with unified_search examples
-- Updated INTERFACE_SPEC.md with version 0.4 changelog and new search section
-- Added comprehensive documentation for unified search in both files
-- Updated all usage patterns and examples to use new search command
 
-### Migration Guide
-- Replace all `ie task search` calls with `ie search`
-- Replace all `task_search` MCP tool calls with `unified_search`
-- Event results now include `task_chain` array for ancestry context
-- When using `event_list`, `task_id` is now optional (omit for global queries)
+- Add Speckit Guardian integration protocol specification
+- Update Speckit Guardian to v2.0 with phased approach
+- Split Sub-Agent architecture into separate specification
+- Add Phase 1 Focus Restoration implementation specification
+- Add comprehensive Phase 1 testing specification
+- Add Phase 1 implementation summary
+- Update INTERFACE_SPEC to v0.3 with Phase 1 commands
+- Add Phase 1 completion report
 
-## [0.3.x] - 2025-11-13
+### Features
 
-### Added
-- **Smart Lazy Initialization**: Automatic project root detection and initialization
-  - Intelligently infers project root by detecting common markers (.git, Cargo.toml, package.json, etc.)
-  - Supports 8 project types: Git, Mercurial, Node.js, Rust, Python, Go, Maven, Gradle
-  - Transparent initialization on first write operation - no manual `init` command needed
-  - Works seamlessly from any subdirectory within a project
-  - Priority-based marker detection (.git has highest priority)
-  - Fallback to current directory with warning if no markers found
-  - Comprehensive test coverage with 22 integration tests
-  - **Monorepo support**: Each sub-project gets isolated `.intent-engine` directory
-  - **Edge cases handled**: Symlinks, Git submodules, concurrent initialization, partial states
-- **Enhanced Documentation**:
-  - Complete implementation design document (`docs/en/technical/smart-initialization.md`)
-  - Edge cases analysis document with 50+ scenarios (`docs/en/technical/smart-initialization-edge-cases.md`)
-  - Updated INTERFACE_SPEC.md with Section 1.3: Project Initialization and Smart Root Inference
-  - Implementation summary report with detailed statistics and examples
-  - Updated quickstart guides (English and Chinese) with smart initialization explanation
+- Implement Phase 1 Focus Restoration (session-restore & setup-claude-code)
 
-### Changed
-- Project initialization now automatically detects root directory instead of using CWD
-- `.intent-engine` directory is created at project root rather than current directory
-- Initialization behavior is now consistent across different project structures
+### Testing
 
-### Fixed
-- Fixed clippy warnings in `src/project.rs` (unused imports, const checks)
-- Fixed deprecated rand API warnings in performance tests
-- Fixed Windows console API compatibility with updated `windows` crate
-  - Updated `SetConsoleOutputCP` to use Result-based interface
+- Add comprehensive unit tests for session_restore module
+- Add Phase 1 integration tests for session restoration
 
-### Technical
-- Total test coverage: 240 tests (all passing)
-- New integration tests: +22 smart initialization tests
-- Platform support: Linux, macOS, Windows (with platform-specific symlink handling)
-- Performance: ~1-3ms overhead for root detection (negligible)
-- Zero breaking changes - fully backward compatible
+## [0.2.1] - 2025-11-11
+
+### Bug Fixes
+
+- Update tests and MCP version for v0.2.0
+- Implement standard FromStr trait for PriorityLevel
+- Replace deprecated Command::cargo_bin with cargo::cargo_bin! macro
+
+### Documentation
+
+- 文档体系重构 Phase 1-2
+- Add v0.2.0 requirement specification
+- Supplement v0.2.0 spec with detailed technical specifications
+- Update documentation for v0.2.0 release
+
+### Features
+
+- 版本同步系统实现 (Phase 3)
+- Implement database migration and circular dependency detection for v0.2.0
+- Add CLI depends-on command with comprehensive tests
+- Add task start blocking check with comprehensive tests
+- Filter blocked tasks from pick-next recommendations with comprehensive tests
+- Enhance task_context with dependency information
+- Add MCP task_add_dependency tool
+- Implement Smart Event Querying with type and since filters
+- Phase 3 - Priority Enum & Command Rename (P1)
+
+### Miscellaneous Tasks
+
+- Bump version to 0.2.1
+
+## [0.1.17] - 2025-11-11
+
+### Bug Fixes
+
+- Fix MCP integration tests and remove duplicate tool definitions
+- Use cargo_bin! macro for reliable test binary path resolution
+- Ensure CLI commands inherit project directory in MCP integration tests
+- Update mcp-server.json version to match Cargo.toml major.minor
+
+### Documentation
+
+- Add task_context MCP tool to INTERFACE_SPEC.md
+
+### Features
+
+- Implement task_context MCP tool
+
+### Miscellaneous Tasks
+
+- Fix critical inconsistencies and enhance AI prompting
+- Configure MCP integration tests to run sequentially
+- Bump version to 0.1.17
+
+### Testing
+
+- Add comprehensive test suite for task_context functionality
+- Derive expected tool count from mcp-server.json instead of hard-coding
+- Add debug output for CI diagnosis of task_context test failures
+
+## [0.1.16] - 2025-11-10
+
+### Miscellaneous Tasks
+
+- Bump version to 0.1.16
+
+## [0.1.15] - 2025-11-10
+
+### Bug Fixes
+
+- Add console input encoding support for Windows Chinese characters
+- Add automatic GBK to UTF-8 conversion for Windows piped input
+- Update SetConsoleCP API calls for windows crate 0.58
+
+### Documentation
+
+- Add CHANGELOG entry for smart lazy initialization feature
+
+### Miscellaneous Tasks
+
+- Bump version to 0.1.15
+
+## [0.1.14] - 2025-11-10
+
+### Bug Fixes
+
+- Enable Release workflow trigger from Version Bump
+- Use marker file for idempotent git hooks installation
+- Update Windows API call to match new Result-based interface
+- Add wrapper script to MCP server installer for working directory resolution
+- Add MCP initialize method for proper handshake
+- Address clippy warnings in test code
+- Resolve clippy warnings in project.rs
+- Suppress deprecated rand API warnings in performance tests
+- Update Windows console API to use Result-based interface
+
+### Documentation
+
+- Add code formatting reminder to AGENT.md
+- Add comprehensive build.rs design documentation
+- Add comprehensive implementation summary report
+- Update MCP server documentation to reflect Rust native implementation
+- Enhance MCP tool descriptions with stdin usage and documentation guidance
+- Update all documentation for unified binary architecture
+
+### Features
+
+- Add Windows console UTF-8 encoding support for Chinese characters
+- Add build.rs to auto-install git hooks on first build
+- Implement smart lazy initialization with project root inference
+- Improve MCP server robustness per official specification
+- Add task_search and task_delete MCP tools with comprehensive tests
+
+### Miscellaneous Tasks
+
+- Bump windows from 0.58.0 to 0.62.2
+- Bump actions/stale from 9 to 10
+- Bump orhun/git-cliff-action from 3 to 4
+- Bump actions/checkout from 3 to 5
+- Bump actions/download-artifact from 4 to 6
+- Bump actions/github-script from 6 to 8
+- Bump rand from 0.8.5 to 0.9.2
+- Bump version to 0.1.14
+
+### Refactor
+
+- Enhance build.rs robustness and clean up documentation
+- Remove Python dependency from MCP server install script
+- Unify MCP server into single binary with environment variable support
+
+### Styling
+
+- Apply cargo fmt formatting
+
+### Testing
+
+- Fix Windows encoding tests to match actual API behavior
+- Verify git hooks work
+- Add comprehensive edge case tests for smart initialization
+- Exclude 'initialize' from MCP tools sync test
+
+## [0.1.13] - 2025-11-10
+
+### Bug Fixes
+
+- Enable publish to crates.io for workflow_dispatch
+- Add input validation for workflow_dispatch tag parameter
+- Change INTERFACE_SPEC version to reflect interface contract only
+
+### Features
+
+- Implement interface-contract-based version management system
+
+### Miscellaneous Tasks
+
+- Sync version to 0.1.12 across all files
+- Bump version to 0.1.13
+
+## [0.1.12] - 2025-11-10
+
+### Miscellaneous Tasks
+
+- Bump version to 0.1.12
+
+## [0.1.11] - 2025-11-10
+
+### Bug Fixes
+
+- Add Cargo.lock for reproducible binary builds
+- Handle existing tags in version bump workflow
+- Use force push for tags to handle remote conflicts
+
+### Miscellaneous Tasks
+
+- Bump version to 0.1.10
+- Remove unused reusable workflow files
+- Update INTERFACE_SPEC.md version to 0.1.10
+- Sync mcp-server.json version to 0.1.10
+- Bump version to 0.1.11
+
+### Refactor
+
+- Comprehensive CI/CD system overhaul
+
+## [.0.1.11] - 2025-11-10
+
+### Bug Fixes
+
+- Resolve immutable release error in GitHub Actions
+- Remove needless borrow in test args
+- Use GitHub API directly to delete releases
+- Improve release deletion with better error handling
+
+## [0.1.10] - 2025-11-09
+
+### Bug Fixes
+
+- Apply cargo fmt and fix clippy warnings
+- 更新接口规范测试以匹配实际数据模型
+- 修改实现以匹配 INTERFACE_SPEC.md 规范
+
+### Documentation
+
+- Add "Replace Intermediate Files" pattern to AI Quick Guide
+- 整理安装脚本和文档结构
+- 更新命令参考和 CI 文档中的安装脚本路径
+- 强调 INTERFACE_SPEC.md 作为权威规范的基石作用
+- 添加深度测试覆盖分析报告
+
+### Features
+
+- 从根本上解决代码格式化问题
+- 添加灵活的手动构建系统
+- 添加专门的Codecov工作流 - 一键触发代码覆盖率
+- 添加 MCP 工具自动同步系统
+- 添加权威接口规范文档系统
+
+### Fix
+
+- Add JSON-RPC version validation to eliminate dead code warning
+- Resolve codecov workflow exit code 1 error
+- Remove duplicate if condition in manual-build workflow
+
+### Miscellaneous Tasks
+
+- Remove unnecessary shebang from mcp-server.rs
+- Specify default binary to resolve cargo run ambiguity
+- Add permissions for PR comment posting in codecov workflow
+- 更新 mcp-server.json 版本号至 0.1.9
+
+### Refactor
+
+- 删除废弃的 Python MCP 服务器
+- 根据实际实现完全修正接口规范文档
+
+### Styling
+
+- 运行 cargo fmt 修复代码格式
+
+### Testing
+
+- Add comprehensive unit and integration tests to improve coverage
+- Add comprehensive performance tests for large datasets
+- Add missing coverage for get_task_with_events and pick_next_tasks
+
+## [0.1.9] - 2025-11-08
+
+### Bug Fixes
+
+- Remove redundant wildcard pattern in format match
+
+### Documentation
+
+- 更新所有文档以反映 task done 命令的正确语义
+- 修复 command-reference-full.md 中遗漏的 task done 语义
+- Update pick-next documentation to reflect new functionality
+- Update event add command documentation
+
+### Features
+
+- Implement intelligent pick-next command
+- Make --task-id optional in event add command
+
+### Styling
+
+- Apply rustfmt formatting
+- Apply rustfmt formatting to main.rs
+
+## [0.1.8] - 2025-11-08
+
+### Features
+
+- 添加 --version 支持
 
 ## [0.1.7] - 2025-11-08
 
-### Added
-- **FTS5 Full-text Search**: New `task search <QUERY>` command with millisecond-level performance
-  - Uses SQLite FTS5 for blazing-fast full-text search
-  - Returns match snippets with `**` highlighting for matched keywords
-  - Supports advanced query syntax (AND, OR, NOT, prefix matching, phrase search)
-  - Extremely Agent-context-friendly with ~64 character context snippets
-- **Smart Next-step Suggestions**: Enhanced `task done` command now provides intelligent suggestions
-  - Suggests switching to parent task after completing subtask
-  - Recommends picking next task when current task is done
-  - Helps maintain workflow momentum
-- **Development Automation Tools**:
-  - Git pre-commit hooks for automatic code formatting
-  - Makefile with convenient development commands (`make fmt`, `make check`, `make test`)
-  - Setup script: `./scripts/setup-git-hooks.sh`
-- **Enhanced Documentation**:
-  - Development setup guide in README and QUICKSTART
-  - Comprehensive `task search` command documentation
-  - Git hooks installation instructions for contributors
-  - Scripts usage documentation in `scripts/README.md`
+### Bug Fixes
 
-### Changed
-- **`task done` Command Refactored**: Now only operates on current focused task
-  - Clearer semantics: complete the task you're working on
-  - More intuitive workflow with automatic task switching suggestions
-  - Updated all documentation to reflect new behavior
-
-### Fixed
-- Fixed `report` command `tasks_by_status` statistics inconsistency
-- Fixed clippy `doc_lazy_continuation` lint error in documentation comments
-- Fixed rustfmt formatting issues through automated git hooks
+- 修复 report 命令中 tasks_by_status 统计不一致的问题
+- 修复 clippy doc_lazy_continuation lint 错误
 
 ### Documentation
-- Added prominent git hooks setup instructions to README.md
-- Enhanced FTS5 search engine feature description highlighting performance and Agent-friendliness
-- Complete Chinese and English documentation for `task search` command
-- Added AI Quick Guide references for search functionality
 
-## [0.1.6] - 2024-XX-XX
+- 文档结构优化 - 支持中英文双语和清晰导航
+- 添加英文翻译和语言切换功能
+- 添加核心文档英文翻译
+- 翻译核心集成和理念文档
+- 翻译安装指南和贡献指南
+- 翻译技术文档(性能和安全)
+- 翻译贡献者发布指南
+- 完成剩余超长文档翻译 - 100%完成
+- 更新所有文档以反映 task done 命令的语义变化
+- 添加 task search 命令的文档说明
+- 增强 FTS5 搜索引擎特性描述
+- 添加开发脚本使用说明
+- 在主要文档中添加 git hooks 设置说明
+- 添加 v0.1.7 版本的 PR 描述文档
 
-### Changed
-- Optimized CI pipeline for faster execution
-- Improved scheduled CI to run only when there are new commits
+### Features
 
-## [0.1.5] - 2024-XX-XX
+- 增强 task done 命令的响应结构，添加智能的下一步建议
+- 实现 task search 命令支持全文搜索
 
-### Changed
-- Simplified CI configuration
-- Improved release process
+### Miscellaneous Tasks
 
-## [0.1.4] - 2024-XX-XX
+- 添加自动格式化工具和 git hooks
+- Bump version to 0.1.7
 
-### Added
-- Multiple package manager support (cargo-binstall, Homebrew)
-- Comprehensive installation documentation
-- Release testing guide
+### Refactor
 
-## [0.1.3] - 2024-XX-XX
+- 重构 done 命令，只对当前焦点任务生效
 
-### Changed
-- Updated GitHub Actions workflows
-- Improved artifact handling
+### Styling
 
-## [0.1.2] - 2024-XX-XX
+- 修复 rustfmt 代码格式问题
 
-### Added
-- Initial stable release
-- Core task management functionality
-- Event tracking system
-- SQLite database backend
+## [.0.1.1] - 2025-11-08
 
-[0.1.7]: https://github.com/wayfind/intent-engine/compare/v0.1.6...v0.1.7
-[0.1.6]: https://github.com/wayfind/intent-engine/compare/v0.1.5...v0.1.6
-[0.1.5]: https://github.com/wayfind/intent-engine/compare/v0.1.4...v0.1.5
-[0.1.4]: https://github.com/wayfind/intent-engine/compare/v0.1.3...v0.1.4
-[0.1.3]: https://github.com/wayfind/intent-engine/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/wayfind/intent-engine/releases/tag/v0.1.2
+### Bug Fixes
+
+- Ensure cargo bin directory is in PATH for install-scripts job
+- Install OpenSSL development libraries for install-scripts job
+
+### Documentation
+
+- Add comprehensive CI/CD system overview
+- Fix repository URLs from yourusername to wayfind
+
+### Features
+
+- Enhance CI/CD with comprehensive quality checks
+- Add local CI check scripts
+
+### Miscellaneous Tasks
+
+- Update criterion requirement from 0.5 to 0.7
+- Update sqlx requirement from 0.7 to 0.8
+- Update thiserror requirement from 1.0 to 2.0
+- Bump softprops/action-gh-release from 1 to 2
+- Bump actions/upload-artifact from 3 to 5
+- Bump actions/cache from 3 to 4
+- Bump actions/dependency-review-action from 3 to 4
+- Bump actions/checkout from 4 to 5
+
+<!-- generated by git-cliff -->
