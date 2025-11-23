@@ -51,6 +51,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load current task if exists
     await loadCurrentTask();
+
+    // Start periodic polling for CLI/MCP sync (every 15 seconds)
+    setInterval(async () => {
+        try {
+            await loadTasks(currentFilter);
+            if (currentTaskId) {
+                await loadTaskDetail(currentTaskId);
+            }
+            await loadCurrentTask();
+        } catch (e) {
+            console.error('Periodic refresh failed:', e);
+        }
+    }, 15000);
 });
 
 // Protocol v1.0: Send goodbye when page closes
@@ -443,6 +456,22 @@ function handleDashboardMessage(message) {
             }
             // Connection will close - this is expected, not an error
             break;
+        case 'task_created':
+            // A new task was created via CLI/MCP
+            handleTaskCreated(message.payload);
+            break;
+        case 'task_updated':
+            // A task was updated via CLI/MCP
+            handleTaskUpdated(message.payload);
+            break;
+        case 'task_deleted':
+            // A task was deleted via CLI/MCP
+            handleTaskDeleted(message.payload);
+            break;
+        case 'event_created':
+            // A new event was created via CLI/MCP
+            handleEventCreated(message.payload);
+            break;
         default:
             console.warn('Unknown message type:', message.type);
     }
@@ -486,6 +515,116 @@ function handleProjectOffline(projectPath) {
 
     // Re-render tabs (project stays in storage, just shown as offline)
     renderProjectTabs();
+}
+
+// ============================================================================
+// Database Operation Message Handlers
+// ============================================================================
+
+function handleTaskCreated(payload) {
+    console.log('✨ Task created via CLI/MCP:', payload);
+
+    // Only reload if this is for the current project
+    const projects = JSON.parse(localStorage.getItem('intent-engine-projects') || '[]');
+        const currentProject = projects.find(p => p.is_online);
+        const currentProjectPath = currentProject?.path
+    
+    if (payload.project_path && currentProjectPath && payload.project_path !== currentProjectPath) {
+          console.log('  Ignoring - different project');
+          return;
+      }
+    
+
+    // Reload task list to show the new task
+    loadTasks();
+
+    // Show brief notification
+    showNotification('Task created', 'success');
+}
+
+function handleTaskUpdated(payload) {
+    console.log('📝 Task updated via CLI/MCP:', payload);
+
+    // Only reload if this is for the current project
+    const projects = JSON.parse(localStorage.getItem('intent-engine-projects') || '[]');
+        const currentProject = projects.find(p => p.is_online);
+        const currentProjectPath = currentProject?.path
+    
+    if (payload.project_path && currentProjectPath && payload.project_path !== currentProjectPath) {
+          console.log('  Ignoring - different project');
+          return;
+      }
+    
+
+    // Reload task list to show the updated task
+    loadTasks();
+
+    // If the updated task is the current task, reload current task details
+    const updatedTaskId = payload.affected_ids?.[0];
+    if (updatedTaskId && currentTaskId === updatedTaskId) {
+        loadCurrentTask();
+    }
+
+    // Show brief notification
+    showNotification('Task updated', 'info');
+}
+
+function handleTaskDeleted(payload) {
+    console.log('🗑️  Task deleted via CLI/MCP:', payload);
+
+    // Only reload if this is for the current project
+    const projects = JSON.parse(localStorage.getItem('intent-engine-projects') || '[]');
+        const currentProject = projects.find(p => p.is_online);
+        const currentProjectPath = currentProject?.path
+    
+    if (payload.project_path && currentProjectPath && payload.project_path !== currentProjectPath) {
+          console.log('  Ignoring - different project');
+          return;
+      }
+    
+
+    // Reload task list to remove the deleted task
+    loadTasks();
+
+    // If the deleted task is the current task, clear current task
+    const deletedTaskId = payload.affected_ids?.[0];
+    if (deletedTaskId && currentTaskId === deletedTaskId) {
+        currentTaskId = null;
+        currentTask = null;
+        loadCurrentTask();
+    }
+
+    // Show brief notification
+    showNotification('Task deleted', 'warning');
+}
+
+function handleEventCreated(payload) {
+    console.log('📌 Event created via CLI/MCP:', payload);
+
+    // Only reload if this is for the current project
+    const projects = JSON.parse(localStorage.getItem('intent-engine-projects') || '[]');
+        const currentProject = projects.find(p => p.is_online);
+        const currentProjectPath = currentProject?.path
+    
+    if (payload.project_path && currentProjectPath && payload.project_path !== currentProjectPath) {
+          console.log('  Ignoring - different project');
+          return;
+      }
+    
+
+    // If event is for the current task, reload task details (which includes events)
+    if (payload.data?.task_id && currentTaskId === payload.data.task_id) {
+        loadCurrentTask();
+    }
+
+    // Show brief notification
+    showNotification('Event added', 'info');
+}
+
+function showNotification(message, type = 'info') {
+    // Simple console notification for now
+    // TODO: Implement visual toast notifications in the UI
+    console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
 // Render project tabs from storage + online state
@@ -756,6 +895,9 @@ function renderTaskDetail(task) {
                             ⇄ Switch_Focus
                         </button>
                     ` : ''}
+                    <button onclick="openEditTaskModal(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-yellow-500 hover:border-yellow-500 hover:text-black hover:bg-yellow-500 font-mono text-xs font-bold tracking-wider transition-all uppercase">
+                        ✏️ Modify
+                    </button>
                     <button onclick="openAddEventModal(${task.id})" class="py-3 bg-sci-panel border border-sci-border text-slate-300 hover:border-white hover:text-white font-mono text-xs font-bold tracking-wider transition-all uppercase">
                         📝 Log_Entry
                     </button>
@@ -830,10 +972,32 @@ function renderEventCard(event) {
     const icon = typeIcons[event.log_type] || '📝';
 
     return `
-        <div class="border-l-2 ${colorClass.split(' ')[0]} bg-sci-bg/50 p-4 mb-3 hover:bg-sci-panel transition-colors">
+        <div class="group border-l-2 ${colorClass.split(' ')[0]} bg-sci-bg/50 p-4 mb-3 hover:bg-sci-panel transition-colors relative">
             <div class="flex items-center justify-between mb-2">
                 <span class="font-mono text-xs font-bold uppercase tracking-wider ${colorClass.split(' ')[1]}">${icon} ${event.log_type}</span>
-                <span class="font-mono text-xs text-slate-500">${formatDate(event.logged_at)}</span>
+                <div class="flex items-center gap-3">
+                    <span class="font-mono text-xs text-slate-500">${formatDate(event.timestamp || event.logged_at)}</span>
+                    ${!isCurrentProjectOffline ? `
+                        <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick="openEditEventModal(${event.id}, ${event.task_id})"
+                                class="text-yellow-500 hover:text-yellow-300 transition-colors"
+                                title="Edit Event">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                            </button>
+                            <button onclick="deleteEvent(${event.id}, ${event.task_id})"
+                                class="text-neon-red hover:text-red-300 transition-colors"
+                                title="Delete Event">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
             </div>
             <div class="prose prose-invert max-w-none text-base text-slate-300 leading-relaxed">
                 ${renderMarkdown(event.discussion_data)}
@@ -937,6 +1101,31 @@ async function loadCurrentTask() {
         }
     } catch (e) {
         console.error('Failed to load current task:', e);
+    }
+}
+
+// Refresh all data (for CLI/MCP sync)
+async function refreshAllData() {
+    try {
+        // Show loading notification
+        showNotification('REFRESHING_DATA...', 'info');
+
+        // Reload tasks list
+        await loadTasks(currentFilter);
+
+        // Reload current task if one is selected
+        if (currentTaskId) {
+            await loadTaskDetail(currentTaskId);
+        }
+
+        // Reload current focus
+        await loadCurrentTask();
+
+        // Success notification
+        showNotification('DATA_REFRESHED', 'success');
+    } catch (e) {
+        console.error('Failed to refresh data:', e);
+        showNotification('REFRESH_FAILED', 'error');
     }
 }
 
@@ -1060,6 +1249,69 @@ async function createTask(event) {
     }
 }
 
+// Edit task modal functions
+async function openEditTaskModal(taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}`);
+        if (!response.ok) {
+            showNotification('FAILED_TO_LOAD_TASK', 'error');
+            return;
+        }
+        const result = await response.json();
+        const task = result.data;  // Extract actual task from wrapper
+
+        document.getElementById('edit-task-id').value = task.id;
+        document.getElementById('edit-task-name').value = task.name;
+        document.getElementById('edit-task-spec').value = task.spec || '';
+        document.getElementById('edit-task-priority').value = task.priority || '';
+        document.getElementById('edit-task-status').value = task.status;
+        document.getElementById('edit-task-modal').classList.remove('hidden');
+    } catch (e) {
+        console.error('Failed to load task:', e);
+        showNotification('SYSTEM_ERROR', 'error');
+    }
+}
+
+function closeEditTaskModal() {
+    document.getElementById('edit-task-modal').classList.add('hidden');
+    document.getElementById('edit-task-form').reset();
+}
+
+async function updateTask(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    const taskId = parseInt(formData.get('task_id'));
+
+    const data = {
+        name: formData.get('name'),
+        spec: formData.get('spec') || null,
+        priority: formData.get('priority') ? parseInt(formData.get('priority')) : null,
+        status: formData.get('status')
+    };
+
+    try {
+        const response = await fetch(`/api/tasks/${taskId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            closeEditTaskModal();
+            await loadTasks(currentFilter);
+            await loadTaskDetail(taskId);
+            showNotification('TASK_UPDATED', 'success');
+        } else {
+            const error = await response.json();
+            showNotification(error.message || 'UPDATE_FAILED', 'error');
+        }
+    } catch (e) {
+        console.error('Failed to update task:', e);
+        showNotification('SYSTEM_ERROR', 'error');
+    }
+}
+
 function openAddEventModal(taskId) {
     document.getElementById('event-task-id').value = taskId;
     document.getElementById('add-event-modal').classList.remove('hidden');
@@ -1098,6 +1350,95 @@ async function addEvent(event) {
         }
     } catch (e) {
         console.error('Failed to add event:', e);
+        showNotification('SYSTEM_ERROR', 'error');
+    }
+}
+
+// Edit event modal functions
+async function openEditEventModal(eventId, taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/events`);
+        if (!response.ok) {
+            showNotification('FAILED_TO_LOAD_EVENTS', 'error');
+            return;
+        }
+        const result = await response.json();
+        const events = result.data;  // Extract events array from wrapper
+        const event = events.find(e => e.id === eventId);
+
+        if (!event) {
+            showNotification('EVENT_NOT_FOUND', 'error');
+            return;
+        }
+
+        document.getElementById('edit-event-id').value = event.id;
+        document.getElementById('edit-event-task-id').value = event.task_id;
+        document.getElementById('edit-event-type').value = event.log_type;
+        document.getElementById('edit-event-data').value = event.discussion_data;
+        document.getElementById('edit-event-modal').classList.remove('hidden');
+    } catch (e) {
+        console.error('Failed to load event:', e);
+        showNotification('SYSTEM_ERROR', 'error');
+    }
+}
+
+function closeEditEventModal() {
+    document.getElementById('edit-event-modal').classList.add('hidden');
+    document.getElementById('edit-event-form').reset();
+}
+
+async function updateEvent(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    const eventId = parseInt(formData.get('event_id'));
+    const taskId = parseInt(formData.get('task_id'));
+
+    const data = {
+        type: formData.get('type'),
+        data: formData.get('data')
+    };
+
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/events/${eventId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            closeEditEventModal();
+            await loadEvents(taskId);
+            showNotification('EVENT_UPDATED', 'success');
+        } else {
+            const error = await response.json();
+            showNotification(error.message || 'UPDATE_FAILED', 'error');
+        }
+    } catch (e) {
+        console.error('Failed to update event:', e);
+        showNotification('SYSTEM_ERROR', 'error');
+    }
+}
+
+async function deleteEvent(eventId, taskId) {
+    if (!confirm('WARNING: DELETE EVENT DATA. THIS ACTION IS IRREVERSIBLE. PROCEED?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/events/${eventId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok || response.status === 204) {
+            await loadEvents(taskId);
+            showNotification('EVENT_DELETED', 'success');
+        } else {
+            const error = await response.json();
+            showNotification(error.message || 'DELETE_FAILED', 'error');
+        }
+    } catch (e) {
+        console.error('Failed to delete event:', e);
         showNotification('SYSTEM_ERROR', 'error');
     }
 }

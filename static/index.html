@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap"
         rel="stylesheet">
 
     <!-- Local HTMX -->
@@ -42,9 +42,9 @@
                         'neon-red': '#ff003c',
                     },
                     fontFamily: {
-                        'mono': ['"JetBrains Mono"', 'monospace'],
-                        'display': ['"Orbitron"', 'sans-serif'],
-                        'body': ['"Rajdhani"', 'sans-serif'],
+                        'mono': ['"JetBrains Mono"', '"Noto Color Emoji"', 'monospace'],
+                        'display': ['"Orbitron"', '"Noto Sans SC"', '"Noto Color Emoji"', 'sans-serif'],
+                        'body': ['"Rajdhani"', '"Noto Sans SC"', '"Noto Color Emoji"', 'sans-serif'],
                     },
                     boxShadow: {
                         'neon-blue': '0 0 5px #00f3ff, 0 0 10px #00f3ff40',
@@ -64,7 +64,7 @@
                 linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
             background-size: 30px 30px;
             color: #e2e8f0;
-            font-family: 'Rajdhani', sans-serif;
+            font-family: 'Rajdhani', 'Noto Sans SC', 'Noto Color Emoji', sans-serif;
             overflow: hidden;
         }
 
@@ -125,7 +125,7 @@
         h4,
         h5,
         h6 {
-            font-family: 'Orbitron', sans-serif;
+            font-family: 'Orbitron', 'Noto Sans SC', 'Noto Color Emoji', sans-serif;
             letter-spacing: 0.05em;
         }
 
@@ -141,7 +141,7 @@
         .prose {
             color: #cbd5e1;
             max-width: none;
-            font-family: 'Rajdhani', sans-serif;
+            font-family: 'Rajdhani', 'Noto Sans SC', 'Noto Color Emoji', sans-serif;
             font-size: 1.1rem;
         }
 
@@ -149,7 +149,7 @@
         .prose h2,
         .prose h3 {
             color: #00f3ff;
-            font-family: 'Orbitron', sans-serif;
+            font-family: 'Orbitron', 'Noto Sans SC', 'Noto Color Emoji', sans-serif;
             border-bottom: 1px solid rgba(0, 243, 255, 0.2);
             padding-bottom: 0.5rem;
             margin-top: 1.5rem;
@@ -346,6 +346,14 @@
                 class="px-4 py-2 bg-sci-bg border border-neon-purple text-neon-purple hover:bg-neon-purple hover:text-white transition-all font-mono text-sm uppercase tracking-wider flex items-center gap-2 group">
                 <span class="w-2 h-2 bg-neon-purple rounded-full animate-pulse"></span>
                 Current Focus
+            </button>
+            <button onclick="refreshAllData()"
+                class="px-4 py-2 bg-sci-bg border border-neon-green text-neon-green hover:bg-neon-green hover:text-black transition-all font-mono text-sm uppercase tracking-wider flex items-center gap-2"
+                title="Refresh data (use after CLI/MCP operations)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                Refresh
             </button>
             <button onclick="openNewTaskModal()"
                 class="px-4 py-2 bg-neon-blue text-black font-bold hover:bg-white hover:shadow-neon-blue transition-all font-display text-sm uppercase tracking-wider clip-path-slant">
@@ -556,6 +564,117 @@
                             class="px-6 py-2 border border-sci-border text-slate-400 font-mono hover:text-white hover:border-white transition-colors">CANCEL</button>
                         <button type="submit"
                             class="px-6 py-2 bg-neon-purple text-white font-bold font-display hover:bg-white hover:text-black hover:shadow-neon-purple transition-all">COMMIT_LOG</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Event Modal -->
+    <div id="edit-event-modal"
+        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-sci-panel border border-neon-purple w-full max-w-2xl p-1 shadow-neon-purple relative">
+            <div class="bg-sci-bg p-6">
+                <div class="flex justify-between items-center mb-6 border-b border-sci-border pb-4">
+                    <h2 class="font-display text-xl text-white">MODIFY_EVENT_DATA</h2>
+                    <button onclick="closeEditEventModal()" class="text-slate-500 hover:text-neon-red transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <form id="edit-event-form" onsubmit="updateEvent(event)" class="space-y-4">
+                    <input type="hidden" name="task_id" id="edit-event-task-id">
+                    <input type="hidden" name="event_id" id="edit-event-id">
+                    <div>
+                        <label class="block font-mono text-xs text-neon-purple mb-1">EVENT_TYPE</label>
+                        <select name="type" id="edit-event-type" required
+                            class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono focus:border-neon-purple focus:outline-none">
+                            <option value="decision">DECISION</option>
+                            <option value="blocker">BLOCKER</option>
+                            <option value="milestone">MILESTONE</option>
+                            <option value="note">NOTE</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-mono text-xs text-neon-purple mb-1">DATA_STREAM [MARKDOWN]</label>
+                        <textarea name="data" id="edit-event-data" required rows="6"
+                            class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono text-sm focus:border-neon-purple focus:outline-none transition-colors resize-none"
+                            placeholder="// Enter event data..."></textarea>
+                    </div>
+                    <div class="flex justify-end gap-4 mt-6 pt-4 border-t border-sci-border">
+                        <button type="button" onclick="closeEditEventModal()"
+                            class="px-6 py-2 border border-sci-border text-slate-400 font-mono hover:text-white hover:border-white transition-colors">CANCEL</button>
+                        <button type="submit"
+                            class="px-6 py-2 bg-neon-purple text-white font-bold font-display hover:bg-white hover:text-black hover:shadow-neon-purple transition-all">UPDATE_LOG</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Task Modal -->
+    <div id="edit-task-modal"
+        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-sci-panel border border-yellow-500 w-full max-w-2xl p-1 shadow-yellow-500 relative">
+            <!-- Corner Accents -->
+            <div class="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-yellow-500"></div>
+            <div class="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-yellow-500"></div>
+            <div class="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-yellow-500"></div>
+            <div class="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-yellow-500"></div>
+
+            <div class="bg-sci-bg p-6">
+                <div class="flex justify-between items-center mb-6 border-b border-sci-border pb-4">
+                    <h2 class="font-display text-xl text-white">MODIFY_TASK_PARAMETERS</h2>
+                    <button onclick="closeEditTaskModal()" class="text-slate-500 hover:text-neon-red transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <form id="edit-task-form" onsubmit="updateTask(event)" class="space-y-4">
+                    <input type="hidden" name="task_id" id="edit-task-id">
+                    <div>
+                        <label class="block font-mono text-xs text-yellow-500 mb-1">TASK_DESIGNATION</label>
+                        <input type="text" name="name" id="edit-task-name" required
+                            class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono focus:border-yellow-500 focus:outline-none transition-colors"
+                            placeholder="ENTER_TASK_NAME">
+                    </div>
+                    <div>
+                        <label class="block font-mono text-xs text-yellow-500 mb-1">PARAMETERS [MARKDOWN]</label>
+                        <textarea name="spec" id="edit-task-spec" rows="6"
+                            class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono text-sm focus:border-yellow-500 focus:outline-none transition-colors resize-none"
+                            placeholder="// Enter specifications..."></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block font-mono text-xs text-yellow-500 mb-1">PRIORITY_LEVEL</label>
+                            <select name="priority" id="edit-task-priority"
+                                class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono focus:border-yellow-500 focus:outline-none">
+                                <option value="">DEFAULT</option>
+                                <option value="1">CRITICAL [L1]</option>
+                                <option value="2">HIGH [L2]</option>
+                                <option value="3">MEDIUM [L3]</option>
+                                <option value="4">LOW [L4]</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-mono text-xs text-yellow-500 mb-1">STATUS</label>
+                            <select name="status" id="edit-task-status"
+                                class="w-full bg-sci-panel border border-sci-border text-white px-4 py-2 font-mono focus:border-yellow-500 focus:outline-none">
+                                <option value="todo">TODO</option>
+                                <option value="doing">DOING</option>
+                                <option value="done">DONE</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-4 mt-6 pt-4 border-t border-sci-border">
+                        <button type="button" onclick="closeEditTaskModal()"
+                            class="px-6 py-2 border border-sci-border text-slate-400 font-mono hover:text-white hover:border-white transition-colors">CANCEL</button>
+                        <button type="submit"
+                            class="px-6 py-2 bg-yellow-500 text-black font-bold font-display hover:bg-white hover:shadow-yellow-500 transition-all">UPDATE</button>
                     </div>
                 </form>
             </div>

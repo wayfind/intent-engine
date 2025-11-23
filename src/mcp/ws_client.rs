@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
@@ -86,6 +87,10 @@ pub struct ProjectInfo {
     pub db_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// Whether this project has an active MCP connection
+    pub mcp_connected: bool,
+    /// Whether the Dashboard serving this project is online
+    pub is_online: bool,
 }
 
 /// Reconnection delays in seconds (exponential backoff with max)
@@ -97,6 +102,7 @@ pub async fn connect_to_dashboard(
     project_path: PathBuf,
     db_path: PathBuf,
     agent: Option<String>,
+    notification_rx: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
 ) -> Result<()> {
     // Validate project path once at the beginning
     let normalized_project_path = project_path
@@ -117,11 +123,21 @@ pub async fn connect_to_dashboard(
 
     let mut attempt = 0;
 
+    // Convert notification_rx to Option<Arc<Mutex<>>> for sharing across reconnections
+    let notification_rx = notification_rx.map(|rx| Arc::new(tokio::sync::Mutex::new(rx)));
+
     // Infinite reconnection loop
     loop {
         tracing::info!("Connecting to Dashboard (attempt {})...", attempt + 1);
 
-        match connect_and_run(project_path.clone(), db_path.clone(), agent.clone()).await {
+        match connect_and_run(
+            project_path.clone(),
+            db_path.clone(),
+            agent.clone(),
+            notification_rx.clone(),
+        )
+        .await
+        {
             Ok(()) => {
                 // Graceful close - reset attempt counter and retry immediately
                 tracing::info!("Dashboard connection closed gracefully, reconnecting...");
@@ -163,6 +179,7 @@ async fn connect_and_run(
     project_path: PathBuf,
     db_path: PathBuf,
     agent: Option<String>,
+    notification_rx: Option<Arc<tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<String>>>>,
 ) -> Result<()> {
     // Extract project name from path
     let project_name = project_path
@@ -183,6 +200,8 @@ async fn connect_and_run(
         name: project_name,
         db_path: normalized_db_path.to_string_lossy().to_string(),
         agent,
+        mcp_connected: true,
+        is_online: true,
     };
 
     // Connect to Dashboard WebSocket
@@ -257,90 +276,211 @@ async fn connect_and_run(
     // Spawn read/write task to handle messages and respond to pings
     // Protocol v1.0 Section 4.1.3: Dashboard sends ping, client responds with pong
     tokio::spawn(async move {
-        while let Some(Ok(msg)) = read.next().await {
-            match msg {
-                Message::Text(text) => {
-                    if let Ok(msg) =
-                        serde_json::from_str::<ProtocolMessage<serde_json::Value>>(&text)
-                    {
-                        match msg.message_type.as_str() {
-                            "ping" => {
-                                // Dashboard sent ping - respond with pong
-                                tracing::debug!(
-                                    "Received ping from Dashboard, responding with pong"
-                                );
-                                let pong_msg = ProtocolMessage::new("pong", EmptyPayload {});
-                                if let Ok(pong_json) = pong_msg.to_json() {
-                                    if write.send(Message::Text(pong_json)).await.is_err() {
-                                        tracing::warn!(
-                                            "Failed to send pong - Dashboard connection lost"
-                                        );
-                                        break;
-                                    }
-                                }
-                            },
-                            "error" => {
-                                // Dashboard sent an error
-                                if let Ok(error) =
-                                    serde_json::from_value::<ErrorPayload>(msg.payload)
+        loop {
+            // Handle notification channel if available
+            if let Some(ref rx) = notification_rx {
+                let mut rx_guard = rx.lock().await;
+                tokio::select! {
+                    msg_result = read.next() => {
+                        if let Some(Ok(msg)) = msg_result {
+                        match msg {
+                            Message::Text(text) => {
+                                if let Ok(msg) =
+                                    serde_json::from_str::<ProtocolMessage<serde_json::Value>>(&text)
                                 {
-                                    tracing::error!(
-                                        "Dashboard error [{}]: {}",
-                                        error.code,
-                                        error.message
-                                    );
-                                    if let Some(details) = error.details {
-                                        tracing::error!("  Details: {}", details);
-                                    }
-
-                                    // Handle critical errors
-                                    match error.code.as_str() {
-                                        "unsupported_version" => {
-                                            tracing::error!(
-                                                "Protocol version mismatch - connection will close"
+                                    match msg.message_type.as_str() {
+                                        "ping" => {
+                                            // Dashboard sent ping - respond with pong
+                                            tracing::debug!(
+                                                "Received ping from Dashboard, responding with pong"
                                             );
-                                            break;
+                                            let pong_msg = ProtocolMessage::new("pong", EmptyPayload {});
+                                            if let Ok(pong_json) = pong_msg.to_json() {
+                                                if write.send(Message::Text(pong_json)).await.is_err() {
+                                                    tracing::warn!(
+                                                        "Failed to send pong - Dashboard connection lost"
+                                                    );
+                                                    break;
+                                                }
+                                            }
                                         },
-                                        "invalid_path" => {
-                                            tracing::error!("Project path rejected by Dashboard");
+                                        "error" => {
+                                            // Dashboard sent an error
+                                            if let Ok(error) =
+                                                serde_json::from_value::<ErrorPayload>(msg.payload)
+                                            {
+                                                tracing::error!(
+                                                    "Dashboard error [{}]: {}",
+                                                    error.code,
+                                                    error.message
+                                                );
+                                                if let Some(details) = error.details {
+                                                    tracing::error!("  Details: {}", details);
+                                                }
+
+                                                // Handle critical errors
+                                                match error.code.as_str() {
+                                                    "unsupported_version" => {
+                                                        tracing::error!(
+                                                            "Protocol version mismatch - connection will close"
+                                                        );
+                                                        break;
+                                                    },
+                                                    "invalid_path" => {
+                                                        tracing::error!("Project path rejected by Dashboard");
+                                                        break;
+                                                    },
+                                                    _ => {
+                                                        // Non-critical errors, continue
+                                                    },
+                                                }
+                                            }
+                                        },
+                                        "goodbye" => {
+                                            // Dashboard is closing connection gracefully
+                                            if let Ok(goodbye) =
+                                                serde_json::from_value::<GoodbyePayload>(msg.payload)
+                                            {
+                                                if let Some(reason) = goodbye.reason {
+                                                    tracing::info!("Dashboard closing connection: {}", reason);
+                                                } else {
+                                                    tracing::info!("Dashboard closing connection gracefully");
+                                                }
+                                            }
                                             break;
                                         },
                                         _ => {
-                                            // Non-critical errors, continue
+                                            tracing::debug!(
+                                                "Received message from Dashboard: {} ({})",
+                                                msg.message_type,
+                                                text
+                                            );
                                         },
                                     }
+                                } else {
+                                    tracing::debug!("Received non-protocol message: {}", text);
                                 }
                             },
-                            "goodbye" => {
-                                // Dashboard is closing connection gracefully
-                                if let Ok(goodbye) =
-                                    serde_json::from_value::<GoodbyePayload>(msg.payload)
-                                {
-                                    if let Some(reason) = goodbye.reason {
-                                        tracing::info!("Dashboard closing connection: {}", reason);
-                                    } else {
-                                        tracing::info!("Dashboard closing connection gracefully");
-                                    }
-                                }
+                            Message::Close(_) => {
+                                tracing::info!("Dashboard closed connection");
                                 break;
                             },
-                            _ => {
-                                tracing::debug!(
-                                    "Received message from Dashboard: {} ({})",
-                                    msg.message_type,
-                                    text
-                                );
-                            },
+                            _ => {}
                         }
-                    } else {
-                        tracing::debug!("Received non-protocol message: {}", text);
+                        } else {
+                            // None or error - connection closed
+                            tracing::info!("Dashboard WebSocket stream ended");
+                            break;
+                        }
                     }
-                },
-                Message::Close(_) => {
-                    tracing::info!("Dashboard closed connection");
-                    break;
-                },
-                _ => {},
+                    notification_result = rx_guard.recv() => {
+                        if let Some(notification) = notification_result {
+                            // Send notification to Dashboard
+                            if let Err(e) = write.send(Message::Text(notification)).await {
+                                tracing::warn!("Failed to send notification to Dashboard: {}", e);
+                                break;
+                            }
+                            tracing::debug!("Sent db_operation notification to Dashboard");
+                        }
+                    }
+                }
+                drop(rx_guard); // Release the lock after select!
+            } else {
+                // No notification channel - only handle WebSocket messages
+                tokio::select! {
+                    msg_result = read.next() => {
+                        if let Some(Ok(msg)) = msg_result {
+                        match msg {
+                            Message::Text(text) => {
+                                if let Ok(msg) =
+                                    serde_json::from_str::<ProtocolMessage<serde_json::Value>>(&text)
+                                {
+                                    match msg.message_type.as_str() {
+                                        "ping" => {
+                                            // Dashboard sent ping - respond with pong
+                                            tracing::debug!(
+                                                "Received ping from Dashboard, responding with pong"
+                                            );
+                                            let pong_msg = ProtocolMessage::new("pong", EmptyPayload {});
+                                            if let Ok(pong_json) = pong_msg.to_json() {
+                                                if write.send(Message::Text(pong_json)).await.is_err() {
+                                                    tracing::warn!(
+                                                        "Failed to send pong - Dashboard connection lost"
+                                                    );
+                                                    break;
+                                                }
+                                            }
+                                        },
+                                        "error" => {
+                                            // Dashboard sent an error
+                                            if let Ok(error) =
+                                                serde_json::from_value::<ErrorPayload>(msg.payload)
+                                            {
+                                                tracing::error!(
+                                                    "Dashboard error [{}]: {}",
+                                                    error.code,
+                                                    error.message
+                                                );
+                                                if let Some(details) = error.details {
+                                                    tracing::error!("  Details: {}", details);
+                                                }
+
+                                                // Handle critical errors
+                                                match error.code.as_str() {
+                                                    "unsupported_version" => {
+                                                        tracing::error!(
+                                                            "Protocol version mismatch - connection will close"
+                                                        );
+                                                        break;
+                                                    },
+                                                    "invalid_path" => {
+                                                        tracing::error!("Project path rejected by Dashboard");
+                                                        break;
+                                                    },
+                                                    _ => {
+                                                        // Non-critical errors, continue
+                                                    },
+                                                }
+                                            }
+                                        },
+                                        "goodbye" => {
+                                            // Dashboard is closing connection gracefully
+                                            if let Ok(goodbye) =
+                                                serde_json::from_value::<GoodbyePayload>(msg.payload)
+                                            {
+                                                if let Some(reason) = goodbye.reason {
+                                                    tracing::info!("Dashboard closing connection: {}", reason);
+                                                } else {
+                                                    tracing::info!("Dashboard closing connection gracefully");
+                                                }
+                                            }
+                                            break;
+                                        },
+                                        _ => {
+                                            tracing::debug!(
+                                                "Received message from Dashboard: {} ({})",
+                                                msg.message_type,
+                                                text
+                                            );
+                                        },
+                                    }
+                                } else {
+                                    tracing::debug!("Received non-protocol message: {}", text);
+                                }
+                            },
+                            Message::Close(_) => {
+                                tracing::info!("Dashboard closed connection");
+                                break;
+                            }
+                            _ => {}
+                        }
+                        } else {
+                            // None or error - connection closed
+                            tracing::info!("Dashboard WebSocket stream ended");
+                            break;
+                        }
+                    }
+                }
             }
         }
     });

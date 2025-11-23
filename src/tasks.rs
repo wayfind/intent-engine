@@ -6,14 +6,166 @@ use crate::db::models::{
 use crate::error::{IntentError, Result};
 use chrono::Utc;
 use sqlx::{Row, SqlitePool};
+use std::sync::Arc;
 
 pub struct TaskManager<'a> {
     pool: &'a SqlitePool,
+    ws_state: Option<Arc<crate::dashboard::websocket::WebSocketState>>,
+    project_path: Option<String>,
+    mcp_notifier: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 }
 
 impl<'a> TaskManager<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            ws_state: None,
+            project_path: None,
+            mcp_notifier: None,
+        }
+    }
+
+    /// Create a TaskManager with MCP notification support
+    pub fn with_mcp_notifier(
+        pool: &'a SqlitePool,
+        project_path: String,
+        mcp_notifier: tokio::sync::mpsc::UnboundedSender<String>,
+    ) -> Self {
+        Self {
+            pool,
+            ws_state: None,
+            project_path: Some(project_path),
+            mcp_notifier: Some(mcp_notifier),
+        }
+    }
+
+    /// Create a TaskManager with WebSocket notification support
+    pub fn with_websocket(
+        pool: &'a SqlitePool,
+        ws_state: Arc<crate::dashboard::websocket::WebSocketState>,
+        project_path: String,
+    ) -> Self {
+        Self {
+            pool,
+            ws_state: Some(ws_state),
+            project_path: Some(project_path),
+            mcp_notifier: None,
+        }
+    }
+
+    /// Internal helper: Notify UI about task creation
+    async fn notify_task_created(&self, task: &Task) {
+        use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage};
+
+        // Prepare notification payload
+        let task_json = match serde_json::to_value(task) {
+            Ok(json) => json,
+            Err(e) => {
+                tracing::warn!("Failed to serialize task for notification: {}", e);
+                return;
+            },
+        };
+
+        let project_path = match &self.project_path {
+            Some(path) => path.clone(),
+            None => return, // No project path configured
+        };
+
+        let payload =
+            DatabaseOperationPayload::task_created(task.id, task_json, project_path.clone());
+        let msg = ProtocolMessage::new("db_operation", payload);
+        let json = match msg.to_json() {
+            Ok(j) => j,
+            Err(e) => {
+                tracing::warn!("Failed to serialize notification message: {}", e);
+                return;
+            },
+        };
+
+        // Send via Dashboard WebSocket (if available)
+        if let Some(ws) = &self.ws_state {
+            ws.broadcast_to_ui(&json).await;
+        }
+
+        // Send via MCP WebSocket (if available) - non-blocking
+        if let Some(notifier) = &self.mcp_notifier {
+            if let Err(e) = notifier.send(json) {
+                tracing::debug!("Failed to send MCP notification (channel closed): {}", e);
+            }
+        }
+    }
+
+    /// Internal helper: Notify UI about task update
+    async fn notify_task_updated(&self, task: &Task) {
+        use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage};
+
+        let task_json = match serde_json::to_value(task) {
+            Ok(json) => json,
+            Err(e) => {
+                tracing::warn!("Failed to serialize task for notification: {}", e);
+                return;
+            },
+        };
+
+        let project_path = match &self.project_path {
+            Some(path) => path.clone(),
+            None => return,
+        };
+
+        let payload =
+            DatabaseOperationPayload::task_updated(task.id, task_json, project_path.clone());
+        let msg = ProtocolMessage::new("db_operation", payload);
+        let json = match msg.to_json() {
+            Ok(j) => j,
+            Err(e) => {
+                tracing::warn!("Failed to serialize notification message: {}", e);
+                return;
+            },
+        };
+
+        // Send via Dashboard WebSocket (if available)
+        if let Some(ws) = &self.ws_state {
+            ws.broadcast_to_ui(&json).await;
+        }
+
+        // Send via MCP WebSocket (if available) - non-blocking
+        if let Some(notifier) = &self.mcp_notifier {
+            if let Err(e) = notifier.send(json) {
+                tracing::debug!("Failed to send MCP notification (channel closed): {}", e);
+            }
+        }
+    }
+
+    /// Internal helper: Notify UI about task deletion
+    async fn notify_task_deleted(&self, task_id: i64) {
+        use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage};
+
+        let project_path = match &self.project_path {
+            Some(path) => path.clone(),
+            None => return,
+        };
+
+        let payload = DatabaseOperationPayload::task_deleted(task_id, project_path.clone());
+        let msg = ProtocolMessage::new("db_operation", payload);
+        let json = match msg.to_json() {
+            Ok(j) => j,
+            Err(e) => {
+                tracing::warn!("Failed to serialize notification message: {}", e);
+                return;
+            },
+        };
+
+        // Send via Dashboard WebSocket (if available)
+        if let Some(ws) = &self.ws_state {
+            ws.broadcast_to_ui(&json).await;
+        }
+
+        // Send via MCP WebSocket (if available) - non-blocking
+        if let Some(notifier) = &self.mcp_notifier {
+            if let Err(e) = notifier.send(json) {
+                tracing::debug!("Failed to send MCP notification (channel closed): {}", e);
+            }
+        }
     }
 
     /// Add a new task
@@ -44,7 +196,12 @@ impl<'a> TaskManager<'a> {
         .await?;
 
         let id = result.last_insert_rowid();
-        self.get_task(id).await
+        let task = self.get_task(id).await?;
+
+        // Notify WebSocket clients about the new task
+        self.notify_task_created(&task).await;
+
+        Ok(task)
     }
 
     /// Get a task by ID
@@ -348,7 +505,12 @@ impl<'a> TaskManager<'a> {
 
         builder.build().execute(self.pool).await?;
 
-        self.get_task(id).await
+        let task = self.get_task(id).await?;
+
+        // Notify WebSocket clients about the task update
+        self.notify_task_updated(&task).await;
+
+        Ok(task)
     }
 
     /// Delete a task
@@ -359,6 +521,9 @@ impl<'a> TaskManager<'a> {
             .bind(id)
             .execute(self.pool)
             .await?;
+
+        // Notify WebSocket clients about the task deletion
+        self.notify_task_deleted(id).await;
 
         Ok(())
     }

@@ -1580,8 +1580,7 @@ async fn check_dashboard_health(port: u16) -> bool {
 }
 
 async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()> {
-    use chrono::Utc;
-    use intent_engine::dashboard::{daemon, registry::*};
+    use intent_engine::dashboard::daemon;
 
     match dashboard_cmd {
         DashboardCommands::Start {
@@ -1599,60 +1598,34 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 .unwrap_or("unknown")
                 .to_string();
 
-            // Load or create registry
-            let mut registry = ProjectRegistry::load()?;
+            // Allocate port (always 11391, or custom if specified)
+            let allocated_port = port.unwrap_or(11391);
 
-            // Check if already running using HTTP health check
-            if let Some(existing) = registry.find_by_path(&project_path) {
-                if check_dashboard_health(existing.port).await {
+            // Check if already running using PID file + HTTP health check
+            if let Ok(Some(existing_pid)) = daemon::read_pid_file(allocated_port) {
+                if check_dashboard_health(allocated_port).await {
                     println!("Dashboard already running for this project:");
-                    println!("  Port: {}", existing.port);
-                    if let Some(pid) = existing.pid {
-                        println!("  PID: {}", pid);
-                    }
-                    println!("  URL: http://127.0.0.1:{}", existing.port);
+                    println!("  Port: {}", allocated_port);
+                    println!("  PID: {}", existing_pid);
+                    println!("  URL: http://127.0.0.1:{}", allocated_port);
                     return Ok(());
                 } else {
-                    // Dashboard not responding, clean up stale state
+                    // Dashboard not responding, clean up stale PID file
                     tracing::info!(
-                        "Cleaning up stale Dashboard state for {}",
-                        project_path.display()
+                        "Cleaning up stale Dashboard PID file for port {}",
+                        allocated_port
                     );
-                    daemon::delete_pid_file(existing.port).ok();
-                    registry.unregister(&project_path);
+                    daemon::delete_pid_file(allocated_port).ok();
                 }
             }
 
-            // Allocate port (always 11391, or custom if specified)
-            let allocated_port = if let Some(custom_port) = port {
-                // Custom port specified - check if available
-                if !ProjectRegistry::is_port_available(custom_port) {
-                    return Err(IntentError::InvalidInput(format!(
-                        "Port {} is already in use",
-                        custom_port
-                    )));
-                }
-                custom_port
-            } else {
-                // Use default fixed port (11391)
-                registry.allocate_port()?
-            };
-
-            // Register project
-            let registered_project = RegisteredProject {
-                path: project_path.clone(),
-                name: project_name.clone(),
-                port: allocated_port,
-                pid: None, // Will be set after server starts
-                started_at: Utc::now().to_rfc3339(),
-                db_path: db_path.clone(),
-                mcp_connected: false,
-                mcp_last_seen: None,
-                mcp_agent: None,
-            };
-
-            registry.register(registered_project);
-            registry.save()?;
+            // Check if port is available
+            if std::net::TcpListener::bind(("127.0.0.1", allocated_port)).is_err() {
+                return Err(IntentError::InvalidInput(format!(
+                    "Port {} is already in use",
+                    allocated_port
+                )));
+            }
 
             println!("Dashboard starting for project: {}", project_name);
             println!("  Port: {}", allocated_port);
@@ -1688,12 +1661,8 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                     println!();
                 }
 
-                // Update registry with current PID
+                // Write PID file
                 let current_pid = std::process::id();
-                if let Some(project) = registry.find_by_path_mut(&project_path) {
-                    project.pid = Some(current_pid);
-                    registry.save()?;
-                }
                 daemon::write_pid_file(allocated_port, current_pid)?;
 
                 // Run server (blocks until terminated)
@@ -1701,8 +1670,6 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
 
                 // Cleanup on exit
                 daemon::delete_pid_file(allocated_port).ok();
-                registry.unregister(&project_path);
-                registry.save().ok();
 
                 result.map_err(IntentError::OtherError)?;
                 Ok(())
@@ -1799,11 +1766,7 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 #[cfg(not(unix))]
                 let pid = _setsid_pid;
 
-                // Update registry with PID
-                if let Some(project) = registry.find_by_path_mut(&project_path) {
-                    project.pid = Some(pid);
-                    registry.save()?;
-                }
+                // Write PID file
                 daemon::write_pid_file(allocated_port, pid)?;
 
                 // Wait a moment for server to initialize, then check health
@@ -1828,8 +1791,6 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                 } else {
                     // Server failed to start
                     daemon::delete_pid_file(allocated_port).ok();
-                    registry.unregister(&project_path);
-                    registry.save().ok();
                     return Err(IntentError::InvalidInput(
                         "Failed to start dashboard server".to_string(),
                     ));
@@ -1840,208 +1801,236 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
         },
 
         DashboardCommands::Stop { all } => {
-            let mut registry = ProjectRegistry::load()?;
+            // Single Dashboard architecture: all uses fixed port 11391
+            let port = 11391;
 
             if all {
-                // Stop all dashboards
-                let projects: Vec<_> = registry.list_all().to_vec();
-                let mut stopped_count = 0;
+                println!(
+                    "⚠️  Note: Single Dashboard mode - stopping Dashboard on port {}",
+                    port
+                );
+            }
 
-                for project in projects {
-                    // Check if dashboard is actually running via HTTP health check
-                    let is_healthy = check_dashboard_health(project.port).await;
-
-                    if is_healthy {
-                        if let Some(pid) = project.pid {
-                            if let Err(e) = daemon::stop_process(pid) {
-                                eprintln!("Failed to stop {} (PID {}): {}", project.name, pid, e);
-                            } else {
-                                println!("Stopped dashboard for: {}", project.name);
-                                stopped_count += 1;
-                            }
-                        } else {
-                            eprintln!("Dashboard running but no PID recorded for {}", project.name);
-                        }
+            // Check if dashboard is running via PID file + HTTP health check
+            match daemon::read_pid_file(port) {
+                Ok(Some(pid)) => {
+                    // PID file exists - check if dashboard is actually running
+                    if check_dashboard_health(port).await {
+                        // Dashboard is healthy - stop it
+                        daemon::stop_process(pid)?;
+                        println!("✓ Stopped dashboard (PID: {})", pid);
                     } else {
-                        tracing::debug!(
-                            "Dashboard for {} not responding, cleaning up stale state",
-                            project.name
+                        // Dashboard not responding - clean up stale PID
+                        println!(
+                            "⚠️  Dashboard not responding (stale PID: {}), cleaning up",
+                            pid
                         );
                     }
-
-                    daemon::delete_pid_file(project.port).ok();
-                    registry.unregister(&project.path);
-                }
-
-                registry.save()?;
-                println!("Stopped {} dashboard(s)", stopped_count);
-            } else {
-                // Stop dashboard for current project
-                let project_ctx = ProjectContext::load_or_init().await?;
-                let project_path = project_ctx.root.clone();
-
-                if let Some(project) = registry.find_by_path(&project_path) {
-                    let port = project.port;
-                    let pid = project.pid;
-
-                    // Check if dashboard is actually running via HTTP health check
+                    daemon::delete_pid_file(port).ok();
+                },
+                Ok(None) => {
+                    // No PID file - check if something is listening on port anyway
                     if check_dashboard_health(port).await {
-                        if let Some(pid) = pid {
-                            daemon::stop_process(pid)?;
-                            println!("Stopped dashboard (PID: {})", pid);
-                        } else {
-                            println!("Dashboard running but no PID recorded");
-                        }
-                    } else if let Some(pid) = pid {
-                        println!("Dashboard not responding (stale PID: {}), cleaning up", pid);
+                        println!(
+                            "⚠️  Dashboard running but no PID file found (port {})",
+                            port
+                        );
+                        println!(
+                            "   Try killing the process manually or use: lsof -ti:{} | xargs kill",
+                            port
+                        );
+                        return Err(IntentError::InvalidInput(
+                            "Dashboard running without PID file".to_string(),
+                        ));
                     } else {
                         println!("Dashboard not running");
                     }
-
-                    daemon::delete_pid_file(port).ok();
-                    registry.unregister(&project_path);
-                    registry.save()?;
-                } else {
-                    eprintln!("No dashboard running for current project");
-                    return Err(IntentError::InvalidInput(
-                        "No dashboard instance found".to_string(),
-                    ));
-                }
+                },
+                Err(e) => {
+                    tracing::debug!("Error reading PID file: {}", e);
+                    println!("Dashboard not running");
+                },
             }
 
             Ok(())
         },
 
         DashboardCommands::Status { all } => {
-            let mut registry = ProjectRegistry::load()?;
-
-            // Clean up unhealthy dashboards via HTTP health checks
-            registry.cleanup_unhealthy_dashboards().await;
-            registry.save()?;
+            // Single Dashboard architecture: check fixed port 11391
+            let port = 11391;
 
             if all {
-                // Show all dashboards
-                let projects = registry.list_all();
+                println!(
+                    "⚠️  Note: Single Dashboard mode - showing status for port {}",
+                    port
+                );
+            }
 
-                if projects.is_empty() {
-                    println!("No dashboard instances registered");
-                    return Ok(());
-                }
-
-                println!("Dashboard instances:");
-                for project in projects {
-                    // Check dashboard health via HTTP
-                    let status = if check_dashboard_health(project.port).await {
-                        if let Some(pid) = project.pid {
-                            format!("✓ Running (PID: {})", pid)
-                        } else {
-                            "✓ Running".to_string()
+            // Check if dashboard is running via PID file + HTTP health check
+            match daemon::read_pid_file(port) {
+                Ok(Some(pid)) => {
+                    // PID file exists - check if dashboard is actually running
+                    if check_dashboard_health(port).await {
+                        // Dashboard is healthy - get project info via API
+                        let url = format!("http://127.0.0.1:{}/api/info", port);
+                        match reqwest::get(&url).await {
+                            Ok(response) if response.status().is_success() => {
+                                #[derive(serde::Deserialize)]
+                                struct InfoResponse {
+                                    data: serde_json::Value,
+                                }
+                                if let Ok(info) = response.json::<InfoResponse>().await {
+                                    println!("Dashboard status:");
+                                    println!("  Status: ✓ Running (PID: {})", pid);
+                                    println!("  Port: {}", port);
+                                    println!("  URL: http://127.0.0.1:{}", port);
+                                    if let Some(project_name) = info.data.get("project_name") {
+                                        println!("  Project: {}", project_name);
+                                    }
+                                    if let Some(project_path) = info.data.get("project_path") {
+                                        println!("  Path: {}", project_path);
+                                    }
+                                } else {
+                                    println!("Dashboard status:");
+                                    println!("  Status: ✓ Running (PID: {})", pid);
+                                    println!("  Port: {}", port);
+                                    println!("  URL: http://127.0.0.1:{}", port);
+                                }
+                            },
+                            _ => {
+                                println!("Dashboard status:");
+                                println!("  Status: ✓ Running (PID: {})", pid);
+                                println!("  Port: {}", port);
+                                println!("  URL: http://127.0.0.1:{}", port);
+                            },
                         }
                     } else {
-                        "✗ Stopped".to_string()
-                    };
-
-                    println!("\n  Project: {}", project.name);
-                    println!("    Path: {}", project.path.display());
-                    println!("    Port: {}", project.port);
-                    println!("    Status: {}", status);
-                    println!("    Started: {}", project.started_at);
-                    println!("    URL: http://127.0.0.1:{}", project.port);
-                }
-            } else {
-                // Show status for current project
-                let project_ctx = ProjectContext::load_or_init().await?;
-                let project_path = project_ctx.root.clone();
-
-                if let Some(project) = registry.find_by_path(&project_path) {
-                    // Check dashboard health via HTTP
-                    let status = if check_dashboard_health(project.port).await {
-                        if let Some(pid) = project.pid {
-                            format!("✓ Running (PID: {})", pid)
-                        } else {
-                            "✓ Running".to_string()
-                        }
-                    } else {
-                        "✗ Stopped".to_string()
-                    };
-
+                        println!("Dashboard status:");
+                        println!("  Status: ✗ Stopped (stale PID: {})", pid);
+                        println!("  Port: {}", port);
+                    }
+                },
+                Ok(None) => {
                     println!("Dashboard status:");
-                    println!("  Project: {}", project.name);
-                    println!("  Port: {}", project.port);
-                    println!("  Status: {}", status);
-                    println!("  URL: http://127.0.0.1:{}", project.port);
-                } else {
-                    println!("No dashboard running for current project");
-                }
+                    println!("  Status: ✗ Not running");
+                    println!("  Port: {}", port);
+                },
+                Err(e) => {
+                    tracing::debug!("Error reading PID file: {}", e);
+                    println!("Dashboard status:");
+                    println!("  Status: ✗ Not running");
+                    println!("  Port: {}", port);
+                },
             }
 
             Ok(())
         },
 
         DashboardCommands::List => {
-            let mut registry = ProjectRegistry::load()?;
+            // Single Dashboard architecture: check fixed port 11391
+            let port = 11391;
 
-            // Clean up unhealthy dashboards via HTTP health checks
-            registry.cleanup_unhealthy_dashboards().await;
-            registry.save()?;
-
-            let projects = registry.list_all();
-
-            if projects.is_empty() {
-                println!("No dashboard instances registered");
+            // Check if dashboard is running
+            if !check_dashboard_health(port).await {
+                println!("Dashboard not running");
+                println!("\nUse 'ie dashboard start' to start the Dashboard");
                 return Ok(());
             }
 
-            println!("Registered dashboard instances:");
-            println!("{:<30} {:<8} {:<12} PATH", "PROJECT", "PORT", "STATUS");
-            println!("{}", "-".repeat(80));
+            // Get PID if available
+            let pid = daemon::read_pid_file(port).ok().flatten();
 
-            for project in projects {
-                // Check dashboard health via HTTP
-                let status = if check_dashboard_health(project.port).await {
-                    "Running"
-                } else {
-                    "Stopped"
-                };
+            // Get project list via API
+            let url = format!("http://127.0.0.1:{}/api/projects", port);
+            match reqwest::get(&url).await {
+                Ok(response) if response.status().is_success() => {
+                    #[derive(serde::Deserialize)]
+                    struct ApiResponse {
+                        data: Vec<serde_json::Value>,
+                    }
+                    match response.json::<ApiResponse>().await {
+                        Ok(api_response) => {
+                            if api_response.data.is_empty() {
+                                println!("Dashboard running but no projects registered");
+                                if let Some(pid) = pid {
+                                    println!("  PID: {}", pid);
+                                }
+                                println!("  Port: {}", port);
+                                println!("  URL: http://127.0.0.1:{}", port);
+                                return Ok(());
+                            }
 
-                println!(
-                    "{:<30} {:<8} {:<12} {}",
-                    project.name,
-                    project.port,
-                    status,
-                    project.path.display()
-                );
+                            println!("Dashboard projects:");
+                            println!("{:<30} {:<8} {:<15} MCP", "PROJECT", "PORT", "STATUS");
+                            println!("{}", "-".repeat(80));
+
+                            for project in api_response.data {
+                                let name = project
+                                    .get("name")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown");
+                                let mcp_connected = project
+                                    .get("mcp_connected")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false);
+                                let mcp_status = if mcp_connected {
+                                    "✓ Connected"
+                                } else {
+                                    "✗ Disconnected"
+                                };
+
+                                println!(
+                                    "{:<30} {:<8} {:<15} {}",
+                                    name, port, "Running", mcp_status
+                                );
+
+                                if let Some(path) = project.get("path").and_then(|v| v.as_str()) {
+                                    println!("  Path: {}", path);
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!("Failed to parse projects list: {}", e);
+                            println!("Dashboard running on port {}", port);
+                            if let Some(pid) = pid {
+                                println!("  PID: {}", pid);
+                            }
+                        },
+                    }
+                },
+                Ok(response) => {
+                    eprintln!("Failed to get projects list: HTTP {}", response.status());
+                    println!("Dashboard running on port {}", port);
+                    if let Some(pid) = pid {
+                        println!("  PID: {}", pid);
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Failed to connect to Dashboard API: {}", e);
+                    println!("Dashboard may not be running properly on port {}", port);
+                },
             }
 
             Ok(())
         },
 
         DashboardCommands::Open => {
-            let registry = ProjectRegistry::load()?;
-            let project_ctx = ProjectContext::load_or_init().await?;
-            let project_path = project_ctx.root.clone();
+            // Single Dashboard architecture: use fixed port 11391
+            let port = 11391;
 
-            if let Some(project) = registry.find_by_path(&project_path) {
-                // Check if dashboard is running via HTTP health check
-                if !check_dashboard_health(project.port).await {
-                    eprintln!("Dashboard is not running");
-                    eprintln!("Start it with: ie dashboard start");
-                    return Err(IntentError::InvalidInput(
-                        "Dashboard not running".to_string(),
-                    ));
-                }
-
-                let url = format!("http://127.0.0.1:{}", project.port);
-                println!("Opening dashboard: {}", url);
-
-                daemon::open_browser(&url)?;
-            } else {
-                eprintln!("No dashboard registered for current project");
+            // Check if dashboard is running via HTTP health check
+            if !check_dashboard_health(port).await {
+                eprintln!("Dashboard is not running");
                 eprintln!("Start it with: ie dashboard start");
                 return Err(IntentError::InvalidInput(
-                    "No dashboard instance found".to_string(),
+                    "Dashboard not running".to_string(),
                 ));
             }
+
+            let url = format!("http://127.0.0.1:{}", port);
+            println!("Opening dashboard: {}", url);
+
+            daemon::open_browser(&url)?;
 
             Ok(())
         },

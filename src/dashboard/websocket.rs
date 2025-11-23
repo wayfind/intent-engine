@@ -280,6 +280,121 @@ pub mod error_codes {
     pub const INTERNAL_ERROR: &str = "internal_error";
 }
 
+/// Payload for database operation notifications
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DatabaseOperationPayload {
+    /// Operation type: create, read, update, delete
+    pub operation: String,
+
+    /// Entity type: task, event
+    pub entity: String,
+
+    /// List of affected IDs
+    pub affected_ids: Vec<i64>,
+
+    /// Full data for create/update operations
+    /// Empty for delete operations
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
+
+    /// Project path (for multi-project scenarios)
+    pub project_path: String,
+}
+
+impl DatabaseOperationPayload {
+    /// Create a new database operation payload
+    pub fn new(
+        operation: impl Into<String>,
+        entity: impl Into<String>,
+        affected_ids: Vec<i64>,
+        data: Option<serde_json::Value>,
+        project_path: impl Into<String>,
+    ) -> Self {
+        Self {
+            operation: operation.into(),
+            entity: entity.into(),
+            affected_ids,
+            data,
+            project_path: project_path.into(),
+        }
+    }
+
+    /// Helper: Create payload for task created
+    pub fn task_created(
+        task_id: i64,
+        task_data: serde_json::Value,
+        project_path: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            "create",
+            "task",
+            vec![task_id],
+            Some(task_data),
+            project_path,
+        )
+    }
+
+    /// Helper: Create payload for task updated
+    pub fn task_updated(
+        task_id: i64,
+        task_data: serde_json::Value,
+        project_path: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            "update",
+            "task",
+            vec![task_id],
+            Some(task_data),
+            project_path,
+        )
+    }
+
+    /// Helper: Create payload for task deleted
+    pub fn task_deleted(task_id: i64, project_path: impl Into<String>) -> Self {
+        Self::new("delete", "task", vec![task_id], None, project_path)
+    }
+
+    /// Helper: Create payload for task read
+    pub fn task_read(task_id: i64, project_path: impl Into<String>) -> Self {
+        Self::new("read", "task", vec![task_id], None, project_path)
+    }
+
+    /// Helper: Create payload for event created
+    pub fn event_created(
+        event_id: i64,
+        event_data: serde_json::Value,
+        project_path: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            "create",
+            "event",
+            vec![event_id],
+            Some(event_data),
+            project_path,
+        )
+    }
+
+    /// Helper: Create payload for event updated
+    pub fn event_updated(
+        event_id: i64,
+        event_data: serde_json::Value,
+        project_path: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            "update",
+            "event",
+            vec![event_id],
+            Some(event_data),
+            project_path,
+        )
+    }
+
+    /// Helper: Create payload for event deleted
+    pub fn event_deleted(event_id: i64, project_path: impl Into<String>) -> Self {
+        Self::new("delete", "event", vec![event_id], None, project_path)
+    }
+}
+
 // ============================================================================
 // Helper Functions for Sending Protocol Messages
 // ============================================================================
@@ -520,6 +635,14 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                             }
                             // Break loop to close connection
                             break;
+                        },
+                        "db_operation" => {
+                            // MCP client is notifying about a database operation
+                            // Forward directly to all UI clients for real-time updates
+                            tracing::debug!(
+                                "Received db_operation from MCP, forwarding to UI clients"
+                            );
+                            state_for_recv.broadcast_to_ui(&text).await;
                         },
                         _ => {
                             tracing::warn!("Unknown message type: {}", parsed_msg.message_type);
