@@ -191,9 +191,9 @@ fn get_online_projects(port: u16) -> Vec<serde_json::Value> {
     match reqwest::blocking::get(&url) {
         Ok(response) => {
             if response.status().is_success() {
-                response
-                    .json::<Vec<serde_json::Value>>()
-                    .unwrap_or_default()
+                // API returns {"data": [...]} format
+                let json: serde_json::Value = response.json().unwrap_or_default();
+                json["data"].as_array().cloned().unwrap_or_default()
             } else {
                 Vec::new()
             }
