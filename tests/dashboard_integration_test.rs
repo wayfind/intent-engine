@@ -184,7 +184,27 @@ fn check_dashboard_health(port: u16) -> bool {
         .unwrap_or(false)
 }
 
+/// Get online projects from Dashboard HTTP API
+/// This replaces the old Registry file approach since febf9f9 refactoring
+fn get_online_projects(port: u16) -> Vec<serde_json::Value> {
+    let url = format!("http://127.0.0.1:{}/api/projects", port);
+    match reqwest::blocking::get(&url) {
+        Ok(response) => {
+            if response.status().is_success() {
+                response
+                    .json::<Vec<serde_json::Value>>()
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            }
+        },
+        Err(_) => Vec::new(),
+    }
+}
+
 /// Load the global registry file
+/// NOTE: This is DEPRECATED as of febf9f9 refactoring
+/// The Registry file is no longer used - use get_online_projects() instead
 fn load_registry() -> ProjectRegistry {
     let registry_path = dirs::home_dir()
         .expect("Failed to get home directory")
@@ -268,17 +288,20 @@ fn test_mcp_connects_to_dashboard_and_registers_project() {
     // Initialize project
     init_project(&test_dir);
 
-    // Get registry state before starting
-    let registry_before = load_registry();
-    let project_path_str = test_dir.to_string_lossy().to_string();
-    let was_registered_before = registry_before
-        .projects
-        .iter()
-        .any(|p| p.path.to_string_lossy() == project_path_str);
+    // Canonicalize path for comparison (handles symlinks, WSL paths, etc.)
+    let canonical_path = test_dir.canonicalize().unwrap_or_else(|_| test_dir.clone());
+    let canonical_path_str = canonical_path.to_string_lossy().to_string();
+    let port = 11391; // Fixed Dashboard port
 
     // Start Dashboard
     let (mut dashboard, stdout_path, stderr_path) = start_dashboard(&test_dir);
     wait_for_dashboard_ready(&stdout_path, &stderr_path, &mut dashboard);
+
+    // Get online projects before MCP connection
+    let projects_before = get_online_projects(port);
+    let was_registered_before = projects_before
+        .iter()
+        .any(|p| p["path"].as_str() == Some(&canonical_path_str));
 
     // Start MCP server (NOT isolated - allows WebSocket connection)
     let mcp = start_mcp_server(&test_dir, false);
@@ -286,24 +309,26 @@ fn test_mcp_connects_to_dashboard_and_registers_project() {
     // Wait for WebSocket connection to establish
     std::thread::sleep(Duration::from_secs(3));
 
-    // Verify project is registered in Registry
-    let registry_after = load_registry();
-    let is_registered_after = registry_after
-        .projects
+    // Verify project is registered via Dashboard API
+    let projects_after = get_online_projects(port);
+    let is_registered_after = projects_after
         .iter()
-        .any(|p| p.path.to_string_lossy() == project_path_str);
+        .any(|p| p["path"].as_str() == Some(&canonical_path_str));
 
     assert!(
         is_registered_after,
         "Project should be registered in Dashboard after MCP connection.\n\
+         Test dir: {:?}\n\
+         Canonical: {:?}\n\
          Before: {}, After: {}\n\
-         Registry projects: {:?}",
+         Online projects: {:?}",
+        test_dir,
+        canonical_path,
         was_registered_before,
         is_registered_after,
-        registry_after
-            .projects
+        projects_after
             .iter()
-            .map(|p| &p.path)
+            .map(|p| p["path"].as_str().unwrap_or("unknown"))
             .collect::<Vec<_>>()
     );
 
