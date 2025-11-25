@@ -41,12 +41,16 @@ Example output:
 ```
 Dashboard starting for project: my-project
   Port: 11391
-  URL: http://127.0.0.1:11391
+  URL: http://localhost:11391
   Mode: background
 
 ✅ Dashboard server started successfully
    PID: 12345
-   URL: http://127.0.0.1:11391
+   URL: http://localhost:11391
+
+⚠️  Dashboard is accessible from external IPs. Access via:
+    - http://localhost:11391 (local)
+    - http://<your-ip>:11391 (from other devices)
 
 Tip: Use 'ie dashboard status' to check server status
 Tip: Use 'ie dashboard stop' to stop the server
@@ -54,7 +58,13 @@ Tip: Use 'ie dashboard stop' to stop the server
 
 ### 2. Access the Dashboard
 
-Open your web browser and navigate to the URL shown (e.g., `http://127.0.0.1:11391`).
+Open your web browser and navigate to the URL shown (e.g., `http://localhost:11391`).
+
+**Network Access**:
+- Local access: `http://localhost:11391`
+- From other devices: `http://<your-machine-ip>:11391` (e.g., from Windows host when running in WSL)
+
+⚠️ **Security Notice**: The Dashboard is accessible from your local network. There is no authentication in Phase 1. Only run the Dashboard on trusted networks.
 
 You'll see the Dashboard interface with:
 - **Left Sidebar**: Task list with filters
@@ -422,9 +432,10 @@ ie dashboard stop
    ie dashboard status
    ```
 
-2. **Check firewall**:
-   - Dashboard binds to `127.0.0.1` (localhost only)
-   - No external access by default
+2. **Check network access**:
+   - Dashboard binds to `0.0.0.0` (accessible from network)
+   - Verify firewall allows port 11391 if accessing from external devices
+   - Test local access first: `http://localhost:11391`
 
 3. **Try another browser**:
    - Tested: Chrome, Firefox, Safari, Edge
@@ -475,9 +486,11 @@ ie task done               # Now you can complete parent
    - Phase 2+ will add WebSocket support
 
 2. **No Authentication**
-   - Localhost only (127.0.0.1)
-   - Not suitable for multi-user setups
-   - Phase 2+ will add API keys and JWT
+   - ⚠️ **Security Warning**: Dashboard is accessible from your local network without authentication
+   - Binds to `0.0.0.0` (all network interfaces) for development convenience
+   - **Not suitable for untrusted networks or multi-user setups**
+   - **Recommendation**: Only run on trusted networks (e.g., home network, private VPN)
+   - Phase 2+ will add API keys and JWT authentication
 
 3. **Basic Error Handling**
    - Errors shown via browser alerts

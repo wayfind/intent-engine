@@ -70,13 +70,21 @@ fn setup_empty_project() -> TempDir {
         .success();
 
     // Reset the SQLite auto-increment sequence so next task ID is 1
-    use std::process::Command as StdCommand;
+    // Use sqlx directly instead of relying on sqlite3 CLI tool
     let db_path = temp_dir.path().join(".intent-engine/project.db");
-    StdCommand::new("sqlite3")
-        .arg(&db_path)
-        .arg("UPDATE sqlite_sequence SET seq = 0 WHERE name = 'tasks';")
-        .output()
-        .ok(); // Ignore errors if sqlite3 not available
+    let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+    // Use tokio runtime to execute async code
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        use sqlx::SqlitePool;
+        if let Ok(pool) = SqlitePool::connect(&db_url).await {
+            let _ = sqlx::query("UPDATE sqlite_sequence SET seq = 0 WHERE name = 'tasks'")
+                .execute(&pool)
+                .await;
+            pool.close().await;
+        }
+    });
 
     temp_dir
 }
