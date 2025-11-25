@@ -1,13 +1,19 @@
 # Dashboard API Reference
 
 **Version**: 0.5.0 (Phase 1 MVP)
-**Base URL**: `http://127.0.0.1:<PORT>/api`
+**Base URL**: `http://localhost:<PORT>/api` or `http://<your-ip>:<PORT>/api`
+
+⚠️ **Security Notice**: The Dashboard API is accessible from your local network without authentication. Only use on trusted networks.
 
 ---
 
 ## Overview
 
 The Intent-Engine Dashboard provides a RESTful API for managing tasks and events. All endpoints return JSON responses with a consistent structure.
+
+**Network Access**:
+- Local: `http://localhost:11391/api` (default port)
+- Network: `http://<your-machine-ip>:11391/api` (e.g., from Windows host when running in WSL)
 
 ### Response Format
 
@@ -472,7 +478,11 @@ GET /api/search?query=JWT AND token&include_events=false
 
 ## Authentication
 
-**Phase 1**: No authentication required. Dashboard binds to `127.0.0.1` (localhost only).
+**Phase 1**: No authentication required.
+
+⚠️ **Security Warning**: Dashboard binds to `0.0.0.0` (accessible from local network). Only use on trusted networks.
+
+**Current Binding**: All network interfaces (`0.0.0.0`) for development convenience (e.g., WSL access from Windows host)
 
 **Future**: Phase 2+ will add authentication (API keys, JWT).
 

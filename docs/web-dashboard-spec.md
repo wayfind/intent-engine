@@ -1313,16 +1313,19 @@ ie dashboard stop --all
 
 ## 10. Security Considerations
 
-### 10.1 Local-Only Access
+### 10.1 Network Access
 
-**Default Binding**: `127.0.0.1` (localhost only)
+**Current Binding** (v0.6.8+): `0.0.0.0` (all network interfaces)
 
-**Rationale**: Dashboard contains sensitive project information, should not be exposed to network
+**Rationale**: Enables access from external devices (e.g., Windows host accessing WSL dashboard) for development convenience
 
-**Production Deployment**: If needed on LAN, use:
-- Reverse proxy (nginx) with auth
+⚠️ **Security Warning**: Dashboard is accessible from local network without authentication. Only use on trusted networks.
+
+**Production Deployment**: If deploying on untrusted networks, use:
+- Reverse proxy (nginx) with authentication
 - VPN access
 - SSH tunnel
+- Firewall rules to restrict access
 
 ### 10.2 Optional Authentication
 
