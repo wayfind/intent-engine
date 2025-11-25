@@ -123,12 +123,17 @@ impl DashboardServer {
         let app = create_router(state);
 
         // Bind to address
-        let addr = format!("127.0.0.1:{}", self.port);
+        // Bind to 0.0.0.0 to allow external access (e.g., from Windows host when running in WSL)
+        let addr = format!("0.0.0.0:{}", self.port);
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .with_context(|| format!("Failed to bind to {}", addr))?;
 
         tracing::info!("Dashboard server listening on {}", addr);
+        tracing::warn!(
+            "⚠️  Dashboard is accessible from external IPs. Access via http://localhost:{} or http://<your-ip>:{}",
+            self.port, self.port
+        );
         tracing::info!("Project: {}", self.project_name);
         tracing::info!("Database: {}", self.db_path.display());
 

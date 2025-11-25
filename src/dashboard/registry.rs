@@ -162,9 +162,10 @@ impl ProjectRegistry {
     }
 
     /// Check if a port is available on the system
+    /// Tests binding to 0.0.0.0 to match the actual Dashboard bind address
     pub fn is_port_available(port: u16) -> bool {
         use std::net::TcpListener;
-        TcpListener::bind(("127.0.0.1", port)).is_ok()
+        TcpListener::bind(("0.0.0.0", port)).is_ok()
     }
 
     /// Register a new project
