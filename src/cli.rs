@@ -108,16 +108,15 @@ pub enum Commands {
 
     /// Initialize a new Intent-Engine project
     ///
-    /// Explicitly creates a .intent-engine directory with database.
-    /// By default, auto-detects project root based on markers (.git, Cargo.toml, etc.).
-    /// Use --at to specify a custom location.
+    /// Creates a .intent-engine directory with database in the current working directory.
+    /// Use --at to specify a different location.
     ///
     /// Examples:
-    ///   ie init                    # Initialize at auto-detected project root
+    ///   ie init                    # Initialize in current directory
     ///   ie init --at /my/project   # Initialize at specific directory
     ///   ie init --dry-run          # Preview where it would initialize
     Init {
-        /// Custom directory to initialize (default: auto-detect project root)
+        /// Custom directory to initialize (default: current directory)
         #[arg(long)]
         at: Option<String>,
 

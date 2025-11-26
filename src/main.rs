@@ -1210,9 +1210,8 @@ async fn handle_init_command(at: Option<String>, dry_run: bool, force: bool) -> 
         }
         p
     } else {
-        // Auto-detect project root
-        ProjectContext::find_project_root()
-            .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"))
+        // Use current working directory
+        std::env::current_dir().expect("Failed to get current directory")
     };
 
     let intent_dir = target_dir.join(".intent-engine");
@@ -1220,17 +1219,11 @@ async fn handle_init_command(at: Option<String>, dry_run: bool, force: bool) -> 
 
     // Dry-run mode: show what would be done
     if dry_run {
-        let db_info = ProjectContext::get_database_path_info();
-
         println!("Would initialize Intent-Engine at:");
         println!("  Root: {}", target_dir.display());
         println!("  Directory: {}", intent_dir.display());
         println!("  Database: {}", db_path.display());
         println!();
-
-        if let Some(method) = db_info.resolution_method {
-            println!("Detection method: {}", method);
-        }
 
         if intent_dir.exists() {
             if force {
@@ -1259,11 +1252,7 @@ async fn handle_init_command(at: Option<String>, dry_run: bool, force: bool) -> 
     }
 
     // Perform initialization
-    let ctx = if let Some(custom_path) = at {
-        ProjectContext::initialize_project_at(PathBuf::from(custom_path)).await?
-    } else {
-        ProjectContext::initialize_project().await?
-    };
+    let ctx = ProjectContext::initialize_project_at(target_dir).await?;
 
     // Success output
     let result = json!({

@@ -232,7 +232,7 @@ fn test_init_dry_run_shows_existing_warning() {
 }
 
 #[test]
-fn test_init_auto_detects_project_root() {
+fn test_init_in_current_directory() {
     let temp_dir = TempDir::new().unwrap();
     let project_dir = temp_dir.path();
 
@@ -251,12 +251,12 @@ fn test_init_auto_detects_project_root() {
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     let json: Value = serde_json::from_str(&stdout).unwrap();
 
-    // Verify .intent-engine is created at project root, not in src/
+    // Verify .intent-engine is created in current directory (src/), not at project root
     assert_eq!(json["success"], true);
 
-    let intent_dir = project_dir.join(".intent-engine");
-    assert!(intent_dir.exists());
-
     let src_intent_dir = src_dir.join(".intent-engine");
-    assert!(!src_intent_dir.exists());
+    assert!(src_intent_dir.exists());
+
+    let parent_intent_dir = project_dir.join(".intent-engine");
+    assert!(!parent_intent_dir.exists());
 }

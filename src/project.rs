@@ -346,6 +346,10 @@ impl ProjectContext {
 
     /// Initialize a new Intent-Engine project at a specific directory
     ///
+    /// **BREAKING CHANGE (v0.7.0)**: This function now initializes directly in the
+    /// specified directory without attempting to infer a project root. The directory
+    /// structure must already exist.
+    ///
     /// This is a thread-safe alternative to `initialize_project()` that doesn't
     /// rely on the global current directory. It's particularly useful for:
     /// - Concurrent tests that need isolated project initialization
@@ -355,10 +359,8 @@ impl ProjectContext {
     /// # Arguments
     /// * `project_dir` - The directory where the project should be initialized
     ///
-    /// # Algorithm
-    /// 1. Try to infer project root starting from `project_dir`
-    /// 2. If inference succeeds, initialize in the inferred root
-    /// 3. If inference fails, use `project_dir` as the root directly
+    /// # Behavior
+    /// Creates `.intent-engine/project.db` directly in the specified directory
     ///
     /// # Examples
     /// ```no_run
@@ -373,19 +375,9 @@ impl ProjectContext {
     /// }
     /// ```
     pub async fn initialize_project_at(project_dir: PathBuf) -> Result<Self> {
-        // Try to infer the project root starting from the provided directory
-        let root = match Self::infer_project_root_from(&project_dir) {
-            Some(inferred_root) => {
-                // Successfully inferred project root
-                inferred_root
-            },
-            None => {
-                // No marker found, use provided directory as root
-                // This is expected for test environments where we explicitly
-                // create a .git marker in a temp directory
-                project_dir
-            },
-        };
+        // BREAKING CHANGE (v0.7.0): Initialize in the specified directory directly
+        // No longer attempts to infer project root - explicit is better than implicit
+        let root = project_dir;
 
         let intent_dir = root.join(INTENT_DIR);
         let db_path = intent_dir.join(DB_FILE);

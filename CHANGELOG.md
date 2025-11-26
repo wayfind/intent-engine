@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-11-26
+
+### BREAKING CHANGES
+- **`ie init` behavior changed**: Now initializes in the current working directory instead of auto-detecting project root
+  - **Old behavior**: `ie init` would search upward for project markers (.git, Cargo.toml, etc.) and initialize at the detected project root
+  - **New behavior**: `ie init` creates `.intent-engine/` in the current working directory where the command is executed
+  - **Migration**: Users should `cd` to their desired project root directory before running `ie init` or any Intent-Engine commands
+  - **Rationale**: Simplifies initialization logic, makes behavior more predictable and explicit, removes "magic" auto-detection
+  - The `--at <path>` parameter is still available to initialize a specific directory
+  - The `--dry-run` and `--force` flags remain unchanged
+
+### Removed
+- **Smart project root detection**: Removed automatic upward search for project markers during initialization
+- **Documentation**: Removed `docs/en/technical/smart-initialization.md` and `docs/en/technical/smart-initialization-edge-cases.md`
+
+### Changed
+- **CLI help text**: Updated `ie init` command description and examples to reflect current directory initialization
+- **Tests**: Updated `test_init_auto_detects_project_root` → `test_init_in_current_directory` with reversed assertions
+- **`ProjectContext::initialize_project_at()`**: No longer attempts to infer project root - initializes directly in the specified directory
+
 ## [0.6.7] - 2025-11-23
 
 ### Fixed

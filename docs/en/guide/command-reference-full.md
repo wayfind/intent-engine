@@ -12,8 +12,8 @@ Intent-Engine is a minimalist, project-specific command-line database service de
 
 ## Core Features
 
-- **Project Awareness**: Automatically searches upward for `.intent-engine` directory, aware of project root
-- **Lazy Initialization**: Write commands automatically initialize project, no manual init required
+- **Simple Initialization**: Use `ie init` to initialize a directory, or let write commands auto-initialize in the current directory
+- **Lazy Initialization**: Write commands automatically initialize in the current directory if needed
 - **Task Management**: Support for task CRUD, hierarchical relationships, status tracking
   - **Priority and Complexity**: Support for task evaluation and sorting 🆕
   - **Smart Recommendation**: `pick-next` recommends next task based on context 🆕

@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.6
-**Last Updated**: 2025-11-21
+**Version**: 0.7
+**Last Updated**: 2025-11-26
 **Status**: Experimental (Pre-1.0)
 
 ---
@@ -28,6 +28,30 @@
 ---
 
 ## Changelog
+
+### Version 0.7 (2025-11-26)
+
+**Theme**: "Explicit Initialization - No Magic"
+
+**BREAKING CHANGES:**
+- **`ie init` behavior changed**: Now initializes in the current working directory instead of auto-detecting project root
+  - **Old behavior**: `ie init` would search upward for project markers (.git, Cargo.toml, etc.) and initialize at the detected project root
+  - **New behavior**: `ie init` creates `.intent-engine/` in the current working directory where the command is executed
+  - **Migration**: Users should `cd` to their desired project root directory before running `ie init`
+  - **Rationale**: Simplifies initialization logic, makes behavior more predictable and explicit, removes "magic" auto-detection
+
+**Removed:**
+- Smart project root detection during initialization
+- Documentation for smart initialization feature
+
+**Implementation Changes:**
+- `ProjectContext::initialize_project_at()` no longer infers project root - initializes directly in specified directory
+- Updated test assertions to verify current directory initialization
+
+**CLI Parameters (Unchanged):**
+- `--at <path>`: Still available to initialize a specific directory
+- `--dry-run`: Shows what would be done without making changes
+- `--force`: Re-initializes even if .intent-engine exists
 
 ### Version 0.5 (2025-11-16)
 
@@ -226,90 +250,58 @@ todo → doing → done
 - `switch <ID>`: (Previous doing → todo) + Set new task to `doing` + set as current
 - `done`: Current task → `done` + clear current (requires all children done)
 
-### 1.3 Project Initialization and Smart Root Inference
+### 1.3 Project Initialization
 
-**Philosophy**: Intent-Engine's initialization is designed to be completely transparent and frictionless. Users should focus on expressing intent (e.g., `task add`) rather than performing setup work (e.g., `init`). There is no public `init` command.
+**Philosophy**: Intent-Engine's initialization is designed to be simple and predictable. Users can explicitly initialize a directory with `ie init` or rely on lazy initialization on the first write operation.
 
-**Smart Lazy Initialization**: The system automatically initializes on the first write operation, intelligently inferring the project root directory rather than blindly using the current working directory (CWD).
+**Lazy Initialization**: The system automatically initializes in the current working directory on the first write operation if no `.intent-engine` folder exists.
+
+#### Explicit Initialization
+
+Users can explicitly initialize a directory using the `ie init` command:
+
+```bash
+# Initialize in current directory
+ie init
+
+# Initialize in specific directory
+ie init --at /path/to/project
+
+# Preview initialization without executing
+ie init --dry-run
+
+# Re-initialize existing directory
+ie init --force
+```
 
 #### Trigger Conditions
 
-Initialization logic is triggered when **all** of the following conditions are met:
+Lazy initialization is triggered when **all** of the following conditions are met:
 1. A write-type CLI command is executed (e.g., `task add`, `task spawn-subtask`)
-2. No `.intent-engine` folder exists in CWD or any parent directory
+2. No `.intent-engine` folder exists in the current working directory
 
 If `.intent-engine` already exists, it is used directly without re-initialization. If a read-only command is executed and no `.intent-engine` is found, an error is returned.
 
-#### Root Directory Inference Algorithm
+#### Initialization Behavior
 
-The system follows this algorithm to determine where to initialize:
+The system creates `.intent-engine/project.db` in the current working directory where the command is executed.
 
-**Step 1: Define Project Root Markers (Priority Order)**
-
-The system uses a hardcoded priority list of common project markers:
-
-1. `.git` (Git - highest priority)
-2. `.hg` (Mercurial)
-3. `package.json` (Node.js)
-4. `Cargo.toml` (Rust)
-5. `pyproject.toml` (Python PEP 518)
-6. `go.mod` (Go Modules)
-7. `pom.xml` (Maven - Java)
-8. `build.gradle` (Gradle - Java/Kotlin)
-
-**Step 2: Recursive Upward Search**
-
-Starting from CWD, traverse upward to the filesystem root (`/`), checking each directory for markers in priority order.
-
-**Step 3: First Match Determines Root**
-
-The first directory containing any marker becomes the project root. Search terminates immediately upon finding a marker.
-
-**Step 4: Initialize in Determined Root**
-
-Create `.intent-engine/project.db` in the determined project root directory.
-
-**Step 5: Fallback Mechanism**
-
-If no markers are found after reaching filesystem root:
-- Use CWD as the project root (fallback)
-- Print a warning to stderr:
-  ```
-  Warning: Could not determine a project root based on common markers (e.g., .git, package.json).
-           Initialized Intent-Engine in the current directory '/path/to/cwd'.
-           For predictable behavior, it's recommended to initialize from a directory containing a root marker.
-  ```
+**Important**: Users should `cd` to their project root directory before running Intent-Engine commands to ensure the database is created in the desired location.
 
 #### Example Scenarios
 
-**Scenario 1: Git Repository**
-```
-Structure: /home/user/my-app/.git
-           /home/user/my-app/src/components/
-
-Command: cd /home/user/my-app/src/components && ie task add --name "Fix button"
-
-Result: .intent-engine created at /home/user/my-app/ (where .git is located)
+**Scenario 1: Explicit Initialization**
+```bash
+cd /home/user/my-app
+ie init
+# Result: .intent-engine created at /home/user/my-app/
 ```
 
-**Scenario 2: No Markers (Fallback)**
-```
-Structure: /home/user/scripts/ (no markers)
-
-Command: cd /home/user/scripts && ie task add --name "Refactor script"
-
-Result: .intent-engine created at /home/user/scripts/ (CWD fallback)
-        Warning printed to stderr
-```
-
-**Scenario 3: Multiple Markers (Priority)**
-```
-Structure: /home/user/project/.git
-           /home/user/project/nested/Cargo.toml
-
-Command: cd /home/user/project/nested/deep && ie task add --name "Test"
-
-Result: .intent-engine created at /home/user/project/ (.git has higher priority)
+**Scenario 2: Lazy Initialization**
+```bash
+cd /home/user/my-app
+ie task add --name "Fix button"
+# Result: .intent-engine automatically created at /home/user/my-app/
 ```
 
 #### Error Handling
@@ -924,9 +916,9 @@ ie session-restore \
   "status": "error",
   "error_type": "workspace_not_found",
   "message": "Current directory is not an Intent-Engine project",
-  "recovery_suggestion": "Run 'ie workspace init' to initialize a workspace",
+  "recovery_suggestion": "Run 'ie init' to initialize a workspace",
   "suggested_commands": [
-    "ie workspace init",
+    "ie init",
     "ie help"
   ]
 }
