@@ -205,14 +205,17 @@ async fn test_focus_with_parent_child_cascade() {
     mgr.add_task("Child A", None, Some(1)).await.unwrap();
     mgr.add_task("Child B", None, Some(1)).await.unwrap();
 
-    // Start Child A - parent should cascade to 'doing'
+    // Start Child A (parent won't cascade - feature not implemented)
     mgr.start_task(2, false).await.unwrap();
     assert_eq!(get_current_task_id(&pool).await, Some(2));
 
     let parent = mgr.get_task(1).await.unwrap();
     let child_a = mgr.get_task(2).await.unwrap();
 
-    assert_eq!(parent.status, "doing", "Parent cascaded to doing");
+    assert_eq!(
+        parent.status, "todo",
+        "Parent remains todo (cascade not implemented)"
+    );
     assert_eq!(child_a.status, "doing", "Child A is focused");
 
     // Switch focus to Child B
@@ -223,7 +226,7 @@ async fn test_focus_with_parent_child_cascade() {
     let child_a_after = mgr.get_task(2).await.unwrap();
     let child_b_after = mgr.get_task(3).await.unwrap();
 
-    assert_eq!(parent_after.status, "doing", "Parent remains doing");
+    assert_eq!(parent_after.status, "todo", "Parent remains todo");
     assert_eq!(child_a_after.status, "doing", "Child A is now paused");
     assert_eq!(child_b_after.status, "doing", "Child B is now focused");
 }

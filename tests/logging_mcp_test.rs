@@ -15,13 +15,15 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-/// Get MCP Server log path
+/// Get MCP Server log path (with daily rotation date suffix)
 fn mcp_log_path() -> PathBuf {
+    use chrono::Local;
+    let date = Local::now().format("%Y-%m-%d");
     dirs::home_dir()
         .expect("Failed to get home directory")
         .join(".intent-engine")
         .join("logs")
-        .join("mcp-server.log")
+        .join(format!("mcp-server.log.{}", date))
 }
 
 /// Clean up log directory

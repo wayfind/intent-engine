@@ -106,6 +106,30 @@ pub enum Commands {
     /// Check system health and dependencies
     Doctor,
 
+    /// Initialize a new Intent-Engine project
+    ///
+    /// Explicitly creates a .intent-engine directory with database.
+    /// By default, auto-detects project root based on markers (.git, Cargo.toml, etc.).
+    /// Use --at to specify a custom location.
+    ///
+    /// Examples:
+    ///   ie init                    # Initialize at auto-detected project root
+    ///   ie init --at /my/project   # Initialize at specific directory
+    ///   ie init --dry-run          # Preview where it would initialize
+    Init {
+        /// Custom directory to initialize (default: auto-detect project root)
+        #[arg(long)]
+        at: Option<String>,
+
+        /// Show what would be initialized without actually doing it
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Re-initialize even if .intent-engine already exists
+        #[arg(long)]
+        force: bool,
+    },
+
     /// Start MCP server for AI assistants (JSON-RPC stdio)
     #[command(name = "mcp-server")]
     McpServer,

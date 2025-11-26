@@ -143,6 +143,9 @@ pub fn init_logging(config: LoggingConfig) -> io::Result<()> {
             .file_name()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Invalid log file name"))?;
 
+        // Create log directory if it doesn't exist
+        std::fs::create_dir_all(log_dir)?;
+
         // Use daily rotation (recommended to configure logrotate on Linux)
         let file_appender = tracing_appender::rolling::daily(log_dir, file_name);
 

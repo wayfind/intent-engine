@@ -52,11 +52,34 @@ async fn main() {
         }
     }
 
-    // Enable file logging for MCP Server mode
+    // Enable file logging for MCP Server mode (with graceful fallback)
     if matches!(cli.command, Commands::McpServer) {
         use intent_engine::logging::{log_file_path, ApplicationMode};
         log_config = LoggingConfig::for_mode(ApplicationMode::McpServer);
-        log_config.file_output = Some(log_file_path(ApplicationMode::McpServer));
+
+        // Try to get log file path and verify directory is writable
+        // If it fails (e.g., HOME=/nonexistent in tests), fall back to stdout
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let path = log_file_path(ApplicationMode::McpServer);
+            // Verify directory was created successfully
+            if let Some(parent) = path.parent() {
+                if parent.exists() {
+                    Some(path)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })) {
+            Ok(Some(path)) => {
+                log_config.file_output = Some(path);
+            },
+            _ => {
+                // Directory creation failed, use stdout instead
+                log_config.file_output = None;
+            },
+        }
     }
 
     if let Err(e) = intent_engine::logging::init_logging(log_config) {
@@ -111,6 +134,7 @@ async fn run(cli: &Cli) -> Result<()> {
             limit,
         } => handle_search_command(&query, tasks, events, limit).await?,
         Commands::Doctor => handle_doctor_command().await?,
+        Commands::Init { at, dry_run, force } => handle_init_command(at, dry_run, force).await?,
         Commands::Dashboard(dashboard_cmd) => handle_dashboard_command(dashboard_cmd).await?,
         Commands::McpServer => {
             // Run MCP server - this never returns unless there's an error
@@ -1163,6 +1187,93 @@ async fn handle_doctor_command() -> Result<()> {
         std::process::exit(1);
     }
 
+    Ok(())
+}
+
+async fn handle_init_command(at: Option<String>, dry_run: bool, force: bool) -> Result<()> {
+    use serde_json::json;
+
+    // Determine target directory
+    let target_dir = if let Some(path) = &at {
+        let p = PathBuf::from(path);
+        if !p.exists() {
+            return Err(IntentError::InvalidInput(format!(
+                "Directory does not exist: {}",
+                path
+            )));
+        }
+        if !p.is_dir() {
+            return Err(IntentError::InvalidInput(format!(
+                "Path is not a directory: {}",
+                path
+            )));
+        }
+        p
+    } else {
+        // Auto-detect project root
+        ProjectContext::find_project_root()
+            .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"))
+    };
+
+    let intent_dir = target_dir.join(".intent-engine");
+    let db_path = intent_dir.join("project.db");
+
+    // Dry-run mode: show what would be done
+    if dry_run {
+        let db_info = ProjectContext::get_database_path_info();
+
+        println!("Would initialize Intent-Engine at:");
+        println!("  Root: {}", target_dir.display());
+        println!("  Directory: {}", intent_dir.display());
+        println!("  Database: {}", db_path.display());
+        println!();
+
+        if let Some(method) = db_info.resolution_method {
+            println!("Detection method: {}", method);
+        }
+
+        if intent_dir.exists() {
+            if force {
+                println!("⚠ Warning: .intent-engine already exists (would be re-initialized with --force)");
+            } else {
+                println!("⚠ Warning: .intent-engine already exists");
+                println!("  Use --force to re-initialize");
+                return Ok(());
+            }
+        } else {
+            println!("✓ Directory does not exist (would be created)");
+        }
+
+        println!();
+        println!("To proceed, run without --dry-run");
+        return Ok(());
+    }
+
+    // Check if already exists
+    if intent_dir.exists() && !force {
+        let error_msg = format!(
+            ".intent-engine already exists at {}\nUse --force to re-initialize",
+            intent_dir.display()
+        );
+        return Err(IntentError::InvalidInput(error_msg));
+    }
+
+    // Perform initialization
+    let ctx = if let Some(custom_path) = at {
+        ProjectContext::initialize_project_at(PathBuf::from(custom_path)).await?
+    } else {
+        ProjectContext::initialize_project().await?
+    };
+
+    // Success output
+    let result = json!({
+        "success": true,
+        "root": ctx.root.display().to_string(),
+        "database_path": ctx.db_path.display().to_string(),
+        "message": "Intent-Engine initialized successfully"
+    });
+
+    println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
 }
 
