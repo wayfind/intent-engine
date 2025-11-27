@@ -46,7 +46,7 @@ fn test_mcp_server_creates_log_file() {
     // Start MCP Server in background
     let mut child = Command::new(common::ie_binary())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", common::current_project_dir())
+        .current_dir(common::current_project_dir())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -80,7 +80,6 @@ fn test_mcp_server_log_json_format() {
     // Start MCP Server
     let mut child = Command::new(common::ie_binary())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", common::current_project_dir())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -137,7 +136,6 @@ fn test_mcp_server_logs_debug_level() {
     // Start MCP Server
     let mut child = Command::new(common::ie_binary())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", common::current_project_dir())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -179,7 +177,6 @@ fn test_mcp_server_stdout_clean_for_jsonrpc() {
     // Start MCP Server (don't try to interact with it)
     let mut child = Command::new(common::ie_binary())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", common::current_project_dir())
         .stdin(Stdio::null())  // Changed to null to avoid blocking
         .stdout(Stdio::null()) // Changed to null - we're not testing stdout content
         .stderr(Stdio::piped())
@@ -229,7 +226,6 @@ fn test_mcp_log_directory_auto_creation() {
     // Start MCP Server
     let mut child = Command::new(common::ie_binary())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", common::current_project_dir())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

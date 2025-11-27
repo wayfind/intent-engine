@@ -7,17 +7,35 @@ use crate::tasks::TaskManager;
 use crate::test_utils::test_helpers::TestContext;
 use serde_json::json;
 use serial_test::serial;
+use std::path::PathBuf;
+
+/// Guard that restores the original working directory when dropped
+struct WorkingDirGuard {
+    original_dir: PathBuf,
+}
+
+impl WorkingDirGuard {
+    fn new() -> Self {
+        Self {
+            original_dir: std::env::current_dir().expect("Failed to get current directory"),
+        }
+    }
+}
+
+impl Drop for WorkingDirGuard {
+    fn drop(&mut self) {
+        let _ = std::env::set_current_dir(&self.original_dir);
+    }
+}
 
 /// Helper function to set up test environment with proper isolation
-async fn setup_test_env() -> TestContext {
+async fn setup_test_env() -> (TestContext, WorkingDirGuard) {
+    let guard = WorkingDirGuard::new();
     let ctx = TestContext::new().await;
-    std::env::set_var(
-        "INTENT_ENGINE_PROJECT_DIR",
-        ctx.project_root()
-            .to_str()
-            .expect("Project root should be valid UTF-8"),
-    );
-    ctx
+    // Set current directory to test project root
+    std::env::set_current_dir(ctx.project_root())
+        .expect("Failed to change to test project directory");
+    (ctx, guard)
 }
 
 #[cfg(test)]
@@ -236,7 +254,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_start_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         // Create a task first
         let task_mgr = TaskManager::new(ctx.pool());
@@ -283,7 +301,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_done_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         // Create and start a task
         let task_mgr = TaskManager::new(ctx.pool());
@@ -308,7 +326,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_done_with_task_id() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         // Create and start a task
         let task_mgr = TaskManager::new(ctx.pool());
@@ -326,7 +344,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_list_all() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         // Create some tasks
         let task_mgr = TaskManager::new(ctx.pool());
@@ -345,7 +363,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_list_by_status() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         // Create tasks with different statuses
         let task_mgr = TaskManager::new(ctx.pool());
@@ -369,7 +387,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_get_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr
@@ -393,7 +411,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_get_with_events() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -421,7 +439,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_update_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr
@@ -457,7 +475,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_update_priority() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -477,7 +495,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_update_invalid_priority() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -495,7 +513,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_delete_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -526,7 +544,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_spawn_subtask_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         // Create and start parent task
         let task_mgr = TaskManager::new(ctx.pool());
@@ -564,7 +582,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_pick_next_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         task_mgr.add_task("Todo Task", None, None).await.unwrap();
@@ -582,7 +600,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_event_add_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -604,7 +622,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_event_add_with_task_id() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -647,7 +665,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_event_list_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -678,7 +696,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_event_list_with_filters() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -712,7 +730,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_event_list_global() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
@@ -754,7 +772,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_current_task_get_with_current() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -774,7 +792,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_report_generate_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         task_mgr.add_task("Task 1", None, None).await.unwrap();
@@ -809,7 +827,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_context_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -828,7 +846,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_context_uses_current_task() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
@@ -855,7 +873,7 @@ mod handler_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_add_dependency_success() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
@@ -1044,7 +1062,7 @@ mod edge_case_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_list_parent_null() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         // Create top-level and child tasks
         let task_mgr = TaskManager::new(ctx.pool());
@@ -1074,7 +1092,7 @@ mod edge_case_tests {
     #[tokio::test]
     #[serial]
     async fn test_handle_task_start_default_with_events() {
-        let ctx = setup_test_env().await;
+        let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr.add_task("Test Task", None, None).await.unwrap();

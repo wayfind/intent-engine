@@ -1,6 +1,6 @@
 {
   "name": "intent-engine",
-  "version": "0.6",
+  "version": "0.7",
   "description": "An expert task management assistant that provides a persistent, intent-driven context layer. Use this toolset to maintain strategic clarity in complex projects—one focused task at a time, with complete decision history. Think of it as your external brain for project management.",
   "cli_info": {
     "primary_command": "intent-engine",
@@ -175,7 +175,7 @@
     },
     {
       "name": "task_start",
-      "description": "# Core Duty\nActivates an intent and sets it as the current focus. This is the entry point to the focus-driven workflow.\n\n# Tactical Guide\nCall this before working on any task. This is an atomic operation that:\n1. Sets task status to 'doing'\n2. Sets as current_task_id in workspace\n3. Returns full context including event history (if with_events: true)\n\n**Best Practice:** Always use `with_events: true` to get the complete decision history, crucial for resuming work.",
+      "description": "# Core Duty\nActivates an intent and sets it as the current focus. This is the entry point to the focus-driven workflow.\n\n# Tactical Guide\nCall this before working on any task. This is an atomic operation that:\n1. Sets task status to 'doing'\n2. Sets as current_task_id in workspace\n3. Returns full context including event history (if with_events: true)\n\n**Multi-doing Support:** The system allows multiple tasks to be in 'doing' status simultaneously, enabling hierarchical workflows where parent tasks remain 'doing' while working on subtasks. However, only one task can be focused (current_task_id) at any time. When you start a new task, the previous focused task remains 'doing' but becomes \"pending\" (doing but not current).\n\n**Best Practice:** Always use `with_events: true` to get the complete decision history, crucial for resuming work.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -205,7 +205,7 @@
     },
     {
       "name": "task_spawn_subtask",
-      "description": "# Core Duty\nCreates a subtask under the CURRENT FOCUSED task and IMMEDIATELY switches focus to it.\n\n# Tactical Guide\nThis is a powerful atomic workflow operation for 'on-the-fly' problem decomposition. Use when:\n- You identify a prerequisite that must be solved first\n- You discover a sub-problem while working\n- You need to break down current work into smaller steps\n\n**The operation:**\n1. Creates subtask with parent_id = current task\n2. Switches focus to new subtask\n3. Sets new subtask status to 'doing'\n\n**Design Pattern:** Enables depth-first work style—dive into sub-problems immediately, complete them, then return to parent.",
+      "description": "# Core Duty\nCreates a subtask under the CURRENT FOCUSED task and IMMEDIATELY switches focus to it.\n\n# Tactical Guide\nThis is a powerful atomic workflow operation for 'on-the-fly' problem decomposition. Use when:\n- You identify a prerequisite that must be solved first\n- You discover a sub-problem while working\n- You need to break down current work into smaller steps\n\n**The operation:**\n1. Creates subtask with parent_id = current task\n2. Switches focus to new subtask\n3. Sets new subtask status to 'doing'\n\n**Parent Task Preservation:** The parent task remains in 'doing' status when spawning a subtask, supporting the multi-doing workflow model. Only the current_task_id (focus) switches to the new subtask. This enables hierarchical workflows where you can have multiple 'doing' tasks at different levels of the task tree.\n\n**Design Pattern:** Enables depth-first work style—dive into sub-problems immediately, complete them, then return to parent.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -510,7 +510,7 @@
                     "doing",
                     "done"
                   ],
-                  "description": "Optional task status for workflow management. Defaults to 'todo'. IMPORTANT: Only ONE task can be 'doing' globally - attempting to create multiple will fail with an error. Use this to enforce focused, single-task workflow."
+                  "description": "Optional task status for workflow management. Defaults to 'todo'. IMPORTANT: Only ONE task can be 'doing' within a single plan request. The database supports multiple 'doing' tasks globally to enable hierarchical workflows (parent task doing while working on subtasks). This batch-level constraint enforces focus within plan operations."
                 },
                 "active_form": {
                   "type": "string",

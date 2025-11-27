@@ -1,6 +1,6 @@
 # Intent-Engine: Claude Integration Guide
 
-**Version**: 0.6
+**Version**: 0.6.3
 **Target**: Claude Code, Claude Desktop, and AI assistants via MCP
 
 ---
@@ -50,7 +50,7 @@ Intent-Engine works like your brain - **one focused task at a time**:
            │
            ▼
     ┌────────────┐
-    │  Task 42   │  ← The Focused Task
+    │  Task 42   │  ← The Focused Task (doing + current)
     │  "Impl auth"│
     └────┬───┬───┘
          │   │
@@ -59,6 +59,8 @@ Intent-Engine works like your brain - **one focused task at a time**:
     │JWT  │ │OAuth│
     └─────┘ └─────┘
 ```
+
+**Important**: The system supports **multiple 'doing' tasks** simultaneously for hierarchical workflows. However, only **one task is focused** (current_task_id) at any time. Tasks that are 'doing' but not current are effectively "paused/pending" until you switch back to them.
 
 ---
 
@@ -417,7 +419,4 @@ Intent-Engine is designed for **strategic intent tracking**, not tactical todo l
 
 ---
 
-**Last Updated**: 2025-11-17
-**Spec Version**: 0.6
-**MCP Tools**: 14 available (search tool for unified search)
-**Status**: Experimental (Pre-1.0)
+*End of CLAUDE.md*

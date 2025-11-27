@@ -184,7 +184,7 @@ fn test_invalid_json_returns_parse_error() {
 
     let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .current_dir(project_path)
         .env("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -284,7 +284,7 @@ fn test_task_search_with_fts5_query() {
 
     let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .current_dir(project_path)
         .env("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -425,7 +425,7 @@ fn test_task_context_returns_family_tree() {
 
     let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .current_dir(project_path)
         .env("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -531,7 +531,7 @@ fn test_task_context_uses_current_task_when_no_id_provided() {
 
     let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .current_dir(project_path)
         .env("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -601,7 +601,7 @@ fn test_task_context_error_when_no_current_task_and_no_id() {
 
     let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .current_dir(project_path)
         .env("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -658,7 +658,7 @@ fn test_task_context_nonexistent_task() {
 
     let mut child = Command::new(get_binary_path())
         .arg("mcp-server")
-        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
+        .current_dir(project_path)
         .env("INTENT_ENGINE_NO_DASHBOARD_AUTOSTART", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

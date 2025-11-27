@@ -50,8 +50,6 @@ pub struct SetupOptions {
     pub force: bool,
     /// Custom config file path (optional)
     pub config_path: Option<PathBuf>,
-    /// Project directory for INTENT_ENGINE_PROJECT_DIR env var
-    pub project_dir: Option<PathBuf>,
 }
 
 impl Default for SetupOptions {
@@ -61,7 +59,6 @@ impl Default for SetupOptions {
             dry_run: false,
             force: false,
             config_path: None,
-            project_dir: None,
         }
     }
 }

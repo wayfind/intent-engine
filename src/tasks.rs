@@ -1061,15 +1061,15 @@ impl<'a> TaskManager<'a> {
         // Select tasks from todo, prioritizing by priority DESC, complexity ASC
         let todo_tasks = sqlx::query_as::<_, Task>(
             r#"
-            SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form
-            FROM tasks
-            WHERE status = 'todo'
-            ORDER BY
-                COALESCE(priority, 0) DESC,
-                COALESCE(complexity, 5) ASC,
-                id ASC
-            LIMIT ?
-            "#,
+                        SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form
+                        FROM tasks
+                        WHERE status = 'todo'
+                        ORDER BY
+                            COALESCE(priority, 0) ASC,
+                            COALESCE(complexity, 5) ASC,
+                            id ASC
+                        LIMIT ?
+                        "#,
         )
         .bind(limit as i64)
         .fetch_all(&mut *tx)
@@ -1104,11 +1104,11 @@ impl<'a> TaskManager<'a> {
         let placeholders = vec!["?"; task_ids.len()].join(",");
         let query = format!(
             "SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form
-             FROM tasks WHERE id IN ({})
-             ORDER BY
-                 COALESCE(priority, 0) DESC,
-                 COALESCE(complexity, 5) ASC,
-                 id ASC",
+                         FROM tasks WHERE id IN ({})
+                         ORDER BY
+                             COALESCE(priority, 0) ASC,
+                             COALESCE(complexity, 5) ASC,
+                             id ASC",
             placeholders
         );
 
@@ -1136,16 +1136,71 @@ impl<'a> TaskManager<'a> {
                 .fetch_optional(self.pool)
                 .await?;
 
-        if let Some(current_id_str) = current_task_id {
+        if let Some(current_id_str) = current_task_id.as_ref() {
             if let Ok(current_id) = current_id_str.parse::<i64>() {
-                // First priority: Get todo subtasks of current focused task
+                // Step 1a: First priority - Get **doing** subtasks of current focused task
                 // Exclude tasks blocked by incomplete dependencies
-                let subtasks = sqlx::query_as::<_, Task>(
+                let doing_subtasks = sqlx::query_as::<_, Task>(
+                    r#"
+                            SELECT id, parent_id, name, spec, status, complexity, priority,
+                                   first_todo_at, first_doing_at, first_done_at, active_form
+                            FROM tasks
+                            WHERE parent_id = ? AND status = 'doing'
+                              AND NOT EXISTS (
+                                SELECT 1 FROM dependencies d
+                                JOIN tasks bt ON d.blocking_task_id = bt.id
+                                WHERE d.blocked_task_id = tasks.id
+                                  AND bt.status != 'done'
+                              )
+                            ORDER BY COALESCE(priority, 999999) ASC, id ASC
+                            LIMIT 1
+                            "#,
+                )
+                .bind(current_id)
+                .fetch_optional(self.pool)
+                .await?;
+
+                if let Some(task) = doing_subtasks {
+                    return Ok(PickNextResponse::focused_subtask(task));
+                }
+
+                // Step 1b: Second priority - Get **todo** subtasks if no doing subtasks
+                let todo_subtasks = sqlx::query_as::<_, Task>(
+                    r#"
+                            SELECT id, parent_id, name, spec, status, complexity, priority,
+                                   first_todo_at, first_doing_at, first_done_at, active_form
+                            FROM tasks
+                            WHERE parent_id = ? AND status = 'todo'
+                              AND NOT EXISTS (
+                                SELECT 1 FROM dependencies d
+                                JOIN tasks bt ON d.blocking_task_id = bt.id
+                                WHERE d.blocked_task_id = tasks.id
+                                  AND bt.status != 'done'
+                              )
+                            ORDER BY COALESCE(priority, 999999) ASC, id ASC
+                            LIMIT 1
+                            "#,
+                )
+                .bind(current_id)
+                .fetch_optional(self.pool)
+                .await?;
+
+                if let Some(task) = todo_subtasks {
+                    return Ok(PickNextResponse::focused_subtask(task));
+                }
+            }
+        }
+
+        // Step 2a: Third priority - Get top-level **doing** tasks (excluding current task)
+        // Exclude tasks blocked by incomplete dependencies
+        let doing_top_level = if let Some(current_id_str) = current_task_id.as_ref() {
+            if let Ok(current_id) = current_id_str.parse::<i64>() {
+                sqlx::query_as::<_, Task>(
                     r#"
                     SELECT id, parent_id, name, spec, status, complexity, priority,
                            first_todo_at, first_doing_at, first_done_at, active_form
                     FROM tasks
-                    WHERE parent_id = ? AND status = 'todo'
+                    WHERE parent_id IS NULL AND status = 'doing' AND id != ?
                       AND NOT EXISTS (
                         SELECT 1 FROM dependencies d
                         JOIN tasks bt ON d.blocking_task_id = bt.id
@@ -1158,17 +1213,38 @@ impl<'a> TaskManager<'a> {
                 )
                 .bind(current_id)
                 .fetch_optional(self.pool)
-                .await?;
-
-                if let Some(task) = subtasks {
-                    return Ok(PickNextResponse::focused_subtask(task));
-                }
+                .await?
+            } else {
+                None
             }
+        } else {
+            sqlx::query_as::<_, Task>(
+                r#"
+                SELECT id, parent_id, name, spec, status, complexity, priority,
+                       first_todo_at, first_doing_at, first_done_at, active_form
+                FROM tasks
+                WHERE parent_id IS NULL AND status = 'doing'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM dependencies d
+                    JOIN tasks bt ON d.blocking_task_id = bt.id
+                    WHERE d.blocked_task_id = tasks.id
+                      AND bt.status != 'done'
+                  )
+                ORDER BY COALESCE(priority, 999999) ASC, id ASC
+                LIMIT 1
+                "#,
+            )
+            .fetch_optional(self.pool)
+            .await?
+        };
+
+        if let Some(task) = doing_top_level {
+            return Ok(PickNextResponse::top_level_task(task));
         }
 
-        // Step 2: Second priority - get top-level todo tasks
+        // Step 2b: Fourth priority - Get top-level **todo** tasks
         // Exclude tasks blocked by incomplete dependencies
-        let top_level_task = sqlx::query_as::<_, Task>(
+        let todo_top_level = sqlx::query_as::<_, Task>(
             r#"
             SELECT id, parent_id, name, spec, status, complexity, priority,
                    first_todo_at, first_doing_at, first_done_at, active_form
@@ -1187,7 +1263,7 @@ impl<'a> TaskManager<'a> {
         .fetch_optional(self.pool)
         .await?;
 
-        if let Some(task) = top_level_task {
+        if let Some(task) = todo_top_level {
             return Ok(PickNextResponse::top_level_task(task));
         }
 
@@ -1221,6 +1297,7 @@ mod tests {
     use super::*;
     use crate::events::EventManager;
     use crate::test_utils::test_helpers::TestContext;
+    use crate::workspace::WorkspaceManager;
 
     #[tokio::test]
     async fn test_add_task() {
@@ -1705,11 +1782,11 @@ mod tests {
         // Pick tasks
         let picked = manager.pick_next_tasks(3, 5).await.unwrap();
 
-        // Should be ordered by priority DESC
+        // Should be ordered by priority ASC (lower number = higher priority)
         assert_eq!(picked.len(), 3);
-        assert_eq!(picked[0].priority, Some(10)); // high
+        assert_eq!(picked[0].priority, Some(1)); // lowest number = highest priority
         assert_eq!(picked[1].priority, Some(5)); // medium
-        assert_eq!(picked[2].priority, Some(1)); // low
+        assert_eq!(picked[2].priority, Some(10)); // highest number = lowest priority
     }
 
     #[tokio::test]
@@ -2147,12 +2224,13 @@ mod tests {
             .await
             .unwrap();
 
-        // Pick next should indicate no available todos
+        // With multi-doing semantics, pick next should recommend the doing parent
+        // (it's a valid top-level doing task that's not current)
         let response = manager.pick_next().await.unwrap();
 
-        assert_eq!(response.suggestion_type, "NONE");
-        assert_eq!(response.reason_code.as_deref(), Some("NO_AVAILABLE_TODOS"));
-        assert!(response.message.is_some());
+        assert_eq!(response.suggestion_type, "TOP_LEVEL_TASK");
+        assert_eq!(response.task.as_ref().unwrap().id, parent.id);
+        assert_eq!(response.task.as_ref().unwrap().status, "doing");
     }
 
     #[tokio::test]
@@ -2627,5 +2705,135 @@ mod tests {
         // Task with priority 5 should come second
         assert_eq!(context.siblings[1].id, task3.id);
         assert_eq!(context.siblings[1].priority, Some(5));
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_tasks_priority_order() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create 4 tasks with different priorities
+        let critical = task_mgr
+            .add_task("Critical Task", None, None)
+            .await
+            .unwrap();
+        task_mgr
+            .update_task(critical.id, None, None, None, None, None, Some(1))
+            .await
+            .unwrap();
+
+        let low = task_mgr.add_task("Low Task", None, None).await.unwrap();
+        task_mgr
+            .update_task(low.id, None, None, None, None, None, Some(4))
+            .await
+            .unwrap();
+
+        let high = task_mgr.add_task("High Task", None, None).await.unwrap();
+        task_mgr
+            .update_task(high.id, None, None, None, None, None, Some(2))
+            .await
+            .unwrap();
+
+        let medium = task_mgr.add_task("Medium Task", None, None).await.unwrap();
+        task_mgr
+            .update_task(medium.id, None, None, None, None, None, Some(3))
+            .await
+            .unwrap();
+
+        // Pick next tasks should return them in priority order: critical > high > medium > low
+        let tasks = task_mgr.pick_next_tasks(10, 10).await.unwrap();
+
+        assert_eq!(tasks.len(), 4);
+        assert_eq!(tasks[0].id, critical.id); // Priority 1
+        assert_eq!(tasks[1].id, high.id); // Priority 2
+        assert_eq!(tasks[2].id, medium.id); // Priority 3
+        assert_eq!(tasks[3].id, low.id); // Priority 4
+    }
+
+    #[tokio::test]
+    async fn test_pick_next_prefers_doing_over_todo() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        // Create a parent task and set it as current
+        let parent = task_mgr.add_task("Parent", None, None).await.unwrap();
+        let parent_started = task_mgr.start_task(parent.id, false).await.unwrap();
+        workspace_mgr
+            .set_current_task(parent_started.task.id)
+            .await
+            .unwrap();
+
+        // Create two subtasks with same priority: one doing, one todo
+        let doing_subtask = task_mgr
+            .add_task("Doing Subtask", None, Some(parent.id))
+            .await
+            .unwrap();
+        task_mgr.start_task(doing_subtask.id, false).await.unwrap();
+        // Switch back to parent so doing_subtask is "pending" (doing but not current)
+        workspace_mgr.set_current_task(parent.id).await.unwrap();
+
+        let _todo_subtask = task_mgr
+            .add_task("Todo Subtask", None, Some(parent.id))
+            .await
+            .unwrap();
+
+        // Both have same priority (default), but doing should be picked first
+        let result = task_mgr.pick_next().await.unwrap();
+
+        if let Some(task) = result.task {
+            assert_eq!(
+                task.id, doing_subtask.id,
+                "Should recommend doing subtask over todo subtask"
+            );
+            assert_eq!(task.status, "doing");
+        } else {
+            panic!("Expected a task recommendation");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_multiple_doing_tasks_allowed() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        // Create and start task A
+        let task_a = task_mgr.add_task("Task A", None, None).await.unwrap();
+        let task_a_started = task_mgr.start_task(task_a.id, false).await.unwrap();
+        assert_eq!(task_a_started.task.status, "doing");
+
+        // Verify task A is current
+        let current = workspace_mgr.get_current_task().await.unwrap();
+        assert_eq!(current.current_task_id, Some(task_a.id));
+
+        // Create and start task B
+        let task_b = task_mgr.add_task("Task B", None, None).await.unwrap();
+        let task_b_started = task_mgr.start_task(task_b.id, false).await.unwrap();
+        assert_eq!(task_b_started.task.status, "doing");
+
+        // Verify task B is now current
+        let current = workspace_mgr.get_current_task().await.unwrap();
+        assert_eq!(current.current_task_id, Some(task_b.id));
+
+        // Verify task A is still doing (not reverted to todo)
+        let task_a_after = task_mgr.get_task(task_a.id).await.unwrap();
+        assert_eq!(
+            task_a_after.status, "doing",
+            "Task A should remain doing even though it is not current"
+        );
+
+        // Verify both tasks are in doing status
+        let doing_tasks: Vec<Task> = sqlx::query_as(
+            r#"SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form
+             FROM tasks WHERE status = 'doing' ORDER BY id"#
+        )
+        .fetch_all(ctx.pool())
+        .await
+        .unwrap();
+
+        assert_eq!(doing_tasks.len(), 2, "Should have 2 doing tasks");
+        assert_eq!(doing_tasks[0].id, task_a.id);
+        assert_eq!(doing_tasks[1].id, task_b.id);
     }
 }

@@ -72,7 +72,7 @@ impl ProjectContext {
             resolution_method: None,
         };
 
-        // Check strategy 1: Environment variable
+        // Check for deprecated environment variable (for doctor diagnostics)
         if let Ok(env_path) = std::env::var("INTENT_ENGINE_PROJECT_DIR") {
             info.env_var_set = true;
             info.env_var_path = Some(env_path.clone());
@@ -82,16 +82,11 @@ impl ProjectContext {
             let has_intent_engine = intent_dir.exists() && intent_dir.is_dir();
             info.env_var_valid = Some(has_intent_engine);
 
-            if has_intent_engine {
-                let db_path = intent_dir.join(DB_FILE);
-                info.final_database_path = Some(db_path.display().to_string());
-                info.resolution_method =
-                    Some("Environment Variable (INTENT_ENGINE_PROJECT_DIR)".to_string());
-                return info;
-            }
+            // Note: INTENT_ENGINE_PROJECT_DIR is deprecated and ignored
+            // Continue to strategy 1 (upward directory traversal)
         }
 
-        // Check strategy 2: Upward directory traversal
+        // Strategy 1: Upward directory traversal
         if let Ok(mut current) = std::env::current_dir() {
             loop {
                 let intent_dir = current.join(INTENT_DIR);
@@ -118,7 +113,7 @@ impl ProjectContext {
             }
         }
 
-        // Check strategy 3: Home directory
+        // Strategy 2: Home directory
         #[cfg(not(target_os = "windows"))]
         let home_path = std::env::var("HOME").ok().map(PathBuf::from);
 
@@ -146,34 +141,15 @@ impl ProjectContext {
     /// Find the project root by searching upwards for .intent-engine directory
     ///
     /// Search strategy (in priority order):
-    /// 1. Check INTENT_ENGINE_PROJECT_DIR environment variable
-    /// 2. Search upwards from current directory for .intent-engine/, but:
+    /// 1. Search upwards from current directory for .intent-engine/, but:
     ///    - Stop at project boundary (defined by PROJECT_ROOT_MARKERS)
     ///    - Do NOT cross into parent projects to prevent database mixing
-    /// 3. Check user's home directory for .intent-engine/
+    /// 2. Check user's home directory for .intent-engine/
     ///
     /// **Important**: This function now respects project boundaries to prevent
     /// nested projects from accidentally using parent project databases.
     pub fn find_project_root() -> Option<PathBuf> {
-        // Strategy 1: Check environment variable (highest priority)
-        if let Ok(env_path) = std::env::var("INTENT_ENGINE_PROJECT_DIR") {
-            let path = PathBuf::from(env_path);
-            let intent_dir = path.join(INTENT_DIR);
-            if intent_dir.exists() && intent_dir.is_dir() {
-                eprintln!(
-                    "✓ Using project from INTENT_ENGINE_PROJECT_DIR: {}",
-                    path.display()
-                );
-                return Some(path);
-            } else {
-                eprintln!(
-                    "⚠ INTENT_ENGINE_PROJECT_DIR set but no .intent-engine found: {}",
-                    path.display()
-                );
-            }
-        }
-
-        // Strategy 2: Search upwards from current directory
+        // Strategy 1: Search upwards from current directory
         // BUT respect project boundaries (don't cross into parent projects)
         // UNLESS we're not inside any project (to support MCP server startup)
         if let Ok(current_dir) = std::env::current_dir() {
@@ -225,7 +201,7 @@ impl ProjectContext {
             }
         }
 
-        // Strategy 3: Check user's home directory (fallback)
+        // Strategy 2: Check user's home directory (fallback)
         // ONLY use if no project boundary was detected
         if let Ok(home) = std::env::var("HOME") {
             let home_path = PathBuf::from(home);

@@ -154,18 +154,8 @@ async fn run(cli: &Cli) -> Result<()> {
             force,
             diagnose,
             config_path,
-            project_dir,
         } => {
-            handle_setup(
-                target,
-                &scope,
-                dry_run,
-                force,
-                diagnose,
-                config_path,
-                project_dir,
-            )
-            .await?;
+            handle_setup(target, &scope, dry_run, force, diagnose, config_path).await?;
         },
 
         Commands::Plan { dry_run, format } => {
@@ -1320,7 +1310,6 @@ async fn handle_setup(
     force: bool,
     diagnose: bool,
     config_path: Option<String>,
-    project_dir: Option<String>,
 ) -> Result<()> {
     use intent_engine::setup::claude_code::ClaudeCodeSetup;
     use intent_engine::setup::{SetupModule, SetupOptions, SetupScope};
@@ -1337,7 +1326,6 @@ async fn handle_setup(
         dry_run,
         force,
         config_path: config_path.map(PathBuf::from),
-        project_dir: project_dir.map(PathBuf::from),
     };
 
     // Determine target (interactive if not specified)
@@ -1796,11 +1784,6 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                         cmd.arg("--browser");
                     }
 
-                    // Pass project path via environment variable to ensure child process
-                    // can find the project even if current_dir is not inherited correctly
-                    // (fixes macOS setsid issue where std::env::current_dir() fails in child)
-                    cmd.env("INTENT_ENGINE_PROJECT_DIR", &project_path);
-
                     cmd
                 };
 
@@ -1818,9 +1801,6 @@ async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()
                     if browser {
                         cmd.arg("--browser");
                     }
-
-                    // Pass project path via environment variable for consistency
-                    cmd.env("INTENT_ENGINE_PROJECT_DIR", &project_path);
 
                     cmd
                 };

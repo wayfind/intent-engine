@@ -193,10 +193,6 @@ pub enum Commands {
         /// Custom config file path (advanced)
         #[arg(long)]
         config_path: Option<String>,
-
-        /// Project directory for INTENT_ENGINE_PROJECT_DIR env var
-        #[arg(long)]
-        project_dir: Option<String>,
     },
 
     // ========================================
@@ -448,9 +444,12 @@ pub enum TaskCommands {
     /// Intelligently recommend the next task to work on
     ///
     /// This command uses a context-aware priority model to recommend a single task:
-    /// 1. First priority: Subtasks of the current focused task (depth-first)
-    /// 2. Second priority: Top-level tasks (breadth-first)
+    /// 1. First priority: 'doing' subtasks of current focused task
+    /// 2. Second priority: 'todo' subtasks of current focused task
+    /// 3. Third priority: Top-level 'doing' tasks
+    /// 4. Fourth priority: Top-level 'todo' tasks
     ///
+    /// Within the same priority level, 'doing' tasks are prioritized over 'todo' tasks.
     /// The command is non-interactive and does not modify task status.
     PickNext {
         /// Output format (text or json)

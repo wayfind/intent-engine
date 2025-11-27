@@ -110,7 +110,6 @@ fn start_test_dashboard(project_path: &Path) -> Child {
         .arg("start")
         .arg("--foreground")
         .current_dir(project_path)
-        .env("INTENT_ENGINE_PROJECT_DIR", project_path)
         .env("RUST_LOG", "debug")
         .stdout(Stdio::from(stdout_file))
         .stderr(Stdio::from(stderr_file))
