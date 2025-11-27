@@ -1,13 +1,13 @@
 use crate::db::models::{
     DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, ParentTaskInfo, PickNextResponse,
-    SpawnSubtaskResponse, SubtaskInfo, Task, TaskContext, TaskSearchResult, TaskWithEvents,
-    WorkspaceStatus,
+    SpawnSubtaskResponse, SubtaskInfo, Task, TaskSearchResult, TaskWithEvents, WorkspaceStatus,
 };
 use crate::error::{IntentError, Result};
 use chrono::Utc;
 use sqlx::{Row, SqlitePool};
 use std::sync::Arc;
 
+pub use crate::db::models::TaskContext;
 pub struct TaskManager<'a> {
     pool: &'a SqlitePool,
     notifier: crate::notifications::NotificationSender,
@@ -2762,3 +2762,5 @@ mod tests {
         assert_eq!(doing_tasks[1].id, task_b.id);
     }
 }
+
+// Re-export TaskContext for cli_handlers

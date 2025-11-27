@@ -1083,14 +1083,12 @@ ie setup [OPTIONS]
 - `--scope <SCOPE>` - Installation scope: user (default recommended), project, or both
 - `--dry-run` - Preview mode, show what would be done without executing
 - `--force` - Force overwrite existing configuration
-- `--diagnose` - Diagnose existing setup instead of installing
 - `--config-path <CONFIG_PATH>` - Custom config file path (advanced)
 
 **Features:**
 - Support for user-level or project-level installation
 - Atomic operations with rollback on failure
 - Built-in connectivity testing
-- Troubleshooting mode
 
 **Examples:**
 ```bash
@@ -1099,9 +1097,6 @@ ie setup --target claude-code
 
 # Preview what will be done
 ie setup --target claude-code --dry-run
-
-# Diagnose existing configuration
-ie setup --diagnose
 
 # Force reinstall
 ie setup --target claude-code --force

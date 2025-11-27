@@ -82,28 +82,6 @@ pub struct ConnectivityResult {
     pub details: String,
 }
 
-/// Result of a diagnosis operation
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DiagnosisReport {
-    /// Overall status (all checks passed?)
-    pub overall_status: bool,
-    /// Individual check results
-    pub checks: Vec<DiagnosisCheck>,
-    /// Suggested fixes for failed checks
-    pub suggested_fixes: Vec<String>,
-}
-
-/// Individual diagnosis check
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DiagnosisCheck {
-    /// Check name
-    pub name: String,
-    /// Whether the check passed
-    pub passed: bool,
-    /// Details or error message
-    pub details: String,
-}
-
 /// Trait for setup modules
 pub trait SetupModule {
     /// Module name (e.g., "claude-code")
@@ -111,9 +89,6 @@ pub trait SetupModule {
 
     /// Perform setup
     fn setup(&self, opts: &SetupOptions) -> Result<SetupResult>;
-
-    /// Diagnose existing setup
-    fn diagnose(&self) -> Result<DiagnosisReport>;
 
     /// Test connectivity
     fn test_connectivity(&self) -> Result<ConnectivityResult>;

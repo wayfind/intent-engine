@@ -173,10 +173,6 @@ pub enum Commands {
         #[arg(long)]
         force: bool,
 
-        /// Run diagnosis on existing setup instead of installing
-        #[arg(long)]
-        diagnose: bool,
-
         /// Custom config file path (advanced)
         #[arg(long)]
         config_path: Option<String>,

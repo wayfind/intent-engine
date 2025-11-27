@@ -1120,14 +1120,12 @@ ie setup [OPTIONS]
 - `--scope <SCOPE>` - 安装范围：user（默认推荐）, project, 或 both
 - `--dry-run` - 预览模式，显示将要执行的操作但不实际执行
 - `--force` - 强制覆盖现有配置
-- `--diagnose` - 诊断现有设置而不安装
 - `--config-path <CONFIG_PATH>` - 自定义配置文件路径（高级用法）
 
 **特性:**
 - 支持用户级或项目级安装
 - 原子操作，失败时自动回滚
 - 内置连接测试
-- 故障诊断模式
 
 **示例:**
 ```bash
@@ -1136,9 +1134,6 @@ ie setup --target claude-code
 
 # 预览将要进行的操作
 ie setup --target claude-code --dry-run
-
-# 诊断现有配置
-ie setup --diagnose
 
 # 强制重新安装
 ie setup --target claude-code --force

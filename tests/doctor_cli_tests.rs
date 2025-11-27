@@ -48,7 +48,7 @@ async fn test_doctor_basic_success() {
         .collect();
 
     assert_eq!(checks.len(), 5, "Should have exactly 5 checks");
-    assert!(check_names.contains(&"Database Location".to_string()));
+    assert!(check_names.contains(&"Database Path Resolution".to_string()));
     assert!(check_names.contains(&"Database Health".to_string()));
     assert!(check_names.contains(&"Dashboard".to_string()));
     assert!(check_names.contains(&"MCP Connections".to_string()));
@@ -72,7 +72,7 @@ async fn test_doctor_database_location_check() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Database Location"))
+        .stdout(predicate::str::contains("Database Path Resolution"))
         .stdout(predicate::str::contains("✓ INFO"));
 }
 
@@ -158,7 +158,7 @@ async fn test_doctor_database_path_resolution() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Database Location"));
+        .stdout(predicate::str::contains("Database Path Resolution"));
 }
 
 #[tokio::test]
