@@ -93,22 +93,6 @@ if ($isSourceRepo) {
     }
 }
 
-# Clean up old dashboard registry (v0.5.x -> v0.6.0 migration)
-$registryFile = Join-Path $env:USERPROFILE ".intent-engine\projects.json"
-if (Test-Path $registryFile) {
-    Print-Info "Cleaning up old dashboard registry for v0.6.0 upgrade..."
-    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-    $backupFile = Join-Path $env:USERPROFILE ".intent-engine\projects.json.backup.$timestamp"
-    try {
-        Copy-Item $registryFile $backupFile -ErrorAction SilentlyContinue
-        Remove-Item $registryFile -Force
-        $backupName = Split-Path $backupFile -Leaf
-        Print-Info "Old registry backed up to: $backupName"
-    } catch {
-        # Silently ignore backup failures
-    }
-}
-
 # Verify installation
 Print-Info "Verifying installation..."
 try {

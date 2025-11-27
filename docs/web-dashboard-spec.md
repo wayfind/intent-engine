@@ -795,7 +795,6 @@ Response: 200 OK
 
 ```
 ~/.intent-engine/
-├── projects.json          # Global registry
 ├── projects/
 │   ├── project-a/
 │   │   ├── intents.db
@@ -804,43 +803,28 @@ Response: 200 OK
 │       ├── intents.db
 │       └── dashboard.pid
 └── dashboard-global.log
+
+Note: projects.json (Global registry) removed in v0.6.0
+      Replaced by WebSocket-based in-memory state
 ```
 
 ### 7.2 Project Registry
 
-**Location**: `~/.intent-engine/projects.json`
+> **DEPRECATED**: File-based registry (`~/.intent-engine/projects.json`) was removed in v0.6.0
 
-**Structure**:
-```json
-{
-  "version": "1.0",
-  "projects": [
-    {
-      "path": "/home/user/projects/intent-engine",
-      "name": "intent-engine",
-      "port": 11391,
-      "pid": 12345,
-      "started_at": "2025-11-16T10:00:00Z",
-      "db_path": "/home/user/projects/intent-engine/.intent-engine/intents.db"
-    },
-    {
-      "path": "/home/user/projects/cortex",
-      "name": "cortex",
-      "port": 11392,
-      "pid": 12346,
-      "started_at": "2025-11-16T10:05:00Z",
-      "db_path": "/home/user/projects/cortex/.intent-engine/intents.db"
-    }
-  ],
-  "next_port": 11393
-}
-```
+**Current Implementation** (v0.6.0+):
+- Projects are tracked via **WebSocket connections** (in-memory state)
+- Dashboard runs on fixed port **11391**
+- MCP clients register by establishing WebSocket connection
+- State is ephemeral - persists only while Dashboard and MCP are running
+- Query active projects via `/api/projects` HTTP endpoint
 
-**Operations**:
-- **Register**: Add project when dashboard starts
-- **Unregister**: Remove project when dashboard stops
-- **Lookup**: Find project by path or port
-- **Port Allocation**: Fixed port 11391 (custom port available via --port flag)
+**Legacy System** (v0.5.x and earlier):
+- Used `~/.intent-engine/projects.json` for persistent registry
+- Supported dynamic port allocation (11391, 11392, ...)
+- File-based synchronization across multiple dashboards
+
+**Migration**: No action required - WebSocket registration is automatic when MCP connects to Dashboard
 
 ### 7.3 Project Identification
 
@@ -853,7 +837,7 @@ ie dashboard start
 # 1. Detect project root (has .intent-engine/ or .git/)
 # 2. Use project name from directory name
 # 3. Use fixed port 11391 (or custom port if specified)
-# 4. Register in global registry
+# 4. Start WebSocket server for MCP connections
 ```
 
 **Option 2: Explicit Project Name**
@@ -1162,11 +1146,11 @@ ie dashboard stop --all
 **Goal**: Basic working dashboard
 
 **Tasks**:
-- [ ] **Multi-Project Infrastructure**
-  - Global project registry (`~/.intent-engine/projects.json`)
-  - Project root auto-detection logic
-  - Port management system (fixed port 11391 with --port override)
-  - PID/lock file management per project
+- [x] **Multi-Project Infrastructure** _(v0.6.0)_
+  - ~~Global project registry (`~/.intent-engine/projects.json`)~~ → WebSocket-based in-memory state
+  - Project root auto-detection logic ✓
+  - Port management system (fixed port 11391 with --port override) ✓
+  - PID/lock file management per project ✓
 - [ ] **Backend Server**
   - Setup Axum server with static file serving
   - Implement project context middleware

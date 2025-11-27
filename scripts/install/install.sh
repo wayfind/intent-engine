@@ -78,16 +78,6 @@ else
     fi
 fi
 
-# Clean up old dashboard registry (v0.5.x -> v0.6.0 migration)
-REGISTRY_FILE="$HOME/.intent-engine/projects.json"
-if [ -f "$REGISTRY_FILE" ]; then
-    print_info "Cleaning up old dashboard registry for v0.6.0 upgrade..."
-    BACKUP_FILE="$HOME/.intent-engine/projects.json.backup.$(date +%Y%m%d_%H%M%S)"
-    cp "$REGISTRY_FILE" "$BACKUP_FILE" 2>/dev/null || true
-    rm -f "$REGISTRY_FILE"
-    print_info "Old registry backed up to: ${BACKUP_FILE##*/}"
-fi
-
 # Verify installation
 print_info "Verifying installation..."
 if command -v ie &> /dev/null; then

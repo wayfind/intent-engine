@@ -33,7 +33,7 @@ ie dashboard start
 
 The dashboard will automatically:
 - Detect the project database (`.intent-engine/intents.db`)
-- Register the project in `~/.intent-engine/projects.json`
+- Start WebSocket server for MCP client connections
 - Use the fixed port 11391
 - Display the URL to access
 

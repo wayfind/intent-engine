@@ -47,7 +47,7 @@ impl DashboardTestServer {
         let binary_path = common::ie_binary();
 
         // Create a temporary HOME directory for the dashboard server
-        // (dashboard needs to write to ~/.intent-engine/projects.json)
+        // (provides isolated test environment)
         let temp_home = tempfile::tempdir()?;
         let home_path = temp_home
             .path()
