@@ -1166,17 +1166,22 @@ fn handle_setup_diagnose(target: &str) -> Result<()> {
     }
 }
 
+/// Get status badge icon for task status
+fn get_status_badge(status: &str) -> &'static str {
+    match status {
+        "done" => "✓",
+        "doing" => "→",
+        "todo" => "○",
+        _ => "?",
+    }
+}
+
 /// Print task context in a human-friendly tree format
 fn print_task_context(ctx: &TaskContext) -> Result<()> {
     let task = &ctx.task;
 
     // Status badge
-    let status_badge = match task.status.as_str() {
-        "done" => "✓",
-        "doing" => "→",
-        "todo" => "○",
-        _ => "?",
-    };
+    let status_badge = get_status_badge(task.status.as_str());
 
     // Main task info
     println!("Task #{}: {} [{}]", task.id, task.name, status_badge);
@@ -1199,12 +1204,7 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
         println!("  (none - top-level task)");
     } else {
         for ancestor in &ctx.ancestors {
-            let status = match ancestor.status.as_str() {
-                "done" => "✓",
-                "doing" => "→",
-                "todo" => "○",
-                _ => "?",
-            };
+            let status = get_status_badge(ancestor.status.as_str());
             println!("  └─ #{}: {} {}", ancestor.id, ancestor.name, status);
         }
     }
@@ -1220,12 +1220,7 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
         println!("  (none)");
     } else {
         for (i, child) in ctx.children.iter().enumerate() {
-            let status = match child.status.as_str() {
-                "done" => "✓",
-                "doing" => "→",
-                "todo" => "○",
-                _ => "?",
-            };
+            let status = get_status_badge(child.status.as_str());
             let prefix = if i == ctx.children.len() - 1 {
                 "└─"
             } else {
@@ -1240,12 +1235,7 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
         println!("\nSiblings ({} at same level):", ctx.siblings.len());
         let show_count = 5.min(ctx.siblings.len());
         for (i, sibling) in ctx.siblings.iter().take(show_count).enumerate() {
-            let status = match sibling.status.as_str() {
-                "done" => "✓",
-                "doing" => "→",
-                "todo" => "○",
-                _ => "?",
-            };
+            let status = get_status_badge(sibling.status.as_str());
             let prefix = if i == show_count - 1 && ctx.siblings.len() <= 5 {
                 "└─"
             } else {
@@ -1262,12 +1252,7 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
     if !ctx.dependencies.blocking_tasks.is_empty() {
         println!("\nBlocking tasks (must complete first):");
         for task in &ctx.dependencies.blocking_tasks {
-            let status = match task.status.as_str() {
-                "done" => "✓",
-                "doing" => "→",
-                "todo" => "○",
-                _ => "?",
-            };
+            let status = get_status_badge(task.status.as_str());
             println!("  • #{} {} {}", task.id, task.name, status);
         }
     }
@@ -1275,12 +1260,7 @@ fn print_task_context(ctx: &TaskContext) -> Result<()> {
     if !ctx.dependencies.blocked_by_tasks.is_empty() {
         println!("\nBlocked by this task:");
         for task in &ctx.dependencies.blocked_by_tasks {
-            let status = match task.status.as_str() {
-                "done" => "✓",
-                "doing" => "→",
-                "todo" => "○",
-                _ => "?",
-            };
+            let status = get_status_badge(task.status.as_str());
             println!("  • #{} {} {}", task.id, task.name, status);
         }
     }
