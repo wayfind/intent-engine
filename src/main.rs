@@ -1374,14 +1374,23 @@ async fn check_mcp_connections() -> serde_json::Value {
 
     // Query /api/projects to get connection count
     let url = format!("http://127.0.0.1:{}/api/projects", DASHBOARD_PORT);
-    match reqwest::Client::builder()
+    let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(2))
         .build()
-        .unwrap()
-        .get(&url)
-        .send()
-        .await
     {
+        Ok(c) => c,
+        Err(e) => {
+            return json!({
+                "check": "MCP Connections",
+                "status": "✗ FAIL",
+                "details": {
+                    "error": format!("Failed to create HTTP client: {}", e)
+                }
+            });
+        },
+    };
+
+    match client.get(&url).send().await {
         Ok(resp) if resp.status().is_success() => {
             if let Ok(data) = resp.json::<serde_json::Value>().await {
                 let empty_vec = vec![];
