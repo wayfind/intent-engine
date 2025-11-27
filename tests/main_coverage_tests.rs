@@ -144,27 +144,6 @@ fn test_event_add_without_current_task_and_without_task_id() {
 // ============================================================================
 
 #[test]
-fn test_setup_claude_code_dry_run() {
-    let temp_dir = common::setup_test_env();
-    let config_file = temp_dir.path().join("test-config.json");
-
-    let mut cmd = common::ie_command();
-    cmd.current_dir(temp_dir.path())
-        .arg("setup")
-        .arg("--target")
-        .arg("claude-code")
-        .arg("--scope")
-        .arg("project")
-        .arg("--config-path")
-        .arg(&config_file)
-        .arg("--dry-run");
-
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Would create:"));
-}
-
-#[test]
 fn test_setup_claude_code_creates_hook() {
     let temp_dir = common::setup_test_env();
     let config_file = temp_dir.path().join("test-config.json");
@@ -293,27 +272,6 @@ fn test_setup_claude_code_with_custom_claude_dir() {
 // ============================================================================
 // Setup MCP Tests
 // ============================================================================
-
-#[test]
-fn test_setup_mcp_dry_run() {
-    let temp_dir = common::setup_test_env();
-    let config_file = temp_dir.path().join("test-config.json");
-
-    let mut cmd = common::ie_command();
-    cmd.current_dir(temp_dir.path())
-        .arg("setup")
-        .arg("--target")
-        .arg("claude-code")
-        .arg("--scope")
-        .arg("project")
-        .arg("--dry-run")
-        .arg("--config-path")
-        .arg(&config_file);
-
-    cmd.assert().success().stdout(
-        predicate::str::contains("Would create:").or(predicate::str::contains("Would write:")),
-    );
-}
 
 #[test]
 fn test_setup_mcp_creates_config() {

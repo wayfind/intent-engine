@@ -44,8 +44,6 @@ impl FromStr for SetupScope {
 pub struct SetupOptions {
     /// Installation scope
     pub scope: SetupScope,
-    /// Dry run mode (show what would be done)
-    pub dry_run: bool,
     /// Force overwrite existing configuration
     pub force: bool,
     /// Custom config file path (optional)
@@ -56,7 +54,6 @@ impl Default for SetupOptions {
     fn default() -> Self {
         Self {
             scope: SetupScope::User,
-            dry_run: false,
             force: false,
             config_path: None,
         }

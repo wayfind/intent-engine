@@ -11,28 +11,6 @@ fn ie_command() -> Command {
 }
 
 #[test]
-fn test_init_dry_run() {
-    let temp_dir = TempDir::new().unwrap();
-    let project_dir = temp_dir.path();
-
-    // Create a .git marker to simulate a git repository
-    fs::create_dir(project_dir.join(".git")).unwrap();
-
-    let output = ie_command()
-        .current_dir(project_dir)
-        .arg("init")
-        .arg("--dry-run")
-        .assert()
-        .success();
-
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-
-    assert!(stdout.contains("Would initialize Intent-Engine at:"));
-    assert!(stdout.contains("Directory does not exist (would be created)"));
-    assert!(stdout.contains("To proceed, run without --dry-run"));
-}
-
-#[test]
 fn test_init_creates_directory_and_database() {
     let temp_dir = TempDir::new().unwrap();
     let project_dir = temp_dir.path();
@@ -200,35 +178,6 @@ fn test_init_with_nonexistent_directory_fails() {
             stderr
         );
     }
-}
-
-#[test]
-fn test_init_dry_run_shows_existing_warning() {
-    let temp_dir = TempDir::new().unwrap();
-    let project_dir = temp_dir.path();
-
-    // Create a .git marker
-    fs::create_dir(project_dir.join(".git")).unwrap();
-
-    // Initialize once
-    ie_command()
-        .current_dir(project_dir)
-        .arg("init")
-        .assert()
-        .success();
-
-    // Run dry-run (should show warning)
-    let output = ie_command()
-        .current_dir(project_dir)
-        .arg("init")
-        .arg("--dry-run")
-        .assert()
-        .success();
-
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-
-    assert!(stdout.contains("⚠ Warning: .intent-engine already exists"));
-    assert!(stdout.contains("Use --force to re-initialize"));
 }
 
 #[test]

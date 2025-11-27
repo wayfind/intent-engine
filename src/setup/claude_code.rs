@@ -38,12 +38,8 @@ impl ClaudeCodeSetup {
         let hooks_dir = claude_dir.join("hooks");
         let hook_script = hooks_dir.join("session-start.sh");
 
-        if !opts.dry_run {
-            fs::create_dir_all(&hooks_dir).map_err(IntentError::IoError)?;
-            println!("✓ Created {}", hooks_dir.display());
-        } else {
-            println!("Would create: {}", hooks_dir.display());
-        }
+        fs::create_dir_all(&hooks_dir).map_err(IntentError::IoError)?;
+        println!("✓ Created {}", hooks_dir.display());
 
         // Backup existing hook script
         if hook_script.exists() && !opts.force {
@@ -53,7 +49,7 @@ impl ClaudeCodeSetup {
             )));
         }
 
-        if hook_script.exists() && !opts.dry_run {
+        if hook_script.exists() {
             if let Some(backup) = create_backup(&hook_script)? {
                 backups.push((hook_script.clone(), backup.clone()));
                 println!("✓ Backed up hook script to {}", backup.display());
@@ -62,14 +58,10 @@ impl ClaudeCodeSetup {
 
         // Install session-start hook script
         let hook_content = include_str!("../../templates/session-start.sh");
-        if !opts.dry_run {
-            fs::write(&hook_script, hook_content).map_err(IntentError::IoError)?;
-            set_executable(&hook_script)?;
-            files_modified.push(hook_script.clone());
-            println!("✓ Installed {}", hook_script.display());
-        } else {
-            println!("Would write: {}", hook_script.display());
-        }
+        fs::write(&hook_script, hook_content).map_err(IntentError::IoError)?;
+        set_executable(&hook_script)?;
+        files_modified.push(hook_script.clone());
+        println!("✓ Installed {}", hook_script.display());
 
         // Install format-ie-output hook script
         let format_hook_script = hooks_dir.join("format-ie-output.sh");
@@ -82,21 +74,17 @@ impl ClaudeCodeSetup {
             )));
         }
 
-        if format_hook_script.exists() && !opts.dry_run {
+        if format_hook_script.exists() {
             if let Some(backup) = create_backup(&format_hook_script)? {
                 backups.push((format_hook_script.clone(), backup.clone()));
                 println!("✓ Backed up format hook to {}", backup.display());
             }
         }
 
-        if !opts.dry_run {
-            fs::write(&format_hook_script, format_hook_content).map_err(IntentError::IoError)?;
-            set_executable(&format_hook_script)?;
-            files_modified.push(format_hook_script.clone());
-            println!("✓ Installed {}", format_hook_script.display());
-        } else {
-            println!("Would write: {}", format_hook_script.display());
-        }
+        fs::write(&format_hook_script, format_hook_content).map_err(IntentError::IoError)?;
+        set_executable(&format_hook_script)?;
+        files_modified.push(format_hook_script.clone());
+        println!("✓ Installed {}", format_hook_script.display());
 
         // 2. Setup settings.json with absolute paths
         let settings_file = claude_dir.join("settings.json");
@@ -110,7 +98,7 @@ impl ClaudeCodeSetup {
             )));
         }
 
-        if settings_file.exists() && !opts.dry_run {
+        if settings_file.exists() {
             if let Some(backup) = create_backup(&settings_file)? {
                 backups.push((settings_file.clone(), backup.clone()));
                 println!("✓ Backed up settings to {}", backup.display());
@@ -179,13 +167,9 @@ impl ClaudeCodeSetup {
             }
         });
 
-        if !opts.dry_run {
-            write_json_config(&settings_file, &settings)?;
-            files_modified.push(settings_file.clone());
-            println!("✓ Created {}", settings_file.display());
-        } else {
-            println!("Would write: {}", settings_file.display());
-        }
+        write_json_config(&settings_file, &settings)?;
+        files_modified.push(settings_file.clone());
+        println!("✓ Created {}", settings_file.display());
 
         // 3. Setup MCP configuration
         let mcp_result = self.setup_mcp_config(opts, &mut files_modified, &mut backups)?;
@@ -217,7 +201,7 @@ impl ClaudeCodeSetup {
         println!("✓ Found binary: {}", binary_path.display());
 
         // Backup existing config
-        if config_path.exists() && !opts.dry_run {
+        if config_path.exists() {
             if let Some(backup) = create_backup(&config_path)? {
                 backups.push((config_path.clone(), backup.clone()));
                 println!("✓ Backed up MCP config to {}", backup.display());
@@ -248,13 +232,9 @@ impl ClaudeCodeSetup {
             "description": "Strategic intent and task workflow management"
         });
 
-        if !opts.dry_run {
-            write_json_config(&config_path, &config)?;
-            files_modified.push(config_path.clone());
-            println!("✓ Updated {}", config_path.display());
-        } else {
-            println!("Would write: {}", config_path.display());
-        }
+        write_json_config(&config_path, &config)?;
+        files_modified.push(config_path.clone());
+        println!("✓ Updated {}", config_path.display());
 
         Ok(ConnectivityResult {
             passed: true,
@@ -273,12 +253,8 @@ impl ClaudeCodeSetup {
         let hooks_dir = claude_dir.join("hooks");
         let hook_script = hooks_dir.join("session-start.sh");
 
-        if !opts.dry_run {
-            fs::create_dir_all(&hooks_dir).map_err(IntentError::IoError)?;
-            println!("✓ Created {}", hooks_dir.display());
-        } else {
-            println!("Would create: {}", hooks_dir.display());
-        }
+        fs::create_dir_all(&hooks_dir).map_err(IntentError::IoError)?;
+        println!("✓ Created {}", hooks_dir.display());
 
         // Check if hook script already exists
         if hook_script.exists() && !opts.force {
@@ -290,14 +266,10 @@ impl ClaudeCodeSetup {
 
         // Install session-start hook script
         let hook_content = include_str!("../../templates/session-start.sh");
-        if !opts.dry_run {
-            fs::write(&hook_script, hook_content).map_err(IntentError::IoError)?;
-            set_executable(&hook_script)?;
-            files_modified.push(hook_script.clone());
-            println!("✓ Installed {}", hook_script.display());
-        } else {
-            println!("Would write: {}", hook_script.display());
-        }
+        fs::write(&hook_script, hook_content).map_err(IntentError::IoError)?;
+        set_executable(&hook_script)?;
+        files_modified.push(hook_script.clone());
+        println!("✓ Installed {}", hook_script.display());
 
         // Install format-ie-output hook script
         let format_hook_script = hooks_dir.join("format-ie-output.sh");
@@ -310,14 +282,10 @@ impl ClaudeCodeSetup {
             )));
         }
 
-        if !opts.dry_run {
-            fs::write(&format_hook_script, format_hook_content).map_err(IntentError::IoError)?;
-            set_executable(&format_hook_script)?;
-            files_modified.push(format_hook_script.clone());
-            println!("✓ Installed {}", format_hook_script.display());
-        } else {
-            println!("Would write: {}", format_hook_script.display());
-        }
+        fs::write(&format_hook_script, format_hook_content).map_err(IntentError::IoError)?;
+        set_executable(&format_hook_script)?;
+        files_modified.push(format_hook_script.clone());
+        println!("✓ Installed {}", format_hook_script.display());
 
         // Create settings.json with absolute paths
         let settings_file = claude_dir.join("settings.json");
@@ -394,13 +362,9 @@ impl ClaudeCodeSetup {
             }
         });
 
-        if !opts.dry_run {
-            write_json_config(&settings_file, &settings)?;
-            files_modified.push(settings_file);
-            println!("✓ Created settings.json");
-        } else {
-            println!("Would write: {}", settings_file.display());
-        }
+        write_json_config(&settings_file, &settings)?;
+        files_modified.push(settings_file);
+        println!("✓ Created settings.json");
 
         // MCP config still goes to user-level
         let mut backups = Vec::new();

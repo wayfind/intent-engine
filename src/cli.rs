@@ -72,10 +72,6 @@ pub enum Commands {
     /// Example:
     ///   echo '{"tasks": [{"name": "Task A", "children": [{"name": "Task B"}]}]}' | ie plan
     Plan {
-        /// Show what would be created without actually doing it
-        #[arg(long)]
-        dry_run: bool,
-
         /// Output format (text or json)
         #[arg(long, default_value = "text")]
         format: String,
@@ -114,15 +110,10 @@ pub enum Commands {
     /// Examples:
     ///   ie init                    # Initialize in current directory
     ///   ie init --at /my/project   # Initialize at specific directory
-    ///   ie init --dry-run          # Preview where it would initialize
     Init {
         /// Custom directory to initialize (default: current directory)
         #[arg(long)]
         at: Option<String>,
-
-        /// Show what would be initialized without actually doing it
-        #[arg(long)]
-        dry_run: bool,
 
         /// Re-initialize even if .intent-engine already exists
         #[arg(long)]
@@ -177,10 +168,6 @@ pub enum Commands {
         /// Installation scope: user (default, recommended), project, or both
         #[arg(long, default_value = "user")]
         scope: String,
-
-        /// Show what would be done without actually doing it
-        #[arg(long)]
-        dry_run: bool,
 
         /// Overwrite existing configuration
         #[arg(long)]
