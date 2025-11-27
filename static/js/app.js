@@ -13,13 +13,46 @@ let wsHeartbeatTimer = null;
 const WS_HEARTBEAT_TIMEOUT = 90000; // 90 seconds (protocol spec)
 const PROTOCOL_VERSION = "1.0"; // Intent-Engine Protocol version
 
-// LocalStorage heartbeat - check offline projects periodically
-let storageHeartbeatTimer = null;
-const STORAGE_HEARTBEAT_INTERVAL = 30000; // 30 seconds
+// ============================================================================
+// Defense Layer 7: Frontend Temporary Directory Detection
+// ============================================================================
 
+/**
+ * Defense Layer 7: Frontend temporary directory detection
+ * Prevents temporary/test directories from polluting the Dashboard
+ *
+ * @param {string} path - The file system path to check
+ * @returns {boolean} true if the path is in a temporary directory
+ */
+function isTempPath(path) {
+    if (!path) return false;
+
+    // Unix/Linux/macOS temporary directories
+    if (path.startsWith('/tmp/') || path.startsWith('/var/tmp/')) {
+        return true;
+    }
+
+    // Windows temporary directories
+    if (path.includes('\\Temp\\') || path.includes('\\AppData\\Local\\Temp')) {
+        return true;
+    }
+
+    // Node.js/system temp patterns (e.g., /tmp/tmp-123456)
+    if (/\/(tmp-|temp-)[a-zA-Z0-9]{6,}/.test(path)) {
+        return true;
+    }
+
+    return false;
+}
+
+// ============================================================================
 // Initialize on page load
+// ============================================================================
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('CORTEX ENGINE initializing...');
+
+    // Clean up stale localStorage entries (temporary directories, etc.)
+    cleanupStaleProjects();
 
     // Configure marked.js
     marked.setOptions({
@@ -39,9 +72,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Connect to Dashboard WebSocket for real-time project updates
     connectToDashboardWebSocket();
-
-    // Start localStorage heartbeat to check offline projects
-    startStorageHeartbeat();
 
     // Load project info
     await loadProjectInfo();
@@ -123,6 +153,12 @@ function saveProjectsToStorage(projects) {
 }
 
 function addProjectToStorage(project) {
+    // Defense Layer 7: Reject temporary directories
+    if (isTempPath(project.path)) {
+        console.warn('[Defense Layer 7] Rejecting temporary path:', project.path);
+        return; // Silently skip
+    }
+
     const projects = loadProjectsFromStorage();
     // Check if project already exists
     const existingIndex = projects.findIndex(p => p.path === project.path);
@@ -142,65 +178,27 @@ function removeProjectFromStorage(projectPath) {
     saveProjectsToStorage(filtered);
 }
 
-// ============================================================================
-// LocalStorage Heartbeat - Detect Offline Projects Coming Back Online
-// ============================================================================
-
-function startStorageHeartbeat() {
-    // Initial check
-    checkOfflineProjects();
-
-    // Set up periodic checks
-    storageHeartbeatTimer = setInterval(checkOfflineProjects, STORAGE_HEARTBEAT_INTERVAL);
-    console.log('📦 LocalStorage heartbeat started (checking every 30s)');
-}
-
-async function checkOfflineProjects() {
-    const storedProjects = loadProjectsFromStorage();
-
-    // Find projects that are stored but not currently online
-    const offlineProjects = storedProjects.filter(p => !onlineProjects.has(p.path));
-
-    if (offlineProjects.length === 0) {
-        return; // All stored projects are already online
-    }
-
-    console.log(`🔍 Checking ${offlineProjects.length} offline project(s)...`);
-
-    // Check each offline project's health
-    for (const project of offlineProjects) {
-        try {
-            // Try to fetch health endpoint (Dashboard must be running on port 11391)
-            const response = await fetch('http://127.0.0.1:11391/api/health', {
-                method: 'GET',
-                signal: AbortSignal.timeout(2000) // 2 second timeout
-            });
-
-            if (response.ok) {
-                // Dashboard is running! Check if our project is now online
-                const infoResponse = await fetch('http://127.0.0.1:11391/api/info');
-                if (infoResponse.ok) {
-                    const info = await infoResponse.json();
-
-                    // If this project matches the running Dashboard's project
-                    if (info.path === project.path) {
-                        console.log(`✓ Project "${project.name}" is now online!`);
-
-                        // Manually update onlineProjects Map since WebSocket may not send
-                        // project_online message when reconnecting (it only sends "init" with empty array)
-                        onlineProjects.set(project.path, project);
-
-                        // Refresh the UI to show updated status (now with green dot)
-                        renderProjectTabs();
-                    }
-                }
-            }
-        } catch (error) {
-            // Dashboard not responding or timeout - project still offline
-            // This is expected for offline projects, no need to log
+/**
+ * Clean up stale localStorage entries on startup
+ * Removes temporary directory entries and orphaned projects
+ */
+function cleanupStaleProjects() {
+    const projects = loadProjectsFromStorage();
+    const validProjects = projects.filter(project => {
+        // Remove temporary directory entries
+        if (isTempPath(project.path)) {
+            console.log('Cleanup: Removing temporary project:', project.path);
+            return false;
         }
+        return true;
+    });
+
+    if (validProjects.length < projects.length) {
+        console.log(`Cleaned up ${projects.length - validProjects.length} stale project(s)`);
+        saveProjectsToStorage(validProjects);
     }
 }
+
 
 // ============================================================================
 // WebSocket Connection for Real-Time Project Updates
@@ -485,6 +483,12 @@ function handleInitMessage(projects) {
 
     // Add all online projects to map
     projects.forEach(project => {
+        // Defense Layer 7: Filter temporary directories
+        if (isTempPath(project.path)) {
+            console.warn('[Defense Layer 7] Ignoring temp project in init:', project.path);
+            return; // Skip this project
+        }
+
         onlineProjects.set(project.path, project);
         // Also add to storage if not already there
         addProjectToStorage(project);
@@ -496,6 +500,12 @@ function handleInitMessage(projects) {
 
 function handleProjectOnline(project) {
     console.log('Project came online:', project);
+
+    // Defense Layer 7: Filter temporary directories
+    if (isTempPath(project.path)) {
+        console.warn('[Defense Layer 7] Ignoring temp project online:', project.path);
+        return; // Skip this project
+    }
 
     // Add to online projects map
     onlineProjects.set(project.path, project);
@@ -513,7 +523,10 @@ function handleProjectOffline(projectPath) {
     // Remove from online projects map
     onlineProjects.delete(projectPath);
 
-    // Re-render tabs (project stays in storage, just shown as offline)
+    // Remove from localStorage (fix: zombie green light issue)
+    removeProjectFromStorage(projectPath);
+
+    // Re-render tabs
     renderProjectTabs();
 }
 
@@ -640,9 +653,8 @@ function renderProjectTabs() {
     // Helper function to render tabs
     const renderTabs = (currentProjectPath = '') => {
         const tabsHTML = storedProjects.map(project => {
-            // Check if project is online based on is_online field (Dashboard running)
-            const onlineProject = onlineProjects.get(project.path);
-            const isOnline = onlineProject ? onlineProject.is_online : false;
+            // SINGLE SOURCE OF TRUTH: Check if project is in onlineProjects Map
+            const isOnline = onlineProjects.has(project.path);
             const isActive = project.path === currentProjectPath;
             const activeClass = isActive
                 ? 'bg-neon-blue text-black font-bold shadow-neon-blue'
