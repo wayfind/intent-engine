@@ -16,6 +16,9 @@ use std::io::{self, Read};
 use std::path::PathBuf;
 use std::str::FromStr;
 
+/// Dashboard server default port
+const DASHBOARD_PORT: u16 = 11391;
+
 #[tokio::main]
 async fn main() {
     // Setup Windows console for UTF-8 output
@@ -1328,7 +1331,6 @@ async fn check_dashboard_health(port: u16) -> bool {
 async fn check_dashboard_status() -> serde_json::Value {
     use serde_json::json;
 
-    const DASHBOARD_PORT: u16 = 11391;
     let dashboard_url = format!("http://127.0.0.1:{}", DASHBOARD_PORT);
 
     if check_dashboard_health(DASHBOARD_PORT).await {
@@ -1357,8 +1359,6 @@ async fn check_dashboard_status() -> serde_json::Value {
 /// Check MCP connections by querying Dashboard's /api/projects endpoint
 async fn check_mcp_connections() -> serde_json::Value {
     use serde_json::json;
-
-    const DASHBOARD_PORT: u16 = 11391;
 
     if !check_dashboard_health(DASHBOARD_PORT).await {
         return json!({
