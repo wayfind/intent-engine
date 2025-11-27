@@ -750,292 +750,6 @@ fn read_stdin() -> Result<String> {
     }
 }
 
-/// Check MCP server configuration in ~/.claude.json
-fn check_mcp_configuration() -> serde_json::Value {
-    use intent_engine::setup::common::get_home_dir;
-    use serde_json::json;
-    use std::fs;
-    use std::path::PathBuf;
-
-    let home = match get_home_dir() {
-        Ok(h) => h,
-        Err(_) => {
-            return json!({
-                "check": "MCP Configuration",
-                "status": "⚠ WARNING",
-                "passed": false,
-                "details": {
-                    "error": "Unable to determine home directory",
-                    "config_file": "~/.claude.json",
-                    "config_exists": false
-                }
-            });
-        },
-    };
-
-    let config_path = home.join(".claude.json");
-
-    if !config_path.exists() {
-        return json!({
-            "check": "MCP Configuration",
-            "status": "⚠ WARNING",
-            "passed": false,
-            "details": {
-                "config_file": config_path.display().to_string(),
-                "config_exists": false,
-                "mcp_configured": false,
-                "message": "MCP not configured. Run 'ie setup --target claude-code' to configure",
-                "setup_command": "ie setup --target claude-code"
-            }
-        });
-    }
-
-    // Read and parse config
-    let config_content = match fs::read_to_string(&config_path) {
-        Ok(c) => c,
-        Err(e) => {
-            return json!({
-                "check": "MCP Configuration",
-                "status": "✗ FAIL",
-                "passed": false,
-                "details": {
-                    "config_file": config_path.display().to_string(),
-                    "config_exists": true,
-                    "error": format!("Failed to read config: {}", e)
-                }
-            });
-        },
-    };
-
-    let config: serde_json::Value = match serde_json::from_str(&config_content) {
-        Ok(c) => c,
-        Err(e) => {
-            return json!({
-                "check": "MCP Configuration",
-                "status": "✗ FAIL",
-                "passed": false,
-                "details": {
-                    "config_file": config_path.display().to_string(),
-                    "config_exists": true,
-                    "error": format!("Invalid JSON: {}", e)
-                }
-            });
-        },
-    };
-
-    // Check if intent-engine is configured
-    let mcp_servers = config.get("mcpServers");
-    let ie_config = mcp_servers.and_then(|s| s.get("intent-engine"));
-
-    if ie_config.is_none() {
-        return json!({
-            "check": "MCP Configuration",
-            "status": "⚠ WARNING",
-            "passed": false,
-            "details": {
-                "config_file": config_path.display().to_string(),
-                "config_exists": true,
-                "mcp_configured": false,
-                "message": "intent-engine not configured in MCP servers",
-                "setup_command": "ie setup --target claude-code"
-            }
-        });
-    }
-
-    let ie_config = ie_config.unwrap();
-    let binary_path = ie_config
-        .get("command")
-        .and_then(|c| c.as_str())
-        .unwrap_or("");
-    let binary_path_buf = PathBuf::from(binary_path);
-    let binary_exists = binary_path_buf.exists();
-    let binary_executable = if binary_exists {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::metadata(&binary_path_buf)
-                .map(|m| m.permissions().mode() & 0o111 != 0)
-                .unwrap_or(false)
-        }
-        #[cfg(not(unix))]
-        {
-            true // On Windows, assume executable if exists
-        }
-    } else {
-        false
-    };
-
-    let env_config = ie_config.get("env");
-    let project_dir = env_config
-        .and_then(|e| e.get("INTENT_ENGINE_PROJECT_DIR"))
-        .and_then(|p| p.as_str())
-        .unwrap_or("");
-
-    let status = if binary_exists && binary_executable {
-        "✓ PASS"
-    } else if binary_exists {
-        "⚠ WARNING"
-    } else {
-        "✗ FAIL"
-    };
-
-    let passed = binary_exists && binary_executable;
-
-    json!({
-        "check": "MCP Configuration",
-        "status": status,
-        "passed": passed,
-        "details": {
-            "config_file": config_path.display().to_string(),
-            "config_exists": true,
-            "mcp_configured": true,
-            "binary_path": binary_path,
-            "binary_exists": binary_exists,
-            "binary_executable": binary_executable,
-            "project_dir": project_dir,
-            "message": if passed {
-                "MCP server configured correctly"
-            } else if !binary_exists {
-                "Binary not found at configured path"
-            } else {
-                "Binary not executable"
-            }
-        }
-    })
-}
-
-/// Check hooks configuration in ~/.claude/ or ./.claude/
-fn check_hooks_configuration() -> serde_json::Value {
-    use intent_engine::setup::common::get_home_dir;
-    use serde_json::json;
-    use std::fs;
-    use std::path::PathBuf;
-
-    let home = match get_home_dir() {
-        Ok(h) => h,
-        Err(_) => {
-            return json!({
-                "check": "Hooks Configuration",
-                "status": "⚠ WARNING",
-                "passed": false,
-                "details": {
-                    "error": "Unable to determine home directory"
-                }
-            });
-        },
-    };
-
-    // Check both user-level and project-level
-    let user_hook = home.join(".claude/hooks/session-start.sh");
-    let user_settings = home.join(".claude/settings.json");
-    let project_hook = PathBuf::from(".claude/hooks/session-start.sh");
-    let project_settings = PathBuf::from(".claude/settings.json");
-
-    let mut details = json!({
-        "user_level": {
-            "hook_script": user_hook.display().to_string(),
-            "script_exists": user_hook.exists(),
-            "script_executable": false,
-            "settings_file": user_settings.display().to_string(),
-            "settings_exists": user_settings.exists(),
-            "settings_configured": false
-        },
-        "project_level": {
-            "hook_script": project_hook.display().to_string(),
-            "script_exists": project_hook.exists(),
-            "script_executable": false,
-            "settings_file": project_settings.display().to_string(),
-            "settings_exists": project_settings.exists(),
-            "settings_configured": false
-        }
-    });
-
-    let mut any_configured = false;
-
-    // Check user-level
-    if user_hook.exists() {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(metadata) = fs::metadata(&user_hook) {
-                details["user_level"]["script_executable"] =
-                    json!(metadata.permissions().mode() & 0o111 != 0);
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            details["user_level"]["script_executable"] = json!(true);
-        }
-
-        if user_settings.exists() {
-            if let Ok(content) = fs::read_to_string(&user_settings) {
-                if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
-                    let has_session_start = settings
-                        .get("hooks")
-                        .and_then(|h| h.get("SessionStart"))
-                        .is_some();
-                    details["user_level"]["settings_configured"] = json!(has_session_start);
-                    if has_session_start {
-                        any_configured = true;
-                    }
-                }
-            }
-        }
-    }
-
-    // Check project-level
-    if project_hook.exists() {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(metadata) = fs::metadata(&project_hook) {
-                details["project_level"]["script_executable"] =
-                    json!(metadata.permissions().mode() & 0o111 != 0);
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            details["project_level"]["script_executable"] = json!(true);
-        }
-
-        if project_settings.exists() {
-            if let Ok(content) = fs::read_to_string(&project_settings) {
-                if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
-                    let has_session_start = settings
-                        .get("hooks")
-                        .and_then(|h| h.get("SessionStart"))
-                        .is_some();
-                    details["project_level"]["settings_configured"] = json!(has_session_start);
-                    if has_session_start {
-                        any_configured = true;
-                    }
-                }
-            }
-        }
-    }
-
-    let status = if any_configured {
-        "✓ PASS"
-    } else {
-        "⚠ WARNING"
-    };
-
-    details["message"] = if any_configured {
-        json!("Hooks configured correctly")
-    } else {
-        json!("Hooks not configured. Run 'ie setup --target claude-code' to configure")
-    };
-
-    details["setup_command"] = json!("ie setup --target claude-code");
-
-    json!({
-        "check": "Hooks Configuration",
-        "status": status,
-        "passed": any_configured,
-        "details": details
-    })
-}
-
 async fn handle_search_command(
     query: &str,
     include_tasks: bool,
@@ -1059,42 +773,18 @@ async fn handle_doctor_command() -> Result<()> {
     use serde_json::json;
 
     let mut checks = vec![];
-    let mut all_passed = true;
 
-    // Check OS and architecture
+    // 1. Database Location
+    let db_path_info = ProjectContext::get_database_path_info();
     checks.push(json!({
-        "check": "System Information",
-        "status": "✓ PASS",
-        "details": format!("OS: {}, Arch: {}", std::env::consts::OS, std::env::consts::ARCH)
+        "check": "Database Location",
+        "status": "✓ INFO",
+        "details": db_path_info
     }));
 
-    // Check SQLite version
-    match sqlx::query("SELECT sqlite_version()")
-        .fetch_optional(&sqlx::SqlitePool::connect(":memory:").await?)
-        .await
-    {
-        Ok(Some(row)) => {
-            let version: String = row.try_get(0).unwrap_or_else(|_| "unknown".to_string());
-            checks.push(json!({
-                "check": "SQLite",
-                "status": "✓ PASS",
-                "details": format!("SQLite version: {}", version)
-            }));
-        },
-        Ok(None) | Err(_) => {
-            all_passed = false;
-            checks.push(json!({
-                "check": "SQLite",
-                "status": "✗ FAIL",
-                "details": "Unable to query SQLite version"
-            }));
-        },
-    }
-
-    // Check database initialization
+    // 2. Database Health
     match ProjectContext::load_or_init().await {
         Ok(ctx) => {
-            // Test a simple query
             match sqlx::query("SELECT COUNT(*) FROM tasks")
                 .fetch_one(&ctx.pool)
                 .await
@@ -1102,77 +792,64 @@ async fn handle_doctor_command() -> Result<()> {
                 Ok(row) => {
                     let count: i64 = row.try_get(0).unwrap_or(0);
                     checks.push(json!({
-                        "check": "Database Connection",
+                        "check": "Database Health",
                         "status": "✓ PASS",
-                        "details": format!("Connected to database, {} tasks found", count)
+                        "details": {
+                            "connected": true,
+                            "tasks_count": count,
+                            "message": format!("Database operational with {} tasks", count)
+                        }
                     }));
                 },
                 Err(e) => {
-                    all_passed = false;
                     checks.push(json!({
-                        "check": "Database Connection",
+                        "check": "Database Health",
                         "status": "✗ FAIL",
-                        "details": format!("Database query failed: {}", e)
+                        "details": {"error": format!("Query failed: {}", e)}
                     }));
                 },
             }
         },
         Err(e) => {
-            all_passed = false;
             checks.push(json!({
-                "check": "Database Initialization",
+                "check": "Database Health",
                 "status": "✗ FAIL",
-                "details": format!("Failed to initialize database: {}", e)
+                "details": {"error": format!("Failed to load database: {}", e)}
             }));
         },
     }
 
-    // Check intent-engine version
-    checks.push(json!({
-        "check": "Intent Engine Version",
-        "status": "✓ PASS",
-        "details": format!("v{}", env!("CARGO_PKG_VERSION"))
-    }));
+    // 3-5. New checks
+    checks.push(check_dashboard_status().await);
+    checks.push(check_mcp_connections().await);
+    checks.push(check_session_start_hook());
 
-    // Database path resolution diagnostics
-    let db_path_info = ProjectContext::get_database_path_info();
-    checks.push(json!({
-        "check": "Database Path Resolution",
-        "status": "✓ INFO",
-        "details": db_path_info
-    }));
+    // Status summary
+    let has_failures = checks
+        .iter()
+        .any(|c| c["status"].as_str().unwrap_or("").contains("✗ FAIL"));
+    let has_warnings = checks
+        .iter()
+        .any(|c| c["status"].as_str().unwrap_or("").contains("⚠ WARNING"));
 
-    // Check MCP configuration
-    let mcp_check = check_mcp_configuration();
-    // MCP is optional, so don't fail overall status
-    // if !mcp_check["passed"].as_bool().unwrap_or(false) {
-    //     all_passed = false;
-    // }
-    checks.push(mcp_check);
-
-    // Check Hooks configuration
-    let hooks_check = check_hooks_configuration();
-    // Hooks are optional, so don't fail overall status
-    // if !hooks_check["passed"].as_bool().unwrap_or(false) {
-    //     all_passed = false;
-    // }
-    checks.push(hooks_check);
-
-    // Determine if there are any real failures (not just warnings)
-    let has_failures = checks.iter().any(|check| {
-        let status = check["status"].as_str().unwrap_or("");
-        status.contains("✗ FAIL")
-    });
+    let summary = if has_failures {
+        "✗ Critical issues detected"
+    } else if has_warnings {
+        "⚠ Some optional features need attention"
+    } else {
+        "✓ All systems operational"
+    };
 
     let result = json!({
-        "summary": if all_passed { "✓ All checks passed" } else if has_failures { "✗ Some checks failed" } else { "⚠ Some optional features not configured" },
-        "overall_status": if all_passed { "healthy" } else if has_failures { "unhealthy" } else { "warnings" },
+        "summary": summary,
+        "overall_status": if has_failures { "unhealthy" }
+                         else if has_warnings { "warnings" }
+                         else { "healthy" },
         "checks": checks
     });
 
     println!("{}", serde_json::to_string_pretty(&result)?);
 
-    // Only exit with error code if there are actual failures, not just warnings
     if has_failures {
         std::process::exit(1);
     }
@@ -1664,6 +1341,197 @@ async fn check_dashboard_health(port: u16) -> bool {
             tracing::error!("Failed to create HTTP client: {}", e);
             false
         },
+    }
+}
+
+/// Check Dashboard status and return formatted JSON result
+async fn check_dashboard_status() -> serde_json::Value {
+    use serde_json::json;
+
+    const DASHBOARD_PORT: u16 = 11391;
+    let dashboard_url = format!("http://127.0.0.1:{}", DASHBOARD_PORT);
+
+    if check_dashboard_health(DASHBOARD_PORT).await {
+        json!({
+            "check": "Dashboard",
+            "status": "✓ PASS",
+            "details": {
+                "url": dashboard_url,
+                "status": "running",
+                "access": format!("Visit {} in your browser", dashboard_url)
+            }
+        })
+    } else {
+        json!({
+            "check": "Dashboard",
+            "status": "⚠ WARNING",
+            "details": {
+                "status": "not running",
+                "message": "Dashboard is not running. Start it with 'ie dashboard start'",
+                "command": "ie dashboard start"
+            }
+        })
+    }
+}
+
+/// Check MCP connections by querying Dashboard's /api/projects endpoint
+async fn check_mcp_connections() -> serde_json::Value {
+    use serde_json::json;
+
+    const DASHBOARD_PORT: u16 = 11391;
+
+    if !check_dashboard_health(DASHBOARD_PORT).await {
+        return json!({
+            "check": "MCP Connections",
+            "status": "⚠ WARNING",
+            "details": {
+                "count": 0,
+                "message": "Dashboard not running - cannot query connections",
+                "command": "ie dashboard start"
+            }
+        });
+    }
+
+    // Query /api/projects to get connection count
+    let url = format!("http://127.0.0.1:{}/api/projects", DASHBOARD_PORT);
+    match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .unwrap()
+        .get(&url)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            if let Ok(data) = resp.json::<serde_json::Value>().await {
+                let empty_vec = vec![];
+                let projects = data["projects"].as_array().unwrap_or(&empty_vec);
+                let mcp_count = projects
+                    .iter()
+                    .filter(|p| p["mcp_connected"].as_bool().unwrap_or(false))
+                    .count();
+
+                json!({
+                    "check": "MCP Connections",
+                    "status": if mcp_count > 0 { "✓ PASS" } else { "⚠ WARNING" },
+                    "details": {
+                        "count": mcp_count,
+                        "message": if mcp_count > 0 {
+                            format!("{} MCP client(s) connected", mcp_count)
+                        } else {
+                            "No MCP clients connected".to_string()
+                        }
+                    }
+                })
+            } else {
+                json!({
+                    "check": "MCP Connections",
+                    "status": "✗ FAIL",
+                    "details": {"error": "Failed to parse response"}
+                })
+            }
+        },
+        _ => json!({
+            "check": "MCP Connections",
+            "status": "⚠ WARNING",
+            "details": {"count": 0, "message": "Dashboard not responding"}
+        }),
+    }
+}
+
+/// Check SessionStart hook configuration and effectiveness
+fn check_session_start_hook() -> serde_json::Value {
+    use intent_engine::setup::common::get_home_dir;
+    use serde_json::json;
+
+    let home = match get_home_dir() {
+        Ok(h) => h,
+        Err(_) => {
+            return json!({
+                "check": "SessionStart Hook",
+                "status": "⚠ WARNING",
+                "details": {"error": "Unable to determine home directory"}
+            })
+        },
+    };
+
+    let user_hook = home.join(".claude/hooks/session-start.sh");
+    let user_settings = home.join(".claude/settings.json");
+
+    let script_exists = user_hook.exists();
+    let script_executable = if script_exists {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::metadata(&user_hook)
+                .map(|m| m.permissions().mode() & 0o111 != 0)
+                .unwrap_or(false)
+        }
+        #[cfg(not(unix))]
+        {
+            true
+        }
+    } else {
+        false
+    };
+
+    let is_configured = if user_settings.exists() {
+        std::fs::read_to_string(&user_settings)
+            .ok()
+            .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+            .map(|settings| {
+                settings
+                    .get("hooks")
+                    .and_then(|h| h.get("SessionStart"))
+                    .is_some()
+            })
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    let is_active = script_exists && script_executable && is_configured;
+
+    if is_active {
+        json!({
+            "check": "SessionStart Hook",
+            "status": "✓ PASS",
+            "details": {
+                "script": user_hook.display().to_string(),
+                "configured": true,
+                "executable": true,
+                "message": "SessionStart hook is active"
+            }
+        })
+    } else if is_configured && !script_exists {
+        json!({
+            "check": "SessionStart Hook",
+            "status": "✗ FAIL",
+            "details": {
+                "configured": true,
+                "exists": false,
+                "message": "Hook configured but script file missing"
+            }
+        })
+    } else if script_exists && !script_executable {
+        json!({
+            "check": "SessionStart Hook",
+            "status": "✗ FAIL",
+            "details": {
+                "executable": false,
+                "message": "Script not executable. Run: chmod +x ~/.claude/hooks/session-start.sh"
+            }
+        })
+    } else {
+        json!({
+            "check": "SessionStart Hook",
+            "status": "⚠ WARNING",
+            "details": {
+                "configured": false,
+                "message": "Not configured. Run 'ie setup --target claude-code'",
+                "setup_command": "ie setup --target claude-code"
+            }
+        })
     }
 }
 
