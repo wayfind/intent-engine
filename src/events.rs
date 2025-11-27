@@ -257,7 +257,7 @@ impl<'a> EventManager<'a> {
 
         // Parse since duration if provided
         let since_timestamp = if let Some(duration_str) = since {
-            Some(Self::parse_duration(&duration_str)?)
+            Some(crate::time_utils::parse_duration(&duration_str)?)
         } else {
             None
         };
@@ -307,37 +307,6 @@ impl<'a> EventManager<'a> {
         let events = sql_query.fetch_all(self.pool).await?;
 
         Ok(events)
-    }
-
-    /// Parse duration string (e.g., "7d", "24h", "30m") into a DateTime
-    fn parse_duration(duration: &str) -> Result<chrono::DateTime<Utc>> {
-        let len = duration.len();
-        if len < 2 {
-            return Err(IntentError::InvalidInput(
-                "Duration must be in format like '7d', '24h', or '30m'".to_string(),
-            ));
-        }
-
-        let (num_str, unit) = duration.split_at(len - 1);
-        let num: i64 = num_str.parse().map_err(|_| {
-            IntentError::InvalidInput(format!("Invalid number in duration: {}", num_str))
-        })?;
-
-        let now = Utc::now();
-        let result = match unit {
-            "d" => now - chrono::Duration::days(num),
-            "h" => now - chrono::Duration::hours(num),
-            "m" => now - chrono::Duration::minutes(num),
-            "s" => now - chrono::Duration::seconds(num),
-            _ => {
-                return Err(IntentError::InvalidInput(format!(
-                    "Invalid duration unit '{}'. Use 'd' (days), 'h' (hours), 'm' (minutes), or 's' (seconds)",
-                    unit
-                )))
-            }
-        };
-
-        Ok(result)
     }
 
     /// Search events using FTS5

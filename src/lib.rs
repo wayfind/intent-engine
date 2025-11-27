@@ -16,6 +16,7 @@ pub mod search;
 pub mod session_restore;
 pub mod setup;
 pub mod tasks;
+pub mod time_utils;
 pub mod windows_console;
 pub mod workspace;
 

@@ -1,6 +1,6 @@
 use crate::db::models::{DateRange, Event, Report, ReportSummary, StatusBreakdown, Task};
 use crate::error::Result;
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use sqlx::SqlitePool;
 
 pub struct ReportManager<'a> {
@@ -22,7 +22,7 @@ impl<'a> ReportManager<'a> {
         summary_only: bool,
     ) -> Result<Report> {
         // Parse duration if provided
-        let since_datetime = since.and_then(|s| self.parse_duration(&s));
+        let since_datetime = since.and_then(|s| crate::time_utils::parse_duration(&s).ok());
 
         // Build task query
         let mut task_query = String::from("SELECT id FROM tasks WHERE 1=1");
@@ -163,30 +163,6 @@ impl<'a> ReportManager<'a> {
     fn escape_fts(&self, input: &str) -> String {
         input.replace('"', "\"\"")
     }
-
-    /// Parse duration string (e.g., "7d", "2h", "30m")
-    fn parse_duration(&self, duration_str: &str) -> Option<chrono::DateTime<Utc>> {
-        let duration_str = duration_str.trim();
-
-        if duration_str.is_empty() {
-            return None;
-        }
-
-        let len = duration_str.len();
-        let (num_part, unit) = duration_str.split_at(len - 1);
-
-        let num: i64 = num_part.parse().ok()?;
-
-        let duration = match unit {
-            "d" => Duration::days(num),
-            "h" => Duration::hours(num),
-            "m" => Duration::minutes(num),
-            "w" => Duration::weeks(num),
-            _ => return None,
-        };
-
-        Some(Utc::now() - duration)
-    }
 }
 
 #[cfg(test)]
@@ -285,28 +261,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_duration_days() {
-        let ctx = TestContext::new().await;
-        let report_mgr = ReportManager::new(ctx.pool());
-
-        let result = report_mgr.parse_duration("7d");
+        let result = crate::time_utils::parse_duration("7d").ok();
         assert!(result.is_some());
     }
 
     #[tokio::test]
     async fn test_parse_duration_hours() {
-        let ctx = TestContext::new().await;
-        let report_mgr = ReportManager::new(ctx.pool());
-
-        let result = report_mgr.parse_duration("24h");
+        let result = crate::time_utils::parse_duration("24h").ok();
         assert!(result.is_some());
     }
 
     #[tokio::test]
     async fn test_parse_duration_invalid() {
-        let ctx = TestContext::new().await;
-        let report_mgr = ReportManager::new(ctx.pool());
-
-        let result = report_mgr.parse_duration("invalid");
+        let result = crate::time_utils::parse_duration("invalid").ok();
         assert!(result.is_none());
     }
 
