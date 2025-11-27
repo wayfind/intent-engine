@@ -9,7 +9,7 @@ use crate::error::{IntentError, Result};
 use serde_json::json;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct ClaudeCodeSetup;
 
@@ -24,6 +24,51 @@ impl ClaudeCodeSetup {
     fn get_project_claude_dir() -> Result<PathBuf> {
         let current_dir = env::current_dir().map_err(IntentError::IoError)?;
         Ok(current_dir.join(".claude"))
+    }
+
+    /// Create Claude Code settings JSON configuration
+    ///
+    /// Generates the hooks configuration for both SessionStart and PostToolUse events.
+    /// This configuration is shared between user-level and project-level setups.
+    ///
+    /// # Arguments
+    /// * `hook_path` - Absolute path to the SessionStart hook script
+    /// * `format_hook_path` - Absolute path to the PostToolUse formatting hook script
+    fn create_claude_settings(hook_path: &Path, format_hook_path: &Path) -> serde_json::Value {
+        const MCP_TOOL_MATCHERS: &[&str] = &[
+            "task_context",
+            "task_get",
+            "current_task_get",
+            "task_list",
+            "task_pick_next",
+            "unified_search",
+            "event_list",
+        ];
+
+        let post_tool_use_hooks: Vec<serde_json::Value> = MCP_TOOL_MATCHERS
+            .iter()
+            .map(|matcher| {
+                json!({
+                    "matcher": format!("mcp__intent-engine__{}", matcher),
+                    "hooks": [{
+                        "type": "command",
+                        "command": format_hook_path.to_string_lossy()
+                    }]
+                })
+            })
+            .collect();
+
+        json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": hook_path.to_string_lossy()
+                    }]
+                }],
+                "PostToolUse": post_tool_use_hooks
+            }
+        })
     }
 
     /// Setup for user-level installation
@@ -105,67 +150,7 @@ impl ClaudeCodeSetup {
             }
         }
 
-        let settings = json!({
-            "hooks": {
-                "SessionStart": [{
-                    "hooks": [{
-                        "type": "command",
-                        "command": hook_abs_path.to_string_lossy()
-                    }]
-                }],
-                "PostToolUse": [
-                    {
-                        "matcher": "mcp__intent-engine__task_context",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__task_get",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__current_task_get",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__task_list",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__task_pick_next",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__unified_search",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__event_list",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    }
-                ]
-            }
-        });
+        let settings = Self::create_claude_settings(&hook_abs_path, &format_hook_abs_path);
 
         write_json_config(&settings_file, &settings)?;
         files_modified.push(settings_file.clone());
@@ -300,67 +285,7 @@ impl ClaudeCodeSetup {
             )));
         }
 
-        let settings = json!({
-            "hooks": {
-                "SessionStart": [{
-                    "hooks": [{
-                        "type": "command",
-                        "command": hook_abs_path.to_string_lossy()
-                    }]
-                }],
-                "PostToolUse": [
-                    {
-                        "matcher": "mcp__intent-engine__task_context",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__task_get",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__current_task_get",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__task_list",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__task_pick_next",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__unified_search",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    },
-                    {
-                        "matcher": "mcp__intent-engine__event_list",
-                        "hooks": [{
-                            "type": "command",
-                            "command": format_hook_abs_path.to_string_lossy()
-                        }]
-                    }
-                ]
-            }
-        });
+        let settings = Self::create_claude_settings(&hook_abs_path, &format_hook_abs_path);
 
         write_json_config(&settings_file, &settings)?;
         files_modified.push(settings_file);
