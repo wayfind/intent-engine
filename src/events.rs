@@ -6,18 +6,16 @@ use std::sync::Arc;
 
 pub struct EventManager<'a> {
     pool: &'a SqlitePool,
-    ws_state: Option<Arc<crate::dashboard::websocket::WebSocketState>>,
+    notifier: crate::notifications::NotificationSender,
     project_path: Option<String>,
-    mcp_notifier: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 }
 
 impl<'a> EventManager<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
         Self {
             pool,
-            ws_state: None,
+            notifier: crate::notifications::NotificationSender::new(None, None),
             project_path: None,
-            mcp_notifier: None,
         }
     }
 
@@ -29,9 +27,8 @@ impl<'a> EventManager<'a> {
     ) -> Self {
         Self {
             pool,
-            ws_state: None,
+            notifier: crate::notifications::NotificationSender::new(None, Some(mcp_notifier)),
             project_path: Some(project_path),
-            mcp_notifier: Some(mcp_notifier),
         }
     }
 
@@ -43,17 +40,19 @@ impl<'a> EventManager<'a> {
     ) -> Self {
         Self {
             pool,
-            ws_state: Some(ws_state),
+            notifier: crate::notifications::NotificationSender::new(Some(ws_state), None),
             project_path: Some(project_path),
-            mcp_notifier: None,
         }
     }
 
     /// Internal helper: Notify UI about event creation
     async fn notify_event_created(&self, event: &Event) {
-        use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage};
+        use crate::dashboard::websocket::DatabaseOperationPayload;
 
-        // Prepare notification payload
+        let Some(project_path) = &self.project_path else {
+            return;
+        };
+
         let event_json = match serde_json::to_value(event) {
             Ok(json) => json,
             Err(e) => {
@@ -62,62 +61,42 @@ impl<'a> EventManager<'a> {
             },
         };
 
-        let project_path = match &self.project_path {
-            Some(path) => path.clone(),
-            None => return, // No project path configured
-        };
-
         let payload =
             DatabaseOperationPayload::event_created(event.id, event_json, project_path.clone());
-        let msg = ProtocolMessage::new("db_operation", payload);
-        let json = match msg.to_json() {
-            Ok(j) => j,
-            Err(e) => {
-                tracing::warn!("Failed to serialize notification message: {}", e);
-                return;
-            },
-        };
-
-        // Send via Dashboard WebSocket (if available)
-        if let Some(ws) = &self.ws_state {
-            ws.broadcast_to_ui(&json).await;
-        }
-
-        // Send via MCP WebSocket (if available) - non-blocking
-        if let Some(notifier) = &self.mcp_notifier {
-            if let Err(e) = notifier.send(json) {
-                tracing::debug!("Failed to send MCP notification (channel closed): {}", e);
-            }
-        }
+        self.notifier.send(payload).await;
     }
 
     /// Internal helper: Notify UI about event update
     async fn notify_event_updated(&self, event: &Event) {
-        if let (Some(ws), Some(path)) = (&self.ws_state, &self.project_path) {
-            use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage};
+        use crate::dashboard::websocket::DatabaseOperationPayload;
 
-            if let Ok(event_json) = serde_json::to_value(event) {
-                let payload =
-                    DatabaseOperationPayload::event_updated(event.id, event_json, path.clone());
-                let msg = ProtocolMessage::new("event_updated", payload);
-                if let Ok(json) = msg.to_json() {
-                    ws.broadcast_to_ui(&json).await;
-                }
-            }
-        }
+        let Some(project_path) = &self.project_path else {
+            return;
+        };
+
+        let event_json = match serde_json::to_value(event) {
+            Ok(json) => json,
+            Err(e) => {
+                tracing::warn!("Failed to serialize event for notification: {}", e);
+                return;
+            },
+        };
+
+        let payload =
+            DatabaseOperationPayload::event_updated(event.id, event_json, project_path.clone());
+        self.notifier.send(payload).await;
     }
 
     /// Internal helper: Notify UI about event deletion
     async fn notify_event_deleted(&self, event_id: i64) {
-        if let (Some(ws), Some(path)) = (&self.ws_state, &self.project_path) {
-            use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage};
+        use crate::dashboard::websocket::DatabaseOperationPayload;
 
-            let payload = DatabaseOperationPayload::event_deleted(event_id, path.clone());
-            let msg = ProtocolMessage::new("event_deleted", payload);
-            if let Ok(json) = msg.to_json() {
-                ws.broadcast_to_ui(&json).await;
-            }
-        }
+        let Some(project_path) = &self.project_path else {
+            return;
+        };
+
+        let payload = DatabaseOperationPayload::event_deleted(event_id, project_path.clone());
+        self.notifier.send(payload).await;
     }
 
     /// Add a new event
