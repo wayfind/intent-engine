@@ -141,11 +141,17 @@ impl<'a> ReportManager<'a> {
         let mut conditions = Vec::new();
 
         if let Some(name_filter) = filter_name {
-            conditions.push(format!("name MATCH '{}'", self.escape_fts(name_filter)));
+            conditions.push(format!(
+                "name MATCH '{}'",
+                crate::search::escape_fts5(name_filter)
+            ));
         }
 
         if let Some(spec_filter) = filter_spec {
-            conditions.push(format!("spec MATCH '{}'", self.escape_fts(spec_filter)));
+            conditions.push(format!(
+                "spec MATCH '{}'",
+                crate::search::escape_fts5(spec_filter)
+            ));
         }
 
         if conditions.is_empty() {
@@ -157,11 +163,6 @@ impl<'a> ReportManager<'a> {
         let ids: Vec<i64> = sqlx::query_scalar(&query).fetch_all(self.pool).await?;
 
         Ok(ids)
-    }
-
-    /// Escape FTS5 special characters
-    fn escape_fts(&self, input: &str) -> String {
-        input.replace('"', "\"\"")
     }
 }
 

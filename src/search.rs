@@ -61,6 +61,29 @@ pub fn needs_like_fallback(query: &str) -> bool {
     false
 }
 
+/// Escape FTS5 special characters in a query string
+///
+/// FTS5 queries support advanced syntax (AND, OR, NOT, *, "phrase search", etc.).
+/// This function only escapes double quotes, which is the most common case where
+/// user input needs escaping.
+///
+/// # Arguments
+/// * `query` - The query string to escape
+///
+/// # Returns
+/// The escaped query string with double quotes escaped as `""`
+///
+/// # Example
+/// ```ignore
+/// use crate::search::escape_fts5;
+///
+/// let escaped = escape_fts5("user \"admin\" role");
+/// assert_eq!(escaped, "user \"\"admin\"\" role");
+/// ```
+pub fn escape_fts5(query: &str) -> String {
+    query.replace('"', "\"\"")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

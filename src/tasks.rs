@@ -528,7 +528,7 @@ impl<'a> TaskManager<'a> {
     /// Search tasks using FTS5 trigram tokenizer
     async fn search_tasks_fts5(&self, query: &str) -> Result<Vec<TaskSearchResult>> {
         // Escape special FTS5 characters in the query
-        let escaped_query = self.escape_fts_query(query);
+        let escaped_query = crate::search::escape_fts5(query);
 
         // Use FTS5 to search and get snippets
         // snippet(table, column, start_mark, end_mark, ellipsis, max_tokens)
@@ -654,14 +654,6 @@ impl<'a> TaskManager<'a> {
         }
 
         Ok(search_results)
-    }
-
-    /// Escape FTS5 special characters in query
-    fn escape_fts_query(&self, query: &str) -> String {
-        // FTS5 queries are passed through as-is to support advanced syntax
-        // Users can use operators like AND, OR, NOT, *, "phrase search", etc.
-        // We only need to handle basic escaping for quotes
-        query.replace('"', "\"\"")
     }
 
     /// Start a task (atomic: update status + set current)
