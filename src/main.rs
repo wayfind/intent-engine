@@ -9,6 +9,7 @@ use intent_engine::logging::LoggingConfig;
 use intent_engine::plan::{PlanExecutor, PlanRequest};
 use intent_engine::project::ProjectContext;
 use intent_engine::report::ReportManager;
+use intent_engine::sql_constants;
 use intent_engine::tasks::TaskManager;
 use intent_engine::workspace::WorkspaceManager;
 use sqlx::Row;
@@ -777,7 +778,7 @@ async fn handle_doctor_command() -> Result<()> {
     // 2. Database Health
     match ProjectContext::load_or_init().await {
         Ok(ctx) => {
-            match sqlx::query("SELECT COUNT(*) FROM tasks")
+            match sqlx::query(sql_constants::COUNT_TASKS_TOTAL)
                 .fetch_one(&ctx.pool)
                 .await
             {

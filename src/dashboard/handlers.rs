@@ -552,12 +552,10 @@ pub async fn delete_event(
     );
 
     // First verify the event exists and belongs to the task
-    match sqlx::query_as::<_, crate::db::models::Event>(
-        "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE id = ?",
-    )
-    .bind(event_id)
-    .fetch_optional(&db_pool)
-    .await
+    match sqlx::query_as::<_, crate::db::models::Event>(crate::sql_constants::SELECT_EVENT_BY_ID)
+        .bind(event_id)
+        .fetch_optional(&db_pool)
+        .await
     {
         Ok(Some(event)) => {
             if event.task_id != task_id {

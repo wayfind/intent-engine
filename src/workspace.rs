@@ -52,11 +52,10 @@ impl<'a> WorkspaceManager<'a> {
     /// Set the current task
     pub async fn set_current_task(&self, task_id: i64) -> Result<CurrentTaskResponse> {
         // Check if task exists
-        let task_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)")
-                .bind(task_id)
-                .fetch_one(self.pool)
-                .await?;
+        let task_exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
+            .bind(task_id)
+            .fetch_one(self.pool)
+            .await?;
 
         if !task_exists {
             return Err(IntentError::TaskNotFound(task_id));

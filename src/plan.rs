@@ -1597,7 +1597,7 @@ mod tests {
 
         // Check subtask A
         let subtask_a: (String, Option<i64>) =
-            sqlx::query_as("SELECT name, parent_id FROM tasks WHERE id = ?")
+            sqlx::query_as(crate::sql_constants::SELECT_TASK_NAME_PARENT)
                 .bind(subtask_a_id)
                 .fetch_one(&ctx.pool)
                 .await

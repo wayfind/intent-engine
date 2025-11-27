@@ -80,9 +80,7 @@ impl<'a> ReportManager<'a> {
 
         // Get events
         let events = if !summary_only {
-            let mut event_query = String::from(
-                "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE 1=1",
-            );
+            let mut event_query = String::from(crate::sql_constants::SELECT_EVENT_BASE);
             let mut event_conditions = Vec::new();
 
             if let Some(ref dt) = since_datetime {
@@ -105,7 +103,7 @@ impl<'a> ReportManager<'a> {
         let total_events = if let Some(ref evts) = events {
             evts.len() as i64
         } else {
-            sqlx::query_scalar("SELECT COUNT(*) FROM events")
+            sqlx::query_scalar(crate::sql_constants::COUNT_EVENTS_TOTAL)
                 .fetch_one(self.pool)
                 .await?
         };

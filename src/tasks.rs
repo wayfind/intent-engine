@@ -728,7 +728,7 @@ impl<'a> TaskManager<'a> {
 
         // Get the task info before completing it
         let task_info: (String, Option<i64>) =
-            sqlx::query_as("SELECT name, parent_id FROM tasks WHERE id = ?")
+            sqlx::query_as(crate::sql_constants::SELECT_TASK_NAME_PARENT)
                 .bind(id)
                 .fetch_one(&mut *tx)
                 .await?;
@@ -779,10 +779,11 @@ impl<'a> TaskManager<'a> {
 
             if remaining_siblings == 0 {
                 // All siblings are done - parent is ready
-                let parent_name: String = sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
-                    .bind(parent_task_id)
-                    .fetch_one(&mut *tx)
-                    .await?;
+                let parent_name: String =
+                    sqlx::query_scalar(crate::sql_constants::SELECT_TASK_NAME)
+                        .bind(parent_task_id)
+                        .fetch_one(&mut *tx)
+                        .await?;
 
                 NextStepSuggestion::ParentIsReady {
                     message: format!(
@@ -794,10 +795,11 @@ impl<'a> TaskManager<'a> {
                 }
             } else {
                 // Siblings remain
-                let parent_name: String = sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
-                    .bind(parent_task_id)
-                    .fetch_one(&mut *tx)
-                    .await?;
+                let parent_name: String =
+                    sqlx::query_scalar(crate::sql_constants::SELECT_TASK_NAME)
+                        .bind(parent_task_id)
+                        .fetch_one(&mut *tx)
+                        .await?;
 
                 NextStepSuggestion::SiblingTasksRemain {
                     message: format!(
@@ -811,11 +813,10 @@ impl<'a> TaskManager<'a> {
             }
         } else {
             // No parent - check if this was a top-level task with children or standalone
-            let child_count: i64 =
-                sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE parent_id = ?")
-                    .bind(id)
-                    .fetch_one(&mut *tx)
-                    .await?;
+            let child_count: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_CHILDREN_TOTAL)
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
 
             if child_count > 0 {
                 // Top-level task with children completed
@@ -869,7 +870,7 @@ impl<'a> TaskManager<'a> {
 
     /// Check if a task exists
     async fn check_task_exists(&self, id: i64) -> Result<()> {
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)")
+        let exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
             .bind(id)
             .fetch_one(self.pool)
             .await?;
@@ -894,7 +895,7 @@ impl<'a> TaskManager<'a> {
             }
 
             let parent: Option<i64> =
-                sqlx::query_scalar("SELECT parent_id FROM tasks WHERE id = ?")
+                sqlx::query_scalar(crate::sql_constants::SELECT_TASK_PARENT_ID)
                     .bind(current_id)
                     .fetch_optional(self.pool)
                     .await?;
@@ -926,7 +927,7 @@ impl<'a> TaskManager<'a> {
         )?;
 
         // Get parent task info
-        let parent_name: String = sqlx::query_scalar("SELECT name FROM tasks WHERE id = ?")
+        let parent_name: String = sqlx::query_scalar(crate::sql_constants::SELECT_TASK_NAME)
             .bind(parent_id)
             .fetch_one(self.pool)
             .await?;
@@ -972,10 +973,9 @@ impl<'a> TaskManager<'a> {
         let mut tx = self.pool.begin().await?;
 
         // Get current doing count
-        let doing_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
-                .fetch_one(&mut *tx)
-                .await?;
+        let doing_count: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_TASKS_DOING)
+            .fetch_one(&mut *tx)
+            .await?;
 
         // Calculate available capacity
         let available = capacity_limit.saturating_sub(doing_count as usize);
@@ -1196,7 +1196,7 @@ impl<'a> TaskManager<'a> {
 
         // Step 3: No recommendation - determine why
         // Check if there are any tasks at all
-        let total_tasks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tasks")
+        let total_tasks: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_TASKS_TOTAL)
             .fetch_one(self.pool)
             .await?;
 
@@ -1614,11 +1614,10 @@ mod tests {
         }
 
         // Verify total doing count
-        let doing_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
-                .fetch_one(ctx.pool())
-                .await
-                .unwrap();
+        let doing_count: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_TASKS_DOING)
+            .fetch_one(ctx.pool())
+            .await
+            .unwrap();
 
         assert_eq!(doing_count, 5);
     }
@@ -1648,11 +1647,10 @@ mod tests {
         assert_eq!(picked.len(), 3);
 
         // Verify total doing count
-        let doing_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status = 'doing'")
-                .fetch_one(ctx.pool())
-                .await
-                .unwrap();
+        let doing_count: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_TASKS_DOING)
+            .fetch_one(ctx.pool())
+            .await
+            .unwrap();
 
         assert_eq!(doing_count, 5);
     }

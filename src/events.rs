@@ -107,11 +107,10 @@ impl<'a> EventManager<'a> {
         discussion_data: &str,
     ) -> Result<Event> {
         // Check if task exists
-        let task_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)")
-                .bind(task_id)
-                .fetch_one(self.pool)
-                .await?;
+        let task_exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
+            .bind(task_id)
+            .fetch_one(self.pool)
+            .await?;
 
         if !task_exists {
             return Err(IntentError::TaskNotFound(task_id));
@@ -156,12 +155,11 @@ impl<'a> EventManager<'a> {
         discussion_data: Option<&str>,
     ) -> Result<Event> {
         // First, get the existing event to check if it exists
-        let existing_event: Option<Event> = sqlx::query_as(
-            "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE id = ?",
-        )
-        .bind(event_id)
-        .fetch_optional(self.pool)
-        .await?;
+        let existing_event: Option<Event> =
+            sqlx::query_as(crate::sql_constants::SELECT_EVENT_BY_ID)
+                .bind(event_id)
+                .fetch_optional(self.pool)
+                .await?;
 
         let existing_event = existing_event.ok_or(IntentError::InvalidInput(format!(
             "Event {} not found",
@@ -202,12 +200,10 @@ impl<'a> EventManager<'a> {
     /// Delete an event
     pub async fn delete_event(&self, event_id: i64) -> Result<()> {
         // First, get the event to check if it exists and get task_id for notification
-        let event: Option<Event> = sqlx::query_as(
-            "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE id = ?",
-        )
-        .bind(event_id)
-        .fetch_optional(self.pool)
-        .await?;
+        let event: Option<Event> = sqlx::query_as(crate::sql_constants::SELECT_EVENT_BY_ID)
+            .bind(event_id)
+            .fetch_optional(self.pool)
+            .await?;
 
         let _event = event.ok_or(IntentError::InvalidInput(format!(
             "Event {} not found",
@@ -242,11 +238,10 @@ impl<'a> EventManager<'a> {
     ) -> Result<Vec<Event>> {
         // Check if task exists (only if task_id provided)
         if let Some(tid) = task_id {
-            let task_exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)")
-                    .bind(tid)
-                    .fetch_one(self.pool)
-                    .await?;
+            let task_exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
+                .bind(tid)
+                .fetch_one(self.pool)
+                .await?;
 
             if !task_exists {
                 return Err(IntentError::TaskNotFound(tid));
@@ -263,9 +258,7 @@ impl<'a> EventManager<'a> {
         };
 
         // Build dynamic query based on filters
-        let mut query = String::from(
-            "SELECT id, task_id, timestamp, log_type, discussion_data FROM events WHERE 1=1",
-        );
+        let mut query = String::from(crate::sql_constants::SELECT_EVENT_BASE);
         let mut conditions = Vec::new();
 
         if task_id.is_some() {
