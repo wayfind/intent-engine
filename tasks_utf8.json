@@ -1,0 +1,152 @@
+﻿[
+  {
+    "id": 1,
+    "parent_id": null,
+    "name": "Test Task for Dashboardw娴嬭瘯",
+    "status": "done",
+    "priority": 0,
+    "first_todo_at": "2025-11-27T14:20:52.038480100Z",
+    "first_doing_at": "2025-11-27T18:35:50.070550800Z",
+    "first_done_at": "2025-11-27T18:35:51.368289700Z"
+  },
+  {
+    "id": 2,
+    "parent_id": null,
+    "name": "Test Root Task 1",
+    "status": "doing",
+    "priority": 2,
+    "first_todo_at": "2025-11-27T14:24:05.894922700Z",
+    "first_doing_at": "2025-11-27T14:26:32.309543600Z",
+    "first_done_at": null
+  },
+  {
+    "id": 3,
+    "parent_id": 2,
+    "name": "Test Child 1.1",
+    "status": "doing",
+    "priority": 3,
+    "first_todo_at": "2025-11-27T14:24:05.895134200Z",
+    "first_doing_at": "2025-11-27T17:57:08.830763400Z",
+    "first_done_at": "2025-11-27T18:40:26.437440600Z"
+  },
+  {
+    "id": 4,
+    "parent_id": 2,
+    "name": "Test Child 1.2",
+    "status": "done",
+    "priority": 3,
+    "first_todo_at": "2025-11-27T14:24:05.895248300Z",
+    "first_doing_at": "2025-11-27T17:57:13.705247300Z",
+    "first_done_at": "2025-11-27T18:40:24.232427300Z"
+  },
+  {
+    "id": 5,
+    "parent_id": 4,
+    "name": "Test Grandchild 1.2.1",
+    "status": "doing",
+    "priority": 4,
+    "first_todo_at": "2025-11-27T14:24:05.895449700Z",
+    "first_doing_at": "2025-11-27T16:55:44.303250500Z",
+    "first_done_at": "2025-11-27T18:27:24.228436500Z"
+  },
+  {
+    "id": 8,
+    "parent_id": null,
+    "name": "asdfas",
+    "status": "doing",
+    "priority": 0,
+    "first_todo_at": "2025-11-27T15:05:58.577176600Z",
+    "first_doing_at": "2025-11-27T19:20:28.267378800Z",
+    "first_done_at": null
+  },
+  {
+    "id": 9,
+    "parent_id": null,
+    "name": "Global Task Test",
+    "status": "done",
+    "priority": 0,
+    "first_todo_at": "2025-11-27T15:05:58.729599400Z",
+    "first_doing_at": "2025-11-27T16:53:17.201552600Z",
+    "first_done_at": "2025-11-27T18:51:19.216581900Z"
+  },
+  {
+    "id": 10,
+    "parent_id": null,
+    "name": "Round 3 Simple",
+    "status": "done",
+    "priority": 0,
+    "first_todo_at": "2025-11-27T15:19:47.617596800Z",
+    "first_doing_at": "2025-11-27T18:19:44.984066400Z",
+    "first_done_at": "2025-11-27T18:27:13.187703800Z"
+  },
+  {
+    "id": 11,
+    "parent_id": 10,
+    "name": "asdfasdf",
+    "status": "done",
+    "priority": 3,
+    "first_todo_at": "2025-11-27T16:45:46.044098900Z",
+    "first_doing_at": "2025-11-27T17:57:58.939183Z",
+    "first_done_at": "2025-11-27T17:58:08.344260100Z"
+  },
+  {
+    "id": 12,
+    "parent_id": 2,
+    "name": "瀛愪换鍔?",
+    "status": "todo",
+    "priority": 2,
+    "first_todo_at": "2025-11-27T17:11:35.521948100Z",
+    "first_doing_at": null,
+    "first_done_at": null
+  },
+  {
+    "id": 13,
+    "parent_id": 11,
+    "name": "gh",
+    "status": "done",
+    "priority": 0,
+    "first_todo_at": "2025-11-27T17:58:40.588911600Z",
+    "first_doing_at": "2025-11-27T18:02:13.652695200Z",
+    "first_done_at": "2025-11-27T18:02:15.918565500Z"
+  },
+  {
+    "id": 14,
+    "parent_id": null,
+    "name": "闃挎柉钂傝姮",
+    "status": "todo",
+    "priority": 0,
+    "first_todo_at": "2025-11-27T17:58:48.687716300Z",
+    "first_doing_at": null,
+    "first_done_at": null
+  },
+  {
+    "id": 15,
+    "parent_id": null,
+    "name": "浜ф摝鎷殑椤惧闃挎柉钂傝姮灏卞晩鑸掓湇闃挎柉钂傝姮闃挎柉钂傝姮鍟婅垝鏈嶆寜鏃堕樋鏂拏鑺樋鏂拏鑺槸鐨勫晩",
+    "status": "doing",
+    "priority": 0,
+    "first_todo_at": "2025-11-27T19:07:11.830916700Z",
+    "first_doing_at": "2025-11-27T19:09:56.669315100Z",
+    "first_done_at": "2025-11-27T19:09:58.889348700Z"
+  },
+  {
+    "id": 16,
+    "parent_id": null,
+    "name": "Bug Repro Task",
+    "status": "doing",
+    "priority": 0,
+    "first_todo_at": "2025-11-27T19:17:01.734397700Z",
+    "first_doing_at": "2025-11-27T19:20:32.947316200Z",
+    "first_done_at": "2025-11-27T19:20:34.388198400Z"
+  },
+  {
+    "id": 17,
+    "parent_id": null,
+    "name": "WS Test Task",
+    "status": "todo",
+    "priority": 0,
+    "first_todo_at": "2025-11-27T19:37:48.198126600Z",
+    "first_doing_at": null,
+    "first_done_at": null
+  }
+]

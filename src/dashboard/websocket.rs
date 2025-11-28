@@ -158,6 +158,7 @@ impl WebSocketState {
         current_project_name: &str,
         current_project_path: &std::path::Path,
         current_db_path: &std::path::Path,
+        host_project: &ProjectInfo,
         _port: u16,
     ) -> Vec<ProjectInfo> {
         let connections = self.mcp_connections.read().await;
@@ -171,18 +172,38 @@ impl WebSocketState {
             .values()
             .any(|conn| conn.project.path == current_path_str);
 
+        // Determine if current project is the host project
+        let is_host_current = current_path_str == host_project.path;
+
+        // Current project is online if it's the host OR if it has an MCP connection
+        // But we want to reflect MCP status accurately for non-host projects
+        let is_current_online = is_host_current || current_has_mcp;
+
         projects.push(ProjectInfo {
             name: current_project_name.to_string(),
             path: current_path_str.clone(),
             db_path: current_db_path.display().to_string(),
             agent: None, // Dashboard itself doesn't have an agent name
             mcp_connected: current_has_mcp,
-            is_online: true, // Dashboard is online (serving this response)
+            is_online: is_current_online,
         });
 
-        // 2. Add all other MCP-connected projects (excluding current project to avoid duplication)
+        // 2. Add Host Project (if it's not the current project)
+        // Host project is always online (because Dashboard is running there)
+        if !is_host_current {
+            let host_has_mcp = connections
+                .values()
+                .any(|conn| conn.project.path == host_project.path);
+
+            let mut host = host_project.clone();
+            host.mcp_connected = host_has_mcp;
+            host.is_online = true; // Host is always online
+            projects.push(host);
+        }
+
+        // 3. Add all other MCP-connected projects (excluding current and host to avoid duplication)
         for conn in connections.values() {
-            if conn.project.path != current_path_str {
+            if conn.project.path != current_path_str && conn.project.path != host_project.path {
                 let mut project = conn.project.clone();
                 project.mcp_connected = true;
                 project.is_online = true; // MCP connection means project is online
@@ -802,6 +823,7 @@ async fn handle_ui_socket(socket: WebSocket, app_state: crate::dashboard::server
                                                 &current_project.project_name,
                                                 &current_project.project_path,
                                                 &current_project.db_path,
+                                                &app_state_for_recv.host_project,
                                                 port,
                                             )
                                             .await

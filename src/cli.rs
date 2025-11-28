@@ -122,7 +122,11 @@ pub enum Commands {
 
     /// Start MCP server for AI assistants (JSON-RPC stdio)
     #[command(name = "mcp-server")]
-    McpServer,
+    McpServer {
+        /// Dashboard port to connect to (default: 11391)
+        #[arg(long)]
+        dashboard_port: Option<u16>,
+    },
 
     /// Restore session context for AI agents (Focus Restoration - Phase 1)
     ///

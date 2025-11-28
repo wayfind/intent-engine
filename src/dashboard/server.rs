@@ -38,6 +38,8 @@ pub struct ProjectContext {
 pub struct AppState {
     /// Current active project (wrapped in `Arc<RwLock>` for dynamic switching)
     pub current_project: Arc<RwLock<ProjectContext>>,
+    /// The project that started the Dashboard (always considered online)
+    pub host_project: super::websocket::ProjectInfo,
     pub port: u16,
     /// WebSocket state for real-time connections
     pub ws_state: super::websocket::WebSocketState,
@@ -113,8 +115,19 @@ impl DashboardServer {
 
         // Create shared state
         let ws_state = websocket::WebSocketState::new();
+
+        let host_project_info = websocket::ProjectInfo {
+            name: self.project_name.clone(),
+            path: self.project_path.display().to_string(),
+            db_path: self.db_path.display().to_string(),
+            agent: None,
+            mcp_connected: false, // Will be updated dynamically
+            is_online: true,      // Host is always online
+        };
+
         let state = AppState {
             current_project: Arc::new(RwLock::new(project_context)),
+            host_project: host_project_info,
             port: self.port,
             ws_state,
         };
@@ -387,6 +400,7 @@ async fn info_handler(State(state): State<AppState>) -> Json<ProjectInfo> {
             &project.project_name,
             &project.project_path,
             &project.db_path,
+            &state.host_project,
             state.port,
         )
         .await;

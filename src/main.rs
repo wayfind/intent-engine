@@ -56,7 +56,7 @@ async fn main() {
     }
 
     // Enable file logging for MCP Server mode (with graceful fallback)
-    if matches!(cli.command, Commands::McpServer) {
+    if matches!(cli.command, Commands::McpServer { .. }) {
         use intent_engine::logging::{log_file_path, ApplicationMode};
         log_config = LoggingConfig::for_mode(ApplicationMode::McpServer);
 
@@ -139,10 +139,10 @@ async fn run(cli: &Cli) -> Result<()> {
         Commands::Doctor => handle_doctor_command().await?,
         Commands::Init { at, force } => handle_init_command(at, force).await?,
         Commands::Dashboard(dashboard_cmd) => handle_dashboard_command(dashboard_cmd).await?,
-        Commands::McpServer => {
+        Commands::McpServer { dashboard_port } => {
             // Run MCP server - this never returns unless there's an error
             // io::Error is automatically converted to IntentError::IoError via #[from]
-            intent_engine::mcp::run().await?;
+            intent_engine::mcp::run(dashboard_port).await?;
         },
         Commands::SessionRestore {
             include_events,

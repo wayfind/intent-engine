@@ -1,0 +1,312 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Modern Control Console Design System */
+
+:root {
+  /* Default Theme (Clean/Light - Slate Based) */
+  --bg-app: #f8fafc;
+  /* slate-50 */
+  --bg-panel: #ffffff;
+  --bg-panel-hover: #f1f5f9;
+  /* slate-100 */
+
+  --border-color: #e2e8f0;
+  /* slate-200 */
+  --border-active: #cbd5e1;
+  /* slate-300 */
+
+  /* Accents */
+  --color-primary: #3b82f6;
+  /* blue-500 */
+  --color-primary-dim: #eff6ff;
+  /* blue-50 */
+
+  --color-secondary: #f59e0b;
+  /* amber-500 */
+  --color-secondary-dim: #fff7ed;
+  /* orange-50 */
+
+  --color-success: #22c55e;
+  /* green-500 */
+  --color-success-dim: #f0fdf4;
+  /* green-50 */
+
+  --color-danger: #dc2626;
+  /* red-600 */
+  --color-danger-dim: #fef2f2;
+  /* red-50 */
+
+  /* Text */
+  --text-main: #0f172a;
+  /* slate-900 */
+  --text-muted: #64748b;
+  /* slate-500 */
+  --text-dim: #94a3b8;
+  /* slate-400 */
+  --text-sec: #334155;
+  /* slate-700 */
+
+  /* Typography */
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Effects */
+  --glow-primary: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --glow-text: none;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Borders */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+/* Cyberpunk Theme Override */
+.theme-cyberpunk {
+  --bg-app: #050505;
+  --bg-panel: #0a0a0a;
+  --bg-panel-hover: #111111;
+
+  --border-color: #333333;
+  --border-active: #555555;
+
+  --color-primary: #00f0ff;
+  --color-primary-dim: rgba(0, 240, 255, 0.1);
+  --color-secondary: #ff9900;
+  --color-secondary-dim: rgba(255, 153, 0, 0.1);
+  --color-success: #00ff99;
+  --color-success-dim: rgba(0, 255, 153, 0.1);
+  --color-danger: #ff3366;
+  --color-danger-dim: rgba(255, 51, 102, 0.1);
+
+  --text-main: #e0e0e0;
+  --text-muted: #888888;
+  --text-dim: #444444;
+
+  --glow-primary: 0 0 10px rgba(0, 240, 255, 0.5);
+  --glow-text: 0 0 5px rgba(255, 255, 255, 0.3);
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+}
+
+/* Reset & Base */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  font-family: var(--font-ui);
+  line-height: 1.5;
+  overflow: hidden;
+  /* App-like feel */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-active);
+}
+
+/* Utility Classes */
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.text-primary {
+  color: var(--color-primary);
+}
+
+.text-secondary {
+  color: var(--color-secondary);
+}
+
+.text-success {
+  color: var(--color-success);
+}
+
+.text-danger {
+  color: var(--color-danger);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.bg-panel {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+}
+
+/* Panel Style - The "Widget" look */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.panel::before {
+  /* Corner accent */
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 10px;
+  background: var(--color-primary);
+  opacity: 0.5;
+}
+
+.panel-header {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Button Styles */
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  color: inherit;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-main);
+  transition: all 0.2s ease;
+  border-radius: var(--radius-sm);
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--text-muted);
+}
+
+.btn-primary {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-dim);
+}
+
+.btn-primary:hover {
+  background: rgba(0, 240, 255, 0.2);
+  /* box-shadow: var(--glow-primary); */
+}
+
+.btn-icon {
+  padding: 6px;
+  border-radius: 4px;
+}
+
+/* Input Styles */
+input,
+textarea,
+select {
+  background: var(--bg-app);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 8px 12px;
+  font-family: var(--font-ui);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--color-primary);
+}
+
+/* Animations */
+@keyframes blink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.blink {
+  animation: blink 2s infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes slideInBottom {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in-bottom {
+  animation: slideInBottom 0.3s ease-out forwards;
+}
