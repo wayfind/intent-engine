@@ -150,4 +150,150 @@ mod tests {
         assert_eq!(response.current_task_id, Some(task.id));
         assert!(response.task.is_some());
     }
+
+    #[tokio::test]
+    async fn test_current_task_response_serialization() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let response = workspace_mgr.set_current_task(task.id).await.unwrap();
+
+        // Should serialize to JSON without errors
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("current_task_id"));
+        assert!(json.contains("task"));
+    }
+
+    #[tokio::test]
+    async fn test_current_task_response_none_serialization() {
+        let ctx = TestContext::new().await;
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        let response = workspace_mgr.get_current_task().await.unwrap();
+
+        // When no task, task field should be omitted (skip_serializing_if)
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("current_task_id"));
+        // task field should be omitted when None
+        assert!(!json.contains("\"task\""));
+    }
+
+    #[tokio::test]
+    async fn test_get_current_task_with_invalid_id_in_db() {
+        let ctx = TestContext::new().await;
+
+        // Manually insert invalid task_id (non-numeric string)
+        sqlx::query(
+            "INSERT INTO workspace_state (key, value) VALUES ('current_task_id', 'invalid')",
+        )
+        .execute(ctx.pool())
+        .await
+        .unwrap();
+
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+        let response = workspace_mgr.get_current_task().await.unwrap();
+
+        // Should gracefully handle invalid ID by returning None
+        assert!(response.current_task_id.is_none());
+        assert!(response.task.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_current_task_with_deleted_task() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        workspace_mgr.set_current_task(task.id).await.unwrap();
+
+        // Delete the task
+        task_mgr.delete_task(task.id).await.unwrap();
+
+        let response = workspace_mgr.get_current_task().await.unwrap();
+
+        // current_task_id still exists but task should be None
+        assert_eq!(response.current_task_id, Some(task.id));
+        assert!(response.task.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_set_current_task_returns_complete_task() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        let task = task_mgr
+            .add_task("Test task", Some("Task spec"), None)
+            .await
+            .unwrap();
+
+        let response = workspace_mgr.set_current_task(task.id).await.unwrap();
+
+        // Verify task object is complete
+        let returned_task = response.task.unwrap();
+        assert_eq!(returned_task.id, task.id);
+        assert_eq!(returned_task.name, "Test task");
+        assert_eq!(returned_task.spec, Some("Task spec".to_string()));
+        assert_eq!(returned_task.status, "todo");
+    }
+
+    #[tokio::test]
+    async fn test_set_same_task_multiple_times() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+
+        // Set the same task multiple times (idempotent)
+        workspace_mgr.set_current_task(task.id).await.unwrap();
+        workspace_mgr.set_current_task(task.id).await.unwrap();
+        let response = workspace_mgr.set_current_task(task.id).await.unwrap();
+
+        assert_eq!(response.current_task_id, Some(task.id));
+    }
+
+    #[tokio::test]
+    async fn test_workspace_state_insert_or_replace() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
+        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+
+        workspace_mgr.set_current_task(task1.id).await.unwrap();
+        workspace_mgr.set_current_task(task2.id).await.unwrap();
+
+        // Check that only one row exists in workspace_state for current_task_id
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM workspace_state WHERE key = 'current_task_id'",
+        )
+        .fetch_one(ctx.pool())
+        .await
+        .unwrap();
+
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_current_task_with_changed_status() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        workspace_mgr.set_current_task(task.id).await.unwrap();
+
+        // Change task status
+        task_mgr.start_task(task.id, false).await.unwrap();
+
+        let response = workspace_mgr.get_current_task().await.unwrap();
+
+        // Should reflect updated status
+        assert_eq!(response.task.unwrap().status, "doing");
+    }
 }
