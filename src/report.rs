@@ -339,4 +339,246 @@ mod tests {
         assert_eq!(report.summary.tasks_by_status.doing, 0);
         assert_eq!(report.summary.tasks_by_status.done, 0);
     }
+
+    #[tokio::test]
+    async fn test_generate_report_with_since() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        // Create some tasks
+        task_mgr.add_task("Old task", None, None).await.unwrap();
+        task_mgr.add_task("Recent task", None, None).await.unwrap();
+
+        // Query with since parameter (should include all tasks created just now)
+        let report = report_mgr
+            .generate_report(Some("1h".to_string()), None, None, None, true)
+            .await
+            .unwrap();
+
+        // Should include recent tasks
+        assert!(report.summary.total_tasks >= 2);
+        assert!(report.summary.date_range.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_generate_report_filter_by_spec() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        task_mgr
+            .add_task("Task 1", Some("Implement authentication using JWT"), None)
+            .await
+            .unwrap();
+        task_mgr
+            .add_task("Task 2", Some("Setup database migrations"), None)
+            .await
+            .unwrap();
+
+        let report = report_mgr
+            .generate_report(None, None, None, Some("authentication".to_string()), false)
+            .await
+            .unwrap();
+
+        let tasks = report.tasks.unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].name, "Task 1");
+    }
+
+    #[tokio::test]
+    async fn test_generate_report_combined_status_and_since() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        task_mgr.add_task("Todo task", None, None).await.unwrap();
+        let doing = task_mgr.add_task("Doing task", None, None).await.unwrap();
+        task_mgr.start_task(doing.id, false).await.unwrap();
+
+        // Filter by status + since
+        let report = report_mgr
+            .generate_report(
+                Some("1d".to_string()),
+                Some("doing".to_string()),
+                None,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+
+        let tasks = report.tasks.unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].status, "doing");
+    }
+
+    #[tokio::test]
+    async fn test_filter_tasks_by_fts_spec() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        task_mgr
+            .add_task("Feature A", Some("Implement JWT authentication"), None)
+            .await
+            .unwrap();
+        task_mgr
+            .add_task("Feature B", Some("Setup OAuth2 integration"), None)
+            .await
+            .unwrap();
+
+        let ids = report_mgr
+            .filter_tasks_by_fts(&None, &Some("JWT".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(ids.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_filter_tasks_by_fts_both_name_and_spec() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        task_mgr
+            .add_task("Auth feature", Some("Implement authentication"), None)
+            .await
+            .unwrap();
+        task_mgr
+            .add_task(
+                "Database setup",
+                Some("Configure authentication database"),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Both name and spec contain "auth"
+        let ids = report_mgr
+            .filter_tasks_by_fts(
+                &Some("Auth".to_string()),
+                &Some("authentication".to_string()),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(ids.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_filter_tasks_by_fts_empty() {
+        let ctx = TestContext::new().await;
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        // Empty filters should return empty vec
+        let ids = report_mgr.filter_tasks_by_fts(&None, &None).await.unwrap();
+
+        assert_eq!(ids.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_report_date_range_present() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        task_mgr.add_task("Task", None, None).await.unwrap();
+
+        let report = report_mgr
+            .generate_report(Some("7d".to_string()), None, None, None, true)
+            .await
+            .unwrap();
+
+        // date_range should be present when since is specified
+        assert!(report.summary.date_range.is_some());
+        let date_range = report.summary.date_range.unwrap();
+        assert!(date_range.to > date_range.from);
+    }
+
+    #[tokio::test]
+    async fn test_report_date_range_absent() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        task_mgr.add_task("Task", None, None).await.unwrap();
+
+        let report = report_mgr
+            .generate_report(None, None, None, None, true)
+            .await
+            .unwrap();
+
+        // date_range should be None when since is not specified
+        assert!(report.summary.date_range.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_report_events_count_consistency() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Task", None, None).await.unwrap();
+        event_mgr
+            .add_event(task.id, "decision", "Event 1")
+            .await
+            .unwrap();
+        event_mgr
+            .add_event(task.id, "note", "Event 2")
+            .await
+            .unwrap();
+
+        // summary_only should still count events
+        let summary_report = report_mgr
+            .generate_report(None, None, None, None, true)
+            .await
+            .unwrap();
+        assert_eq!(summary_report.summary.total_events, 2);
+        assert!(summary_report.events.is_none());
+
+        // Full report should include events
+        let full_report = report_mgr
+            .generate_report(None, None, None, None, false)
+            .await
+            .unwrap();
+        assert_eq!(full_report.summary.total_events, 2);
+        assert_eq!(full_report.events.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_generate_report_all_filters_combined() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let report_mgr = ReportManager::new(ctx.pool());
+
+        task_mgr
+            .add_task("Auth feature", Some("JWT implementation"), None)
+            .await
+            .unwrap();
+        let doing = task_mgr
+            .add_task("Auth testing", Some("Write JWT tests"), None)
+            .await
+            .unwrap();
+        task_mgr.start_task(doing.id, false).await.unwrap();
+
+        // Combine all filters: since + status + name + spec
+        let report = report_mgr
+            .generate_report(
+                Some("1h".to_string()),
+                Some("doing".to_string()),
+                Some("Auth".to_string()),
+                Some("JWT".to_string()),
+                false,
+            )
+            .await
+            .unwrap();
+
+        let tasks = report.tasks.unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].status, "doing");
+        assert!(tasks[0].name.contains("Auth"));
+    }
 }
