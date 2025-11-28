@@ -690,7 +690,6 @@ pub async fn switch_project(
     Json(req): Json<SwitchProjectRequest>,
 ) -> impl IntoResponse {
     use super::server::ProjectContext;
-    use sqlx::SqlitePool;
     use std::path::PathBuf;
 
     // Parse and validate project path
