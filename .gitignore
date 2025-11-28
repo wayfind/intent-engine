@@ -25,7 +25,9 @@
 .playwright-mcp/
 coverage_report/
 coverage_lib_only/
+coverage/
 coverage.log
+lcov.info
 
 # Migration and temporary scripts
 export.log
@@ -34,6 +36,7 @@ export_to_import.py
 import.sh
 migrate_data.py
 test-consistency.sh
+*.backup
 
 # OS
 .DS_Store
