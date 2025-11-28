@@ -124,7 +124,7 @@ async function createSubtask(data: { name: string, parentId: number | null, prio
         <!-- Metadata Row (ID, Status, Priority, Actions) -->
         <!-- Metadata Row (ID, Status, Priority, Actions) -->
         <!-- Metadata Row (ID, Status, Priority, Actions) -->
-        <div class="flex items-center gap-8 mb-4 text-xs font-mono text-sci-text-dim">
+        <div class="flex items-center gap-8 mb-6 text-xs font-mono text-sci-text-dim bg-sci-panel/50 border border-sci-border rounded-md px-4 py-2">
           <!-- ID Dropdown -->
           <div class="relative" @mouseenter="openIdDropdown" @mouseleave="closeIdDropdown">
             <button 

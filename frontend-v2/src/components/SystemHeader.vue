@@ -17,7 +17,7 @@ function toggleTheme() {
     <div class="flex items-end gap-4">
       <div class="flex items-center gap-2 text-sci-cyan pb-2">
         <Cpu class="w-6 h-6" />
-        <span class="font-display font-bold text-lg tracking-wider">INTENT ENGINE</span>
+        <span class="font-display font-bold text-lg tracking-wider">INTENT ENGINE CONSOLE</span>
       </div>
       
       <div class="h-6 w-px bg-sci-border mx-2"></div>
