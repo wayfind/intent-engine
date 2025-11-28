@@ -116,19 +116,6 @@ fn test_dashboard_start_with_custom_port() {
 
 #[test]
 #[ignore]
-fn test_dashboard_start_foreground_mode() {
-    let temp_dir = common::setup_test_env();
-    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
-
-    // Test foreground mode flag
-    cmd.arg("dashboard").arg("start").arg("--foreground");
-
-    // Command should be accepted
-    cmd.assert();
-}
-
-#[test]
-#[ignore]
 fn test_dashboard_start_with_browser() {
     let temp_dir = common::setup_test_env();
     let mut cmd = common::ie_command_with_project_dir(temp_dir.path());

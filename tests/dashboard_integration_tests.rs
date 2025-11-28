@@ -55,13 +55,7 @@ impl DashboardTestServer {
             .ok_or_else(|| anyhow::anyhow!("Failed to convert home path to string"))?;
 
         let process = Command::new(&binary_path)
-            .args([
-                "dashboard",
-                "start",
-                "--foreground",
-                "--port",
-                &port.to_string(),
-            ])
+            .args(["dashboard", "start", "--port", &port.to_string()])
             .current_dir(&project_path)
             .env("HOME", home_path)
             .env("USERPROFILE", home_path)

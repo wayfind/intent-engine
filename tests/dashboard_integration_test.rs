@@ -55,7 +55,6 @@ fn start_dashboard(project_path: &Path) -> (Child, PathBuf, PathBuf) {
     let child = Command::new(common::ie_binary())
         .arg("dashboard")
         .arg("start")
-        .arg("--foreground") // Run in foreground mode for tests
         .current_dir(project_path)
         .stdout(Stdio::from(stdout_file))
         .stderr(Stdio::from(stderr_file))

@@ -327,6 +327,7 @@ async fn handle_task_add(args: Value) -> Result<Value, String> {
 
     let spec = args.get("spec").and_then(|v| v.as_str());
     let parent_id = args.get("parent_id").and_then(|v| v.as_i64());
+    let priority = args.get("priority").and_then(|v| v.as_str());
 
     let ctx = ProjectContext::load_or_init()
         .await
@@ -345,6 +346,18 @@ async fn handle_task_add(args: Value) -> Result<Value, String> {
         .add_task(name, spec, parent_id)
         .await
         .map_err(|e| format!("Failed to add task: {}", e))?;
+
+    // If priority is specified, update the task with it
+    let task = if let Some(priority_str) = priority {
+        let priority_int = crate::priority::PriorityLevel::parse_to_int(priority_str)
+            .map_err(|e| format!("Invalid priority '{}': {}", priority_str, e))?;
+        task_mgr
+            .update_task(task.id, None, None, None, None, None, Some(priority_int))
+            .await
+            .map_err(|e| format!("Failed to set priority: {}", e))?
+    } else {
+        task
+    };
 
     serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
 }

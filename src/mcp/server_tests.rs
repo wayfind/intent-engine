@@ -1105,4 +1105,79 @@ mod edge_case_tests {
         let result = handle_task_start(args).await;
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_handle_task_add_with_priority() {
+        let (_ctx, _guard) = setup_test_env().await;
+
+        // Test creating task with priority
+        let args = json!({
+            "name": "High Priority Task",
+            "priority": "high"
+        });
+
+        let result = handle_task_add(args).await;
+        assert!(result.is_ok());
+
+        let task = result.unwrap();
+        assert_eq!(
+            task.get("name").unwrap().as_str().unwrap(),
+            "High Priority Task"
+        );
+        // Priority 2 = high (1=critical, 2=high, 3=medium, 4=low)
+        assert_eq!(task.get("priority").unwrap().as_i64().unwrap(), 2);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_handle_task_add_without_priority() {
+        let (_ctx, _guard) = setup_test_env().await;
+
+        // Test creating task without priority
+        let args = json!({
+            "name": "Default Priority Task"
+        });
+
+        let result = handle_task_add(args).await;
+        assert!(result.is_ok());
+
+        let task = result.unwrap();
+        assert_eq!(
+            task.get("name").unwrap().as_str().unwrap(),
+            "Default Priority Task"
+        );
+        // No priority specified - database default is 0 (INTEGER DEFAULT 0)
+        assert_eq!(
+            task.get("priority").unwrap().as_i64().unwrap(),
+            0,
+            "Priority should default to 0 when not specified"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_handle_task_add_with_all_priority_levels() {
+        let (_ctx, _guard) = setup_test_env().await;
+
+        let test_cases = vec![("critical", 1), ("high", 2), ("medium", 3), ("low", 4)];
+
+        for (priority_str, expected_value) in test_cases {
+            let args = json!({
+                "name": format!("{} task", priority_str),
+                "priority": priority_str
+            });
+
+            let result = handle_task_add(args).await;
+            assert!(result.is_ok(), "Failed for priority: {}", priority_str);
+
+            let task = result.unwrap();
+            assert_eq!(
+                task.get("priority").unwrap().as_i64().unwrap(),
+                expected_value,
+                "Priority mismatch for: {}",
+                priority_str
+            );
+        }
+    }
 }
