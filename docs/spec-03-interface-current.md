@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.7
-**Last Updated**: 2025-11-26
+**Version**: 0.8
+**Last Updated**: 2025-11-28
 **Status**: Experimental (Pre-1.0)
 
 ---
@@ -28,6 +28,30 @@
 ---
 
 ## Changelog
+
+### Version 0.8 (2025-11-28)
+
+**Theme**: "Production Refinement - UI/UX Overhaul & Code Quality"
+
+**New Features:**
+- **Frontend V2**: Complete dashboard UI overhaul with refined operation area and logo
+- **Enhanced Testing**: 160% coverage increase for workspace module, 100% increase for report module
+- **Improved Code Quality**: Extensive refactoring to eliminate dead code, reduce duplication, and centralize common logic
+
+**BREAKING CHANGES:**
+- **Removed dry-run mode** from `setup`, `init`, and `plan` commands
+  - **Old behavior**: Commands supported `--dry-run` flag to preview changes without committing
+  - **New behavior**: Commands execute directly without preview mode
+  - **Rationale**: Simplifies command interface, reduces complexity, dry-run mode was rarely used
+
+**Refactoring & Improvements:**
+- Centralized SQL query constants to reduce duplication
+- Unified FTS5 escape logic into search module
+- Unified time parsing with centralized `parse_duration` utility
+- Centralized notification logic with `NotificationSender`
+- Extracted CLI handlers to dedicated `cli_handlers` module with unit tests
+- Fixed zombie green light and temp directory pollution in dashboard
+- Removed obsolete registry references and dead code (~138 lines)
 
 ### Version 0.7 (2025-11-26)
 
