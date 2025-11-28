@@ -372,6 +372,7 @@ mod tests {
     /// Test check_dashboard_status when dashboard is not running
     /// Should return WARNING status with appropriate message
     #[tokio::test]
+    #[ignore = "Depends on dashboard not running"]
     async fn test_check_dashboard_status_not_running() {
         // When dashboard is not running, check_dashboard_health will return false
         // and check_dashboard_status should return WARNING status
@@ -393,6 +394,7 @@ mod tests {
     /// Test check_mcp_connections when dashboard is not running
     /// Should return WARNING status indicating dashboard is not running
     #[tokio::test]
+    #[ignore = "Depends on dashboard not running"]
     async fn test_check_mcp_connections_dashboard_not_running() {
         let result = check_mcp_connections().await;
 

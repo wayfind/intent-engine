@@ -2626,7 +2626,7 @@ mod tests {
             .unwrap();
         assert_eq!(page1.tasks.len(), 10);
         assert_eq!(page1.total_count, 15);
-        assert_eq!(page1.has_more, true);
+        assert!(page1.has_more);
         assert_eq!(page1.offset, 0);
 
         // Page 2: Limit 10, Offset 10
@@ -2636,7 +2636,7 @@ mod tests {
             .unwrap();
         assert_eq!(page2.tasks.len(), 5);
         assert_eq!(page2.total_count, 15);
-        assert_eq!(page2.has_more, false);
+        assert!(!page2.has_more);
         assert_eq!(page2.offset, 10);
     }
 }

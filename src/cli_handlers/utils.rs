@@ -4,14 +4,13 @@
 
 use crate::error::Result;
 use crate::tasks::TaskContext;
-use std::io;
+use std::io::{self, Read};
 
 /// Read from stdin with proper encoding handling (especially for Windows PowerShell)
 pub fn read_stdin() -> Result<String> {
     #[cfg(windows)]
     {
         use encoding_rs::GBK;
-        use std::io::Read;
 
         let mut buffer = Vec::new();
         io::stdin().read_to_end(&mut buffer)?;
