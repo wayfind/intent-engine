@@ -9,7 +9,7 @@ use std::io::{self, BufRead, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
 
 /// Log entry structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEntry {
     pub timestamp: DateTime<Utc>,
     pub level: String,
@@ -362,6 +362,8 @@ pub fn follow_logs(query: &LogQuery) -> io::Result<()> {
 mod tests {
     use super::*;
 
+    // ========== parse_duration tests ==========
+
     #[test]
     fn test_parse_duration() {
         assert_eq!(parse_duration("1h"), Some(Duration::hours(1)));
@@ -371,6 +373,50 @@ mod tests {
         assert_eq!(parse_duration("60s"), Some(Duration::seconds(60)));
         assert_eq!(parse_duration("invalid"), None);
     }
+
+    #[test]
+    fn test_parse_duration_edge_cases() {
+        // Empty and whitespace
+        assert_eq!(parse_duration(""), None);
+        assert_eq!(parse_duration("   "), None);
+
+        // Missing unit
+        assert_eq!(parse_duration("123"), None);
+        assert_eq!(parse_duration("42"), None);
+
+        // Invalid number
+        assert_eq!(parse_duration("abch"), None);
+        assert_eq!(parse_duration("12.5h"), None);
+
+        // Whitespace handling
+        assert_eq!(parse_duration("  1h  "), Some(Duration::hours(1)));
+        assert_eq!(parse_duration(" 7d "), Some(Duration::days(7)));
+
+        // Zero values
+        assert_eq!(parse_duration("0h"), Some(Duration::hours(0)));
+        assert_eq!(parse_duration("0d"), Some(Duration::days(0)));
+    }
+
+    #[test]
+    fn test_parse_duration_all_units() {
+        // Seconds
+        assert_eq!(parse_duration("1s"), Some(Duration::seconds(1)));
+        assert_eq!(parse_duration("3600s"), Some(Duration::seconds(3600)));
+
+        // Minutes
+        assert_eq!(parse_duration("1m"), Some(Duration::minutes(1)));
+        assert_eq!(parse_duration("60m"), Some(Duration::minutes(60)));
+
+        // Hours
+        assert_eq!(parse_duration("1h"), Some(Duration::hours(1)));
+        assert_eq!(parse_duration("168h"), Some(Duration::hours(168))); // 1 week
+
+        // Days
+        assert_eq!(parse_duration("1d"), Some(Duration::days(1)));
+        assert_eq!(parse_duration("30d"), Some(Duration::days(30)));
+    }
+
+    // ========== parse_log_line tests ==========
 
     #[test]
     fn test_parse_log_line_text() {
@@ -388,5 +434,168 @@ mod tests {
         let entry = parse_log_line(line, "dashboard").unwrap();
         assert_eq!(entry.level, "INFO");
         assert_eq!(entry.message, "Test message");
+    }
+
+    #[test]
+    fn test_parse_log_line_text_no_target() {
+        let line = "2025-11-22T06:54:15.123456789+00:00  WARN Simple message without target";
+        let entry = parse_log_line(line, "cli").unwrap();
+        assert_eq!(entry.level, "WARN");
+        assert_eq!(entry.target, None);
+        assert_eq!(entry.message, "Simple message without target");
+        assert_eq!(entry.mode, "cli");
+    }
+
+    #[test]
+    fn test_parse_log_line_json_with_fields() {
+        let line = r#"{"timestamp":"2025-11-22T06:54:15.123456789+00:00","level":"DEBUG","target":"mcp","fields":{"message":"Field message","key":"value"}}"#;
+        let entry = parse_log_line(line, "mcp-server").unwrap();
+        assert_eq!(entry.level, "DEBUG");
+        assert_eq!(entry.message, "Field message"); // Should extract from fields.message
+        assert!(entry.fields.is_some());
+    }
+
+    #[test]
+    fn test_parse_log_line_json_missing_fields() {
+        // Minimal valid JSON - missing optional fields
+        let line = r#"{"timestamp":"2025-11-22T06:54:15+00:00"}"#;
+        let entry = parse_log_line(line, "test").unwrap();
+        assert_eq!(entry.level, "INFO"); // Default
+        assert_eq!(entry.message, ""); // Default empty
+        assert_eq!(entry.target, None);
+    }
+
+    #[test]
+    fn test_parse_log_line_invalid() {
+        // Invalid JSON
+        assert_eq!(parse_log_line("{invalid json}", "test"), None);
+
+        // Malformed text (too few parts)
+        assert_eq!(parse_log_line("JUST_TEXT", "test"), None);
+        assert_eq!(parse_log_line("2025-11-22 INFO", "test"), None);
+
+        // Invalid timestamp
+        assert_eq!(parse_log_line("not-a-timestamp INFO message", "test"), None);
+
+        // Empty line
+        assert_eq!(parse_log_line("", "test"), None);
+    }
+
+    // ========== log_file_for_mode tests ==========
+
+    #[test]
+    fn test_log_file_for_mode_valid() {
+        let dashboard = log_file_for_mode("dashboard").unwrap();
+        assert!(dashboard.to_string_lossy().ends_with("dashboard.log"));
+
+        let mcp = log_file_for_mode("mcp-server").unwrap();
+        assert!(mcp.to_string_lossy().ends_with("mcp-server.log"));
+
+        let cli = log_file_for_mode("cli").unwrap();
+        assert!(cli.to_string_lossy().ends_with("cli.log"));
+    }
+
+    #[test]
+    fn test_log_file_for_mode_invalid() {
+        // Invalid mode should return None
+        assert_eq!(log_file_for_mode("invalid"), None);
+        assert_eq!(log_file_for_mode("unknown"), None);
+        assert_eq!(log_file_for_mode(""), None);
+    }
+
+    // ========== LogQuery default tests ==========
+
+    #[test]
+    fn test_log_query_default() {
+        let query = LogQuery::default();
+        assert_eq!(query.mode, None);
+        assert_eq!(query.level, None);
+        assert_eq!(query.since, Some(Duration::hours(24)));
+        assert_eq!(query.until, None);
+        assert_eq!(query.limit, Some(100));
+    }
+
+    // ========== format_entry tests ==========
+
+    #[test]
+    fn test_format_entry_text_with_target() {
+        let entry = LogEntry {
+            timestamp: Utc::now(),
+            level: "INFO".to_string(),
+            target: Some("intent_engine::core".to_string()),
+            message: "Test message".to_string(),
+            mode: "dashboard".to_string(),
+            fields: None,
+        };
+        let formatted = format_entry_text(&entry);
+        assert!(formatted.contains("INFO"));
+        assert!(formatted.contains("dashboard"));
+        assert!(formatted.contains("intent_engine::core"));
+        assert!(formatted.contains("Test message"));
+    }
+
+    #[test]
+    fn test_format_entry_text_without_target() {
+        let entry = LogEntry {
+            timestamp: Utc::now(),
+            level: "ERROR".to_string(),
+            target: None,
+            message: "Error occurred".to_string(),
+            mode: "cli".to_string(),
+            fields: None,
+        };
+        let formatted = format_entry_text(&entry);
+        assert!(formatted.contains("ERROR"));
+        assert!(formatted.contains("cli"));
+        assert!(formatted.contains("Error occurred"));
+        // Should not have ": " separator when no target
+        assert!(!formatted.contains("::"));
+    }
+
+    #[test]
+    fn test_format_entry_json() {
+        let entry = LogEntry {
+            timestamp: Utc::now(),
+            level: "WARN".to_string(),
+            target: Some("test".to_string()),
+            message: "Warning message".to_string(),
+            mode: "mcp-server".to_string(),
+            fields: None,
+        };
+        let json = format_entry_json(&entry);
+        assert!(json.contains("\"level\":\"WARN\""));
+        assert!(json.contains("\"message\":\"Warning message\""));
+        assert!(json.contains("\"mode\":\"mcp-server\""));
+    }
+
+    #[test]
+    fn test_log_entry_fields_serialization() {
+        let fields = serde_json::json!({"key": "value", "count": 42});
+        let entry = LogEntry {
+            timestamp: Utc::now(),
+            level: "DEBUG".to_string(),
+            target: None,
+            message: "Test".to_string(),
+            mode: "test".to_string(),
+            fields: Some(fields),
+        };
+        let json = format_entry_json(&entry);
+        assert!(json.contains("\"fields\""));
+        assert!(json.contains("\"key\":\"value\""));
+    }
+
+    #[test]
+    fn test_log_entry_no_fields_serialization() {
+        let entry = LogEntry {
+            timestamp: Utc::now(),
+            level: "INFO".to_string(),
+            target: None,
+            message: "Test".to_string(),
+            mode: "test".to_string(),
+            fields: None,
+        };
+        let json = format_entry_json(&entry);
+        // fields should be omitted when None
+        assert!(!json.contains("\"fields\""));
     }
 }

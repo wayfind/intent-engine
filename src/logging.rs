@@ -413,3 +413,266 @@ pub fn log_file_path(mode: ApplicationMode) -> std::path::PathBuf {
         ApplicationMode::Test => log_dir.join("test.log"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::SystemTime;
+    use tempfile::TempDir;
+
+    // ========== LoggingConfig tests ==========
+
+    #[test]
+    fn test_logging_config_default() {
+        let config = LoggingConfig::default();
+
+        assert_eq!(config.level, Level::INFO);
+        assert!(config.color);
+        assert!(!config.show_timestamps);
+        assert!(!config.show_target);
+        assert!(!config.json_format);
+        assert!(!config.enable_spans);
+        assert!(config.file_output.is_none());
+    }
+
+    #[test]
+    fn test_logging_config_for_mode_mcp_server() {
+        let config = LoggingConfig::for_mode(ApplicationMode::McpServer);
+
+        assert_eq!(config.level, Level::DEBUG);
+        assert!(!config.color); // MCP should be clean
+        assert!(config.show_timestamps);
+        assert!(config.show_target);
+        assert!(config.json_format); // Machine-readable
+        assert!(!config.enable_spans); // Avoid noise
+        assert!(config.file_output.is_none());
+    }
+
+    #[test]
+    fn test_logging_config_for_mode_dashboard() {
+        let config = LoggingConfig::for_mode(ApplicationMode::Dashboard);
+
+        assert_eq!(config.level, Level::INFO);
+        assert!(!config.color); // Background service
+        assert!(config.show_timestamps);
+        assert!(config.show_target);
+        assert!(!config.json_format);
+        assert!(config.enable_spans); // Good for debugging
+        assert!(config.file_output.is_none());
+    }
+
+    #[test]
+    fn test_logging_config_for_mode_cli() {
+        let config = LoggingConfig::for_mode(ApplicationMode::Cli);
+
+        assert_eq!(config.level, Level::INFO);
+        assert!(config.color); // User-friendly
+        assert!(!config.show_timestamps);
+        assert!(!config.show_target);
+        assert!(!config.json_format);
+        assert!(!config.enable_spans);
+        assert!(config.file_output.is_none());
+    }
+
+    #[test]
+    fn test_logging_config_for_mode_test() {
+        let config = LoggingConfig::for_mode(ApplicationMode::Test);
+
+        assert_eq!(config.level, Level::DEBUG);
+        assert!(!config.color);
+        assert!(config.show_timestamps);
+        assert!(config.show_target);
+        assert!(!config.json_format);
+        assert!(config.enable_spans); // Maximum detail
+        assert!(config.file_output.is_none());
+    }
+
+    #[test]
+    fn test_logging_config_from_args_verbose() {
+        let config = LoggingConfig::from_args(false, true, false);
+
+        assert_eq!(config.level, Level::DEBUG);
+        assert!(config.show_timestamps);
+        assert!(config.show_target);
+        assert!(!config.json_format);
+        assert!(config.enable_spans);
+    }
+
+    #[test]
+    fn test_logging_config_from_args_quiet() {
+        let config = LoggingConfig::from_args(true, false, false);
+
+        assert_eq!(config.level, Level::ERROR);
+        assert!(!config.color); // Quiet mode disables color
+        assert!(!config.show_timestamps); // Quiet mode, no verbose
+        assert!(!config.show_target);
+    }
+
+    #[test]
+    fn test_logging_config_from_args_json() {
+        let config = LoggingConfig::from_args(false, false, true);
+
+        assert_eq!(config.level, Level::INFO);
+        assert!(!config.color); // JSON disables color
+        assert!(config.show_timestamps); // JSON enables timestamps
+        assert!(config.json_format);
+    }
+
+    #[test]
+    fn test_logging_config_from_args_normal() {
+        let config = LoggingConfig::from_args(false, false, false);
+
+        assert_eq!(config.level, Level::INFO);
+        assert!(!config.show_timestamps);
+        assert!(!config.show_target);
+        assert!(!config.json_format);
+        assert!(!config.enable_spans);
+    }
+
+    // ========== log_file_path tests ==========
+
+    #[test]
+    fn test_log_file_path_dashboard() {
+        let path = log_file_path(ApplicationMode::Dashboard);
+        assert!(path.to_string_lossy().ends_with("dashboard.log"));
+        assert!(path.to_string_lossy().contains(".intent-engine"));
+        assert!(path.to_string_lossy().contains("logs"));
+    }
+
+    #[test]
+    fn test_log_file_path_mcp_server() {
+        let path = log_file_path(ApplicationMode::McpServer);
+        assert!(path.to_string_lossy().ends_with("mcp-server.log"));
+    }
+
+    #[test]
+    fn test_log_file_path_cli() {
+        let path = log_file_path(ApplicationMode::Cli);
+        assert!(path.to_string_lossy().ends_with("cli.log"));
+    }
+
+    #[test]
+    fn test_log_file_path_test() {
+        let path = log_file_path(ApplicationMode::Test);
+        assert!(path.to_string_lossy().ends_with("test.log"));
+    }
+
+    // ========== cleanup_old_logs tests ==========
+
+    #[test]
+    fn test_cleanup_old_logs_nonexistent_dir() {
+        let temp = TempDir::new().unwrap();
+        let nonexistent = temp.path().join("nonexistent");
+
+        // Should not error on non-existent directory
+        let result = cleanup_old_logs(&nonexistent, 7);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cleanup_old_logs_empty_dir() {
+        let temp = TempDir::new().unwrap();
+
+        let result = cleanup_old_logs(temp.path(), 7);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cleanup_old_logs_keeps_current_logs() {
+        let temp = TempDir::new().unwrap();
+
+        // Create a current log file (not rotated)
+        let current_log = temp.path().join("dashboard.log");
+        fs::write(&current_log, "current log data").unwrap();
+
+        // Should not remove current log file (no .log.DATE pattern)
+        cleanup_old_logs(temp.path(), 0).unwrap();
+
+        assert!(current_log.exists());
+    }
+
+    #[test]
+    fn test_cleanup_old_logs_removes_old_rotated_files() {
+        let temp = TempDir::new().unwrap();
+
+        // Create an old rotated log file
+        let old_log = temp.path().join("dashboard.log.2020-01-01");
+        fs::write(&old_log, "old log data").unwrap();
+
+        // Set modification time to 10 days ago
+        let ten_days_ago = SystemTime::now()
+            .checked_sub(std::time::Duration::from_secs(10 * 24 * 60 * 60))
+            .unwrap();
+        filetime::set_file_mtime(&old_log, filetime::FileTime::from_system_time(ten_days_ago))
+            .unwrap();
+
+        // Clean up logs older than 7 days
+        cleanup_old_logs(temp.path(), 7).unwrap();
+
+        // Old file should be removed
+        assert!(!old_log.exists());
+    }
+
+    #[test]
+    fn test_cleanup_old_logs_keeps_recent_rotated_files() {
+        let temp = TempDir::new().unwrap();
+
+        // Create a recent rotated log file
+        let recent_log = temp.path().join("mcp-server.log.2025-11-25");
+        fs::write(&recent_log, "recent log data").unwrap();
+
+        // Set modification time to 3 days ago
+        let three_days_ago = SystemTime::now()
+            .checked_sub(std::time::Duration::from_secs(3 * 24 * 60 * 60))
+            .unwrap();
+        filetime::set_file_mtime(
+            &recent_log,
+            filetime::FileTime::from_system_time(three_days_ago),
+        )
+        .unwrap();
+
+        // Clean up logs older than 7 days
+        cleanup_old_logs(temp.path(), 7).unwrap();
+
+        // Recent file should be kept
+        assert!(recent_log.exists());
+    }
+
+    #[test]
+    fn test_cleanup_old_logs_ignores_non_log_files() {
+        let temp = TempDir::new().unwrap();
+
+        // Create a non-log file that's old
+        let old_file = temp.path().join("config.json");
+        fs::write(&old_file, "{}").unwrap();
+
+        let ten_days_ago = SystemTime::now()
+            .checked_sub(std::time::Duration::from_secs(10 * 24 * 60 * 60))
+            .unwrap();
+        filetime::set_file_mtime(
+            &old_file,
+            filetime::FileTime::from_system_time(ten_days_ago),
+        )
+        .unwrap();
+
+        // Should not remove non-log files
+        cleanup_old_logs(temp.path(), 7).unwrap();
+
+        assert!(old_file.exists());
+    }
+
+    #[test]
+    fn test_cleanup_old_logs_ignores_subdirectories() {
+        let temp = TempDir::new().unwrap();
+
+        // Create a subdirectory with log-like name
+        let subdir = temp.path().join("archive.log.2020-01-01");
+        fs::create_dir(&subdir).unwrap();
+
+        // Should not try to remove directories
+        let result = cleanup_old_logs(temp.path(), 7);
+        assert!(result.is_ok());
+        assert!(subdir.exists());
+    }
+}

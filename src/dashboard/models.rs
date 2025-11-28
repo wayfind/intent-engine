@@ -148,4 +148,85 @@ mod tests {
         assert!(query.include_tasks);
         assert!(query.include_events);
     }
+
+    #[test]
+    fn test_update_task_request_deserialization() {
+        let json = r#"{"name":"Updated","spec":"New spec","status":"done"}"#;
+        let req: UpdateTaskRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.name, Some("Updated".to_string()));
+        assert_eq!(req.spec, Some("New spec".to_string()));
+        assert_eq!(req.status, Some("done".to_string()));
+    }
+
+    #[test]
+    fn test_create_event_request_deserialization() {
+        let json = r#"{"type":"decision","data":"Made a decision"}"#;
+        let req: CreateEventRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.event_type, "decision");
+        assert_eq!(req.data, "Made a decision");
+    }
+
+    #[test]
+    fn test_update_event_request_deserialization() {
+        let json = r#"{"type":"milestone","data":"Updated data"}"#;
+        let req: UpdateEventRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.event_type, Some("milestone".to_string()));
+        assert_eq!(req.data, Some("Updated data".to_string()));
+    }
+
+    #[test]
+    fn test_spawn_subtask_request_deserialization() {
+        let json = r#"{"name":"Subtask","spec":"Subtask spec"}"#;
+        let req: SpawnSubtaskRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.name, "Subtask");
+        assert_eq!(req.spec, Some("Subtask spec".to_string()));
+    }
+
+    #[test]
+    fn test_task_list_query_deserialization() {
+        let json = r#"{"status":"doing","parent":"null"}"#;
+        let query: TaskListQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(query.status, Some("doing".to_string()));
+        assert_eq!(query.parent, Some("null".to_string()));
+    }
+
+    #[test]
+    fn test_event_list_query_deserialization() {
+        let json = r#"{"event_type":"decision","since":"7d","limit":10}"#;
+        let query: EventListQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(query.event_type, Some("decision".to_string()));
+        assert_eq!(query.since, Some("7d".to_string()));
+        assert_eq!(query.limit, Some(10));
+    }
+
+    #[test]
+    fn test_switch_project_request_deserialization() {
+        let json = r#"{"project_path":"/path/to/project"}"#;
+        let req: SwitchProjectRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.project_path, "/path/to/project");
+    }
+
+    #[test]
+    fn test_api_error_with_details() {
+        let details = serde_json::json!({"field": "name", "issue": "too short"});
+        let error = ApiError {
+            code: "VALIDATION_ERROR".to_string(),
+            message: "Validation failed".to_string(),
+            details: Some(details),
+        };
+        let json = serde_json::to_string(&error).unwrap();
+        assert!(json.contains("VALIDATION_ERROR"));
+        assert!(json.contains("details"));
+        assert!(json.contains("field"));
+    }
+
+    #[test]
+    fn test_search_query_with_overrides() {
+        let json = r#"{"query":"test","include_tasks":false,"include_events":true,"limit":20}"#;
+        let query: SearchQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(query.query, "test");
+        assert!(!query.include_tasks);
+        assert!(query.include_events);
+        assert_eq!(query.limit, Some(20));
+    }
 }

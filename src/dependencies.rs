@@ -155,56 +155,6 @@ pub async fn add_dependency(
     Ok(dependency)
 }
 
-/// Get all tasks that block a given task (dependencies)
-///
-/// # Arguments
-///
-/// * `pool` - Database connection pool
-/// * `task_id` - ID of the task to check
-///
-/// # Returns
-///
-/// Vector of task IDs that must be completed before the given task can start
-pub async fn get_blocking_tasks(pool: &SqlitePool, task_id: i64) -> Result<Vec<i64>> {
-    let blocking_ids = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT blocking_task_id
-        FROM dependencies
-        WHERE blocked_task_id = ?
-        "#,
-    )
-    .bind(task_id)
-    .fetch_all(pool)
-    .await?;
-
-    Ok(blocking_ids)
-}
-
-/// Get all tasks that are blocked by a given task
-///
-/// # Arguments
-///
-/// * `pool` - Database connection pool
-/// * `task_id` - ID of the task to check
-///
-/// # Returns
-///
-/// Vector of task IDs that depend on the given task
-pub async fn get_blocked_tasks(pool: &SqlitePool, task_id: i64) -> Result<Vec<i64>> {
-    let blocked_ids = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT blocked_task_id
-        FROM dependencies
-        WHERE blocking_task_id = ?
-        "#,
-    )
-    .bind(task_id)
-    .fetch_all(pool)
-    .await?;
-
-    Ok(blocked_ids)
-}
-
 /// Check if a task is blocked by any incomplete tasks
 ///
 /// A task is blocked if any of its blocking tasks are not in 'done' status.
@@ -432,40 +382,6 @@ mod tests {
         // Try to add dependency with non-existent task
         let result = add_dependency(&pool, 9999, task_a).await;
         assert!(matches!(result, Err(IntentError::TaskNotFound(9999))));
-    }
-
-    #[tokio::test]
-    async fn test_get_blocking_tasks() {
-        let (_temp, pool) = setup_test_db().await;
-        let task_a = create_test_task(&pool, "Task A").await;
-        let task_b = create_test_task(&pool, "Task B").await;
-        let task_c = create_test_task(&pool, "Task C").await;
-
-        // A depends on B and C
-        add_dependency(&pool, task_b, task_a).await.unwrap();
-        add_dependency(&pool, task_c, task_a).await.unwrap();
-
-        let blocking = get_blocking_tasks(&pool, task_a).await.unwrap();
-        assert_eq!(blocking.len(), 2);
-        assert!(blocking.contains(&task_b));
-        assert!(blocking.contains(&task_c));
-    }
-
-    #[tokio::test]
-    async fn test_get_blocked_tasks() {
-        let (_temp, pool) = setup_test_db().await;
-        let task_a = create_test_task(&pool, "Task A").await;
-        let task_b = create_test_task(&pool, "Task B").await;
-        let task_c = create_test_task(&pool, "Task C").await;
-
-        // B and C depend on A
-        add_dependency(&pool, task_a, task_b).await.unwrap();
-        add_dependency(&pool, task_a, task_c).await.unwrap();
-
-        let blocked = get_blocked_tasks(&pool, task_a).await.unwrap();
-        assert_eq!(blocked.len(), 2);
-        assert!(blocked.contains(&task_b));
-        assert!(blocked.contains(&task_c));
     }
 
     #[tokio::test]

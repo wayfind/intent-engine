@@ -45,22 +45,6 @@ pub fn create_backup(file_path: &Path) -> Result<Option<PathBuf>> {
     Ok(Some(backup_path))
 }
 
-/// Restore from a backup file
-pub fn restore_from_backup(backup_path: &Path, original_path: &Path) -> Result<()> {
-    if backup_path.exists() {
-        fs::copy(backup_path, original_path).map_err(IntentError::IoError)?;
-    }
-    Ok(())
-}
-
-/// Remove a backup file
-pub fn remove_backup(backup_path: &Path) -> Result<()> {
-    if backup_path.exists() {
-        fs::remove_file(backup_path).map_err(IntentError::IoError)?;
-    }
-    Ok(())
-}
-
 /// Read a JSON config file, or return empty object if it doesn't exist
 pub fn read_json_config(path: &Path) -> Result<Value> {
     if path.exists() {
@@ -177,6 +161,8 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    // ========== resolve_absolute_path tests ==========
+
     #[test]
     fn test_resolve_absolute_path() {
         let _temp = TempDir::new().unwrap();
@@ -186,7 +172,34 @@ mod tests {
     }
 
     #[test]
-    fn test_backup_and_restore() {
+    fn test_resolve_absolute_path_already_absolute() {
+        let abs_path = PathBuf::from("/tmp/test.txt");
+        let result = resolve_absolute_path(&abs_path).unwrap();
+        assert!(result.is_absolute());
+    }
+
+    #[test]
+    fn test_resolve_absolute_path_relative() {
+        let rel_path = PathBuf::from("./test.txt");
+        let result = resolve_absolute_path(&rel_path).unwrap();
+        assert!(result.is_absolute());
+    }
+
+    // ========== get_home_dir tests ==========
+
+    #[test]
+    fn test_get_home_dir() {
+        let result = get_home_dir();
+        assert!(result.is_ok());
+
+        let home = result.unwrap();
+        assert!(home.is_absolute());
+    }
+
+    // ========== backup and restore tests ==========
+
+    #[test]
+    fn test_create_backup_creates_file() {
         let temp = TempDir::new().unwrap();
         let file_path = temp.path().join("test.json");
         fs::write(&file_path, "original content").unwrap();
@@ -197,18 +210,38 @@ mod tests {
         let backup_path = backup.unwrap();
         assert!(backup_path.exists());
 
-        // Modify original
-        fs::write(&file_path, "modified content").unwrap();
-
-        // Restore from backup
-        restore_from_backup(&backup_path, &file_path).unwrap();
-        let content = fs::read_to_string(&file_path).unwrap();
-        assert_eq!(content, "original content");
-
-        // Clean up
-        remove_backup(&backup_path).unwrap();
-        assert!(!backup_path.exists());
+        // Verify backup contains original content
+        let backup_content = fs::read_to_string(&backup_path).unwrap();
+        assert_eq!(backup_content, "original content");
     }
+
+    #[test]
+    fn test_create_backup_nonexistent_file() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("nonexistent.txt");
+
+        // Backup of non-existent file should return None
+        let backup = create_backup(&file_path).unwrap();
+        assert!(backup.is_none());
+    }
+
+    #[test]
+    fn test_create_backup_filename_format() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("test.json");
+        fs::write(&file_path, "content").unwrap();
+
+        let backup = create_backup(&file_path).unwrap();
+        assert!(backup.is_some());
+
+        let backup_path = backup.unwrap();
+        let filename = backup_path.file_name().unwrap().to_string_lossy();
+
+        // Should contain .backup. in the filename
+        assert!(filename.contains(".backup."));
+    }
+
+    // ========== JSON config tests ==========
 
     #[test]
     fn test_json_config_ops() {
@@ -230,5 +263,133 @@ mod tests {
         // Read back
         let read_config = read_json_config(&config_path).unwrap();
         assert_eq!(read_config, test_config);
+    }
+
+    #[test]
+    fn test_read_json_config_invalid_json() {
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("invalid.json");
+
+        // Write invalid JSON
+        fs::write(&config_path, "{invalid json}").unwrap();
+
+        // Should return error
+        let result = read_json_config(&config_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_write_json_config_creates_parent_dir() {
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("nested").join("dir").join("config.json");
+
+        let test_config = serde_json::json!({"test": "value"});
+        write_json_config(&config_path, &test_config).unwrap();
+
+        // Parent directory should be created
+        assert!(config_path.parent().unwrap().exists());
+        assert!(config_path.exists());
+    }
+
+    #[test]
+    fn test_write_json_config_pretty_format() {
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("config.json");
+
+        let test_config = serde_json::json!({
+            "key": "value",
+            "nested": {
+                "item": 123
+            }
+        });
+        write_json_config(&config_path, &test_config).unwrap();
+
+        // Read as string to verify pretty formatting
+        let content = fs::read_to_string(&config_path).unwrap();
+
+        // Pretty-printed JSON should have newlines
+        assert!(content.contains('\n'));
+        assert!(content.contains("  ")); // Should have indentation
+    }
+
+    #[test]
+    fn test_json_config_complex_types() {
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("complex.json");
+
+        let test_config = serde_json::json!({
+            "string": "value",
+            "number": 42,
+            "boolean": true,
+            "null": null,
+            "array": [1, 2, 3],
+            "object": {
+                "nested": "value"
+            }
+        });
+
+        write_json_config(&config_path, &test_config).unwrap();
+        let read_config = read_json_config(&config_path).unwrap();
+
+        assert_eq!(read_config, test_config);
+    }
+
+    // ========== find_ie_binary tests ==========
+
+    #[test]
+    fn test_find_ie_binary() {
+        // This test depends on the binary being available
+        let result = find_ie_binary();
+        // Should either find it or return a descriptive error
+        match result {
+            Ok(path) => {
+                // If found, should be a valid path
+                assert!(!path.to_string_lossy().is_empty());
+            },
+            Err(e) => {
+                // Error message should be descriptive
+                let msg = format!("{:?}", e);
+                assert!(
+                    msg.contains("binary not found")
+                        || msg.contains("intent-engine")
+                        || msg.contains("ie")
+                );
+            },
+        }
+    }
+
+    // ========== set_executable tests ==========
+
+    #[cfg(unix)]
+    #[test]
+    fn test_set_executable_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("script.sh");
+        fs::write(&file_path, "#!/bin/bash\necho test").unwrap();
+
+        // Set executable
+        set_executable(&file_path).unwrap();
+
+        // Check permissions
+        let metadata = fs::metadata(&file_path).unwrap();
+        let permissions = metadata.permissions();
+        let mode = permissions.mode();
+
+        // Should have execute permissions (0o755)
+        assert_ne!(mode & 0o111, 0); // At least one execute bit set
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn test_set_executable_non_unix() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("script.sh");
+        fs::write(&file_path, "echo test").unwrap();
+
+        // Should not error on non-Unix platforms
+        let result = set_executable(&file_path);
+        assert!(result.is_ok());
     }
 }

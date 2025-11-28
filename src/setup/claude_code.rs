@@ -25,36 +25,12 @@ impl ClaudeCodeSetup {
 
     /// Create Claude Code settings JSON configuration
     ///
-    /// Generates the hooks configuration for both SessionStart and PostToolUse events.
+    /// Generates the hooks configuration for SessionStart event.
     /// This configuration is shared between user-level and project-level setups.
     ///
     /// # Arguments
     /// * `hook_path` - Absolute path to the SessionStart hook script
-    /// * `format_hook_path` - Absolute path to the PostToolUse formatting hook script
-    fn create_claude_settings(hook_path: &Path, format_hook_path: &Path) -> serde_json::Value {
-        const MCP_TOOL_MATCHERS: &[&str] = &[
-            "task_context",
-            "task_get",
-            "current_task_get",
-            "task_list",
-            "task_pick_next",
-            "unified_search",
-            "event_list",
-        ];
-
-        let post_tool_use_hooks: Vec<serde_json::Value> = MCP_TOOL_MATCHERS
-            .iter()
-            .map(|matcher| {
-                json!({
-                    "matcher": format!("mcp__intent-engine__{}", matcher),
-                    "hooks": [{
-                        "type": "command",
-                        "command": format_hook_path.to_string_lossy()
-                    }]
-                })
-            })
-            .collect();
-
+    fn create_claude_settings(hook_path: &Path) -> serde_json::Value {
         json!({
             "hooks": {
                 "SessionStart": [{
@@ -62,40 +38,38 @@ impl ClaudeCodeSetup {
                         "type": "command",
                         "command": hook_path.to_string_lossy()
                     }]
-                }],
-                "PostToolUse": post_tool_use_hooks
+                }]
             }
         })
     }
 
-    /// Setup for user-level installation
-    fn setup_user_level(&self, opts: &SetupOptions) -> Result<SetupResult> {
-        let mut files_modified = Vec::new();
-        let mut backups = Vec::new();
-
-        println!("📦 Setting up user-level Claude Code integration...\n");
-
-        // 1. Setup hooks directory and script
-        let claude_dir = Self::get_user_claude_dir()?;
+    /// Common setup logic for hooks and settings
+    ///
+    /// Sets up the session-start hook script and settings.json in the given Claude directory.
+    /// This function is shared between user-level and project-level setup.
+    ///
+    /// # Arguments
+    /// * `claude_dir` - The .claude directory (user-level or project-level)
+    /// * `opts` - Setup options (includes force flag)
+    /// * `files_modified` - Mutable vector to track modified files
+    fn setup_hooks_and_settings(
+        claude_dir: &Path,
+        opts: &SetupOptions,
+        files_modified: &mut Vec<PathBuf>,
+    ) -> Result<()> {
         let hooks_dir = claude_dir.join("hooks");
         let hook_script = hooks_dir.join("session-start.sh");
 
+        // Create hooks directory
         fs::create_dir_all(&hooks_dir).map_err(IntentError::IoError)?;
         println!("✓ Created {}", hooks_dir.display());
 
-        // Backup existing hook script
+        // Check if hook script already exists
         if hook_script.exists() && !opts.force {
             return Err(IntentError::InvalidInput(format!(
                 "Hook script already exists: {}. Use --force to overwrite",
                 hook_script.display()
             )));
-        }
-
-        if hook_script.exists() {
-            if let Some(backup) = create_backup(&hook_script)? {
-                backups.push((hook_script.clone(), backup.clone()));
-                println!("✓ Backed up hook script to {}", backup.display());
-            }
         }
 
         // Install session-start hook script
@@ -105,34 +79,11 @@ impl ClaudeCodeSetup {
         files_modified.push(hook_script.clone());
         println!("✓ Installed {}", hook_script.display());
 
-        // Install format-ie-output hook script
-        let format_hook_script = hooks_dir.join("format-ie-output.sh");
-        let format_hook_content = include_str!("../../templates/format-ie-output.sh");
-
-        if format_hook_script.exists() && !opts.force {
-            return Err(IntentError::InvalidInput(format!(
-                "Format hook already exists: {}. Use --force to overwrite",
-                format_hook_script.display()
-            )));
-        }
-
-        if format_hook_script.exists() {
-            if let Some(backup) = create_backup(&format_hook_script)? {
-                backups.push((format_hook_script.clone(), backup.clone()));
-                println!("✓ Backed up format hook to {}", backup.display());
-            }
-        }
-
-        fs::write(&format_hook_script, format_hook_content).map_err(IntentError::IoError)?;
-        set_executable(&format_hook_script)?;
-        files_modified.push(format_hook_script.clone());
-        println!("✓ Installed {}", format_hook_script.display());
-
-        // 2. Setup settings.json with absolute paths
+        // Setup settings.json with absolute paths
         let settings_file = claude_dir.join("settings.json");
         let hook_abs_path = resolve_absolute_path(&hook_script)?;
-        let format_hook_abs_path = resolve_absolute_path(&format_hook_script)?;
 
+        // Check if settings file already exists
         if settings_file.exists() && !opts.force {
             return Err(IntentError::InvalidInput(format!(
                 "Settings file already exists: {}. Use --force to overwrite",
@@ -140,21 +91,27 @@ impl ClaudeCodeSetup {
             )));
         }
 
-        if settings_file.exists() {
-            if let Some(backup) = create_backup(&settings_file)? {
-                backups.push((settings_file.clone(), backup.clone()));
-                println!("✓ Backed up settings to {}", backup.display());
-            }
-        }
-
-        let settings = Self::create_claude_settings(&hook_abs_path, &format_hook_abs_path);
+        let settings = Self::create_claude_settings(&hook_abs_path);
 
         write_json_config(&settings_file, &settings)?;
         files_modified.push(settings_file.clone());
         println!("✓ Created {}", settings_file.display());
 
-        // 3. Setup MCP configuration
-        let mcp_result = self.setup_mcp_config(opts, &mut files_modified, &mut backups)?;
+        Ok(())
+    }
+
+    /// Setup for user-level installation
+    fn setup_user_level(&self, opts: &SetupOptions) -> Result<SetupResult> {
+        let mut files_modified = Vec::new();
+
+        println!("📦 Setting up user-level Claude Code integration...\n");
+
+        // Setup hooks and settings in user-level .claude directory
+        let claude_dir = Self::get_user_claude_dir()?;
+        Self::setup_hooks_and_settings(&claude_dir, opts, &mut files_modified)?;
+
+        // Setup MCP configuration
+        let mcp_result = self.setup_mcp_config(opts, &mut files_modified)?;
 
         Ok(SetupResult {
             success: true,
@@ -169,7 +126,6 @@ impl ClaudeCodeSetup {
         &self,
         opts: &SetupOptions,
         files_modified: &mut Vec<PathBuf>,
-        backups: &mut Vec<(PathBuf, PathBuf)>,
     ) -> Result<ConnectivityResult> {
         let config_path = if let Some(ref path) = opts.config_path {
             path.clone()
@@ -181,14 +137,6 @@ impl ClaudeCodeSetup {
         // Find binary
         let binary_path = find_ie_binary()?;
         println!("✓ Found binary: {}", binary_path.display());
-
-        // Backup existing config
-        if config_path.exists() {
-            if let Some(backup) = create_backup(&config_path)? {
-                backups.push((config_path.clone(), backup.clone()));
-                println!("✓ Backed up MCP config to {}", backup.display());
-            }
-        }
 
         // Read or create config
         let mut config = read_json_config(&config_path)?;
@@ -231,66 +179,13 @@ impl ClaudeCodeSetup {
         println!("    MCP config will still be in ~/.claude.json (user-level)\n");
 
         let mut files_modified = Vec::new();
+
+        // Setup hooks and settings in project-level .claude directory
         let claude_dir = Self::get_project_claude_dir()?;
-        let hooks_dir = claude_dir.join("hooks");
-        let hook_script = hooks_dir.join("session-start.sh");
-
-        fs::create_dir_all(&hooks_dir).map_err(IntentError::IoError)?;
-        println!("✓ Created {}", hooks_dir.display());
-
-        // Check if hook script already exists
-        if hook_script.exists() && !opts.force {
-            return Err(IntentError::InvalidInput(format!(
-                "Hook script already exists: {}. Use --force to overwrite",
-                hook_script.display()
-            )));
-        }
-
-        // Install session-start hook script
-        let hook_content = include_str!("../../templates/session-start.sh");
-        fs::write(&hook_script, hook_content).map_err(IntentError::IoError)?;
-        set_executable(&hook_script)?;
-        files_modified.push(hook_script.clone());
-        println!("✓ Installed {}", hook_script.display());
-
-        // Install format-ie-output hook script
-        let format_hook_script = hooks_dir.join("format-ie-output.sh");
-        let format_hook_content = include_str!("../../templates/format-ie-output.sh");
-
-        if format_hook_script.exists() && !opts.force {
-            return Err(IntentError::InvalidInput(format!(
-                "Format hook already exists: {}. Use --force to overwrite",
-                format_hook_script.display()
-            )));
-        }
-
-        fs::write(&format_hook_script, format_hook_content).map_err(IntentError::IoError)?;
-        set_executable(&format_hook_script)?;
-        files_modified.push(format_hook_script.clone());
-        println!("✓ Installed {}", format_hook_script.display());
-
-        // Create settings.json with absolute paths
-        let settings_file = claude_dir.join("settings.json");
-        let hook_abs_path = resolve_absolute_path(&hook_script)?;
-        let format_hook_abs_path = resolve_absolute_path(&format_hook_script)?;
-
-        // Check if settings file already exists
-        if settings_file.exists() && !opts.force {
-            return Err(IntentError::InvalidInput(format!(
-                "Settings file already exists: {}. Use --force to overwrite",
-                settings_file.display()
-            )));
-        }
-
-        let settings = Self::create_claude_settings(&hook_abs_path, &format_hook_abs_path);
-
-        write_json_config(&settings_file, &settings)?;
-        files_modified.push(settings_file);
-        println!("✓ Created settings.json");
+        Self::setup_hooks_and_settings(&claude_dir, opts, &mut files_modified)?;
 
         // MCP config still goes to user-level
-        let mut backups = Vec::new();
-        let mcp_result = self.setup_mcp_config(opts, &mut files_modified, &mut backups)?;
+        let mcp_result = self.setup_mcp_config(opts, &mut files_modified)?;
 
         Ok(SetupResult {
             success: true,
@@ -356,5 +251,90 @@ impl SetupModule for ClaudeCodeSetup {
                 details: format!("Failed to execute session-restore: {}", e),
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    // ========== create_claude_settings tests ==========
+
+    #[test]
+    fn test_create_claude_settings_structure() {
+        let hook_path = PathBuf::from("/tmp/session-start.sh");
+
+        let settings = ClaudeCodeSetup::create_claude_settings(&hook_path);
+
+        // Verify hooks key exists
+        assert!(settings.get("hooks").is_some());
+
+        // Verify SessionStart hook
+        let hooks = &settings["hooks"];
+        assert!(hooks.get("SessionStart").is_some());
+        let session_start = &hooks["SessionStart"];
+        assert!(session_start.is_array());
+        assert_eq!(session_start.as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_create_claude_settings_session_start_hook() {
+        let hook_path = PathBuf::from("/home/user/.claude/hooks/session-start.sh");
+
+        let settings = ClaudeCodeSetup::create_claude_settings(&hook_path);
+
+        let session_start = &settings["hooks"]["SessionStart"][0];
+        assert!(session_start.get("hooks").is_some());
+
+        let hooks_array = session_start["hooks"].as_array().unwrap();
+        assert_eq!(hooks_array.len(), 1);
+
+        let hook = &hooks_array[0];
+        assert_eq!(hook["type"], "command");
+        assert_eq!(hook["command"], "/home/user/.claude/hooks/session-start.sh");
+    }
+
+    // ========== Directory path tests ==========
+
+    #[test]
+    fn test_get_user_claude_dir() {
+        // This test depends on HOME environment variable
+        let result = ClaudeCodeSetup::get_user_claude_dir();
+        assert!(result.is_ok());
+
+        let dir = result.unwrap();
+        assert!(dir.ends_with(".claude"));
+    }
+
+    #[test]
+    fn test_get_project_claude_dir() {
+        let result = ClaudeCodeSetup::get_project_claude_dir();
+        assert!(result.is_ok());
+
+        let dir = result.unwrap();
+        assert!(dir.ends_with(".claude"));
+    }
+
+    #[test]
+    fn test_claude_code_setup_name() {
+        let setup = ClaudeCodeSetup;
+        assert_eq!(setup.name(), "claude-code");
+    }
+
+    // ========== JSON structure validation tests ==========
+
+    #[test]
+    fn test_create_claude_settings_paths_preserved() {
+        // Test with special characters in path
+        let hook_path = PathBuf::from("/home/user name/with spaces/.claude/hooks/session-start.sh");
+
+        let settings = ClaudeCodeSetup::create_claude_settings(&hook_path);
+
+        // Paths should be preserved as strings
+        let session_start_cmd = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(session_start_cmd.contains("with spaces"));
     }
 }

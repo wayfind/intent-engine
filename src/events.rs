@@ -472,4 +472,158 @@ mod tests {
             .unwrap();
         assert_eq!(events.len(), 0);
     }
+
+    #[tokio::test]
+    async fn test_update_event() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let event = event_mgr
+            .add_event(task.id, "decision", "Initial decision")
+            .await
+            .unwrap();
+
+        // Update event type and data
+        let updated = event_mgr
+            .update_event(event.id, Some("milestone"), Some("Updated decision"))
+            .await
+            .unwrap();
+
+        assert_eq!(updated.id, event.id);
+        assert_eq!(updated.task_id, task.id);
+        assert_eq!(updated.log_type, "milestone");
+        assert_eq!(updated.discussion_data, "Updated decision");
+    }
+
+    #[tokio::test]
+    async fn test_update_event_partial() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let event = event_mgr
+            .add_event(task.id, "decision", "Initial decision")
+            .await
+            .unwrap();
+
+        // Update only discussion_data
+        let updated = event_mgr
+            .update_event(event.id, None, Some("Updated data only"))
+            .await
+            .unwrap();
+
+        assert_eq!(updated.log_type, "decision"); // Unchanged
+        assert_eq!(updated.discussion_data, "Updated data only");
+    }
+
+    #[tokio::test]
+    async fn test_update_event_nonexistent() {
+        let ctx = TestContext::new().await;
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let result = event_mgr
+            .update_event(999, Some("decision"), Some("Test"))
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(result, Err(IntentError::InvalidInput(_))));
+    }
+
+    #[tokio::test]
+    async fn test_delete_event() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let event = event_mgr
+            .add_event(task.id, "decision", "To be deleted")
+            .await
+            .unwrap();
+
+        // Delete the event
+        event_mgr.delete_event(event.id).await.unwrap();
+
+        // Verify it's deleted
+        let events = event_mgr
+            .list_events(Some(task.id), None, None, None)
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_delete_event_nonexistent() {
+        let ctx = TestContext::new().await;
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let result = event_mgr.delete_event(999).await;
+        assert!(result.is_err());
+        assert!(matches!(result, Err(IntentError::InvalidInput(_))));
+    }
+
+    #[tokio::test]
+    async fn test_list_events_filter_by_type() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+
+        // Add events of different types
+        event_mgr
+            .add_event(task.id, "decision", "Decision 1")
+            .await
+            .unwrap();
+        event_mgr
+            .add_event(task.id, "blocker", "Blocker 1")
+            .await
+            .unwrap();
+        event_mgr
+            .add_event(task.id, "decision", "Decision 2")
+            .await
+            .unwrap();
+
+        // Filter by decision type
+        let events = event_mgr
+            .list_events(Some(task.id), None, Some("decision".to_string()), None)
+            .await
+            .unwrap();
+
+        assert_eq!(events.len(), 2);
+        assert!(events.iter().all(|e| e.log_type == "decision"));
+    }
+
+    #[tokio::test]
+    async fn test_list_events_global() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
+        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+
+        // Add events to both tasks
+        event_mgr
+            .add_event(task1.id, "decision", "Task 1 Decision")
+            .await
+            .unwrap();
+        event_mgr
+            .add_event(task2.id, "decision", "Task 2 Decision")
+            .await
+            .unwrap();
+
+        // List all events globally (task_id = None)
+        let events = event_mgr.list_events(None, None, None, None).await.unwrap();
+
+        assert!(events.len() >= 2); // At least our 2 events
+        let task1_events: Vec<_> = events.iter().filter(|e| e.task_id == task1.id).collect();
+        let task2_events: Vec<_> = events.iter().filter(|e| e.task_id == task2.id).collect();
+
+        assert_eq!(task1_events.len(), 1);
+        assert_eq!(task2_events.len(), 1);
+    }
 }

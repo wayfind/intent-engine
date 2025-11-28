@@ -142,6 +142,159 @@ mod tests {
         assert!(!needs_like_fallback("JWT认证"));
         assert!(!needs_like_fallback("API接口"));
     }
+
+    #[test]
+    fn test_needs_like_fallback_mixed_cjk_ascii() {
+        // Two characters: one CJK + one ASCII - should NOT need fallback
+        // because not all chars are CJK
+        assert!(!needs_like_fallback("中a"));
+        assert!(!needs_like_fallback("a中"));
+        assert!(!needs_like_fallback("認1"));
+
+        // Three+ characters with mixed CJK/ASCII - can use FTS5
+        assert!(!needs_like_fallback("中文API"));
+        assert!(!needs_like_fallback("JWT认证系统"));
+        assert!(!needs_like_fallback("API中文文档"));
+    }
+
+    #[test]
+    fn test_needs_like_fallback_edge_cases() {
+        // Empty string - no fallback needed
+        assert!(!needs_like_fallback(""));
+
+        // Whitespace only - no fallback
+        assert!(!needs_like_fallback(" "));
+        assert!(!needs_like_fallback("  "));
+
+        // Single non-CJK - no fallback
+        assert!(!needs_like_fallback("1"));
+        assert!(!needs_like_fallback("@"));
+        assert!(!needs_like_fallback(" "));
+
+        // Two non-CJK - no fallback
+        assert!(!needs_like_fallback("ab"));
+        assert!(!needs_like_fallback("12"));
+    }
+
+    #[test]
+    fn test_is_cjk_char_extension_ranges() {
+        // CJK Extension A (U+3400..U+4DBF)
+        assert!(is_cjk_char('\u{3400}')); // First char of Extension A
+        assert!(is_cjk_char('\u{4DBF}')); // Last char of Extension A
+
+        // CJK Unified Ideographs (U+4E00..U+9FFF) - common range
+        assert!(is_cjk_char('\u{4E00}')); // First common CJK
+        assert!(is_cjk_char('\u{9FFF}')); // Last common CJK
+
+        // Characters just outside ranges - should NOT be CJK
+        assert!(!is_cjk_char('\u{33FF}')); // Just before Extension A
+        assert!(!is_cjk_char('\u{4DC0}')); // Just after Extension A
+        assert!(!is_cjk_char('\u{4DFF}')); // Just before Unified Ideographs
+        assert!(!is_cjk_char('\u{A000}')); // Just after Unified Ideographs
+    }
+
+    #[test]
+    fn test_is_cjk_char_japanese() {
+        // Hiragana range (U+3040..U+309F)
+        assert!(is_cjk_char('\u{3040}')); // First Hiragana
+        assert!(is_cjk_char('ひ')); // Middle Hiragana
+        assert!(is_cjk_char('\u{309F}')); // Last Hiragana
+
+        // Katakana range (U+30A0..U+30FF)
+        assert!(is_cjk_char('\u{30A0}')); // First Katakana
+        assert!(is_cjk_char('カ')); // Middle Katakana
+        assert!(is_cjk_char('\u{30FF}')); // Last Katakana
+
+        // Just outside Japanese ranges
+        assert!(!is_cjk_char('\u{303F}')); // Before Hiragana
+        assert!(!is_cjk_char('\u{3100}')); // After Katakana (Bopomofo, not CJK by our definition)
+    }
+
+    #[test]
+    fn test_is_cjk_char_korean() {
+        // Hangul Syllables (U+AC00..U+D7AF)
+        assert!(is_cjk_char('\u{AC00}')); // First Hangul syllable (가)
+        assert!(is_cjk_char('한')); // Middle Hangul
+        assert!(is_cjk_char('\u{D7AF}')); // Last Hangul syllable
+
+        // Just outside Korean range
+        assert!(!is_cjk_char('\u{ABFF}')); // Before Hangul
+        assert!(!is_cjk_char('\u{D7B0}')); // After Hangul
+    }
+
+    #[test]
+    fn test_escape_fts5_basic() {
+        // No quotes - no escaping needed
+        assert_eq!(escape_fts5("hello world"), "hello world");
+        assert_eq!(escape_fts5("JWT authentication"), "JWT authentication");
+
+        // Single quote (not escaped by this function, only double quotes)
+        assert_eq!(escape_fts5("user's task"), "user's task");
+    }
+
+    #[test]
+    fn test_escape_fts5_double_quotes() {
+        // Single double quote
+        assert_eq!(escape_fts5("\"admin\""), "\"\"admin\"\"");
+
+        // Multiple double quotes
+        assert_eq!(
+            escape_fts5("\"user\" and \"admin\""),
+            "\"\"user\"\" and \"\"admin\"\""
+        );
+
+        // Double quotes at different positions
+        assert_eq!(
+            escape_fts5("start \"middle\" end"),
+            "start \"\"middle\"\" end"
+        );
+        assert_eq!(escape_fts5("\"start"), "\"\"start");
+        assert_eq!(escape_fts5("end\""), "end\"\"");
+    }
+
+    #[test]
+    fn test_escape_fts5_complex_queries() {
+        // Mixed quotes and special characters
+        assert_eq!(
+            escape_fts5("search for \"exact phrase\" here"),
+            "search for \"\"exact phrase\"\" here"
+        );
+
+        // Empty string
+        assert_eq!(escape_fts5(""), "");
+
+        // Only quotes
+        assert_eq!(escape_fts5("\""), "\"\"");
+        assert_eq!(escape_fts5("\"\""), "\"\"\"\"");
+        assert_eq!(escape_fts5("\"\"\""), "\"\"\"\"\"\"");
+    }
+
+    #[test]
+    fn test_escape_fts5_cjk_with_quotes() {
+        // CJK text with quotes
+        assert_eq!(escape_fts5("用户\"管理员\"权限"), "用户\"\"管理员\"\"权限");
+        assert_eq!(escape_fts5("\"認証\"システム"), "\"\"認証\"\"システム");
+
+        // Mixed CJK and English with quotes
+        assert_eq!(
+            escape_fts5("API\"接口\"documentation"),
+            "API\"\"接口\"\"documentation"
+        );
+    }
+
+    #[test]
+    fn test_needs_like_fallback_unicode_normalization() {
+        // Test with different Unicode representations
+        // Most CJK characters don't have composition, but test general behavior
+
+        // Standard CJK characters
+        assert!(needs_like_fallback("中"));
+        assert!(needs_like_fallback("日"));
+
+        // Two CJK characters
+        assert!(needs_like_fallback("中日"));
+        assert!(needs_like_fallback("認證"));
+    }
 }
 
 // ============================================================================

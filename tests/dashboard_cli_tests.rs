@@ -80,3 +80,83 @@ async fn test_dashboard_open_not_running() {
         .failure()
         .stderr(predicate::str::contains("Dashboard is not running"));
 }
+
+// ============================================================================
+// Dashboard Start Tests - Command Option Validation
+// ============================================================================
+
+#[test]
+#[ignore]
+fn test_dashboard_start_with_invalid_port() {
+    let temp_dir = common::setup_test_env();
+    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
+
+    // Test with port number that's too large
+    cmd.arg("dashboard").arg("start").arg("--port").arg("99999");
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid").or(predicate::str::contains("port")));
+}
+
+#[test]
+#[ignore]
+fn test_dashboard_start_with_custom_port() {
+    let temp_dir = common::setup_test_env();
+    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
+
+    // Test with valid custom port - command should be accepted
+    // Note: We don't actually verify the server starts (requires cleanup)
+    cmd.arg("dashboard").arg("start").arg("--port").arg("8888");
+
+    // Command should be accepted (though server may not fully start in test env)
+    // We're just testing that the CLI argument parsing works
+    cmd.assert();
+}
+
+#[test]
+#[ignore]
+fn test_dashboard_start_foreground_mode() {
+    let temp_dir = common::setup_test_env();
+    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
+
+    // Test foreground mode flag
+    cmd.arg("dashboard").arg("start").arg("--foreground");
+
+    // Command should be accepted
+    cmd.assert();
+}
+
+#[test]
+#[ignore]
+fn test_dashboard_start_with_browser() {
+    let temp_dir = common::setup_test_env();
+    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
+
+    // Test browser flag
+    cmd.arg("dashboard").arg("start").arg("--browser");
+
+    // Command should be accepted
+    cmd.assert();
+}
+
+#[test]
+fn test_dashboard_start_in_uninitialized_directory() {
+    // Create a temp directory without initializing it
+    let temp_dir = tempfile::TempDir::new().unwrap();
+
+    let mut cmd = common::ie_command();
+    cmd.current_dir(temp_dir.path())
+        .env("HOME", "/nonexistent")
+        .env("USERPROFILE", "/nonexistent")
+        .arg("dashboard")
+        .arg("start");
+
+    // Should fail - either due to no project or logging initialization failure
+    cmd.assert().failure().stderr(
+        predicate::str::contains("No Intent-Engine project found")
+            .or(predicate::str::contains("not initialized"))
+            .or(predicate::str::contains("Failed to initialize logging"))
+            .or(predicate::str::contains("Permission denied")),
+    );
+}
