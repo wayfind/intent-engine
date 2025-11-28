@@ -10,7 +10,7 @@ The user reported that a task in the "done" state, when restarted to "doing", ca
 
 ## Implementation Plan
 - [x] **Identify the issue**: Verified backend response structure via `cargo run` and inspected frontend code.
-- [x] **Fix the code**: Updated `frontend-v2/src/stores/appStore.ts` to correctly access `data.data.completed_task`.
+- [x] **Fix the code**: Updated `front-end/src/stores/appStore.ts` to correctly access `data.data.completed_task`.
 - [x] **Verify the fix**: Verified backend response structure matches the fix. Browser verification was inconclusive due to test automation issues, but code logic is sound.
 
 ## Verification Steps

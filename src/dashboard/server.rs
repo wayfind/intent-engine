@@ -181,6 +181,8 @@ fn create_router(state: AppState) -> Router {
         .route("/", get(serve_index))
         // Static files under /static prefix (embedded)
         .route("/static/*path", get(serve_static))
+        // Vite assets under /assets prefix
+        .route("/assets/*path", get(serve_assets))
         // API routes under /api prefix
         .nest("/api", api_routes)
         // WebSocket routes (now use full AppState)
@@ -246,6 +248,40 @@ async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
                 "error": "File not found",
                 "code": "NOT_FOUND",
                 "path": path
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Serve assets from embedded assets (for Vite)
+async fn serve_assets(Path(path): Path<String>) -> impl IntoResponse {
+    // Remove leading slash if present
+    let path = path.trim_start_matches('/');
+    // Prepend "assets/" if not present (though the route is /assets/*path, so path usually won't have it unless we strip it in route)
+    // Actually, the route is /assets/*path. If we request /assets/index.css, path is index.css.
+    // We need to look up "assets/index.css" in StaticAssets.
+    let full_path = format!("assets/{}", path);
+
+    match StaticAssets::get(&full_path) {
+        Some(content) => {
+            let mime = mime_guess::from_path(&full_path).first_or_octet_stream();
+            let body = content.data.to_vec();
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, mime.as_ref())
+                .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+                .header(header::PRAGMA, "no-cache")
+                .header(header::EXPIRES, "0")
+                .body(body.into())
+                .unwrap()
+        },
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "Asset not found",
+                "code": "NOT_FOUND",
+                "path": full_path
             })),
         )
             .into_response(),
