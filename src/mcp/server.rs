@@ -58,7 +58,7 @@ const MCP_TOOLS: &str = include_str!("../../mcp-server.json");
 
 /// Run the MCP server
 /// This is the main entry point for MCP server mode
-pub async fn run() -> io::Result<()> {
+pub async fn run(dashboard_port: Option<u16>) -> io::Result<()> {
     // Load project context - only load existing projects, don't initialize new ones
     // This prevents blocking when MCP server is started outside an intent-engine project
     let ctx = match ProjectContext::load().await {
@@ -125,6 +125,7 @@ pub async fn run() -> io::Result<()> {
                 ws_db_path,
                 Some("mcp-client".to_string()),
                 Some(notification_rx),
+                dashboard_port,
             )
             .await
             {

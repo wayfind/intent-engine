@@ -103,6 +103,7 @@ pub async fn connect_to_dashboard(
     db_path: PathBuf,
     agent: Option<String>,
     notification_rx: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
+    dashboard_port: Option<u16>,
 ) -> Result<()> {
     // Validate project path once at the beginning
     let normalized_project_path = project_path
@@ -135,6 +136,7 @@ pub async fn connect_to_dashboard(
             db_path.clone(),
             agent.clone(),
             notification_rx.clone(),
+            dashboard_port,
         )
         .await
         {
@@ -180,6 +182,7 @@ async fn connect_and_run(
     db_path: PathBuf,
     agent: Option<String>,
     notification_rx: Option<Arc<tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<String>>>>,
+    dashboard_port: Option<u16>,
 ) -> Result<()> {
     // Extract project name from path
     let project_name = project_path
@@ -205,8 +208,9 @@ async fn connect_and_run(
     };
 
     // Connect to Dashboard WebSocket
-    let url = "ws://127.0.0.1:11391/ws/mcp";
-    let (ws_stream, _) = connect_async(url)
+    let port = dashboard_port.unwrap_or(11391);
+    let url = format!("ws://127.0.0.1:{}/ws/mcp", port);
+    let (ws_stream, _) = connect_async(&url)
         .await
         .context("Failed to connect to Dashboard WebSocket")?;
 

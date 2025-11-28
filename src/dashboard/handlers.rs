@@ -649,6 +649,7 @@ pub async fn list_projects(State(state): State<AppState>) -> impl IntoResponse {
                 &current_project.project_name,
                 &current_project.project_path,
                 &current_project.db_path,
+                &state.host_project,
                 state.port,
             )
             .await
@@ -725,9 +726,9 @@ pub async fn switch_project(
             .into_response();
     }
 
-    // Create new database connection
-    let db_url = format!("sqlite://{}", db_path.display());
-    let new_db_pool = match SqlitePool::connect(&db_url).await {
+    // Create new database connection using the shared helper
+    // This ensures consistent configuration (WAL mode, timeouts) and correct path handling
+    let new_db_pool = match crate::db::create_pool(&db_path).await {
         Ok(pool) => pool,
         Err(e) => {
             return (
