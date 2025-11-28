@@ -234,7 +234,7 @@
     },
     {
       "name": "task_list",
-      "description": "# Core Duty\nPerforms STRUCTURED FILTERING of tasks based on metadata (status, parent_id).\n\n# Tactical Guide\nUse this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\n**NOT for text search:**\n- ❌ task_list: For structured metadata filtering only\n- ✅ search: For full-text searching by keywords across tasks and events\n\n**Examples:**\n- List all in-progress work: `{status: 'doing'}`\n- List all top-level tasks: `{parent: 'null'}`\n- List subtasks of task 42: `{parent: '42'}`",
+      "description": "# Core Duty\nPerforms STRUCTURED FILTERING of tasks based on metadata (status, parent_id) with pagination and sorting support.\n\n# Tactical Guide\nUse this when you need tasks matching specific attributes:\n- All tasks with status='doing'\n- All subtasks of a known parent\n- All top-level tasks (parent='null')\n\n**NOT for text search:**\n- ❌ task_list: For structured metadata filtering only\n- ✅ search: For full-text searching by keywords across tasks and events\n\n**Pagination:**\n- Use `limit` and `offset` for paginated results\n- Response includes `has_more` flag to indicate additional pages\n- Default limit: 100 tasks\n\n**Sorting:**\n- `id`: Legacy chronological order (default for backward compatibility)\n- `priority`: Sort by priority level, then complexity\n- `time`: Sort by most recently active\n- `focus_aware`: Smart sorting (focused task → doing → todo)\n\n**Examples:**\n- List all in-progress work: `{status: 'doing'}`\n- List all top-level tasks: `{parent: 'null'}`\n- List subtasks of task 42, sorted by priority: `{parent: '42', sort_by: 'priority'}`\n- Paginated list: `{status: 'todo', limit: 20, offset: 0}`",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -250,6 +250,26 @@
           "parent": {
             "type": "string",
             "description": "Filter by parent ID (optional). Use the string 'null' for top-level tasks only, or a numeric string like '42' for subtasks of task 42. Leave undefined to include all tasks regardless of parent."
+          },
+          "sort_by": {
+            "type": "string",
+            "enum": [
+              "id",
+              "priority",
+              "time",
+              "focus_aware"
+            ],
+            "description": "Sort order (optional). Options: 'id' (chronological, default), 'priority' (by priority level), 'time' (most recently active), 'focus_aware' (smart sorting: focused → doing → todo)."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of tasks to return (optional). Default: 100. Use with offset for pagination.",
+            "default": 100
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Number of tasks to skip (optional). Default: 0. Use with limit for pagination.",
+            "default": 0
           }
         }
       }
@@ -417,7 +437,7 @@
     },
     {
       "name": "search",
-      "description": "# Core Duty\nPerforms unified full-text search across both tasks and events.\n\n# Tactical Guide\nUse this when you need to find information that could be in either tasks or events:\n- Search for keywords across all project context\n- Find related work mentioned in both task specs and event logs\n- Discover decisions, blockers, or notes related to a topic\n\n**Search behavior:**\n- Uses FTS5 full-text search with snippet highlighting\n- Returns mixed results from both tasks and events\n- Each result includes context: task ancestry chain for events, match field for tasks\n- Results ordered by FTS5 relevance rank\n\n**Parameters:**\n- `query`: FTS5 search query (supports AND, OR, NOT, phrases)\n- `include_tasks`: Search in tasks (default: true)\n- `include_events`: Search in events (default: true)\n- `limit`: Maximum total results (default: 20)\n\n**Examples:**\n- `{query: \"JWT authentication\"}` - Search both tasks and events\n- `{query: \"API\", include_tasks: true, include_events: false}` - Tasks only\n- `{query: \"blocker\", include_tasks: false, include_events: true}` - Events only\n\n**Returns:**\nArray of `UnifiedSearchResult` objects with discriminated union:\n- Task results: `{result_type: \"task\", task: {...}, match_snippet: \"...\", match_field: \"name\"|\"spec\"}`\n- Event results: `{result_type: \"event\", event: {...}, task_chain: [...], match_snippet: \"...\"}`\n\n**Use cases:**\n- \"Find everything related to authentication\"\n- \"What decisions have we made about caching?\"\n- \"Show me all mentions of the API redesign\"",
+      "description": "# Core Duty\nPerforms unified full-text search across both tasks and events with pagination support.\n\n# Tactical Guide\nUse this when you need to find information that could be in either tasks or events:\n- Search for keywords across all project context\n- Find related work mentioned in both task specs and event logs\n- Discover decisions, blockers, or notes related to a topic\n\n**Search behavior:**\n- Uses FTS5 full-text search with snippet highlighting\n- Returns mixed results from both tasks and events\n- Each result includes context: task ancestry chain for events, match field for tasks\n- Results ordered by FTS5 relevance rank\n\n**Pagination:**\n- Use `limit` and `offset` for paginated results\n- Response includes `has_more` flag and separate `total_tasks`/`total_events` counts\n- Default limit: 20 results per source (tasks and events)\n\n**Parameters:**\n- `query`: FTS5 search query (supports AND, OR, NOT, phrases)\n- `include_tasks`: Search in tasks (default: true)\n- `include_events`: Search in events (default: true)\n- `limit`: Maximum results per source (default: 20)\n- `offset`: Skip first N results per source (default: 0)\n\n**Examples:**\n- `{query: \"JWT authentication\"}` - Search both tasks and events\n- `{query: \"API\", include_tasks: true, include_events: false}` - Tasks only\n- `{query: \"blocker\", include_tasks: false, include_events: true}` - Events only\n- `{query: \"auth\", limit: 10, offset: 20}` - Paginated search (skip 20, get next 10)\n\n**Returns:**\n`PaginatedSearchResults` object with:\n- `results`: Array of `UnifiedSearchResult` (mixed task/event results)\n  - Task results: `{result_type: \"task\", task: {...}, match_snippet: \"...\", match_field: \"name\"|\"spec\"}`\n  - Event results: `{result_type: \"event\", event: {...}, task_chain: [...], match_snippet: \"...\"}`\n- `total_tasks`: Total number of matching tasks\n- `total_events`: Total number of matching events\n- `has_more`: Boolean indicating if more results available\n- `limit`: Current page limit\n- `offset`: Current page offset\n\n**Use cases:**\n- \"Find everything related to authentication\"\n- \"What decisions have we made about caching?\"\n- \"Show me all mentions of the API redesign\"",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -437,8 +457,13 @@
           },
           "limit": {
             "type": "integer",
-            "description": "Maximum number of total results to return (default: 20)",
+            "description": "Maximum number of results per source (tasks/events) to return (default: 20)",
             "default": 20
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Number of results per source to skip for pagination (default: 0)",
+            "default": 0
           }
         },
         "required": [
