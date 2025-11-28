@@ -4,7 +4,7 @@
 
 use crate::error::Result;
 use crate::tasks::TaskContext;
-use std::io::{self, Read};
+use std::io;
 
 /// Read from stdin with proper encoding handling (especially for Windows PowerShell)
 pub fn read_stdin() -> Result<String> {

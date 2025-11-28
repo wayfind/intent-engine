@@ -1,0 +1,11 @@
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+        "name": "task_done",
+        "arguments": {
+            "task_id": 5
+        }
+    }
+}

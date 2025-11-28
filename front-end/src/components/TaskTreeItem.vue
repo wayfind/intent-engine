@@ -58,7 +58,7 @@ const activeClass = computed(() => {
 
       <!-- Status Indicator -->
       <div class="relative flex items-center justify-center w-5 h-5">
-        <Play v-if="props.node.status === 'doing'" class="w-[18px] h-[18px] text-sci-cyan fill-current" />
+        <Play v-if="props.node.status === 'doing'" class="w-[18px] h-[18px] text-sci-text-dim" />
         
         <div v-else-if="props.node.status === 'done'" class="relative w-[18px] h-[18px]">
           <Square class="w-full h-full text-sci-text-dim" />

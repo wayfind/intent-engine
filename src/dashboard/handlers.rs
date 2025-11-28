@@ -640,8 +640,8 @@ pub async fn search(
             &query.query,
             query.include_tasks,
             query.include_events,
-            query.limit.map(|l| l as i64),
-            query.offset.map(|o| o as i64),
+            query.limit,
+            query.offset,
             false,
         )
         .await

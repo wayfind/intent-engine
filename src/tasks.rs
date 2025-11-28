@@ -504,7 +504,7 @@ impl<'a> TaskManager<'a> {
             },
             TaskSortBy::Priority => {
                 // ORDER BY priority ASC, complexity ASC, id ASC
-                "ORDER BY COALESCE(priority, 0) ASC, COALESCE(complexity, 5) ASC, id ASC"
+                "ORDER BY COALESCE(priority, 999) ASC, COALESCE(complexity, 5) ASC, id ASC"
                     .to_string()
             },
             TaskSortBy::Time => {
@@ -527,8 +527,7 @@ impl<'a> TaskManager<'a> {
                         WHEN t.status = 'todo' THEN 2
                         ELSE 3
                     END ASC,
-                    COALESCE(t.priority, 0) ASC,
-                    t.first_doing_at ASC NULLS LAST,
+                    COALESCE(t.priority, 999) ASC,
                     t.id ASC"#
                     .to_string()
             },
@@ -635,7 +634,9 @@ impl<'a> TaskManager<'a> {
         tx.commit().await?;
 
         if with_events {
-            self.get_task_with_events(id).await
+            let result = self.get_task_with_events(id).await?;
+            self.notify_task_updated(&result.task).await;
+            Ok(result)
         } else {
             let task = self.get_task(id).await?;
             self.notify_task_updated(&task).await;
@@ -795,6 +796,7 @@ impl<'a> TaskManager<'a> {
 
         tx.commit().await?;
 
+        // Fetch the completed task to notify UI
         let completed_task = self.get_task(id).await?;
         self.notify_task_updated(&completed_task).await;
 
@@ -2603,6 +2605,39 @@ mod tests {
         assert_eq!(doing_tasks.len(), 2, "Should have 2 doing tasks");
         assert_eq!(doing_tasks[0].id, task_a.id);
         assert_eq!(doing_tasks[1].id, task_b.id);
+    }
+    #[tokio::test]
+    async fn test_find_tasks_pagination() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+
+        // Create 15 tasks
+        for i in 0..15 {
+            task_mgr
+                .add_task(&format!("Task {}", i), None, None)
+                .await
+                .unwrap();
+        }
+
+        // Page 1: Limit 10, Offset 0
+        let page1 = task_mgr
+            .find_tasks(None, None, None, Some(10), Some(0))
+            .await
+            .unwrap();
+        assert_eq!(page1.tasks.len(), 10);
+        assert_eq!(page1.total_count, 15);
+        assert_eq!(page1.has_more, true);
+        assert_eq!(page1.offset, 0);
+
+        // Page 2: Limit 10, Offset 10
+        let page2 = task_mgr
+            .find_tasks(None, None, None, Some(10), Some(10))
+            .await
+            .unwrap();
+        assert_eq!(page2.tasks.len(), 5);
+        assert_eq!(page2.total_count, 15);
+        assert_eq!(page2.has_more, false);
+        assert_eq!(page2.offset, 10);
     }
 }
 

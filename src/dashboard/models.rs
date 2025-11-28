@@ -107,13 +107,34 @@ pub struct SearchQuery {
     #[serde(default = "default_true")]
     pub include_events: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub limit: Option<i32>,
+    pub limit: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub offset: Option<i32>,
+    pub offset: Option<i64>,
 }
 
 fn default_true() -> bool {
     true
+}
+
+#[derive(Serialize)]
+pub struct PaginatedResponse<T> {
+    pub items: Vec<T>,
+    pub total_count: i64,
+    pub has_more: bool,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+use crate::db::models::SearchResult;
+
+#[derive(Serialize)]
+pub struct SearchResponse {
+    pub results: Vec<SearchResult>,
+    pub total_tasks: i64,
+    pub total_events: i64,
+    pub has_more: bool,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 #[cfg(test)]
