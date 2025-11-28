@@ -1,6 +1,6 @@
 # Intent-Engine: Claude Integration Guide
 
-**Version**: 0.6.3
+**Version**: 0.8
 **Target**: Claude Code, Claude Desktop, and AI assistants via MCP
 
 ---
