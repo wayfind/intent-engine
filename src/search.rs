@@ -84,6 +84,421 @@ pub fn escape_fts5(query: &str) -> String {
     query.replace('"', "\"\"")
 }
 
+// ============================================================================
+// Unified Search
+// ============================================================================
+
+use crate::db::models::{Event, PaginatedSearchResults, SearchResult, Task};
+use crate::error::Result;
+use crate::tasks::TaskManager;
+use sqlx::{Row, SqlitePool};
+
+pub struct SearchManager<'a> {
+    pool: &'a SqlitePool,
+}
+
+impl<'a> SearchManager<'a> {
+    pub fn new(pool: &'a SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    /// Unified search across tasks and events with pagination support
+    ///
+    /// This is the new unified search method that replaces unified_search().
+    /// Key improvements:
+    /// - Pagination support (limit, offset)
+    /// - Flexible result inclusion (tasks, events)
+    /// - Optional priority-based secondary sorting
+    /// - Returns PaginatedSearchResults with metadata
+    ///
+    /// # Parameters
+    /// - `query`: FTS5 search query string
+    /// - `include_tasks`: Whether to search in tasks (default: true)
+    /// - `include_events`: Whether to search in events (default: true)
+    /// - `limit`: Maximum number of results per source (default: 20)
+    /// - `offset`: Number of results to skip (default: 0)
+    /// - `sort_by_priority`: Enable priority-based secondary sorting (default: false)
+    ///
+    /// # Returns
+    /// PaginatedSearchResults with mixed task and event results, ordered by relevance (FTS5 rank)
+    pub async fn search(
+        &self,
+        query: &str,
+        include_tasks: bool,
+        include_events: bool,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        sort_by_priority: bool,
+    ) -> Result<PaginatedSearchResults> {
+        let limit = limit.unwrap_or(20);
+        let offset = offset.unwrap_or(0);
+
+        // Handle empty or whitespace-only queries
+        if query.trim().is_empty() {
+            return Ok(PaginatedSearchResults {
+                results: Vec::new(),
+                total_tasks: 0,
+                total_events: 0,
+                has_more: false,
+                limit,
+                offset,
+            });
+        }
+
+        // Handle queries with no searchable content (only special characters)
+        let has_searchable = query.chars().any(|c| c.is_alphanumeric() || is_cjk_char(c));
+        if !has_searchable {
+            return Ok(PaginatedSearchResults {
+                results: Vec::new(),
+                total_tasks: 0,
+                total_events: 0,
+                has_more: false,
+                limit,
+                offset,
+            });
+        }
+
+        // Escape FTS5 special characters
+        let escaped_query = escape_fts5(query);
+
+        let mut total_tasks: i64 = 0;
+        let mut total_events: i64 = 0;
+        let mut all_results: Vec<(SearchResult, f64)> = Vec::new();
+
+        // Check if we need LIKE fallback for short CJK queries
+        let use_like_fallback = needs_like_fallback(query);
+
+        if use_like_fallback {
+            // LIKE fallback path for short CJK queries (1-2 chars)
+            let like_pattern = format!("%{}%", query);
+
+            // Search tasks if enabled
+            if include_tasks {
+                // Get total count
+                let count_result = sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM tasks WHERE name LIKE ? OR spec LIKE ?",
+                )
+                .bind(&like_pattern)
+                .bind(&like_pattern)
+                .fetch_one(self.pool)
+                .await?;
+                total_tasks = count_result;
+
+                // Build ORDER BY clause
+                let order_by = if sort_by_priority {
+                    "ORDER BY COALESCE(priority, 0) ASC, id ASC"
+                } else {
+                    "ORDER BY id ASC"
+                };
+
+                // Query tasks with pagination
+                let task_query = format!(
+                    r#"
+                    SELECT
+                        id,
+                        parent_id,
+                        name,
+                        spec,
+                        status,
+                        complexity,
+                        priority,
+                        first_todo_at,
+                        first_doing_at,
+                        first_done_at,
+                        active_form
+                    FROM tasks
+                    WHERE name LIKE ? OR spec LIKE ?
+                    {}
+                    LIMIT ? OFFSET ?
+                    "#,
+                    order_by
+                );
+
+                let rows = sqlx::query(&task_query)
+                    .bind(&like_pattern)
+                    .bind(&like_pattern)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(self.pool)
+                    .await?;
+
+                for row in rows {
+                    let task = Task {
+                        id: row.get("id"),
+                        parent_id: row.get("parent_id"),
+                        name: row.get("name"),
+                        spec: row.get("spec"),
+                        status: row.get("status"),
+                        complexity: row.get("complexity"),
+                        priority: row.get("priority"),
+                        first_todo_at: row.get("first_todo_at"),
+                        first_doing_at: row.get("first_doing_at"),
+                        first_done_at: row.get("first_done_at"),
+                        active_form: row.get("active_form"),
+                    };
+
+                    // Determine match field and create snippet
+                    let (match_field, match_snippet) = if task.name.contains(query) {
+                        ("name".to_string(), task.name.clone())
+                    } else if let Some(ref spec) = task.spec {
+                        if spec.contains(query) {
+                            ("spec".to_string(), spec.clone())
+                        } else {
+                            ("name".to_string(), task.name.clone())
+                        }
+                    } else {
+                        ("name".to_string(), task.name.clone())
+                    };
+
+                    all_results.push((
+                        SearchResult::Task {
+                            task,
+                            match_snippet,
+                            match_field,
+                        },
+                        1.0, // Constant rank for LIKE results
+                    ));
+                }
+            }
+
+            // Search events if enabled
+            if include_events {
+                // Get total count
+                let count_result = sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM events WHERE discussion_data LIKE ?",
+                )
+                .bind(&like_pattern)
+                .fetch_one(self.pool)
+                .await?;
+                total_events = count_result;
+
+                // Query events with pagination
+                let rows = sqlx::query(
+                    r#"
+                    SELECT
+                        id,
+                        task_id,
+                        timestamp,
+                        log_type,
+                        discussion_data
+                    FROM events
+                    WHERE discussion_data LIKE ?
+                    ORDER BY id ASC
+                    LIMIT ? OFFSET ?
+                    "#,
+                )
+                .bind(&like_pattern)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(self.pool)
+                .await?;
+
+                let task_mgr = TaskManager::new(self.pool);
+                for row in rows {
+                    let event = Event {
+                        id: row.get("id"),
+                        task_id: row.get("task_id"),
+                        timestamp: row.get("timestamp"),
+                        log_type: row.get("log_type"),
+                        discussion_data: row.get("discussion_data"),
+                    };
+
+                    // Create match snippet
+                    let match_snippet = event.discussion_data.clone();
+
+                    // Get task ancestry chain for this event
+                    let task_chain = task_mgr.get_task_ancestry(event.task_id).await?;
+
+                    all_results.push((
+                        SearchResult::Event {
+                            event,
+                            task_chain,
+                            match_snippet,
+                        },
+                        1.0, // Constant rank for LIKE results
+                    ));
+                }
+            }
+        } else {
+            // FTS5 path for longer queries (3+ chars)
+            // Search tasks if enabled
+            if include_tasks {
+                // Get total count
+                let count_result = sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM tasks_fts WHERE tasks_fts MATCH ?",
+                )
+                .bind(&escaped_query)
+                .fetch_one(self.pool)
+                .await?;
+                total_tasks = count_result;
+
+                // Build ORDER BY clause
+                let order_by = if sort_by_priority {
+                    "ORDER BY rank ASC, COALESCE(t.priority, 0) ASC, t.id ASC"
+                } else {
+                    "ORDER BY rank ASC, t.id ASC"
+                };
+
+                // Query tasks with pagination
+                let task_query = format!(
+                    r#"
+                SELECT
+                    t.id,
+                    t.parent_id,
+                    t.name,
+                    t.spec,
+                    t.status,
+                    t.complexity,
+                    t.priority,
+                    t.first_todo_at,
+                    t.first_doing_at,
+                    t.first_done_at,
+                    t.active_form,
+                    COALESCE(
+                        snippet(tasks_fts, 1, '**', '**', '...', 15),
+                        snippet(tasks_fts, 0, '**', '**', '...', 15)
+                    ) as match_snippet,
+                    rank
+                FROM tasks_fts
+                INNER JOIN tasks t ON tasks_fts.rowid = t.id
+                WHERE tasks_fts MATCH ?
+                {}
+                LIMIT ? OFFSET ?
+                "#,
+                    order_by
+                );
+
+                let rows = sqlx::query(&task_query)
+                    .bind(&escaped_query)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(self.pool)
+                    .await?;
+
+                for row in rows {
+                    let task = Task {
+                        id: row.get("id"),
+                        parent_id: row.get("parent_id"),
+                        name: row.get("name"),
+                        spec: row.get("spec"),
+                        status: row.get("status"),
+                        complexity: row.get("complexity"),
+                        priority: row.get("priority"),
+                        first_todo_at: row.get("first_todo_at"),
+                        first_doing_at: row.get("first_doing_at"),
+                        first_done_at: row.get("first_done_at"),
+                        active_form: row.get("active_form"),
+                    };
+                    let match_snippet: String = row.get("match_snippet");
+                    let rank: f64 = row.get("rank");
+
+                    // Determine match field based on snippet content
+                    let match_field = if task
+                        .spec
+                        .as_ref()
+                        .map(|s| match_snippet.to_lowercase().contains(&s.to_lowercase()))
+                        .unwrap_or(false)
+                    {
+                        "spec".to_string()
+                    } else {
+                        "name".to_string()
+                    };
+
+                    all_results.push((
+                        SearchResult::Task {
+                            task,
+                            match_snippet,
+                            match_field,
+                        },
+                        rank,
+                    ));
+                }
+            }
+
+            // Search events if enabled
+            if include_events {
+                // Get total count
+                let count_result = sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM events_fts WHERE events_fts MATCH ?",
+                )
+                .bind(&escaped_query)
+                .fetch_one(self.pool)
+                .await?;
+                total_events = count_result;
+
+                // Query events with pagination
+                let rows = sqlx::query(
+                    r#"
+                SELECT
+                    e.id,
+                    e.task_id,
+                    e.timestamp,
+                    e.log_type,
+                    e.discussion_data,
+                    snippet(events_fts, 0, '**', '**', '...', 15) as match_snippet,
+                    rank
+                FROM events_fts
+                INNER JOIN events e ON events_fts.rowid = e.id
+                WHERE events_fts MATCH ?
+                ORDER BY rank ASC, e.id ASC
+                LIMIT ? OFFSET ?
+                "#,
+                )
+                .bind(&escaped_query)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(self.pool)
+                .await?;
+
+                let task_mgr = TaskManager::new(self.pool);
+                for row in rows {
+                    let event = Event {
+                        id: row.get("id"),
+                        task_id: row.get("task_id"),
+                        timestamp: row.get("timestamp"),
+                        log_type: row.get("log_type"),
+                        discussion_data: row.get("discussion_data"),
+                    };
+                    let match_snippet: String = row.get("match_snippet");
+                    let rank: f64 = row.get("rank");
+
+                    // Get task ancestry chain for this event
+                    let task_chain = task_mgr.get_task_ancestry(event.task_id).await?;
+
+                    all_results.push((
+                        SearchResult::Event {
+                            event,
+                            task_chain,
+                            match_snippet,
+                        },
+                        rank,
+                    ));
+                }
+            }
+        } // End of else block (FTS5 path)
+
+        // Sort all results by rank (relevance)
+        all_results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Extract results without rank
+        let results: Vec<SearchResult> =
+            all_results.into_iter().map(|(result, _)| result).collect();
+
+        // Calculate has_more
+        let total_count = total_tasks + total_events;
+        let has_more = offset + (results.len() as i64) < total_count;
+
+        Ok(PaginatedSearchResults {
+            results,
+            total_tasks,
+            total_events,
+            has_more,
+            limit,
+            offset,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -294,232 +709,5 @@ mod tests {
         // Two CJK characters
         assert!(needs_like_fallback("中日"));
         assert!(needs_like_fallback("認證"));
-    }
-}
-
-// ============================================================================
-// Unified Search
-// ============================================================================
-
-use crate::db::models::UnifiedSearchResult;
-use crate::error::Result;
-use crate::events::EventManager;
-use crate::tasks::TaskManager;
-use sqlx::SqlitePool;
-
-pub struct SearchManager<'a> {
-    pool: &'a SqlitePool,
-}
-
-impl<'a> SearchManager<'a> {
-    pub fn new(pool: &'a SqlitePool) -> Self {
-        Self { pool }
-    }
-
-    /// Unified search across tasks and events
-    ///
-    /// # Parameters
-    /// - `query`: FTS5 search query string
-    /// - `include_tasks`: Whether to search in tasks
-    /// - `include_events`: Whether to search in events
-    /// - `limit`: Maximum number of total results (default: 20)
-    ///
-    /// # Returns
-    /// A mixed vector of task and event search results, ordered by relevance (FTS5 rank)
-    pub async fn unified_search(
-        &self,
-        query: &str,
-        include_tasks: bool,
-        include_events: bool,
-        limit: Option<i64>,
-    ) -> Result<Vec<UnifiedSearchResult>> {
-        let total_limit = limit.unwrap_or(20);
-        let mut results = Vec::new();
-
-        // Calculate limits for each source
-        let (task_limit, event_limit) = match (include_tasks, include_events) {
-            (true, true) => (total_limit / 2, total_limit / 2),
-            (true, false) => (total_limit, 0),
-            (false, true) => (0, total_limit),
-            (false, false) => return Ok(results), // Early return if nothing to search
-        };
-
-        // Search tasks if enabled
-        if include_tasks && task_limit > 0 {
-            let task_mgr = TaskManager::new(self.pool);
-            let mut task_results = task_mgr.search_tasks(query).await?;
-
-            // Apply limit
-            task_results.truncate(task_limit as usize);
-
-            for task_result in task_results {
-                // Determine which field matched based on snippet content
-                let match_field = if task_result
-                    .match_snippet
-                    .to_lowercase()
-                    .contains(&task_result.task.name.to_lowercase())
-                {
-                    "name".to_string()
-                } else {
-                    "spec".to_string()
-                };
-
-                results.push(UnifiedSearchResult::Task {
-                    task: task_result.task,
-                    match_snippet: task_result.match_snippet,
-                    match_field,
-                });
-            }
-        }
-
-        // Search events if enabled
-        if include_events && event_limit > 0 {
-            let event_mgr = EventManager::new(self.pool);
-            let event_results = event_mgr
-                .search_events_fts5(query, Some(event_limit))
-                .await?;
-
-            let task_mgr = TaskManager::new(self.pool);
-            for event_result in event_results {
-                // Get task ancestry chain for this event
-                let task_chain = task_mgr
-                    .get_task_ancestry(event_result.event.task_id)
-                    .await?;
-
-                results.push(UnifiedSearchResult::Event {
-                    event: event_result.event,
-                    task_chain,
-                    match_snippet: event_result.match_snippet,
-                });
-            }
-        }
-
-        // Limit to total_limit (in case we got more from both sources)
-        results.truncate(total_limit as usize);
-
-        Ok(results)
-    }
-}
-
-#[cfg(test)]
-mod unified_search_tests {
-    use super::*;
-    use crate::test_utils::test_helpers::TestContext;
-
-    #[tokio::test]
-    async fn test_unified_search_basic() {
-        let ctx = TestContext::new().await;
-        let task_mgr = TaskManager::new(ctx.pool());
-        let event_mgr = EventManager::new(ctx.pool());
-        let search_mgr = SearchManager::new(ctx.pool());
-
-        // Create test task
-        let task = task_mgr
-            .add_task("JWT Authentication", Some("Implement JWT auth"), None)
-            .await
-            .unwrap();
-
-        // Add test event
-        event_mgr
-            .add_event(task.id, "decision", "Chose JWT over OAuth")
-            .await
-            .unwrap();
-
-        // Search for "JWT" - should find both task and event
-        let results = search_mgr
-            .unified_search("JWT", true, true, None)
-            .await
-            .unwrap();
-
-        assert!(results.len() >= 2);
-
-        // Verify we got both task and event results
-        let has_task = results
-            .iter()
-            .any(|r| matches!(r, UnifiedSearchResult::Task { .. }));
-        let has_event = results
-            .iter()
-            .any(|r| matches!(r, UnifiedSearchResult::Event { .. }));
-
-        assert!(has_task);
-        assert!(has_event);
-    }
-
-    #[tokio::test]
-    async fn test_unified_search_tasks_only() {
-        let ctx = TestContext::new().await;
-        let task_mgr = TaskManager::new(ctx.pool());
-        let search_mgr = SearchManager::new(ctx.pool());
-
-        // Create test task
-        task_mgr
-            .add_task("OAuth Implementation", None, None)
-            .await
-            .unwrap();
-
-        // Search tasks only
-        let results = search_mgr
-            .unified_search("OAuth", true, false, None)
-            .await
-            .unwrap();
-
-        assert!(!results.is_empty());
-
-        // All results should be tasks
-        for result in results {
-            assert!(matches!(result, UnifiedSearchResult::Task { .. }));
-        }
-    }
-
-    #[tokio::test]
-    async fn test_unified_search_events_only() {
-        let ctx = TestContext::new().await;
-        let task_mgr = TaskManager::new(ctx.pool());
-        let event_mgr = EventManager::new(ctx.pool());
-        let search_mgr = SearchManager::new(ctx.pool());
-
-        // Create test task and event
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
-
-        event_mgr
-            .add_event(task.id, "blocker", "OAuth library missing")
-            .await
-            .unwrap();
-
-        // Search events only
-        let results = search_mgr
-            .unified_search("OAuth", false, true, None)
-            .await
-            .unwrap();
-
-        assert!(!results.is_empty());
-
-        // All results should be events
-        for result in results {
-            assert!(matches!(result, UnifiedSearchResult::Event { .. }));
-        }
-    }
-
-    #[tokio::test]
-    async fn test_unified_search_with_limit() {
-        let ctx = TestContext::new().await;
-        let task_mgr = TaskManager::new(ctx.pool());
-        let search_mgr = SearchManager::new(ctx.pool());
-
-        // Create multiple test tasks
-        for i in 0..10 {
-            task_mgr
-                .add_task(&format!("Test task {}", i), None, None)
-                .await
-                .unwrap();
-        }
-
-        // Search with limit of 3
-        let results = search_mgr
-            .unified_search("Test", true, true, Some(3))
-            .await
-            .unwrap();
-
-        assert!(results.len() <= 3);
     }
 }

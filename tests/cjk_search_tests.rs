@@ -1,7 +1,9 @@
+use intent_engine::db::models::SearchResult;
 /// Comprehensive CJK (Chinese, Japanese, Korean) search tests
 ///
 /// Tests the trigram + LIKE fallback search implementation for CJK languages
 use intent_engine::db::{create_pool, run_migrations};
+use intent_engine::search::SearchManager;
 use intent_engine::tasks::TaskManager;
 use tempfile::TempDir;
 
@@ -24,6 +26,7 @@ async fn setup_test_db() -> (TempDir, sqlx::SqlitePool) {
 async fn test_chinese_single_char_search() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     // 创建任务
     task_mgr
@@ -32,17 +35,37 @@ async fn test_chinese_single_char_search() {
         .unwrap();
 
     // 单字搜索测试
-    let results = task_mgr.search_tasks("用").await.unwrap();
+    let results = search_mgr
+        .search("用", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1, "应该找到1个包含'用'的任务");
-    assert!(results[0].task.name.contains("用户"));
+    assert!(match &results[0] {
+        SearchResult::Task { task, .. } => &task.name,
+        _ => panic!("Expected task result"),
+    }
+    .contains("用户"));
 
-    let results = task_mgr.search_tasks("认").await.unwrap();
+    let results = search_mgr
+        .search("认", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1, "应该找到1个包含'认'的任务");
 
-    let results = task_mgr.search_tasks("证").await.unwrap();
+    let results = search_mgr
+        .search("证", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1, "应该找到1个包含'证'的任务");
 
-    let results = task_mgr.search_tasks("功").await.unwrap();
+    let results = search_mgr
+        .search("功", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1, "应该找到1个包含'功'的任务");
 }
 
@@ -54,6 +77,7 @@ async fn test_chinese_single_char_search() {
 async fn test_chinese_two_char_search() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     task_mgr.add_task("实现用户认证", None, None).await.unwrap();
     task_mgr
@@ -73,9 +97,20 @@ async fn test_chinese_two_char_search() {
     ];
 
     for (query, expected_name) in test_cases {
-        let results = task_mgr.search_tasks(query).await.unwrap();
+        let results = search_mgr
+            .search(query, true, false, None, None, false)
+            .await
+            .unwrap()
+            .results;
         assert!(
-            results.iter().any(|r| r.task.name.contains(expected_name)),
+            results
+                .iter()
+                .any(|r| if let SearchResult::Task { task, .. } = r {
+                    &task.name
+                } else {
+                    ""
+                }
+                .contains(expected_name)),
             "搜索'{}'应该找到'{}'",
             query,
             expected_name
@@ -91,6 +126,7 @@ async fn test_chinese_two_char_search() {
 async fn test_chinese_multi_char_search() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     task_mgr
         .add_task("实现JWT用户认证功能", Some("基于Token的认证机制"), None)
@@ -102,22 +138,46 @@ async fn test_chinese_multi_char_search() {
         .unwrap();
 
     // 三字词 (FTS5 trigram)
-    let results = task_mgr.search_tasks("用户认").await.unwrap();
+    let results = search_mgr
+        .search("用户认", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1, "三字词搜索应该使用FTS5");
 
     // 四字词
-    let results = task_mgr.search_tasks("用户认证").await.unwrap();
+    let results = search_mgr
+        .search("用户认证", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
-    assert!(results[0].task.name.contains("认证"));
+    assert!(match &results[0] {
+        SearchResult::Task { task, .. } => &task.name,
+        _ => panic!("Expected task result"),
+    }
+    .contains("认证"));
 
     // 五字及以上
-    let results = task_mgr.search_tasks("用户认证功能").await.unwrap();
+    let results = search_mgr
+        .search("用户认证功能", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 
-    let results = task_mgr.search_tasks("数据库查询").await.unwrap();
+    let results = search_mgr
+        .search("数据库查询", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 
-    let results = task_mgr.search_tasks("查询性能").await.unwrap();
+    let results = search_mgr
+        .search("查询性能", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 }
 
@@ -129,6 +189,7 @@ async fn test_chinese_multi_char_search() {
 async fn test_mixed_language_search() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     task_mgr
         .add_task("实现JWT认证", Some("JSON Web Token认证"), None)
@@ -144,25 +205,57 @@ async fn test_mixed_language_search() {
         .unwrap();
 
     // 搜索英文部分
-    let results = task_mgr.search_tasks("JWT").await.unwrap();
+    let results = search_mgr
+        .search("JWT", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
-    assert!(results[0].task.name.contains("JWT"));
+    assert!(match &results[0] {
+        SearchResult::Task { task, .. } => &task.name,
+        _ => panic!("Expected task result"),
+    }
+    .contains("JWT"));
 
-    let results = task_mgr.search_tasks("API").await.unwrap();
+    let results = search_mgr
+        .search("API", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
-    assert!(results[0].task.name.contains("API"));
+    assert!(match &results[0] {
+        SearchResult::Task { task, .. } => &task.name,
+        _ => panic!("Expected task result"),
+    }
+    .contains("API"));
 
-    let results = task_mgr.search_tasks("OAuth2").await.unwrap();
+    let results = search_mgr
+        .search("OAuth2", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 
     // 搜索中文部分（双字词，LIKE）
-    let results = task_mgr.search_tasks("认证").await.unwrap();
+    let results = search_mgr
+        .search("认证", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 
-    let results = task_mgr.search_tasks("接口").await.unwrap();
+    let results = search_mgr
+        .search("接口", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 
-    let results = task_mgr.search_tasks("流程").await.unwrap();
+    let results = search_mgr
+        .search("流程", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 }
 
@@ -174,6 +267,7 @@ async fn test_mixed_language_search() {
 async fn test_japanese_search() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     task_mgr
         .add_task("ユーザー認証を実装", Some("JWTトークンを使用"), None)
@@ -185,22 +279,42 @@ async fn test_japanese_search() {
         .unwrap();
 
     // 单字（平假名）
-    let results = task_mgr.search_tasks("ユ").await.unwrap();
+    let results = search_mgr
+        .search("ユ", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1, "应该找到包含'ユ'的任务");
 
     // 双字（片假名）
-    let results = task_mgr.search_tasks("認証").await.unwrap();
+    let results = search_mgr
+        .search("認証", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 
     // 多字
-    let results = task_mgr.search_tasks("ユーザー").await.unwrap();
+    let results = search_mgr
+        .search("ユーザー", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 
-    let results = task_mgr.search_tasks("データベース").await.unwrap();
+    let results = search_mgr
+        .search("データベース", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 
     // 平假名
-    let results = task_mgr.search_tasks("を").await.unwrap();
+    let results = search_mgr
+        .search("を", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 }
 
@@ -212,13 +326,18 @@ async fn test_japanese_search() {
 async fn test_edge_cases() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     // 标点符号
     task_mgr
         .add_task("实现：用户认证", None, None)
         .await
         .unwrap();
-    let results = task_mgr.search_tasks("用户").await.unwrap();
+    let results = search_mgr
+        .search("用户", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1, "应该忽略标点符号");
 
     // 数字混合
@@ -226,7 +345,11 @@ async fn test_edge_cases() {
         .add_task("实现OAuth2认证", None, None)
         .await
         .unwrap();
-    let results = task_mgr.search_tasks("认证").await.unwrap();
+    let results = search_mgr
+        .search("认证", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 2, "应该找到2个包含'认证'的任务");
 
     // 空格
@@ -234,7 +357,11 @@ async fn test_edge_cases() {
         .add_task("实现 用户 认证", None, None)
         .await
         .unwrap();
-    let results = task_mgr.search_tasks("用户").await.unwrap();
+    let results = search_mgr
+        .search("用户", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert!(!results.is_empty(), "应该能处理空格");
 
     // Spec中的搜索
@@ -242,7 +369,11 @@ async fn test_edge_cases() {
         .add_task("任务标题", Some("描述中包含用户信息"), None)
         .await
         .unwrap();
-    let results = task_mgr.search_tasks("用户").await.unwrap();
+    let results = search_mgr
+        .search("用户", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert!(!results.is_empty(), "应该能搜索spec字段");
 }
 
@@ -254,6 +385,7 @@ async fn test_edge_cases() {
 async fn test_search_performance() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     // 创建1000个任务
     for i in 0..1000 {
@@ -269,7 +401,11 @@ async fn test_search_performance() {
 
     // 测试FTS5 trigram搜索性能
     let start = std::time::Instant::now();
-    let _results = task_mgr.search_tasks("功能").await.unwrap();
+    let _results = search_mgr
+        .search("功能", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     let duration = start.elapsed();
     assert!(
         duration.as_millis() < 100,
@@ -279,7 +415,11 @@ async fn test_search_performance() {
 
     // 测试LIKE fallback搜索性能
     let start = std::time::Instant::now();
-    let _results = task_mgr.search_tasks("任").await.unwrap(); // 单字CJK，使用LIKE
+    let _results = search_mgr
+        .search("任", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results; // 单字CJK，使用LIKE
     let duration = start.elapsed();
     assert!(
         duration.as_millis() < 500,
@@ -296,19 +436,24 @@ async fn test_search_performance() {
 async fn test_empty_and_special_queries() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     task_mgr.add_task("测试任务", None, None).await.unwrap();
 
     // 空查询
-    let results = task_mgr.search_tasks("").await;
+    let results = search_mgr.search("", true, false, None, None, false).await;
     assert!(results.is_ok(), "空查询应该返回空结果而不是错误");
 
     // 仅空格
-    let results = task_mgr.search_tasks("   ").await;
+    let results = search_mgr
+        .search("   ", true, false, None, None, false)
+        .await;
     assert!(results.is_ok());
 
     // 特殊字符
-    let results = task_mgr.search_tasks("@#$%").await;
+    let results = search_mgr
+        .search("@#$%", true, false, None, None, false)
+        .await;
     assert!(results.is_ok());
 }
 
@@ -316,6 +461,7 @@ async fn test_empty_and_special_queries() {
 async fn test_case_sensitivity() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     task_mgr
         .add_task("Implement API", None, None)
@@ -323,8 +469,16 @@ async fn test_case_sensitivity() {
         .unwrap();
 
     // 英文大小写不敏感（FTS5特性）
-    let results_upper = task_mgr.search_tasks("API").await.unwrap();
-    let results_lower = task_mgr.search_tasks("api").await.unwrap();
+    let results_upper = search_mgr
+        .search("API", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
+    let results_lower = search_mgr
+        .search("api", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
 
     // FTS5默认不区分大小写
     assert_eq!(results_upper.len(), results_lower.len());
@@ -334,6 +488,7 @@ async fn test_case_sensitivity() {
 async fn test_korean_search() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     task_mgr
         .add_task("사용자 인증 구현", Some("JWT 토큰 사용"), None)
@@ -341,14 +496,26 @@ async fn test_korean_search() {
         .unwrap();
 
     // 单字韩文
-    let results = task_mgr.search_tasks("사").await.unwrap();
+    let results = search_mgr
+        .search("사", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1, "应该找到包含韩文的任务");
 
     // 双字韩文
-    let results = task_mgr.search_tasks("사용").await.unwrap();
+    let results = search_mgr
+        .search("사용", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 
     // 多字韩文
-    let results = task_mgr.search_tasks("사용자").await.unwrap();
+    let results = search_mgr
+        .search("사용자", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     assert_eq!(results.len(), 1);
 }

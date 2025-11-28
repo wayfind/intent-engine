@@ -1,10 +1,11 @@
 use crate::db::models::{
-    DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, ParentTaskInfo, PickNextResponse,
-    SpawnSubtaskResponse, SubtaskInfo, Task, TaskSearchResult, TaskWithEvents, WorkspaceStatus,
+    DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, PaginatedTasks, ParentTaskInfo,
+    PickNextResponse, SpawnSubtaskResponse, SubtaskInfo, Task, TaskSortBy, TaskWithEvents,
+    WorkspaceStatus,
 };
 use crate::error::{IntentError, Result};
 use chrono::Utc;
-use sqlx::{Row, SqlitePool};
+use sqlx::SqlitePool;
 use std::sync::Arc;
 
 pub use crate::db::models::TaskContext;
@@ -463,197 +464,109 @@ impl<'a> TaskManager<'a> {
         Ok(())
     }
 
-    /// Find tasks with optional filters
+    /// Find tasks with optional filters, sorting, and pagination
     pub async fn find_tasks(
         &self,
         status: Option<&str>,
         parent_id: Option<Option<i64>>,
-    ) -> Result<Vec<Task>> {
-        let mut query = String::from(
-            "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form FROM tasks WHERE 1=1"
-        );
+        sort_by: Option<TaskSortBy>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<PaginatedTasks> {
+        // Apply defaults
+        let sort_by = sort_by.unwrap_or_default(); // Default: FocusAware
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+
+        // Build WHERE clause
+        let mut where_clause = String::from("WHERE 1=1");
         let mut conditions = Vec::new();
 
         if let Some(s) = status {
-            query.push_str(" AND status = ?");
+            where_clause.push_str(" AND status = ?");
             conditions.push(s.to_string());
         }
 
         if let Some(pid) = parent_id {
             if let Some(p) = pid {
-                query.push_str(" AND parent_id = ?");
+                where_clause.push_str(" AND parent_id = ?");
                 conditions.push(p.to_string());
             } else {
-                query.push_str(" AND parent_id IS NULL");
+                where_clause.push_str(" AND parent_id IS NULL");
             }
         }
 
-        query.push_str(" ORDER BY id");
+        // Build ORDER BY clause based on sort mode
+        let order_clause = match sort_by {
+            TaskSortBy::Id => {
+                // Legacy: simple ORDER BY id ASC
+                "ORDER BY id ASC".to_string()
+            },
+            TaskSortBy::Priority => {
+                // ORDER BY priority ASC, complexity ASC, id ASC
+                "ORDER BY COALESCE(priority, 0) ASC, COALESCE(complexity, 5) ASC, id ASC"
+                    .to_string()
+            },
+            TaskSortBy::Time => {
+                // ORDER BY timestamp based on status
+                r#"ORDER BY
+                    CASE status
+                        WHEN 'doing' THEN first_doing_at
+                        WHEN 'todo' THEN first_todo_at
+                        WHEN 'done' THEN first_done_at
+                    END ASC NULLS LAST,
+                    id ASC"#
+                    .to_string()
+            },
+            TaskSortBy::FocusAware => {
+                // Focus-aware: current focused task → doing tasks → todo tasks
+                r#"ORDER BY
+                    CASE
+                        WHEN t.id = (SELECT value FROM workspace_state WHERE key = 'current_task_id') THEN 0
+                        WHEN t.status = 'doing' THEN 1
+                        WHEN t.status = 'todo' THEN 2
+                        ELSE 3
+                    END ASC,
+                    COALESCE(t.priority, 0) ASC,
+                    t.first_doing_at ASC NULLS LAST,
+                    t.id ASC"#
+                    .to_string()
+            },
+        };
 
-        let mut q = sqlx::query_as::<_, Task>(&query);
+        // Get total count
+        let count_query = format!("SELECT COUNT(*) FROM tasks {}", where_clause);
+        let mut count_q = sqlx::query_scalar::<_, i64>(&count_query);
+        for cond in &conditions {
+            count_q = count_q.bind(cond);
+        }
+        let total_count = count_q.fetch_one(self.pool).await?;
+
+        // Build main query with pagination
+        let main_query = format!(
+            "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form FROM tasks t {} {} LIMIT ? OFFSET ?",
+            where_clause, order_clause
+        );
+
+        let mut q = sqlx::query_as::<_, Task>(&main_query);
         for cond in conditions {
             q = q.bind(cond);
         }
+        q = q.bind(limit);
+        q = q.bind(offset);
 
         let tasks = q.fetch_all(self.pool).await?;
-        Ok(tasks)
-    }
 
-    /// Search tasks using full-text search (FTS5)
-    /// Returns tasks with match snippets showing highlighted keywords
-    pub async fn search_tasks(&self, query: &str) -> Result<Vec<TaskSearchResult>> {
-        // Handle empty or whitespace-only queries
-        if query.trim().is_empty() {
-            return Ok(Vec::new());
-        }
+        // Calculate has_more
+        let has_more = offset + (tasks.len() as i64) < total_count;
 
-        // Handle queries with no searchable content (only special characters)
-        // Check if query has at least one alphanumeric or CJK character
-        let has_searchable = query
-            .chars()
-            .any(|c| c.is_alphanumeric() || crate::search::is_cjk_char(c));
-        if !has_searchable {
-            return Ok(Vec::new());
-        }
-
-        // For short CJK queries (1-2 characters), trigram tokenizer won't work
-        // (requires 3+ chars), so we use LIKE fallback
-        if crate::search::needs_like_fallback(query) {
-            self.search_tasks_like(query).await
-        } else {
-            self.search_tasks_fts5(query).await
-        }
-    }
-
-    /// Search tasks using FTS5 trigram tokenizer
-    async fn search_tasks_fts5(&self, query: &str) -> Result<Vec<TaskSearchResult>> {
-        // Escape special FTS5 characters in the query
-        let escaped_query = crate::search::escape_fts5(query);
-
-        // Use FTS5 to search and get snippets
-        // snippet(table, column, start_mark, end_mark, ellipsis, max_tokens)
-        // We search in both name (column 0) and spec (column 1)
-        let results = sqlx::query(
-            r#"
-            SELECT
-                t.id,
-                t.parent_id,
-                t.name,
-                t.spec,
-                t.status,
-                t.complexity,
-                t.priority,
-                t.first_todo_at,
-                t.first_doing_at,
-                t.first_done_at,
-                t.active_form,
-                COALESCE(
-                    snippet(tasks_fts, 1, '**', '**', '...', 15),
-                    snippet(tasks_fts, 0, '**', '**', '...', 15)
-                ) as match_snippet
-            FROM tasks_fts
-            INNER JOIN tasks t ON tasks_fts.rowid = t.id
-            WHERE tasks_fts MATCH ?
-            ORDER BY rank
-            "#,
-        )
-        .bind(&escaped_query)
-        .fetch_all(self.pool)
-        .await?;
-
-        let mut search_results = Vec::new();
-        for row in results {
-            let task = Task {
-                id: row.get("id"),
-                parent_id: row.get("parent_id"),
-                name: row.get("name"),
-                spec: row.get("spec"),
-                status: row.get("status"),
-                complexity: row.get("complexity"),
-                priority: row.get("priority"),
-                first_todo_at: row.get("first_todo_at"),
-                first_doing_at: row.get("first_doing_at"),
-                first_done_at: row.get("first_done_at"),
-                active_form: row.get("active_form"),
-            };
-            let match_snippet: String = row.get("match_snippet");
-
-            search_results.push(TaskSearchResult {
-                task,
-                match_snippet,
-            });
-        }
-
-        Ok(search_results)
-    }
-
-    /// Search tasks using LIKE for short CJK queries
-    async fn search_tasks_like(&self, query: &str) -> Result<Vec<TaskSearchResult>> {
-        let pattern = format!("%{}%", query);
-
-        let results = sqlx::query(
-            r#"
-            SELECT
-                id,
-                parent_id,
-                name,
-                spec,
-                status,
-                complexity,
-                priority,
-                first_todo_at,
-                first_doing_at,
-                first_done_at,
-                active_form
-            FROM tasks
-            WHERE name LIKE ? OR spec LIKE ?
-            ORDER BY name
-            "#,
-        )
-        .bind(&pattern)
-        .bind(&pattern)
-        .fetch_all(self.pool)
-        .await?;
-
-        let mut search_results = Vec::new();
-        for row in results {
-            let task = Task {
-                id: row.get("id"),
-                parent_id: row.get("parent_id"),
-                name: row.get("name"),
-                spec: row.get("spec"),
-                status: row.get("status"),
-                complexity: row.get("complexity"),
-                priority: row.get("priority"),
-                first_todo_at: row.get("first_todo_at"),
-                first_doing_at: row.get("first_doing_at"),
-                first_done_at: row.get("first_done_at"),
-                active_form: row.get("active_form"),
-            };
-
-            // Create a simple snippet showing the matched part
-            let name: String = row.get("name");
-            let spec: Option<String> = row.get("spec");
-
-            let match_snippet = if name.contains(query) {
-                format!("**{}**", name)
-            } else if let Some(ref s) = spec {
-                if s.contains(query) {
-                    format!("**{}**", s)
-                } else {
-                    name.clone()
-                }
-            } else {
-                name
-            };
-
-            search_results.push(TaskSearchResult {
-                task,
-                match_snippet,
-            });
-        }
-
-        Ok(search_results)
+        Ok(PaginatedTasks {
+            tasks,
+            total_count,
+            has_more,
+            limit,
+            offset,
+        })
     }
 
     /// Start a task (atomic: update status + set current)
@@ -701,6 +614,7 @@ impl<'a> TaskManager<'a> {
             self.get_task_with_events(id).await
         } else {
             let task = self.get_task(id).await?;
+            self.notify_task_updated(&task).await;
             Ok(TaskWithEvents {
                 task,
                 events_summary: None,
@@ -858,6 +772,7 @@ impl<'a> TaskManager<'a> {
         tx.commit().await?;
 
         let completed_task = self.get_task(id).await?;
+        self.notify_task_updated(&completed_task).await;
 
         Ok(DoneTaskResponse {
             completed_task,
@@ -1343,12 +1258,18 @@ mod tests {
             .await
             .unwrap();
 
-        let todo_tasks = manager.find_tasks(Some("todo"), None).await.unwrap();
-        let doing_tasks = manager.find_tasks(Some("doing"), None).await.unwrap();
+        let todo_result = manager
+            .find_tasks(Some("todo"), None, None, None, None)
+            .await
+            .unwrap();
+        let doing_result = manager
+            .find_tasks(Some("doing"), None, None, None, None)
+            .await
+            .unwrap();
 
-        assert_eq!(todo_tasks.len(), 1);
-        assert_eq!(doing_tasks.len(), 1);
-        assert_eq!(doing_tasks[0].status, "doing");
+        assert_eq!(todo_result.tasks.len(), 1);
+        assert_eq!(doing_result.tasks.len(), 1);
+        assert_eq!(doing_result.tasks[0].status, "doing");
     }
 
     #[tokio::test]
@@ -1366,12 +1287,12 @@ mod tests {
             .await
             .unwrap();
 
-        let children = manager
-            .find_tasks(None, Some(Some(parent.id)))
+        let result = manager
+            .find_tasks(None, Some(Some(parent.id)), None, None, None)
             .await
             .unwrap();
 
-        assert_eq!(children.len(), 2);
+        assert_eq!(result.tasks.len(), 2);
     }
 
     #[tokio::test]
@@ -1636,9 +1557,12 @@ mod tests {
         }
 
         // Start 2 tasks
-        let tasks = manager.find_tasks(Some("todo"), None).await.unwrap();
-        manager.start_task(tasks[0].id, false).await.unwrap();
-        manager.start_task(tasks[1].id, false).await.unwrap();
+        let result = manager
+            .find_tasks(Some("todo"), None, None, None, None)
+            .await
+            .unwrap();
+        manager.start_task(result.tasks[0].id, false).await.unwrap();
+        manager.start_task(result.tasks[1].id, false).await.unwrap();
 
         // Pick more tasks with capacity limit of 5
         let picked = manager.pick_next_tasks(10, 5).await.unwrap();
@@ -1866,153 +1790,6 @@ mod tests {
             },
             _ => panic!("Expected NoParentContext suggestion"),
         }
-    }
-
-    #[tokio::test]
-    async fn test_search_tasks_by_name() {
-        let ctx = TestContext::new().await;
-        let manager = TaskManager::new(ctx.pool());
-
-        // Create tasks with different names
-        manager
-            .add_task("Authentication bug fix", Some("Fix login issue"), None)
-            .await
-            .unwrap();
-        manager
-            .add_task("Database migration", Some("Migrate to PostgreSQL"), None)
-            .await
-            .unwrap();
-        manager
-            .add_task("Authentication feature", Some("Add OAuth2 support"), None)
-            .await
-            .unwrap();
-
-        // Search for "authentication"
-        let results = manager.search_tasks("authentication").await.unwrap();
-
-        assert_eq!(results.len(), 2);
-        assert!(results[0]
-            .task
-            .name
-            .to_lowercase()
-            .contains("authentication"));
-        assert!(results[1]
-            .task
-            .name
-            .to_lowercase()
-            .contains("authentication"));
-
-        // Check that match_snippet is present
-        assert!(!results[0].match_snippet.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_search_tasks_by_spec() {
-        let ctx = TestContext::new().await;
-        let manager = TaskManager::new(ctx.pool());
-
-        // Create tasks
-        manager
-            .add_task("Task 1", Some("Implement JWT authentication"), None)
-            .await
-            .unwrap();
-        manager
-            .add_task("Task 2", Some("Add user registration"), None)
-            .await
-            .unwrap();
-        manager
-            .add_task("Task 3", Some("JWT token refresh"), None)
-            .await
-            .unwrap();
-
-        // Search for "JWT"
-        let results = manager.search_tasks("JWT").await.unwrap();
-
-        assert_eq!(results.len(), 2);
-        for result in &results {
-            assert!(result
-                .task
-                .spec
-                .as_ref()
-                .unwrap()
-                .to_uppercase()
-                .contains("JWT"));
-        }
-    }
-
-    #[tokio::test]
-    async fn test_search_tasks_with_advanced_query() {
-        let ctx = TestContext::new().await;
-        let manager = TaskManager::new(ctx.pool());
-
-        // Create tasks
-        manager
-            .add_task("Bug fix", Some("Fix critical authentication bug"), None)
-            .await
-            .unwrap();
-        manager
-            .add_task("Feature", Some("Add authentication feature"), None)
-            .await
-            .unwrap();
-        manager
-            .add_task("Bug report", Some("Report critical database bug"), None)
-            .await
-            .unwrap();
-
-        // Search with AND operator
-        let results = manager
-            .search_tasks("authentication AND bug")
-            .await
-            .unwrap();
-
-        assert_eq!(results.len(), 1);
-        assert!(results[0]
-            .task
-            .spec
-            .as_ref()
-            .unwrap()
-            .contains("authentication"));
-        assert!(results[0].task.spec.as_ref().unwrap().contains("bug"));
-    }
-
-    #[tokio::test]
-    async fn test_search_tasks_no_results() {
-        let ctx = TestContext::new().await;
-        let manager = TaskManager::new(ctx.pool());
-
-        // Create tasks
-        manager
-            .add_task("Task 1", Some("Some description"), None)
-            .await
-            .unwrap();
-
-        // Search for non-existent term
-        let results = manager.search_tasks("nonexistent").await.unwrap();
-
-        assert_eq!(results.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_search_tasks_snippet_highlighting() {
-        let ctx = TestContext::new().await;
-        let manager = TaskManager::new(ctx.pool());
-
-        // Create task with keyword in spec
-        manager
-            .add_task(
-                "Test task",
-                Some("This is a description with the keyword authentication in the middle"),
-                None,
-            )
-            .await
-            .unwrap();
-
-        // Search for "authentication"
-        let results = manager.search_tasks("authentication").await.unwrap();
-
-        assert_eq!(results.len(), 1);
-        // Check that snippet contains highlighted keyword (marked with **)
-        assert!(results[0].match_snippet.contains("**authentication**"));
     }
 
     #[tokio::test]

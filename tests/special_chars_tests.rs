@@ -35,8 +35,11 @@ async fn test_sql_injection_single_quote() {
     assert_eq!(task.name, malicious_name);
 
     // Verify table still exists by querying
-    let tasks = task_mgr.find_tasks(None, None).await.unwrap();
-    assert_eq!(tasks.len(), 1);
+    let result = task_mgr
+        .find_tasks(None, None, None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(result.tasks.len(), 1);
 }
 
 #[tokio::test]
@@ -50,8 +53,11 @@ async fn test_sql_injection_union_select() {
     assert_eq!(task.name, malicious_name);
 
     // Verify no extra tasks were created
-    let tasks = task_mgr.find_tasks(None, None).await.unwrap();
-    assert_eq!(tasks.len(), 1);
+    let result = task_mgr
+        .find_tasks(None, None, None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(result.tasks.len(), 1);
 }
 
 #[tokio::test]
@@ -89,8 +95,11 @@ async fn test_sql_injection_in_event_data() {
     assert_eq!(event.discussion_data, malicious_data);
 
     // Verify tasks table still exists
-    let tasks = task_mgr.find_tasks(None, None).await.unwrap();
-    assert_eq!(tasks.len(), 1);
+    let result = task_mgr
+        .find_tasks(None, None, None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(result.tasks.len(), 1);
 }
 
 // ==================== Unicode and Emoji Tests ====================

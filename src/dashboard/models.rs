@@ -73,6 +73,12 @@ pub struct TaskListQuery {
     pub status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<i64>,
 }
 
 /// Query parameters for event list
@@ -102,6 +108,8 @@ pub struct SearchQuery {
     pub include_events: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<i32>,
 }
 
 fn default_true() -> bool {
@@ -188,6 +196,16 @@ mod tests {
         let query: TaskListQuery = serde_json::from_str(json).unwrap();
         assert_eq!(query.status, Some("doing".to_string()));
         assert_eq!(query.parent, Some("null".to_string()));
+    }
+
+    #[test]
+    fn test_task_list_query_with_pagination() {
+        let json = r#"{"status":"doing","sort_by":"priority","limit":50,"offset":10}"#;
+        let query: TaskListQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(query.status, Some("doing".to_string()));
+        assert_eq!(query.sort_by, Some("priority".to_string()));
+        assert_eq!(query.limit, Some(50));
+        assert_eq!(query.offset, Some(10));
     }
 
     #[test]

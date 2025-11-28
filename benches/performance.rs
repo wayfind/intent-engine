@@ -95,7 +95,12 @@ fn bench_task_find(c: &mut Criterion) {
                 }
 
                 // Benchmark find
-                black_box(task_mgr.find_tasks(None, None).await.unwrap());
+                black_box(
+                    task_mgr
+                        .find_tasks(None, None, None, None, None)
+                        .await
+                        .unwrap(),
+                );
             });
         });
     }

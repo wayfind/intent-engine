@@ -31,8 +31,8 @@ async fn main() {
     // Initialize logging system
     let mut log_config = LoggingConfig::from_args(cli.quiet, cli.verbose > 0, cli.json);
 
-    // Check if this is dashboard mode with stdout redirected (daemon mode)
-    // In daemon mode, parent spawns child with --foreground but redirects stdout to /dev/null
+    // Check if Dashboard is running with stdout redirected (e.g., started by MCP Server)
+    // When MCP Server auto-starts Dashboard, stdout is redirected to /dev/null
     // Also support IE_DASHBOARD_LOG_FILE env var for testing
     if matches!(
         cli.command,
@@ -41,7 +41,7 @@ async fn main() {
         // Force enable file logging if env var is set (for testing)
         let force_file_log = std::env::var("IE_DASHBOARD_LOG_FILE").is_ok();
 
-        // Check if stdout is not a TTY (redirected to /dev/null in daemon mode)
+        // Check if stdout is not a TTY (redirected when started by MCP Server)
         if force_file_log || !atty::is(atty::Stream::Stdout) {
             use intent_engine::logging::{log_file_path, ApplicationMode};
             log_config = LoggingConfig::for_mode(ApplicationMode::Dashboard);
@@ -129,7 +129,8 @@ async fn run(cli: &Cli) -> Result<()> {
             tasks,
             events,
             limit,
-        } => handle_search_command(&query, tasks, events, limit).await?,
+            offset,
+        } => handle_search_command(&query, tasks, events, limit, offset).await?,
         Commands::Doctor => handle_doctor_command().await?,
         Commands::Init { at, force } => handle_init_command(at, force).await?,
         Commands::Dashboard(dashboard_cmd) => handle_dashboard_command(dashboard_cmd).await?,
@@ -286,7 +287,13 @@ async fn run(cli: &Cli) -> Result<()> {
             }
         },
 
-        Commands::List { status, parent } => {
+        Commands::List {
+            status,
+            parent,
+            sort_by,
+            limit,
+            offset,
+        } => {
             let ctx = ProjectContext::load().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 
@@ -298,8 +305,26 @@ async fn run(cli: &Cli) -> Result<()> {
                 }
             });
 
-            let tasks = task_mgr.find_tasks(status.as_deref(), parent_opt).await?;
-            println!("{}", serde_json::to_string_pretty(&tasks)?);
+            // Parse sort_by parameter
+            use intent_engine::db::models::TaskSortBy;
+            let sort_by_parsed = match sort_by.as_deref() {
+                Some("id") => Some(TaskSortBy::Id),
+                Some("priority") => Some(TaskSortBy::Priority),
+                Some("time") => Some(TaskSortBy::Time),
+                Some("focus") => Some(TaskSortBy::FocusAware),
+                None => None, // Use default from find_tasks
+                Some(other) => {
+                    return Err(IntentError::InvalidInput(format!(
+                        "Invalid sort_by value '{}'. Valid values: id, priority, time, focus",
+                        other
+                    )));
+                },
+            };
+
+            let result = task_mgr
+                .find_tasks(status.as_deref(), parent_opt, sort_by_parsed, limit, offset)
+                .await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
         },
 
         Commands::Context { task_id } => {

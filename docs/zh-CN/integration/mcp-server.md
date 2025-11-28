@@ -107,23 +107,35 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
 - `task_start` - 开始任务 (原子操作: 设为 doing + 设为当前任务)
 - `task_pick_next` - 智能推荐下一个任务
 - `task_spawn_subtask` - 创建子任务并切换 (原子操作)
-- `task_switch` - 切换任务 (原子操作: 暂停当前 + 开始新任务)
 - `task_done` - 完成任务 (验证所有子任务已完成)
 - `task_update` - 更新任务属性
-- `task_find` - 按状态/父任务查找
+- `task_list` - 列出任务,支持过滤、排序和分页
+  - 支持 `status`、`parent` 过滤
+  - 通过 `limit` 和 `offset` 分页
+  - 排序选项: `id`、`priority`、`time`、`focus_aware`
+  - 返回 `PaginatedTasks`,包含 `has_more` 标志
 - `task_get` - 获取任务详细信息
 
 **事件追踪工具**:
 - `event_add` - 记录决策/阻碍/里程碑 (AI 的外部长时记忆)
-- `event_list` - 列出任务的事件历史
+- `event_list` - 列出任务的事件历史 (支持按类型和时间过滤)
+
+**搜索工具**:
+- `search` - 跨任务和事件的统一全文搜索
+  - FTS5 全文搜索,带片段高亮
+  - 通过 `limit` 和 `offset` 支持分页
+  - 返回 `PaginatedSearchResults`,包含任务/事件分别计数
 
 **工作流工具**:
 - `current_task_get` - 获取当前聚焦的任务
 - `report_generate` - 生成工作报告
+- `plan` - 声明式批量任务创建,支持依赖关系
 
 ## 使用示例
 
 安装完成后,Claude Code 可以自动使用 Intent-Engine:
+
+### 基本任务创建和管理
 
 ```
 你: "帮我重构认证系统"
@@ -139,6 +151,45 @@ Claude: 我会创建一个任务来追踪这项工作。
 
 让我为每个部分创建子任务..."
 [使用 task_spawn_subtask 为每个领域创建子任务]
+```
+
+### 分页和过滤
+
+```
+你: "显示所有正在进行的任务,按优先级排序"
+
+Claude: 我会列出你的 doing 任务并按优先级排序。
+[使用 task_list: {status: 'doing', sort_by: 'priority', limit: 20, offset: 0}]
+
+"你有 15 个正在进行的任务。以下是按优先级排序的前 20 个:
+- 任务 #42: 重构认证系统 (优先级: high)
+- 任务 #58: 优化数据库查询 (优先级: high)
+- 任务 #71: 更新文档 (优先级: medium)
+..."
+
+[响应包含分页元数据: total_count: 15, has_more: false]
+```
+
+### 带分页的搜索
+
+```
+你: "找到所有与 JWT 认证相关的任务和讨论"
+
+Claude: 我会在任务和事件中搜索。
+[使用 search: {query: "JWT 认证", limit: 20, offset: 0}]
+
+"找到 8 个任务和 12 个事件与 JWT 认证相关:
+
+任务:
+- 任务 #42: 实现基于 JWT 的认证 (在 spec 中匹配)
+- 任务 #45: 配置 JWT 密钥轮换 (在 name 中匹配)
+
+事件:
+- 任务 #42 的决策: '选择 HS256 用于 JWT 签名...'
+- 任务 #45 的阻碍: 'JWT 密钥环境变量...'
+..."
+
+[响应包含: total_tasks: 8, total_events: 12, has_more: false]
 ```
 
 ## 技术优势

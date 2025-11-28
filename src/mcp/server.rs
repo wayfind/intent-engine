@@ -536,6 +536,8 @@ async fn handle_task_update(args: Value) -> Result<Value, String> {
 }
 
 async fn handle_task_list(args: Value) -> Result<Value, String> {
+    use crate::db::models::TaskSortBy;
+
     let status = args.get("status").and_then(|v| v.as_str());
     let parent = args.get("parent").and_then(|v| v.as_str());
 
@@ -546,6 +548,26 @@ async fn handle_task_list(args: Value) -> Result<Value, String> {
             p.parse::<i64>().ok()
         }
     });
+
+    // Parse sort_by parameter
+    let sort_by = args
+        .get("sort_by")
+        .and_then(|v| v.as_str())
+        .map(|s| match s.to_lowercase().as_str() {
+            "id" => Ok(TaskSortBy::Id),
+            "priority" => Ok(TaskSortBy::Priority),
+            "time" => Ok(TaskSortBy::Time),
+            "focus_aware" | "focus-aware" => Ok(TaskSortBy::FocusAware),
+            _ => Err(format!(
+                "Invalid sort_by value: '{}'. Valid options: id, priority, time, focus_aware",
+                s
+            )),
+        })
+        .transpose()?;
+
+    // Parse limit and offset parameters
+    let limit = args.get("limit").and_then(|v| v.as_i64());
+    let offset = args.get("offset").and_then(|v| v.as_i64());
 
     let ctx = ProjectContext::load()
         .await
@@ -560,12 +582,12 @@ async fn handle_task_list(args: Value) -> Result<Value, String> {
     } else {
         TaskManager::new(&ctx.pool)
     };
-    let tasks = task_mgr
-        .find_tasks(status, parent_opt)
+    let result = task_mgr
+        .find_tasks(status, parent_opt, sort_by, limit, offset)
         .await
         .map_err(|e| format!("Failed to list tasks: {}", e))?;
 
-    serde_json::to_value(&tasks).map_err(|e| format!("Serialization error: {}", e))
+    serde_json::to_value(&result).map_err(|e| format!("Serialization error: {}", e))
 }
 
 async fn handle_task_get(args: Value) -> Result<Value, String> {
@@ -782,13 +804,15 @@ async fn handle_unified_search(args: Value) -> Result<Value, String> {
 
     let limit = args.get("limit").and_then(|v| v.as_i64());
 
+    let offset = args.get("offset").and_then(|v| v.as_i64());
+
     let ctx = ProjectContext::load()
         .await
         .map_err(|e| format!("Failed to load project context: {}", e))?;
 
     let search_mgr = SearchManager::new(&ctx.pool);
     let results = search_mgr
-        .unified_search(query, include_tasks, include_events, limit)
+        .search(query, include_tasks, include_events, limit, offset, false)
         .await
         .map_err(|e| format!("Failed to perform unified search: {}", e))?;
 
@@ -932,12 +956,11 @@ async fn start_dashboard_background() -> io::Result<()> {
     // Get the current executable path
     let current_exe = std::env::current_exe()?;
 
-    // Spawn Dashboard process in foreground mode
+    // Spawn Dashboard process
     // IMPORTANT: Must keep Child handle alive to prevent blocking on Windows
     let mut child = Command::new(current_exe)
         .arg("dashboard")
         .arg("start")
-        .arg("--foreground")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

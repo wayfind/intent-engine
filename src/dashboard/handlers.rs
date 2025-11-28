@@ -8,7 +8,8 @@ use serde_json::json;
 use super::models::*;
 use super::server::AppState;
 use crate::{
-    events::EventManager, search::SearchManager, tasks::TaskManager, workspace::WorkspaceManager,
+    db::models::TaskSortBy, events::EventManager, search::SearchManager, tasks::TaskManager,
+    workspace::WorkspaceManager,
 };
 
 /// Get all tasks with optional filters
@@ -28,20 +29,38 @@ pub async fn list_tasks(
         }
     });
 
+    // Parse sort_by parameter
+    let sort_by = match query.sort_by.as_deref() {
+        Some("id") => Some(TaskSortBy::Id),
+        Some("priority") => Some(TaskSortBy::Priority),
+        Some("time") => Some(TaskSortBy::Time),
+        Some("focus") => Some(TaskSortBy::FocusAware),
+        _ => Some(TaskSortBy::FocusAware), // Default to FocusAware
+    };
+
     match task_mgr
-        .find_tasks(query.status.as_deref(), parent_filter)
+        .find_tasks(
+            query.status.as_deref(),
+            parent_filter,
+            sort_by,
+            query.limit,
+            query.offset,
+        )
         .await
     {
-        Ok(tasks) => (StatusCode::OK, Json(ApiResponse { data: tasks })).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiError {
-                code: "DATABASE_ERROR".to_string(),
-                message: format!("Failed to list tasks: {}", e),
-                details: None,
-            }),
-        )
-            .into_response(),
+        Ok(result) => (StatusCode::OK, Json(ApiResponse { data: result })).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to fetch tasks: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: format!("Failed to list tasks: {}", e),
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
     }
 }
 
@@ -617,11 +636,13 @@ pub async fn search(
     let search_mgr = SearchManager::new(&db_pool);
 
     match search_mgr
-        .unified_search(
+        .search(
             &query.query,
             query.include_tasks,
             query.include_events,
             query.limit.map(|l| l as i64),
+            query.offset.map(|o| o as i64),
+            false,
         )
         .await
     {

@@ -92,7 +92,13 @@ pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             );
         },
 
-        TaskCommands::List { status, parent } => {
+        TaskCommands::List {
+            status,
+            parent,
+            sort_by,
+            limit,
+            offset,
+        } => {
             let ctx = ProjectContext::load().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 
@@ -104,8 +110,26 @@ pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                 }
             });
 
-            let tasks = task_mgr.find_tasks(status.as_deref(), parent_opt).await?;
-            println!("{}", serde_json::to_string_pretty(&tasks)?);
+            // Parse sort_by parameter
+            use crate::db::models::TaskSortBy;
+            let sort_by_parsed = match sort_by.as_deref() {
+                Some("id") => Some(TaskSortBy::Id),
+                Some("priority") => Some(TaskSortBy::Priority),
+                Some("time") => Some(TaskSortBy::Time),
+                Some("focus") => Some(TaskSortBy::FocusAware),
+                None => None, // Use default from find_tasks
+                Some(other) => {
+                    return Err(IntentError::InvalidInput(format!(
+                        "Invalid sort_by value '{}'. Valid values: id, priority, time, focus",
+                        other
+                    )));
+                },
+            };
+
+            let result = task_mgr
+                .find_tasks(status.as_deref(), parent_opt, sort_by_parsed, limit, offset)
+                .await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
         },
 
         TaskCommands::Start { id, with_events } => {

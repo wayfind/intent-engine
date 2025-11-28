@@ -195,18 +195,20 @@ impl<'a> SessionRestoreManager<'a> {
 
         // Get siblings info
         let siblings = if let Some(parent_id) = task.parent_id {
-            let all_siblings = task_mgr.find_tasks(None, Some(Some(parent_id))).await?;
-            Self::build_siblings_info(&all_siblings)
+            let result = task_mgr
+                .find_tasks(None, Some(Some(parent_id)), None, None, None)
+                .await?;
+            Self::build_siblings_info(&result.tasks)
         } else {
             None
         };
 
         // Get children info
         let children = {
-            let all_children = task_mgr
-                .find_tasks(None, Some(Some(current_task_id)))
+            let result = task_mgr
+                .find_tasks(None, Some(Some(current_task_id)), None, None, None)
                 .await?;
-            Self::build_children_info(&all_children)
+            Self::build_children_info(&result.tasks)
         };
 
         // Get recent events
@@ -250,13 +252,13 @@ impl<'a> SessionRestoreManager<'a> {
         let task_mgr = TaskManager::new(self.pool);
 
         // Get all tasks for stats
-        let all_tasks = task_mgr.find_tasks(None, None).await?;
+        let result = task_mgr.find_tasks(None, None, None, None, None).await?;
 
         let stats = WorkspaceStats {
-            total_tasks: all_tasks.len(),
-            todo: all_tasks.iter().filter(|t| t.status == "todo").count(),
-            doing: all_tasks.iter().filter(|t| t.status == "doing").count(),
-            done: all_tasks.iter().filter(|t| t.status == "done").count(),
+            total_tasks: result.tasks.len(),
+            todo: result.tasks.iter().filter(|t| t.status == "todo").count(),
+            doing: result.tasks.iter().filter(|t| t.status == "doing").count(),
+            done: result.tasks.iter().filter(|t| t.status == "done").count(),
         };
 
         let suggested_commands = vec![

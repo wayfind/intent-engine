@@ -2317,10 +2317,13 @@ mod dataflow_tests {
 
         // 第2步：使用TaskManager读取任务（模拟MCP task_list工具）
         let task_mgr = TaskManager::new(&ctx.pool);
-        let tasks = task_mgr.find_tasks(None, None).await.unwrap();
+        let result = task_mgr
+            .find_tasks(None, None, None, None, None)
+            .await
+            .unwrap();
 
-        assert_eq!(tasks.len(), 1);
-        let task = &tasks[0];
+        assert_eq!(result.tasks.len(), 1);
+        let task = &result.tasks[0];
 
         // 第3步：验证所有字段都正确传递
         assert_eq!(task.name, "Test Active Form Task");

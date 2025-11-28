@@ -135,14 +135,8 @@ pub async fn check_mcp_connections() -> serde_json::Value {
 }
 
 pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()> {
-    use crate::dashboard::daemon;
-
     match dashboard_cmd {
-        DashboardCommands::Start {
-            port,
-            foreground,
-            browser,
-        } => {
+        DashboardCommands::Start { port, browser } => {
             // Load project context to get project path and DB path
             let project_ctx = ProjectContext::load_or_init().await?;
             let project_path = project_ctx.root.clone();
@@ -156,22 +150,12 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
             // Allocate port (always 11391, or custom if specified)
             let allocated_port = port.unwrap_or(11391);
 
-            // Check if already running using PID file + HTTP health check
-            if let Ok(Some(existing_pid)) = daemon::read_pid_file(allocated_port) {
-                if check_dashboard_health(allocated_port).await {
-                    println!("Dashboard already running for this project:");
-                    println!("  Port: {}", allocated_port);
-                    println!("  PID: {}", existing_pid);
-                    println!("  URL: http://127.0.0.1:{}", allocated_port);
-                    return Ok(());
-                } else {
-                    // Dashboard not responding, clean up stale PID file
-                    tracing::info!(
-                        "Cleaning up stale Dashboard PID file for port {}",
-                        allocated_port
-                    );
-                    daemon::delete_pid_file(allocated_port).ok();
-                }
+            // Check if already running using HTTP health check
+            if check_dashboard_health(allocated_port).await {
+                println!("Dashboard already running:");
+                println!("  Port: {}", allocated_port);
+                println!("  URL: http://127.0.0.1:{}", allocated_port);
+                return Ok(());
             }
 
             // Check if port is available
@@ -182,299 +166,106 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
                 )));
             }
 
+            // Start server in foreground mode
+            use crate::dashboard::server::DashboardServer;
+
+            let server =
+                DashboardServer::new(allocated_port, project_path.clone(), db_path.clone()).await?;
+
             println!("Dashboard starting for project: {}", project_name);
             println!("  Port: {}", allocated_port);
             println!("  URL: http://127.0.0.1:{}", allocated_port);
             println!(
-                "  Mode: {}",
-                if foreground { "foreground" } else { "daemon" }
+                "\n🚀 Dashboard server running at http://127.0.0.1:{}",
+                allocated_port
             );
+            println!("   Press Ctrl+C to stop\n");
 
-            if foreground {
-                // Start server in foreground mode
-                use crate::dashboard::server::DashboardServer;
-
-                let server =
-                    DashboardServer::new(allocated_port, project_path.clone(), db_path.clone())
-                        .await?;
-
-                println!(
-                    "\n🚀 Dashboard server running at http://127.0.0.1:{}",
-                    allocated_port
-                );
-                println!("   Press Ctrl+C to stop\n");
-
-                // Open browser if explicitly requested
-                if browser {
-                    let dashboard_url = format!("http://127.0.0.1:{}", allocated_port);
-                    tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
-                    println!("🌐 Opening dashboard in browser...");
-                    if let Err(e) = open::that(&dashboard_url) {
-                        eprintln!("⚠️  Could not open browser automatically: {}", e);
-                        eprintln!("   Please manually visit: {}", dashboard_url);
-                    }
-                    println!();
+            // Open browser if explicitly requested
+            if browser {
+                let dashboard_url = format!("http://127.0.0.1:{}", allocated_port);
+                tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+                println!("🌐 Opening dashboard in browser...");
+                if let Err(e) = open::that(&dashboard_url) {
+                    eprintln!("⚠️  Could not open browser automatically: {}", e);
+                    eprintln!("   Please manually visit: {}", dashboard_url);
                 }
-
-                // Write PID file
-                let current_pid = std::process::id();
-                daemon::write_pid_file(allocated_port, current_pid)?;
-
-                // Run server (blocks until terminated)
-                let result = server.run().await;
-
-                // Cleanup on exit
-                daemon::delete_pid_file(allocated_port).ok();
-
-                result.map_err(IntentError::OtherError)?;
-                Ok(())
-            } else {
-                // Daemon mode: spawn background process
-                println!("\n🚀 Dashboard server starting in background...");
-
-                // Spawn new process with same binary but in foreground mode
-                let current_exe = std::env::current_exe()?;
-
-                // Properly daemonize using setsid on Unix systems
-                #[cfg(unix)]
-                let mut cmd = {
-                    let mut cmd = std::process::Command::new("setsid");
-                    cmd.arg(current_exe)
-                        .arg("dashboard")
-                        .arg("start")
-                        .arg("--foreground")
-                        .arg("--port")
-                        .arg(allocated_port.to_string());
-
-                    // Pass --browser flag if specified
-                    if browser {
-                        cmd.arg("--browser");
-                    }
-
-                    cmd
-                };
-
-                // On Windows, just spawn normally (no setsid available)
-                #[cfg(not(unix))]
-                let mut cmd = {
-                    let mut cmd = std::process::Command::new(current_exe);
-                    cmd.arg("dashboard")
-                        .arg("start")
-                        .arg("--foreground")
-                        .arg("--port")
-                        .arg(allocated_port.to_string());
-
-                    // Pass --browser flag if specified
-                    if browser {
-                        cmd.arg("--browser");
-                    }
-
-                    cmd
-                };
-
-                let child = cmd
-                    .current_dir(&project_path)
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .spawn()?;
-
-                // When using setsid, child.id() returns setsid's PID, not the dashboard's PID
-                // We need to find the actual dashboard process
-                let _setsid_pid = child.id();
-
-                // Give server a moment to start
-                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-
-                // Find the actual dashboard PID by searching for the process
-                #[cfg(unix)]
-                let pid = {
-                    use std::process::Command;
-
-                    let output = Command::new("pgrep")
-                        .args([
-                            "-f",
-                            &format!("ie dashboard start --foreground --port {}", allocated_port),
-                        ])
-                        .output()
-                        .ok()
-                        .and_then(|o| String::from_utf8(o.stdout).ok())
-                        .and_then(|s| s.trim().parse::<u32>().ok());
-
-                    match output {
-                        Some(pid) => pid,
-                        None => {
-                            // Fallback: try to use setsid PID (won't work but better than failing)
-                            _setsid_pid
-                        },
-                    }
-                };
-
-                #[cfg(not(unix))]
-                let pid = _setsid_pid;
-
-                // Write PID file
-                daemon::write_pid_file(allocated_port, pid)?;
-
-                // Wait a moment for server to initialize, then check health
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-                if check_dashboard_health(allocated_port).await {
-                    let dashboard_url = format!("http://127.0.0.1:{}", allocated_port);
-                    println!("✓ Dashboard server started successfully");
-                    println!("  PID: {}", pid);
-                    println!("  URL: {}", dashboard_url);
-
-                    // Open browser if explicitly requested
-                    if browser {
-                        println!("\n🌐 Opening dashboard in browser...");
-                        if let Err(e) = open::that(&dashboard_url) {
-                            eprintln!("⚠️  Could not open browser automatically: {}", e);
-                            eprintln!("   Please manually visit: {}", dashboard_url);
-                        }
-                    }
-
-                    println!("\nUse 'ie dashboard stop' to stop the server");
-                } else {
-                    // Server failed to start
-                    daemon::delete_pid_file(allocated_port).ok();
-                    return Err(IntentError::InvalidInput(
-                        "Failed to start dashboard server".to_string(),
-                    ));
-                }
-
-                Ok(())
+                println!();
             }
+
+            // Run server (blocks until terminated)
+            server.run().await.map_err(IntentError::OtherError)?;
+
+            Ok(())
         },
 
         DashboardCommands::Stop { all } => {
-            // Single Dashboard architecture: all uses fixed port 11391
             let port = 11391;
 
             if all {
-                println!(
-                    "⚠️  Note: Single Dashboard mode - stopping Dashboard on port {}",
-                    port
-                );
+                println!("Note: Single Dashboard mode - checking port {}", port);
             }
 
-            // Check if dashboard is running via PID file + HTTP health check
-            match daemon::read_pid_file(port) {
-                Ok(Some(pid)) => {
-                    // PID file exists - check if dashboard is actually running
-                    if check_dashboard_health(port).await {
-                        // Dashboard is healthy - stop it
-                        daemon::stop_process(pid)?;
-                        println!("✓ Stopped dashboard (PID: {})", pid);
-                    } else {
-                        // Dashboard not responding - clean up stale PID
-                        println!(
-                            "⚠️  Dashboard not responding (stale PID: {}), cleaning up",
-                            pid
-                        );
-                    }
-                    daemon::delete_pid_file(port).ok();
-                },
-                Ok(None) => {
-                    // No PID file - check if something is listening on port anyway
-                    if check_dashboard_health(port).await {
-                        println!(
-                            "⚠️  Dashboard running but no PID file found (port {})",
-                            port
-                        );
-                        println!(
-                            "   Try killing the process manually or use: lsof -ti:{} | xargs kill",
-                            port
-                        );
-                        return Err(IntentError::InvalidInput(
-                            "Dashboard running without PID file".to_string(),
-                        ));
-                    } else {
-                        println!("Dashboard not running");
-                    }
-                },
-                Err(e) => {
-                    tracing::debug!("Error reading PID file: {}", e);
-                    println!("Dashboard not running");
-                },
+            // Check if dashboard is running via HTTP health check
+            if check_dashboard_health(port).await {
+                println!("Dashboard is running on port {}", port);
+                println!();
+                println!("To stop the Dashboard:");
+                println!("  - If running in foreground: Press Ctrl+C in the terminal");
+                println!("  - If started by MCP Server: Stop the AI tool (Claude Code, etc.)");
+                #[cfg(unix)]
+                println!("  - Or run: lsof -ti:{} | xargs kill", port);
+                #[cfg(windows)]
+                println!("  - Or find the process in Task Manager");
+            } else {
+                println!("Dashboard not running");
             }
 
             Ok(())
         },
 
         DashboardCommands::Status { all } => {
-            // Single Dashboard architecture: check fixed port 11391
             let port = 11391;
 
             if all {
-                println!(
-                    "⚠️  Note: Single Dashboard mode - showing status for port {}",
-                    port
-                );
+                println!("Note: Single Dashboard mode - checking port {}", port);
             }
 
-            // Check if dashboard is running via PID file + HTTP health check
-            match daemon::read_pid_file(port) {
-                Ok(Some(pid)) => {
-                    // PID file exists - check if dashboard is actually running
-                    if check_dashboard_health(port).await {
-                        // Dashboard is healthy - get project info via API
-                        let url = format!("http://127.0.0.1:{}/api/info", port);
-                        match reqwest::get(&url).await {
-                            Ok(response) if response.status().is_success() => {
-                                #[derive(serde::Deserialize)]
-                                struct InfoResponse {
-                                    data: serde_json::Value,
-                                }
-                                if let Ok(info) = response.json::<InfoResponse>().await {
-                                    println!("Dashboard status:");
-                                    println!("  Status: ✓ Running (PID: {})", pid);
-                                    println!("  Port: {}", port);
-                                    println!("  URL: http://127.0.0.1:{}", port);
-                                    if let Some(project_name) = info.data.get("project_name") {
-                                        println!("  Project: {}", project_name);
-                                    }
-                                    if let Some(project_path) = info.data.get("project_path") {
-                                        println!("  Path: {}", project_path);
-                                    }
-                                } else {
-                                    println!("Dashboard status:");
-                                    println!("  Status: ✓ Running (PID: {})", pid);
-                                    println!("  Port: {}", port);
-                                    println!("  URL: http://127.0.0.1:{}", port);
-                                }
-                            },
-                            _ => {
-                                println!("Dashboard status:");
-                                println!("  Status: ✓ Running (PID: {})", pid);
-                                println!("  Port: {}", port);
-                                println!("  URL: http://127.0.0.1:{}", port);
-                            },
+            // Check if dashboard is running via HTTP health check
+            if check_dashboard_health(port).await {
+                // Dashboard is healthy - get project info via API
+                let url = format!("http://127.0.0.1:{}/api/info", port);
+                println!("Dashboard status:");
+                println!("  Status: ✓ Running");
+                println!("  Port: {}", port);
+                println!("  URL: http://127.0.0.1:{}", port);
+
+                if let Ok(response) = reqwest::get(&url).await {
+                    if response.status().is_success() {
+                        #[derive(serde::Deserialize)]
+                        struct InfoResponse {
+                            data: serde_json::Value,
                         }
-                    } else {
-                        println!("Dashboard status:");
-                        println!("  Status: ✗ Stopped (stale PID: {})", pid);
-                        println!("  Port: {}", port);
+                        if let Ok(info) = response.json::<InfoResponse>().await {
+                            if let Some(project_name) = info.data.get("project_name") {
+                                println!("  Project: {}", project_name);
+                            }
+                            if let Some(project_path) = info.data.get("project_path") {
+                                println!("  Path: {}", project_path);
+                            }
+                        }
                     }
-                },
-                Ok(None) => {
-                    println!("Dashboard status:");
-                    println!("  Status: ✗ Not running");
-                    println!("  Port: {}", port);
-                },
-                Err(e) => {
-                    tracing::debug!("Error reading PID file: {}", e);
-                    println!("Dashboard status:");
-                    println!("  Status: ✗ Not running");
-                    println!("  Port: {}", port);
-                },
+                }
+            } else {
+                println!("Dashboard status:");
+                println!("  Status: ✗ Not running");
+                println!("  Port: {}", port);
             }
 
             Ok(())
         },
 
         DashboardCommands::List => {
-            // Single Dashboard architecture: check fixed port 11391
             let port = 11391;
 
             // Check if dashboard is running
@@ -483,9 +274,6 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
                 println!("\nUse 'ie dashboard start' to start the Dashboard");
                 return Ok(());
             }
-
-            // Get PID if available
-            let pid = daemon::read_pid_file(port).ok().flatten();
 
             // Get project list via API
             let url = format!("http://127.0.0.1:{}/api/projects", port);
@@ -499,9 +287,6 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
                         Ok(api_response) => {
                             if api_response.data.is_empty() {
                                 println!("Dashboard running but no projects registered");
-                                if let Some(pid) = pid {
-                                    println!("  PID: {}", pid);
-                                }
                                 println!("  Port: {}", port);
                                 println!("  URL: http://127.0.0.1:{}", port);
                                 return Ok(());
@@ -539,18 +324,12 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
                         Err(e) => {
                             eprintln!("Failed to parse projects list: {}", e);
                             println!("Dashboard running on port {}", port);
-                            if let Some(pid) = pid {
-                                println!("  PID: {}", pid);
-                            }
                         },
                     }
                 },
                 Ok(response) => {
                     eprintln!("Failed to get projects list: HTTP {}", response.status());
                     println!("Dashboard running on port {}", port);
-                    if let Some(pid) = pid {
-                        println!("  PID: {}", pid);
-                    }
                 },
                 Err(e) => {
                     eprintln!("Failed to connect to Dashboard API: {}", e);
@@ -562,7 +341,6 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
         },
 
         DashboardCommands::Open => {
-            // Single Dashboard architecture: use fixed port 11391
             let port = 11391;
 
             // Check if dashboard is running via HTTP health check
@@ -577,7 +355,10 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
             let url = format!("http://127.0.0.1:{}", port);
             println!("Opening dashboard: {}", url);
 
-            daemon::open_browser(&url)?;
+            if let Err(e) = open::that(&url) {
+                eprintln!("Failed to open browser: {}", e);
+                eprintln!("Please manually visit: {}", url);
+            }
 
             Ok(())
         },

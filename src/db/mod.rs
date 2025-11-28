@@ -257,6 +257,38 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Create indexes for task sorting and filtering (v0.7.2 - Phase 1)
+    // Index 1: Support FocusAware and Priority sorting with status/parent filtering
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_tasks_status_parent_priority
+        ON tasks(status, parent_id, priority, id)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Index 2: Support Priority sorting mode (aligned with pick_next)
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_tasks_priority_complexity
+        ON tasks(priority, complexity, id)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Index 3: Support Time sorting and FocusAware secondary sorting (partial index for performance)
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_tasks_doing_at
+        ON tasks(first_doing_at)
+        WHERE status = 'doing'
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     // Update schema version to 0.2.0
     sqlx::query(
         r#"

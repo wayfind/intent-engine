@@ -319,14 +319,17 @@ fn test_task_search_with_fts5_query() {
     // Verify match snippet contains highlighted term
     let content_text = json["result"]["content"][0]["text"].as_str().unwrap();
     let parsed: Value = serde_json::from_str(content_text).unwrap();
+
+    // Search now returns PaginatedSearchResults object, not an array
+    assert!(parsed.is_object(), "Expected PaginatedSearchResults object");
     assert!(
-        parsed.is_array() && !parsed.as_array().unwrap().is_empty(),
+        parsed["results"].is_array() && !parsed["results"].as_array().unwrap().is_empty(),
         "Expected non-empty search results"
     );
 
     // Check first result has authentication highlighted
     // Note: With trigram tokenizer, highlights may be partial word matches
-    let first_result = &parsed[0];
+    let first_result = &parsed["results"][0];
     let snippet = first_result["match_snippet"].as_str().unwrap();
     assert!(
         snippet.contains("**authentication**")

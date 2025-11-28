@@ -107,23 +107,35 @@ After starting Claude Code, you should see **13 Intent-Engine MCP tools** availa
 - `task_start` - Start task (atomic: set doing + set as current)
 - `task_pick_next` - Intelligently recommend next task
 - `task_spawn_subtask` - Create subtask and switch (atomic)
-- `task_switch` - Switch tasks (atomic: pause current + start new)
 - `task_done` - Complete task (validates all subtasks done)
 - `task_update` - Update task properties
-- `task_find` - Find tasks by status/parent
+- `task_list` - List tasks with filtering, sorting, and pagination support
+  - Supports `status`, `parent` filters
+  - Pagination via `limit` and `offset`
+  - Sorting: `id`, `priority`, `time`, `focus_aware`
+  - Returns `PaginatedTasks` with `has_more` flag
 - `task_get` - Get detailed task information
 
 **Event Tracking**:
 - `event_add` - Record decisions/blockers/milestones (AI's external long-term memory)
-- `event_list` - List event history for a task
+- `event_list` - List event history for a task (supports filtering by type and time)
+
+**Search**:
+- `search` - Unified full-text search across tasks and events
+  - FTS5 full-text search with snippet highlighting
+  - Pagination support via `limit` and `offset`
+  - Returns `PaginatedSearchResults` with separate task/event counts
 
 **Workflow**:
 - `current_task_get` - Get currently focused task
 - `report_generate` - Generate work reports
+- `plan` - Declarative batch task creation with dependencies
 
-## Usage Example
+## Usage Examples
 
 Once installed, Claude Code can use Intent-Engine automatically:
+
+### Basic Task Creation and Management
 
 ```
 You: "Help me refactor the authentication system"
@@ -139,6 +151,45 @@ Claude: I'll create a task to track this work.
 
 Let me create subtasks for each area..."
 [Uses task_spawn_subtask for each area]
+```
+
+### Pagination and Filtering
+
+```
+You: "Show me all my in-progress tasks, sorted by priority"
+
+Claude: I'll list your doing tasks with priority sorting.
+[Uses task_list with {status: 'doing', sort_by: 'priority', limit: 20, offset: 0}]
+
+"You have 15 in-progress tasks. Here are the top 20 sorted by priority:
+- Task #42: Refactor authentication (priority: high)
+- Task #58: Optimize database queries (priority: high)
+- Task #71: Update documentation (priority: medium)
+..."
+
+[Response includes pagination metadata: total_count: 15, has_more: false]
+```
+
+### Search with Pagination
+
+```
+You: "Find all tasks and discussions related to JWT authentication"
+
+Claude: I'll search across both tasks and events.
+[Uses search with {query: "JWT authentication", limit: 20, offset: 0}]
+
+"Found 8 tasks and 12 events related to JWT authentication:
+
+Tasks:
+- Task #42: Implement JWT-based auth (match in spec)
+- Task #45: Configure JWT secret rotation (match in name)
+
+Events:
+- Decision on Task #42: 'Chose HS256 for JWT signing...'
+- Blocker on Task #45: 'JWT secret environment variable...'
+..."
+
+[Response includes: total_tasks: 8, total_events: 12, has_more: false]
 ```
 
 ## Technical Advantages

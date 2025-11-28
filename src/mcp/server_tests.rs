@@ -356,7 +356,7 @@ mod handler_tests {
         assert!(result.is_ok());
 
         let value = result.unwrap();
-        let tasks = value.as_array().unwrap();
+        let tasks = value.get("tasks").unwrap().as_array().unwrap();
         assert!(tasks.len() >= 2);
     }
 
@@ -379,7 +379,7 @@ mod handler_tests {
         assert!(result.is_ok(), "task_list should succeed");
 
         let value = result.unwrap();
-        let tasks = value.as_array().unwrap();
+        let tasks = value.get("tasks").unwrap().as_array().unwrap();
         assert!(!tasks.is_empty());
         assert_eq!(tasks[0].get("status").unwrap(), "doing");
     }
@@ -1082,7 +1082,7 @@ mod edge_case_tests {
         assert!(result.is_ok());
 
         let value = result.unwrap();
-        let tasks = value.as_array().unwrap();
+        let tasks = value.get("tasks").unwrap().as_array().unwrap();
         // Should only return top-level tasks
         for task in tasks {
             assert!(task.get("parent_id").is_none() || task.get("parent_id").unwrap().is_null());

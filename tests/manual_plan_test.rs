@@ -66,12 +66,13 @@ async fn manual_test_plan_with_status_and_active_form() {
     // 读取并验证active_form字段
     println!("\n📖 测试2: 验证active_form字段传递...");
     let task_mgr = TaskManager::new(&ctx.pool);
-    let tasks = task_mgr
-        .find_tasks(None, None)
+    let result = task_mgr
+        .find_tasks(None, None, None, None, None)
         .await
         .expect("Failed to fetch");
 
-    let test_tasks: Vec<_> = tasks
+    let test_tasks: Vec<_> = result
+        .tasks
         .into_iter()
         .filter(|t| t.name.starts_with("【测试】"))
         .collect();

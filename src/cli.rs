@@ -97,6 +97,10 @@ pub enum Commands {
         /// Maximum number of results (default: 20)
         #[arg(long)]
         limit: Option<i64>,
+
+        /// Result offset for pagination (default: 0)
+        #[arg(long)]
+        offset: Option<i64>,
     },
 
     /// Check system health and dependencies
@@ -251,6 +255,8 @@ pub enum Commands {
     ///   ie ls todo         # List todo tasks
     ///   ie ls doing        # List doing tasks
     ///   ie ls done         # List done tasks
+    ///   ie ls --limit 20 --offset 0  # Paginate results
+    ///   ie ls --sort-by priority     # Sort by priority
     #[command(alias = "ls")]
     List {
         /// Filter by status (todo, doing, done)
@@ -259,6 +265,18 @@ pub enum Commands {
         /// Filter by parent ID (use "null" for no parent)
         #[arg(long)]
         parent: Option<String>,
+
+        /// Sort by (id, priority, time, focus)
+        #[arg(long)]
+        sort_by: Option<String>,
+
+        /// Maximum number of tasks to return (default: 100)
+        #[arg(long)]
+        limit: Option<i64>,
+
+        /// Offset for pagination (default: 0)
+        #[arg(long)]
+        offset: Option<i64>,
     },
 
     /// Get task context (alias for 'task context')
@@ -400,6 +418,8 @@ pub enum TaskCommands {
     ///   ie task list todo         # List todo tasks
     ///   ie task list doing        # List doing tasks
     ///   ie task list done         # List done tasks
+    ///   ie task list --limit 20 --offset 0  # Paginate results
+    ///   ie task list --sort-by priority     # Sort by priority
     List {
         /// Filter by status (todo, doing, done)
         status: Option<String>,
@@ -407,6 +427,18 @@ pub enum TaskCommands {
         /// Filter by parent ID (use "null" for no parent)
         #[arg(long)]
         parent: Option<String>,
+
+        /// Sort by (id, priority, time, focus)
+        #[arg(long)]
+        sort_by: Option<String>,
+
+        /// Maximum number of tasks to return (default: 100)
+        #[arg(long)]
+        limit: Option<i64>,
+
+        /// Offset for pagination (default: 0)
+        #[arg(long)]
+        offset: Option<i64>,
     },
 
     /// Start a task (atomic: update status + set current)
@@ -522,14 +554,13 @@ pub enum EventCommands {
 #[derive(Subcommand, Clone)]
 pub enum DashboardCommands {
     /// Start the Dashboard web server for current project
+    ///
+    /// The server runs in foreground mode and can be stopped with Ctrl+C.
+    /// In production, Dashboard is typically auto-started by MCP Server.
     Start {
         /// Custom port (default: 11391)
         #[arg(long)]
         port: Option<u16>,
-
-        /// Run in foreground (default: daemon mode)
-        #[arg(long)]
-        foreground: bool,
 
         /// Automatically open browser (default: false, use --browser to enable)
         #[arg(long)]

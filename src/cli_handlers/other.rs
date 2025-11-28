@@ -148,6 +148,7 @@ pub async fn handle_search_command(
     include_tasks: bool,
     include_events: bool,
     limit: Option<i64>,
+    offset: Option<i64>,
 ) -> Result<()> {
     use crate::search::SearchManager;
 
@@ -155,10 +156,25 @@ pub async fn handle_search_command(
     let search_mgr = SearchManager::new(&ctx.pool);
 
     let results = search_mgr
-        .unified_search(query, include_tasks, include_events, limit)
+        .search(query, include_tasks, include_events, limit, offset, false)
         .await?;
 
-    println!("{}", serde_json::to_string_pretty(&results)?);
+    // Print pagination info
+    eprintln!(
+        "Found {} tasks, {} events (showing {} results)",
+        results.total_tasks,
+        results.total_events,
+        results.results.len()
+    );
+
+    if results.has_more {
+        eprintln!(
+            "Use --offset {} to see more results",
+            results.offset + results.limit
+        );
+    }
+
+    println!("{}", serde_json::to_string_pretty(&results.results)?);
     Ok(())
 }
 

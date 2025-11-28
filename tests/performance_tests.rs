@@ -93,11 +93,14 @@ async fn test_massive_tasks_10k() {
 
     // Test finding all tasks
     let start = Instant::now();
-    let tasks = task_mgr.find_tasks(None, None).await.unwrap();
+    let result = task_mgr
+        .find_tasks(None, None, None, None, None)
+        .await
+        .unwrap();
     let elapsed = start.elapsed();
 
-    println!("Found {} tasks in {:?}", tasks.len(), elapsed);
-    assert_eq!(tasks.len(), count);
+    println!("Found {} tasks in {:?}", result.tasks.len(), elapsed);
+    assert_eq!(result.tasks.len(), count);
 }
 
 #[tokio::test]
@@ -213,14 +216,14 @@ async fn test_wide_task_hierarchy() {
 
     // Test finding children
     let start = Instant::now();
-    let children = task_mgr
-        .find_tasks(None, Some(Some(parent.id)))
+    let result = task_mgr
+        .find_tasks(None, Some(Some(parent.id)), None, None, None)
         .await
         .unwrap();
     let elapsed = start.elapsed();
 
-    println!("Found {} children in {:?}", children.len(), elapsed);
-    assert_eq!(children.len(), children_count);
+    println!("Found {} children in {:?}", result.tasks.len(), elapsed);
+    assert_eq!(result.tasks.len(), children_count);
 }
 
 #[tokio::test]
@@ -379,8 +382,11 @@ async fn test_concurrent_task_operations() {
 
     // Verify all tasks were created
     let task_mgr = TaskManager::new(&pool);
-    let tasks = task_mgr.find_tasks(None, None).await.unwrap();
-    assert_eq!(tasks.len(), 1000);
+    let result = task_mgr
+        .find_tasks(None, None, None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(result.tasks.len(), 1000);
 }
 
 #[tokio::test]

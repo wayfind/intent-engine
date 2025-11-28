@@ -147,7 +147,7 @@ pub struct TaskSearchResult {
 /// Unified search result that can represent either a task or event match
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "result_type")]
-pub enum UnifiedSearchResult {
+pub enum SearchResult {
     #[serde(rename = "task")]
     Task {
         #[serde(flatten)]
@@ -161,6 +161,17 @@ pub enum UnifiedSearchResult {
         task_chain: Vec<Task>, // Ancestry: [immediate task, parent, grandparent, ...]
         match_snippet: String,
     },
+}
+
+/// Paginated search results across tasks and events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaginatedSearchResults {
+    pub results: Vec<SearchResult>,
+    pub total_tasks: i64,
+    pub total_events: i64,
+    pub has_more: bool,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 /// Response for spawn-subtask command - includes subtask and parent info
@@ -203,6 +214,31 @@ pub struct TaskContext {
     pub siblings: Vec<Task>,
     pub children: Vec<Task>,
     pub dependencies: TaskDependencies,
+}
+
+/// Sort order for task queries
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskSortBy {
+    /// Legacy: ORDER BY id ASC (backward compatible)
+    Id,
+    /// ORDER BY priority ASC, complexity ASC, id ASC
+    Priority,
+    /// ORDER BY first_doing_at DESC NULLS LAST, first_todo_at DESC NULLS LAST, id ASC
+    Time,
+    /// Focus-aware: current focused task → doing tasks → todo tasks
+    #[default]
+    FocusAware,
+}
+
+/// Paginated task query results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaginatedTasks {
+    pub tasks: Vec<Task>,
+    pub total_count: i64,
+    pub has_more: bool,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

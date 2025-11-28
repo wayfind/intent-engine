@@ -1,9 +1,11 @@
 // Performance tests for large datasets
 // These tests are designed to validate performance and accuracy with 100k+ tasks
 
+use intent_engine::db::models::SearchResult;
 use intent_engine::db::{create_pool, run_migrations};
 use intent_engine::events::EventManager;
 use intent_engine::report::ReportManager;
+use intent_engine::search::SearchManager;
 use intent_engine::tasks::TaskManager;
 use rand::Rng;
 use std::time::Instant;
@@ -37,6 +39,7 @@ async fn run_dataset_test(total_tasks: usize) {
     run_migrations(&pool).await.unwrap();
 
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
     let event_mgr = EventManager::new(&pool);
     let report_mgr = ReportManager::new(&pool);
 
@@ -262,7 +265,11 @@ async fn run_dataset_test(total_tasks: usize) {
     for keyword in &keywords[0..5] {
         // Test first 5 keywords
         let start = Instant::now();
-        let results = task_mgr.search_tasks(keyword).await.unwrap();
+        let results = search_mgr
+            .search(keyword, true, false, None, None, false)
+            .await
+            .unwrap()
+            .results;
         let search_duration = start.elapsed();
         total_search_duration += search_duration;
 
@@ -281,14 +288,12 @@ async fn run_dataset_test(total_tasks: usize) {
         let mut accurate = 0;
         for result in results.iter().take(100) {
             // Check first 100 results
-            if result.task.name.contains(keyword)
-                || result
-                    .task
-                    .spec
-                    .as_ref()
-                    .is_some_and(|s| s.contains(keyword))
-            {
-                accurate += 1;
+            if let SearchResult::Task { task, .. } = result {
+                if task.name.contains(keyword)
+                    || task.spec.as_ref().is_some_and(|s| s.contains(keyword))
+                {
+                    accurate += 1;
+                }
             }
         }
 
@@ -325,10 +330,11 @@ async fn run_dataset_test(total_tasks: usize) {
 
     // Test complex search with AND operator
     let start = Instant::now();
-    let complex_results = task_mgr
-        .search_tasks("authentication AND module")
+    let complex_results = search_mgr
+        .search("authentication AND module", true, false, None, None, false)
         .await
-        .unwrap();
+        .unwrap()
+        .results;
     let complex_duration = start.elapsed();
 
     println!(
@@ -340,13 +346,15 @@ async fn run_dataset_test(total_tasks: usize) {
     // Verify complex search accuracy
     let mut accurate = 0;
     for result in complex_results.iter().take(100) {
-        let text = format!(
-            "{} {}",
-            result.task.name,
-            result.task.spec.as_ref().unwrap_or(&String::new())
-        );
-        if text.contains("authentication") && text.contains("module") {
-            accurate += 1;
+        if let SearchResult::Task { task, .. } = result {
+            let text = format!(
+                "{} {}",
+                task.name,
+                task.spec.as_ref().unwrap_or(&String::new())
+            );
+            if text.contains("authentication") && text.contains("module") {
+                accurate += 1;
+            }
         }
     }
 
@@ -360,16 +368,22 @@ async fn run_dataset_test(total_tasks: usize) {
     println!("\n🔎 Phase 5: Testing find_tasks Performance...");
 
     let start = Instant::now();
-    let todo_tasks = task_mgr.find_tasks(Some("todo"), None).await.unwrap();
+    let result = task_mgr
+        .find_tasks(Some("todo"), None, None, None, None)
+        .await
+        .unwrap();
     let find_duration = start.elapsed();
 
     println!(
         "  Find todo tasks: {} results in {:.3}s",
-        todo_tasks.len(),
+        result.tasks.len(),
         find_duration.as_secs_f64()
     );
 
-    assert_eq!(todo_tasks.len() as i64, report.summary.tasks_by_status.todo);
+    assert_eq!(
+        result.tasks.len() as i64,
+        report.summary.tasks_by_status.todo
+    );
 
     let avg_search_duration = total_search_duration.as_secs_f64() / 5.0;
 
@@ -425,6 +439,7 @@ async fn test_search_accuracy_detailed() {
     run_migrations(&pool).await.unwrap();
 
     let task_mgr = TaskManager::new(&pool);
+    let search_mgr = SearchManager::new(&pool);
 
     // Create controlled test dataset
     let test_cases = vec![
@@ -456,7 +471,11 @@ async fn test_search_accuracy_detailed() {
     println!("Testing search accuracy...\n");
 
     // Test 1: Single keyword search
-    let results = task_mgr.search_tasks("authentication").await.unwrap();
+    let results = search_mgr
+        .search("authentication", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     println!("Search 'authentication': {} results", results.len());
 
     // Should find all tasks with "authentication" in name or spec
@@ -484,10 +503,11 @@ async fn test_search_accuracy_detailed() {
     );
 
     // Test 2: AND operator
-    let results = task_mgr
-        .search_tasks("authentication AND JWT")
+    let results = search_mgr
+        .search("authentication AND JWT", true, false, None, None, false)
         .await
-        .unwrap();
+        .unwrap()
+        .results;
     println!(
         "\nSearch 'authentication AND JWT': {} results",
         results.len()
@@ -500,7 +520,11 @@ async fn test_search_accuracy_detailed() {
     assert!(results.len() >= expected - 10 && results.len() <= expected + 10);
 
     // Test 3: OR operator
-    let results = task_mgr.search_tasks("JWT OR OAuth2").await.unwrap();
+    let results = search_mgr
+        .search("JWT OR OAuth2", true, false, None, None, false)
+        .await
+        .unwrap()
+        .results;
     println!("\nSearch 'JWT OR OAuth2': {} results", results.len());
 
     let expected = 200; // "JWT Authentication" + "User Authentication"
@@ -510,10 +534,11 @@ async fn test_search_accuracy_detailed() {
     assert!(results.len() >= expected - 20 && results.len() <= expected + 20);
 
     // Test 4: NOT operator
-    let results = task_mgr
-        .search_tasks("authentication NOT JWT")
+    let results = search_mgr
+        .search("authentication NOT JWT", true, false, None, None, false)
         .await
-        .unwrap();
+        .unwrap()
+        .results;
     println!(
         "\nSearch 'authentication NOT JWT': {} results",
         results.len()
@@ -538,6 +563,7 @@ async fn test_concurrent_search_performance() {
     run_migrations(&pool).await.unwrap();
 
     let task_mgr = TaskManager::new(&pool);
+    let _search_mgr = SearchManager::new(&pool);
 
     // Create dataset
     println!("Creating 10,000 tasks...");
@@ -574,10 +600,15 @@ async fn test_concurrent_search_performance() {
             let handle = tokio::spawn(async move {
                 let db_path = temp_dir_path.join("concurrent_test.db");
                 let pool = create_pool(&db_path).await.unwrap();
-                let task_mgr = TaskManager::new(&pool);
+                let _task_mgr = TaskManager::new(&pool);
+                let search_mgr = SearchManager::new(&pool);
 
                 let start = Instant::now();
-                let results = task_mgr.search_tasks(&keyword).await.unwrap();
+                let results = search_mgr
+                    .search(&keyword, true, false, None, None, false)
+                    .await
+                    .unwrap()
+                    .results;
                 let duration = start.elapsed();
 
                 (keyword, results.len(), duration)
