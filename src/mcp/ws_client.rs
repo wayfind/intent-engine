@@ -1,5 +1,20 @@
-// WebSocket client for MCP → Dashboard communication
-// Handles registration and keep-alive for MCP server instances
+//! WebSocket client for MCP → Dashboard communication
+//!
+//! Handles registration and keep-alive for MCP server instances.
+//!
+//! # Testing Strategy
+//!
+//! This module requires a running Dashboard server for testing.
+//! Tests are located in `tests/ws_client_integration_test.rs` and marked with `#[ignore]`.
+//!
+//! To run integration tests:
+//! ```bash
+//! # Start Dashboard first
+//! ie dashboard start
+//!
+//! # Run integration tests
+//! cargo test --test ws_client_integration_test -- --ignored
+//! ```
 
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};

@@ -258,6 +258,7 @@ impl SetupModule for ClaudeCodeSetup {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use tempfile::TempDir;
 
     // ========== create_claude_settings tests ==========
 
@@ -336,5 +337,214 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(session_start_cmd.contains("with spaces"));
+    }
+
+    // ========== File system tests with tempdir ==========
+
+    #[test]
+    fn test_setup_hooks_and_settings_creates_directories() {
+        let temp_dir = TempDir::new().unwrap();
+        let claude_dir = temp_dir.path().join(".claude");
+
+        let opts = SetupOptions {
+            force: false,
+            scope: SetupScope::User,
+            config_path: None,
+        };
+        let mut files_modified = Vec::new();
+
+        let result =
+            ClaudeCodeSetup::setup_hooks_and_settings(&claude_dir, &opts, &mut files_modified);
+
+        assert!(result.is_ok());
+
+        // Verify directories created
+        assert!(claude_dir.join("hooks").exists());
+
+        // Verify hook script created and executable
+        let hook_script = claude_dir.join("hooks/session-start.sh");
+        assert!(hook_script.exists());
+
+        // Verify settings.json created
+        let settings_file = claude_dir.join("settings.json");
+        assert!(settings_file.exists());
+
+        // Verify files tracked
+        assert_eq!(files_modified.len(), 2);
+    }
+
+    #[test]
+    fn test_setup_hooks_and_settings_force_overwrites() {
+        let temp_dir = TempDir::new().unwrap();
+        let claude_dir = temp_dir.path().join(".claude");
+
+        // First setup without force
+        let opts = SetupOptions {
+            force: false,
+            scope: SetupScope::User,
+            config_path: None,
+        };
+        let mut files_modified = Vec::new();
+        ClaudeCodeSetup::setup_hooks_and_settings(&claude_dir, &opts, &mut files_modified).unwrap();
+
+        // Second setup without force should fail
+        let result =
+            ClaudeCodeSetup::setup_hooks_and_settings(&claude_dir, &opts, &mut files_modified);
+        assert!(result.is_err());
+
+        // Third setup with force should succeed
+        let opts_force = SetupOptions {
+            force: true,
+            scope: SetupScope::User,
+            config_path: None,
+        };
+        let mut files_modified2 = Vec::new();
+        let result = ClaudeCodeSetup::setup_hooks_and_settings(
+            &claude_dir,
+            &opts_force,
+            &mut files_modified2,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_setup_hooks_and_settings_hook_content() {
+        let temp_dir = TempDir::new().unwrap();
+        let claude_dir = temp_dir.path().join(".claude");
+
+        let opts = SetupOptions {
+            force: false,
+            scope: SetupScope::User,
+            config_path: None,
+        };
+        let mut files_modified = Vec::new();
+
+        ClaudeCodeSetup::setup_hooks_and_settings(&claude_dir, &opts, &mut files_modified).unwrap();
+
+        // Read and verify hook script content
+        let hook_script = claude_dir.join("hooks/session-start.sh");
+        let content = std::fs::read_to_string(&hook_script).unwrap();
+
+        // Should contain shebang and ie command
+        assert!(content.contains("#!/"));
+        assert!(content.contains("ie ") || content.contains("session-restore"));
+    }
+
+    #[test]
+    fn test_setup_hooks_and_settings_json_valid() {
+        let temp_dir = TempDir::new().unwrap();
+        let claude_dir = temp_dir.path().join(".claude");
+
+        let opts = SetupOptions {
+            force: false,
+            scope: SetupScope::User,
+            config_path: None,
+        };
+        let mut files_modified = Vec::new();
+
+        ClaudeCodeSetup::setup_hooks_and_settings(&claude_dir, &opts, &mut files_modified).unwrap();
+
+        // Read and parse settings.json
+        let settings_file = claude_dir.join("settings.json");
+        let content = std::fs::read_to_string(&settings_file).unwrap();
+        let settings: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+        // Verify structure
+        assert!(settings.get("hooks").is_some());
+        assert!(settings["hooks"].get("SessionStart").is_some());
+    }
+
+    #[test]
+    fn test_setup_mcp_config_creates_new_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join(".claude.json");
+
+        let opts = SetupOptions {
+            force: false,
+            scope: SetupScope::User,
+            config_path: Some(config_path.clone()),
+        };
+        let mut files_modified = Vec::new();
+
+        let setup = ClaudeCodeSetup;
+        let result = setup.setup_mcp_config(&opts, &mut files_modified);
+
+        assert!(result.is_ok());
+        assert!(config_path.exists());
+
+        // Verify content
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        let config: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(config["mcpServers"]["intent-engine"].is_object());
+    }
+
+    #[test]
+    fn test_setup_mcp_config_preserves_existing() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join(".claude.json");
+
+        // Create existing config with other servers
+        let existing_config = json!({
+            "mcpServers": {
+                "other-server": {
+                    "command": "other-cmd"
+                }
+            }
+        });
+        std::fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&existing_config).unwrap(),
+        )
+        .unwrap();
+
+        let opts = SetupOptions {
+            force: true,
+            scope: SetupScope::User,
+            config_path: Some(config_path.clone()),
+        };
+        let mut files_modified = Vec::new();
+
+        let setup = ClaudeCodeSetup;
+        setup.setup_mcp_config(&opts, &mut files_modified).unwrap();
+
+        // Verify both servers exist
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        let config: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(config["mcpServers"]["other-server"].is_object());
+        assert!(config["mcpServers"]["intent-engine"].is_object());
+    }
+
+    #[test]
+    fn test_setup_mcp_config_no_force_skips_existing() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join(".claude.json");
+
+        // Create existing config with intent-engine
+        let existing_config = json!({
+            "mcpServers": {
+                "intent-engine": {
+                    "command": "old-cmd"
+                }
+            }
+        });
+        std::fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&existing_config).unwrap(),
+        )
+        .unwrap();
+
+        let opts = SetupOptions {
+            force: false,
+            scope: SetupScope::User,
+            config_path: Some(config_path.clone()),
+        };
+        let mut files_modified = Vec::new();
+
+        let setup = ClaudeCodeSetup;
+        let result = setup.setup_mcp_config(&opts, &mut files_modified).unwrap();
+
+        // Should return false (already configured)
+        assert!(!result.passed);
+        assert!(result.details.contains("already configured"));
     }
 }
