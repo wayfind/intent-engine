@@ -347,6 +347,8 @@ pub async fn handle_session_restore(
                     "ie help".to_string(),
                 ]),
                 stats: None,
+                recommended_task: None,
+                top_pending_tasks: None,
                 error_type: Some(crate::session_restore::ErrorType::WorkspaceNotFound),
                 message: Some("No Intent-Engine workspace found in current directory".to_string()),
                 recovery_suggestion: Some(

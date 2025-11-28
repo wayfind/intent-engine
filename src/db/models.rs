@@ -241,6 +241,15 @@ pub struct PaginatedTasks {
     pub offset: i64,
 }
 
+/// Workspace statistics (aggregated counts without loading tasks)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceStats {
+    pub total_tasks: i64,
+    pub todo: i64,
+    pub doing: i64,
+    pub done: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PickNextResponse {
     pub suggestion_type: String,

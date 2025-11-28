@@ -1,3 +1,4 @@
+use crate::db::models::{TaskSortBy, WorkspaceStats};
 use crate::error::Result;
 use crate::events::EventManager;
 use crate::tasks::TaskManager;
@@ -78,14 +79,7 @@ pub struct EventInfo {
     pub timestamp: String,
 }
 
-/// Workspace statistics (for no-focus scenario)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkspaceStats {
-    pub total_tasks: usize,
-    pub todo: usize,
-    pub doing: usize,
-    pub done: usize,
-}
+// WorkspaceStats is imported from crate::db::models
 
 /// Complete session restoration result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,6 +101,12 @@ pub struct SessionRestoreResult {
     pub suggested_commands: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stats: Option<WorkspaceStats>,
+    /// Recommended next task (from pick_next) - used when no focus
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommended_task: Option<TaskInfo>,
+    /// Top pending tasks by priority - used when no focus
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_pending_tasks: Option<Vec<TaskInfo>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_type: Option<ErrorType>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -238,6 +238,8 @@ impl<'a> SessionRestoreManager<'a> {
             recent_events: Some(recent_events),
             suggested_commands: Some(suggested_commands),
             stats: None,
+            recommended_task: None,
+            top_pending_tasks: None,
             error_type: None,
             message: None,
             recovery_suggestion: None,
@@ -245,21 +247,45 @@ impl<'a> SessionRestoreManager<'a> {
     }
 
     /// Restore when no focus exists
+    ///
+    /// Uses efficient SQL aggregation for stats and limited queries for task lists.
+    /// Does NOT load all tasks into memory.
     async fn restore_no_focus(
         &self,
         workspace_path: Option<String>,
     ) -> Result<SessionRestoreResult> {
         let task_mgr = TaskManager::new(self.pool);
 
-        // Get all tasks for stats
-        let result = task_mgr.find_tasks(None, None, None, None, None).await?;
+        // 1. Get stats using SQL aggregation (no data loading)
+        let stats = task_mgr.get_stats().await?;
 
-        let stats = WorkspaceStats {
-            total_tasks: result.tasks.len(),
-            todo: result.tasks.iter().filter(|t| t.status == "todo").count(),
-            doing: result.tasks.iter().filter(|t| t.status == "doing").count(),
-            done: result.tasks.iter().filter(|t| t.status == "done").count(),
-        };
+        // 2. Get recommended next task via pick_next
+        let recommendation = task_mgr.pick_next().await?;
+        let recommended_task = recommendation.task.map(|t| TaskInfo {
+            id: t.id,
+            name: t.name,
+            status: Some(t.status),
+        });
+
+        // 3. Get top 5 pending tasks by priority (limited query)
+        let top_pending_result = task_mgr
+            .find_tasks(
+                Some("todo"),
+                None,
+                Some(TaskSortBy::Priority),
+                Some(5),
+                None,
+            )
+            .await?;
+        let top_pending_tasks: Vec<TaskInfo> = top_pending_result
+            .tasks
+            .into_iter()
+            .map(|t| TaskInfo {
+                id: t.id,
+                name: t.name,
+                status: Some(t.status),
+            })
+            .collect();
 
         let suggested_commands = vec![
             "ie pick-next".to_string(),
@@ -276,6 +302,12 @@ impl<'a> SessionRestoreManager<'a> {
             recent_events: None,
             suggested_commands: Some(suggested_commands),
             stats: Some(stats),
+            recommended_task,
+            top_pending_tasks: if top_pending_tasks.is_empty() {
+                None
+            } else {
+                Some(top_pending_tasks)
+            },
             error_type: None,
             message: None,
             recovery_suggestion: None,
@@ -391,6 +423,8 @@ impl<'a> SessionRestoreManager<'a> {
             recent_events: None,
             suggested_commands: Some(suggested_commands),
             stats: None,
+            recommended_task: None,
+            top_pending_tasks: None,
             error_type: Some(error_type),
             message: Some(message.to_string()),
             recovery_suggestion: Some(recovery.to_string()),
@@ -605,6 +639,15 @@ mod tests {
         let stats = result.stats.unwrap();
         assert_eq!(stats.total_tasks, 2);
         assert_eq!(stats.todo, 2);
+
+        // Verify new fields: recommended_task and top_pending_tasks
+        // pick_next should recommend one of the tasks
+        assert!(result.recommended_task.is_some());
+
+        // top_pending_tasks should contain the 2 todo tasks
+        assert!(result.top_pending_tasks.is_some());
+        let top_pending = result.top_pending_tasks.unwrap();
+        assert_eq!(top_pending.len(), 2);
     }
 
     #[tokio::test]

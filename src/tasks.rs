@@ -1,7 +1,7 @@
 use crate::db::models::{
     DoneTaskResponse, Event, EventsSummary, NextStepSuggestion, PaginatedTasks, ParentTaskInfo,
     PickNextResponse, SpawnSubtaskResponse, SubtaskInfo, Task, TaskSortBy, TaskWithEvents,
-    WorkspaceStatus,
+    WorkspaceStats, WorkspaceStatus,
 };
 use crate::error::{IntentError, Result};
 use chrono::Utc;
@@ -566,6 +566,30 @@ impl<'a> TaskManager<'a> {
             has_more,
             limit,
             offset,
+        })
+    }
+
+    /// Get workspace statistics using SQL aggregation (no data loading)
+    ///
+    /// This is much more efficient than loading all tasks just to count them.
+    /// Used by session restore when there's no focused task.
+    pub async fn get_stats(&self) -> Result<WorkspaceStats> {
+        let row = sqlx::query_as::<_, (i64, i64, i64, i64)>(
+            r#"SELECT
+                COUNT(*) as total,
+                COALESCE(SUM(CASE WHEN status = 'todo' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN status = 'doing' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0)
+            FROM tasks"#,
+        )
+        .fetch_one(self.pool)
+        .await?;
+
+        Ok(WorkspaceStats {
+            total_tasks: row.0,
+            todo: row.1,
+            doing: row.2,
+            done: row.3,
         })
     }
 
@@ -1140,6 +1164,48 @@ mod tests {
     use crate::events::EventManager;
     use crate::test_utils::test_helpers::TestContext;
     use crate::workspace::WorkspaceManager;
+
+    #[tokio::test]
+    async fn test_get_stats_empty() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        let stats = manager.get_stats().await.unwrap();
+
+        assert_eq!(stats.total_tasks, 0);
+        assert_eq!(stats.todo, 0);
+        assert_eq!(stats.doing, 0);
+        assert_eq!(stats.done, 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_stats_with_tasks() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create tasks with different statuses
+        let task1 = manager.add_task("Task 1", None, None).await.unwrap();
+        let task2 = manager.add_task("Task 2", None, None).await.unwrap();
+        let _task3 = manager.add_task("Task 3", None, None).await.unwrap();
+
+        // Update statuses
+        manager
+            .update_task(task1.id, None, None, None, Some("doing"), None, None)
+            .await
+            .unwrap();
+        manager
+            .update_task(task2.id, None, None, None, Some("done"), None, None)
+            .await
+            .unwrap();
+        // task3 stays as todo
+
+        let stats = manager.get_stats().await.unwrap();
+
+        assert_eq!(stats.total_tasks, 3);
+        assert_eq!(stats.todo, 1);
+        assert_eq!(stats.doing, 1);
+        assert_eq!(stats.done, 1);
+    }
 
     #[tokio::test]
     async fn test_add_task() {
