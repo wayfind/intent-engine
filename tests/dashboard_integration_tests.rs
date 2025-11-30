@@ -187,7 +187,7 @@ fn test_dashboard_task_crud() -> Result<()> {
     assert_eq!(list_response.status(), 200);
 
     let list: serde_json::Value = list_response.json()?;
-    let tasks = list["data"].as_array().unwrap();
+    let tasks = list["data"]["tasks"].as_array().unwrap();
     assert!(!tasks.is_empty());
 
     // Delete the task

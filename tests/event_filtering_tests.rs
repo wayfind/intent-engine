@@ -295,7 +295,7 @@ fn test_event_list_invalid_since_format() {
         .assert()
         .failure();
 
-    // Test invalid unit
+    // Test invalid unit (use 'y' for years which is not supported)
     intent_engine_cmd()
         .current_dir(dir)
         .arg("event")
@@ -303,7 +303,7 @@ fn test_event_list_invalid_since_format() {
         .arg("--task-id")
         .arg(task_id.to_string())
         .arg("--since")
-        .arg("7w")
+        .arg("7y")
         .assert()
         .failure();
 }

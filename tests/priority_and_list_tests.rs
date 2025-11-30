@@ -256,7 +256,7 @@ fn test_priority_ordering_still_works() {
 
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    let tasks_array = tasks.as_array().unwrap();
+    let tasks_array = tasks["tasks"].as_array().unwrap();
 
     // Find each task and verify priority
     let task1 = tasks_array
@@ -309,7 +309,7 @@ fn test_task_list_command() {
 
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(tasks.as_array().unwrap().len(), 3);
+    assert_eq!(tasks["tasks"].as_array().unwrap().len(), 3);
 
     // List with status filter (using positional argument)
     let output = intent_engine_cmd()
@@ -322,7 +322,7 @@ fn test_task_list_command() {
 
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(tasks.as_array().unwrap().len(), 3);
+    assert_eq!(tasks["tasks"].as_array().unwrap().len(), 3);
 
     // List with parent filter
     let output = intent_engine_cmd()
@@ -336,9 +336,11 @@ fn test_task_list_command() {
 
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(tasks.as_array().unwrap().len(), 1);
+    assert_eq!(tasks["tasks"].as_array().unwrap().len(), 1);
     assert_eq!(
-        tasks.as_array().unwrap()[0]["name"].as_str().unwrap(),
+        tasks["tasks"].as_array().unwrap()[0]["name"]
+            .as_str()
+            .unwrap(),
         "Subtask 1"
     );
 
@@ -354,5 +356,5 @@ fn test_task_list_command() {
 
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(tasks.as_array().unwrap().len(), 2);
+    assert_eq!(tasks["tasks"].as_array().unwrap().len(), 2);
 }

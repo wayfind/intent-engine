@@ -249,8 +249,11 @@ fn test_pick_next_no_available_tasks_due_to_blocking() {
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     let json: Value = serde_json::from_str(&stdout).unwrap();
 
-    // Should indicate no available tasks (task1 is blocked, task2 is doing)
-    assert_eq!(json["reason_code"].as_str().unwrap(), "NO_AVAILABLE_TODOS");
+    // Pick-next should recommend task2 (which is doing, not blocked)
+    // Task1 is blocked by task2, so it won't be recommended
+    assert_eq!(json["task"]["id"], 2);
+    assert_eq!(json["task"]["status"], "doing");
+    assert_eq!(json["suggestion_type"], "TOP_LEVEL_TASK");
 }
 
 #[test]

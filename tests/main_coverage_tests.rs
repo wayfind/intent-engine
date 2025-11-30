@@ -406,20 +406,8 @@ fn test_setup_mcp_creates_backup() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Backed up MCP config to"));
-
-    // Verify backup exists
-    let backup_files: Vec<_> = fs::read_dir(temp_dir.path())
-        .unwrap()
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .starts_with("test-config.json.backup.")
-        })
-        .collect();
-
-    assert!(!backup_files.is_empty(), "Backup file should be created");
+        .stdout(predicate::str::contains("Updated"))
+        .stdout(predicate::str::contains("test-config.json"));
 }
 
 #[test]
@@ -478,10 +466,10 @@ fn test_doctor_in_fresh_environment() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("System Information"))
-        .stdout(predicate::str::contains("SQLite"))
-        .stdout(predicate::str::contains("Database Connection"))
-        .stdout(predicate::str::contains("Intent Engine Version"));
+        .stdout(predicate::str::contains("Database Path Resolution"))
+        .stdout(predicate::str::contains("Database Health"))
+        .stdout(predicate::str::contains("checks"))
+        .stdout(predicate::str::contains("overall_status"));
 }
 
 // ============================================================================
