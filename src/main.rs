@@ -12,6 +12,7 @@ use intent_engine::plan::{PlanExecutor, PlanRequest};
 use intent_engine::project::ProjectContext;
 use intent_engine::tasks::TaskManager;
 use intent_engine::workspace::WorkspaceManager;
+use std::io::IsTerminal;
 
 #[tokio::main]
 async fn main() {
@@ -42,7 +43,7 @@ async fn main() {
         let force_file_log = std::env::var("IE_DASHBOARD_LOG_FILE").is_ok();
 
         // Check if stdout is not a TTY (redirected when started by MCP Server)
-        if force_file_log || !atty::is(atty::Stream::Stdout) {
+        if force_file_log || !std::io::stdout().is_terminal() {
             use intent_engine::logging::{log_file_path, ApplicationMode};
             log_config = LoggingConfig::for_mode(ApplicationMode::Dashboard);
             log_config.file_output = Some(log_file_path(ApplicationMode::Dashboard));

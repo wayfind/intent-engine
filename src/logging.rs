@@ -3,7 +3,7 @@
 //! Provides structured logging with configurable levels and output formats.
 //! Uses tracing crate for structured logging with spans and events.
 
-use std::io;
+use std::io::{self, IsTerminal};
 use tracing::Level;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
@@ -100,7 +100,7 @@ impl LoggingConfig {
 
         Self {
             level,
-            color: !quiet && !json && atty::is(atty::Stream::Stdout),
+            color: !quiet && !json && std::io::stdout().is_terminal(),
             show_timestamps: verbose || json,
             show_target: verbose,
             json_format: json,
