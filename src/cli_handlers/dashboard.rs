@@ -158,8 +158,8 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
                 return Ok(());
             }
 
-            // Check if port is available
-            if std::net::TcpListener::bind(("127.0.0.1", allocated_port)).is_err() {
+            // Check if port is available (use 0.0.0.0 to match actual server binding)
+            if std::net::TcpListener::bind(("0.0.0.0", allocated_port)).is_err() {
                 return Err(IntentError::InvalidInput(format!(
                     "Port {} is already in use",
                     allocated_port
