@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.6] - 2025-12-01
 
+### Documentation
+
+- Update CHANGELOG for v0.8.5
+
 ### Features
 
-- Display task ID in task tree sidebar
+- Display task ID in task tree
+
+### Miscellaneous Tasks
+
+- Bump version to 0.8.6
 
 ## [0.8.5] - 2025-12-01
 
