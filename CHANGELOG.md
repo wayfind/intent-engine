@@ -5,35 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.0] - 2025-12-02
+## [0.9.0] - 2025-12-01
 
-### Breaking Changes
+### Documentation
 
-- **Human Task Protection Simplified**: Removed passphrase-based approval system
-  - Removed `ie task approve` and `ie task revoke` CLI commands
-  - Removed `/tasks/:id/approve` Dashboard API endpoints
-  - Removed `task_approvals` database table
-  - Human-created tasks can now ONLY be completed via CLI or Dashboard (out-of-band confirmation)
-  - AI agents (via MCP) will receive a clear error message when attempting to complete human tasks
+- Update CHANGELOG for v0.8.6
 
-### Removed
+### Features
 
-- `src/approvals.rs` module (passphrase generation and validation)
-- `Approve` and `Revoke` CLI subcommands
-- Dashboard approval API handlers and routes
-- `CreateApprovalRequest` model
-- Error types: `HumanApprovalRequired`, `InvalidPassphrase`, `ApprovalExpired`, `ApprovalNotFound`
-
-### Changed
-
-- `done_task()` signature simplified: removed `passphrase` parameter
-- New error type `HumanTaskCannotBeCompletedByAI` with strong, actionable message
-- MCP `task_done` tool now returns clear instructions for human task completion
-
-### Security
-
-- Eliminated passphrase leakage risk (AI could potentially see and use passphrases)
-- Pure out-of-band confirmation model: human tasks require human action via separate channel
+- Simplify Human Task Protection to pure out-of-band confirmation
 
 ## [0.8.6] - 2025-12-01
 
