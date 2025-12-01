@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 import { Check, X } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -15,6 +15,14 @@ const isEditing = ref(false)
 const editValue = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
+
+// Watch for external data changes - cancel editing when modelValue changes
+// This handles the case where user switches to a different task while editing
+watch(() => props.modelValue, () => {
+  if (isEditing.value) {
+    isEditing.value = false
+  }
+})
 
 function startEditing() {
   editValue.value = props.modelValue || ''
