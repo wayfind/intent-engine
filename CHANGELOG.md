@@ -9,7 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Bug Fixes
 
-- Reset edit state when switching tasks in dashboard (frontend)
+- Reset edit state when switching tasks
+
+### Documentation
+
+- Update CHANGELOG for v0.8.4
+
+### Miscellaneous Tasks
+
+- Bump version to 0.8.5
 
 ## [0.8.4] - 2025-11-30
 
