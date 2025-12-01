@@ -74,7 +74,10 @@ async fn run_dataset_test(total_tasks: usize) {
         let name = format!("{} task #{}", keyword, i);
         let spec = format!("Implement {} functionality for module {}", keyword, i / 100);
 
-        let task = task_mgr.add_task(&name, Some(&spec), None).await.unwrap();
+        let task = task_mgr
+            .add_task(&name, Some(&spec), None, None)
+            .await
+            .unwrap();
 
         task_ids.push(task.id);
 
@@ -152,7 +155,7 @@ async fn run_dataset_test(total_tasks: usize) {
                 .await
                 .unwrap();
 
-                if uncompleted_children == 0 && task_mgr.done_task().await.is_ok() {
+                if uncompleted_children == 0 && task_mgr.done_task(false).await.is_ok() {
                     completed_count += 1;
                 }
             }
@@ -464,7 +467,10 @@ async fn test_search_accuracy_detailed() {
         for (name_template, spec_template) in &test_cases {
             let name = format!("{} #{}", name_template, i);
             let spec = format!("{} - iteration {}", spec_template, i);
-            task_mgr.add_task(&name, Some(&spec), None).await.unwrap();
+            task_mgr
+                .add_task(&name, Some(&spec), None, None)
+                .await
+                .unwrap();
         }
     }
 
@@ -580,6 +586,7 @@ async fn test_concurrent_search_performance() {
             .add_task(
                 &format!("{} task #{}", keyword, i),
                 Some(&format!("Implementation for {}", keyword)),
+                None,
                 None,
             )
             .await

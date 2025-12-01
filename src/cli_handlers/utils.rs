@@ -140,6 +140,7 @@ mod tests {
             first_doing_at: None,
             first_done_at: None,
             active_form: None,
+            owner: "human".to_string(),
         }
     }
 

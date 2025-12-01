@@ -21,17 +21,17 @@
 ///
 /// Used when fetching complete task data with specification.
 /// Columns: id, parent_id, name, spec, status, complexity, priority,
-///          first_todo_at, first_doing_at, first_done_at, active_form
+///          first_todo_at, first_doing_at, first_done_at, active_form, owner
 pub const TASK_COLUMNS: &str =
-    "id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form";
+    "id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner";
 
 /// Task column list without spec (uses NULL placeholder)
 ///
 /// Used when spec is not needed but schema compatibility is required.
 /// Columns: id, parent_id, name, NULL as spec, status, complexity, priority,
-///          first_todo_at, first_doing_at, first_done_at, active_form
+///          first_todo_at, first_doing_at, first_done_at, active_form, owner
 pub const TASK_COLUMNS_NO_SPEC: &str =
-    "id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form";
+    "id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner";
 
 /// Base SELECT query for tasks (with spec)
 ///
@@ -155,7 +155,7 @@ mod tests {
     fn test_select_task_full() {
         assert_eq!(
             SELECT_TASK_FULL,
-            "SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form FROM tasks"
+            "SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner FROM tasks"
         );
     }
 

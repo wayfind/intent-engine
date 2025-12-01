@@ -372,7 +372,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
         let event = event_mgr
             .add_event(task.id, "decision", "Test decision")
             .await
@@ -398,7 +401,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
 
         // Add multiple events
         event_mgr
@@ -432,7 +438,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
 
         // Add 5 events
         for i in 0..5 {
@@ -464,7 +473,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
 
         let events = event_mgr
             .list_events(Some(task.id), None, None, None)
@@ -479,7 +491,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
         let event = event_mgr
             .add_event(task.id, "decision", "Initial decision")
             .await
@@ -503,7 +518,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
         let event = event_mgr
             .add_event(task.id, "decision", "Initial decision")
             .await
@@ -538,7 +556,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
         let event = event_mgr
             .add_event(task.id, "decision", "To be deleted")
             .await
@@ -571,7 +592,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
 
         // Add events of different types
         event_mgr
@@ -603,8 +627,8 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
-        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+        let task1 = task_mgr.add_task("Task 1", None, None, None).await.unwrap();
+        let task2 = task_mgr.add_task("Task 2", None, None, None).await.unwrap();
 
         // Add events to both tasks
         event_mgr

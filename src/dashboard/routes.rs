@@ -19,6 +19,7 @@ pub fn api_routes() -> Router<AppState> {
         )
         .route("/tasks/:id/start", post(handlers::start_task))
         .route("/tasks/:id/spawn-subtask", post(handlers::spawn_subtask))
+        .route("/tasks/:id/context", get(handlers::get_task_context))
         // Task done is a global operation
         .route("/tasks/done", post(handlers::done_task))
         // Event routes

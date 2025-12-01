@@ -342,8 +342,9 @@ async fn handle_task_add(args: Value) -> Result<Value, String> {
     } else {
         TaskManager::new(&ctx.pool)
     };
+    // MCP creates AI-owned tasks - AI must provide passphrase to complete human tasks
     let task = task_mgr
-        .add_task(name, spec, parent_id)
+        .add_task(name, spec, parent_id, Some("ai"))
         .await
         .map_err(|e| format!("Failed to add task: {}", e))?;
 
@@ -497,10 +498,12 @@ async fn handle_task_done(args: Value) -> Result<Value, String> {
             .map_err(|e| format!("Failed to set current task: {}", e))?;
     }
 
+    // AI caller (MCP) - will fail for human-owned tasks
+    // Human tasks must be completed via CLI or Dashboard
     let task = task_mgr
-        .done_task()
+        .done_task(true) // true = AI caller (MCP)
         .await
-        .map_err(|e| format!("Failed to mark task as done: {}", e))?;
+        .map_err(|e| format!("{}", e))?;
 
     serde_json::to_value(&task).map_err(|e| format!("Serialization error: {}", e))
 }

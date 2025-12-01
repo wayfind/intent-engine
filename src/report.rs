@@ -51,7 +51,7 @@ impl<'a> ReportManager<'a> {
                 " AND id IN ({})",
                 task_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
             ));
-            let full_query = task_query.replace("SELECT id", "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form");
+            let full_query = task_query.replace("SELECT id", "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner");
             let mut q = sqlx::query_as::<_, Task>(&full_query);
             for cond in &task_conditions {
                 q = q.bind(cond);
@@ -61,7 +61,7 @@ impl<'a> ReportManager<'a> {
             }
             q.fetch_all(self.pool).await?
         } else if filter_name.is_none() && filter_spec.is_none() {
-            let full_query = task_query.replace("SELECT id", "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form");
+            let full_query = task_query.replace("SELECT id", "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner");
             let mut q = sqlx::query_as::<_, Task>(&full_query);
             for cond in &task_conditions {
                 q = q.bind(cond);
@@ -178,12 +178,21 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         // Create tasks with different statuses
-        task_mgr.add_task("Todo task", None, None).await.unwrap();
-        let doing = task_mgr.add_task("Doing task", None, None).await.unwrap();
+        task_mgr
+            .add_task("Todo task", None, None, None)
+            .await
+            .unwrap();
+        let doing = task_mgr
+            .add_task("Doing task", None, None, None)
+            .await
+            .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
-        let done = task_mgr.add_task("Done task", None, None).await.unwrap();
+        let done = task_mgr
+            .add_task("Done task", None, None, None)
+            .await
+            .unwrap();
         task_mgr.start_task(done.id, false).await.unwrap();
-        task_mgr.done_task().await.unwrap();
+        task_mgr.done_task(false).await.unwrap();
 
         let report = report_mgr
             .generate_report(None, None, None, None, true)
@@ -204,8 +213,8 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        task_mgr.add_task("Task 1", None, None).await.unwrap();
-        task_mgr.add_task("Task 2", None, None).await.unwrap();
+        task_mgr.add_task("Task 1", None, None, None).await.unwrap();
+        task_mgr.add_task("Task 2", None, None, None).await.unwrap();
 
         let report = report_mgr
             .generate_report(None, None, None, None, false)
@@ -222,8 +231,14 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        task_mgr.add_task("Todo task", None, None).await.unwrap();
-        let doing = task_mgr.add_task("Doing task", None, None).await.unwrap();
+        task_mgr
+            .add_task("Todo task", None, None, None)
+            .await
+            .unwrap();
+        let doing = task_mgr
+            .add_task("Doing task", None, None, None)
+            .await
+            .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
 
         let report = report_mgr
@@ -243,7 +258,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Task 1", None, None).await.unwrap();
+        let task = task_mgr.add_task("Task 1", None, None, None).await.unwrap();
         event_mgr
             .add_event(task.id, "decision", "Test event")
             .await
@@ -283,11 +298,11 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Authentication feature", None, None)
+            .add_task("Authentication feature", None, None, None)
             .await
             .unwrap();
         task_mgr
-            .add_task("Database migration", None, None)
+            .add_task("Database migration", None, None, None)
             .await
             .unwrap();
 
@@ -322,9 +337,9 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         // Create tasks with different statuses
-        task_mgr.add_task("Task A", None, None).await.unwrap();
-        task_mgr.add_task("Task B", None, None).await.unwrap();
-        let doing = task_mgr.add_task("Task C", None, None).await.unwrap();
+        task_mgr.add_task("Task A", None, None, None).await.unwrap();
+        task_mgr.add_task("Task B", None, None, None).await.unwrap();
+        let doing = task_mgr.add_task("Task C", None, None, None).await.unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
 
         // Filter with non-existent spec should return consistent summary
@@ -347,8 +362,14 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         // Create some tasks
-        task_mgr.add_task("Old task", None, None).await.unwrap();
-        task_mgr.add_task("Recent task", None, None).await.unwrap();
+        task_mgr
+            .add_task("Old task", None, None, None)
+            .await
+            .unwrap();
+        task_mgr
+            .add_task("Recent task", None, None, None)
+            .await
+            .unwrap();
 
         // Query with since parameter (should include all tasks created just now)
         let report = report_mgr
@@ -368,11 +389,16 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Task 1", Some("Implement authentication using JWT"), None)
+            .add_task(
+                "Task 1",
+                Some("Implement authentication using JWT"),
+                None,
+                None,
+            )
             .await
             .unwrap();
         task_mgr
-            .add_task("Task 2", Some("Setup database migrations"), None)
+            .add_task("Task 2", Some("Setup database migrations"), None, None)
             .await
             .unwrap();
 
@@ -392,8 +418,14 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        task_mgr.add_task("Todo task", None, None).await.unwrap();
-        let doing = task_mgr.add_task("Doing task", None, None).await.unwrap();
+        task_mgr
+            .add_task("Todo task", None, None, None)
+            .await
+            .unwrap();
+        let doing = task_mgr
+            .add_task("Doing task", None, None, None)
+            .await
+            .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
 
         // Filter by status + since
@@ -420,11 +452,16 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Feature A", Some("Implement JWT authentication"), None)
+            .add_task(
+                "Feature A",
+                Some("Implement JWT authentication"),
+                None,
+                None,
+            )
             .await
             .unwrap();
         task_mgr
-            .add_task("Feature B", Some("Setup OAuth2 integration"), None)
+            .add_task("Feature B", Some("Setup OAuth2 integration"), None, None)
             .await
             .unwrap();
 
@@ -443,13 +480,14 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Auth feature", Some("Implement authentication"), None)
+            .add_task("Auth feature", Some("Implement authentication"), None, None)
             .await
             .unwrap();
         task_mgr
             .add_task(
                 "Database setup",
                 Some("Configure authentication database"),
+                None,
                 None,
             )
             .await
@@ -484,7 +522,7 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        task_mgr.add_task("Task", None, None).await.unwrap();
+        task_mgr.add_task("Task", None, None, None).await.unwrap();
 
         let report = report_mgr
             .generate_report(Some("7d".to_string()), None, None, None, true)
@@ -503,7 +541,7 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        task_mgr.add_task("Task", None, None).await.unwrap();
+        task_mgr.add_task("Task", None, None, None).await.unwrap();
 
         let report = report_mgr
             .generate_report(None, None, None, None, true)
@@ -521,7 +559,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Task", None, None).await.unwrap();
+        let task = task_mgr.add_task("Task", None, None, None).await.unwrap();
         event_mgr
             .add_event(task.id, "decision", "Event 1")
             .await
@@ -555,11 +593,11 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Auth feature", Some("JWT implementation"), None)
+            .add_task("Auth feature", Some("JWT implementation"), None, None)
             .await
             .unwrap();
         let doing = task_mgr
-            .add_task("Auth testing", Some("Write JWT tests"), None)
+            .add_task("Auth testing", Some("Write JWT tests"), None, None)
             .await
             .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();

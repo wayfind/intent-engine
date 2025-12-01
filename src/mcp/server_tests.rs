@@ -258,7 +258,10 @@ mod handler_tests {
 
         // Create a task first
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({
             "task_id": task.id,
@@ -305,7 +308,10 @@ mod handler_tests {
 
         // Create and start a task
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
         task_mgr.start_task(task.id, false).await.unwrap();
 
         let args = json!({});
@@ -330,7 +336,10 @@ mod handler_tests {
 
         // Create and start a task
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
         task_mgr.start_task(task.id, false).await.unwrap();
 
         let args = json!({
@@ -348,8 +357,14 @@ mod handler_tests {
 
         // Create some tasks
         let task_mgr = TaskManager::new(ctx.pool());
-        task_mgr.add_task("Task 1", None, None).await.unwrap();
-        task_mgr.add_task("Task 2", None, None).await.unwrap();
+        task_mgr
+            .add_task("Task 1", None, None, Some("ai"))
+            .await
+            .unwrap();
+        task_mgr
+            .add_task("Task 2", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({});
         let result = handle_task_list(args).await;
@@ -367,8 +382,14 @@ mod handler_tests {
 
         // Create tasks with different statuses
         let task_mgr = TaskManager::new(ctx.pool());
-        task_mgr.add_task("Todo Task", None, None).await.unwrap();
-        let doing = task_mgr.add_task("Doing Task", None, None).await.unwrap();
+        task_mgr
+            .add_task("Todo Task", None, None, Some("ai"))
+            .await
+            .unwrap();
+        let doing = task_mgr
+            .add_task("Doing Task", None, None, Some("ai"))
+            .await
+            .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
 
         let args = json!({
@@ -391,7 +412,7 @@ mod handler_tests {
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr
-            .add_task("Test Task", Some("Test spec"), None)
+            .add_task("Test Task", Some("Test spec"), None, Some("ai"))
             .await
             .unwrap();
 
@@ -414,7 +435,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({
             "task_id": task.id,
@@ -443,7 +467,7 @@ mod handler_tests {
 
         let task_mgr = TaskManager::new(ctx.pool());
         let task = task_mgr
-            .add_task("Original Name", None, None)
+            .add_task("Original Name", None, None, Some("ai"))
             .await
             .unwrap();
 
@@ -478,7 +502,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({
             "task_id": task.id,
@@ -498,7 +525,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({
             "task_id": task.id,
@@ -516,7 +546,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({
             "task_id": task.id
@@ -548,7 +581,10 @@ mod handler_tests {
 
         // Create and start parent task
         let task_mgr = TaskManager::new(ctx.pool());
-        let parent = task_mgr.add_task("Parent Task", None, None).await.unwrap();
+        let parent = task_mgr
+            .add_task("Parent Task", None, None, Some("ai"))
+            .await
+            .unwrap();
         task_mgr.start_task(parent.id, false).await.unwrap();
 
         let args = json!({
@@ -585,7 +621,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        task_mgr.add_task("Todo Task", None, None).await.unwrap();
+        task_mgr
+            .add_task("Todo Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({});
         let result = handle_task_pick_next(args).await;
@@ -603,7 +642,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
         task_mgr.start_task(task.id, false).await.unwrap();
 
         let args = json!({
@@ -625,7 +667,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({
             "task_id": task.id,
@@ -668,7 +713,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         // Add some events
         let event_mgr = crate::events::EventManager::new(ctx.pool());
@@ -699,7 +747,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         // Add events
         let event_mgr = crate::events::EventManager::new(ctx.pool());
@@ -735,8 +786,14 @@ mod handler_tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         // Create tasks and events
-        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
-        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+        let task1 = task_mgr
+            .add_task("Task 1", None, None, Some("ai"))
+            .await
+            .unwrap();
+        let task2 = task_mgr
+            .add_task("Task 2", None, None, Some("ai"))
+            .await
+            .unwrap();
         event_mgr
             .add_event(task1.id, "decision", "Decision 1")
             .await
@@ -775,7 +832,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
         task_mgr.start_task(task.id, false).await.unwrap();
 
         let args = json!({});
@@ -795,8 +855,14 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        task_mgr.add_task("Task 1", None, None).await.unwrap();
-        task_mgr.add_task("Task 2", None, None).await.unwrap();
+        task_mgr
+            .add_task("Task 1", None, None, Some("ai"))
+            .await
+            .unwrap();
+        task_mgr
+            .add_task("Task 2", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({
             "summary_only": true
@@ -830,7 +896,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({
             "task_id": task.id
@@ -849,7 +918,10 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
         task_mgr.start_task(task.id, false).await.unwrap();
 
         // No task_id in args, should use current task
@@ -876,8 +948,14 @@ mod handler_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
-        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+        let task1 = task_mgr
+            .add_task("Task 1", None, None, Some("ai"))
+            .await
+            .unwrap();
+        let task2 = task_mgr
+            .add_task("Task 2", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         let args = json!({
             "blocking_task_id": task1.id,
@@ -1066,10 +1144,16 @@ mod edge_case_tests {
 
         // Create top-level and child tasks
         let task_mgr = TaskManager::new(ctx.pool());
-        task_mgr.add_task("Top Level", None, None).await.unwrap();
-        let parent = task_mgr.add_task("Parent", None, None).await.unwrap();
         task_mgr
-            .add_task("Child", None, Some(parent.id))
+            .add_task("Top Level", None, None, Some("ai"))
+            .await
+            .unwrap();
+        let parent = task_mgr
+            .add_task("Parent", None, None, Some("ai"))
+            .await
+            .unwrap();
+        task_mgr
+            .add_task("Child", None, Some(parent.id), None)
             .await
             .unwrap();
 
@@ -1095,7 +1179,10 @@ mod edge_case_tests {
         let (ctx, _guard) = setup_test_env().await;
 
         let task_mgr = TaskManager::new(ctx.pool());
-        let task = task_mgr.add_task("Test Task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test Task", None, None, Some("ai"))
+            .await
+            .unwrap();
 
         // with_events should default to true
         let args = json!({

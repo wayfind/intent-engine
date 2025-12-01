@@ -43,7 +43,7 @@ async fn test_focus_switch_from_none() {
     let mgr = TaskManager::new(&pool);
 
     // Create a task
-    mgr.add_task("Task A", None, None).await.unwrap();
+    mgr.add_task("Task A", None, None, None).await.unwrap();
 
     // Verify no current focus
     assert_eq!(get_current_task_id(&pool).await, None);
@@ -65,8 +65,8 @@ async fn test_focus_switch_between_tasks() {
     let mgr = TaskManager::new(&pool);
 
     // Create two tasks
-    mgr.add_task("Task A", None, None).await.unwrap();
-    mgr.add_task("Task B", None, None).await.unwrap();
+    mgr.add_task("Task A", None, None, None).await.unwrap();
+    mgr.add_task("Task B", None, None, None).await.unwrap();
 
     // Start Task A
     mgr.start_task(1, false).await.unwrap();
@@ -102,9 +102,9 @@ async fn test_paused_state_is_derived() {
     let mgr = TaskManager::new(&pool);
 
     // Create 3 tasks
-    mgr.add_task("Task A", None, None).await.unwrap();
-    mgr.add_task("Task B", None, None).await.unwrap();
-    mgr.add_task("Task C", None, None).await.unwrap();
+    mgr.add_task("Task A", None, None, None).await.unwrap();
+    mgr.add_task("Task B", None, None, None).await.unwrap();
+    mgr.add_task("Task C", None, None, None).await.unwrap();
 
     // Start all three in sequence
     mgr.start_task(1, false).await.unwrap();
@@ -145,8 +145,8 @@ async fn test_resume_paused_task() {
     let mgr = TaskManager::new(&pool);
 
     // Create two tasks
-    mgr.add_task("Task A", None, None).await.unwrap();
-    mgr.add_task("Task B", None, None).await.unwrap();
+    mgr.add_task("Task A", None, None, None).await.unwrap();
+    mgr.add_task("Task B", None, None, None).await.unwrap();
 
     // Start A, then B (A becomes paused)
     mgr.start_task(1, false).await.unwrap();
@@ -174,7 +174,7 @@ async fn test_start_already_focused_task() {
     let (_temp_dir, pool) = setup_test_db().await;
     let mgr = TaskManager::new(&pool);
 
-    mgr.add_task("Task A", None, None).await.unwrap();
+    mgr.add_task("Task A", None, None, None).await.unwrap();
 
     // Start task
     mgr.start_task(1, false).await.unwrap();
@@ -201,9 +201,9 @@ async fn test_focus_with_parent_child_cascade() {
     let mgr = TaskManager::new(&pool);
 
     // Create parent-child hierarchy
-    mgr.add_task("Parent", None, None).await.unwrap();
-    mgr.add_task("Child A", None, Some(1)).await.unwrap();
-    mgr.add_task("Child B", None, Some(1)).await.unwrap();
+    mgr.add_task("Parent", None, None, None).await.unwrap();
+    mgr.add_task("Child A", None, Some(1), None).await.unwrap();
+    mgr.add_task("Child B", None, Some(1), None).await.unwrap();
 
     // Start Child A (parent won't cascade - feature not implemented)
     mgr.start_task(2, false).await.unwrap();
@@ -239,7 +239,7 @@ async fn test_multiple_paused_tasks() {
 
     // Create 5 tasks
     for i in 1..=5 {
-        mgr.add_task(&format!("Task {}", i), None, None)
+        mgr.add_task(&format!("Task {}", i), None, None, None)
             .await
             .unwrap();
     }
@@ -282,9 +282,9 @@ async fn test_done_removes_from_paused_pool() {
     let mgr = TaskManager::new(&pool);
 
     // Create 3 tasks
-    mgr.add_task("Task A", None, None).await.unwrap();
-    mgr.add_task("Task B", None, None).await.unwrap();
-    mgr.add_task("Task C", None, None).await.unwrap();
+    mgr.add_task("Task A", None, None, None).await.unwrap();
+    mgr.add_task("Task B", None, None, None).await.unwrap();
+    mgr.add_task("Task C", None, None, None).await.unwrap();
 
     // Start all three
     mgr.start_task(1, false).await.unwrap();
@@ -295,7 +295,7 @@ async fn test_done_removes_from_paused_pool() {
     assert_eq!(get_current_task_id(&pool).await, Some(3));
 
     // Complete Task 3
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     let task_c = mgr.get_task(3).await.unwrap();
     assert_eq!(task_c.status, "done");

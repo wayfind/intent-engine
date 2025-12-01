@@ -22,7 +22,9 @@ pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
                 None
             };
 
-            let task = task_mgr.add_task(&name, spec.as_deref(), parent).await?;
+            let task = task_mgr
+                .add_task(&name, spec.as_deref(), parent, None)
+                .await?; // None = human (CLI)
             println!("{}", serde_json::to_string_pretty(&task)?);
         },
 
@@ -144,7 +146,7 @@ pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             let ctx = ProjectContext::load_or_init().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
 
-            let task = task_mgr.done_task().await?;
+            let task = task_mgr.done_task(false).await?; // false = human caller (CLI)
             println!("{}", serde_json::to_string_pretty(&task)?);
         },
 

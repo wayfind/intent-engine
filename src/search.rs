@@ -205,7 +205,8 @@ impl<'a> SearchManager<'a> {
                         first_todo_at,
                         first_doing_at,
                         first_done_at,
-                        active_form
+                        active_form,
+                        owner
                     FROM tasks
                     WHERE name LIKE ? OR spec LIKE ?
                     {}
@@ -235,6 +236,7 @@ impl<'a> SearchManager<'a> {
                         first_doing_at: row.get("first_doing_at"),
                         first_done_at: row.get("first_done_at"),
                         active_form: row.get("active_form"),
+                        owner: row.get("owner"),
                     };
 
                     // Determine match field and create snippet
@@ -354,6 +356,7 @@ impl<'a> SearchManager<'a> {
                     t.first_doing_at,
                     t.first_done_at,
                     t.active_form,
+                    t.owner,
                     COALESCE(
                         snippet(tasks_fts, 1, '**', '**', '...', 15),
                         snippet(tasks_fts, 0, '**', '**', '...', 15)
@@ -388,6 +391,7 @@ impl<'a> SearchManager<'a> {
                         first_doing_at: row.get("first_doing_at"),
                         first_done_at: row.get("first_done_at"),
                         active_form: row.get("active_form"),
+                        owner: row.get("owner"),
                     };
                     let match_snippet: String = row.get("match_snippet");
                     let rank: f64 = row.get("rank");

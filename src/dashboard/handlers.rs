@@ -109,8 +109,9 @@ pub async fn create_task(
     );
 
     // Note: add_task doesn't support priority - it's set separately via update_task
+    // Dashboard creates human-owned tasks (None = human)
     let result = task_mgr
-        .add_task(&req.name, req.spec.as_deref(), req.parent_id)
+        .add_task(&req.name, req.spec.as_deref(), req.parent_id, None)
         .await;
 
     match result {
@@ -295,7 +296,8 @@ pub async fn done_task(State(state): State<AppState>) -> impl IntoResponse {
         project_path,
     );
 
-    match task_mgr.done_task().await {
+    // Dashboard = human caller, no passphrase needed
+    match task_mgr.done_task(false).await {
         Ok(task) => (StatusCode::OK, Json(ApiResponse { data: task })).into_response(),
         Err(e) if e.to_string().contains("No current task") => (
             StatusCode::BAD_REQUEST,
@@ -802,4 +804,35 @@ pub async fn switch_project(
         }),
     )
         .into_response()
+}
+
+/// Get task context (ancestors, siblings, children)
+pub async fn get_task_context(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    let db_pool = state.current_project.read().await.db_pool.clone();
+    let task_mgr = TaskManager::new(&db_pool);
+
+    match task_mgr.get_task_context(id).await {
+        Ok(context) => (StatusCode::OK, Json(ApiResponse { data: context })).into_response(),
+        Err(e) if e.to_string().contains("not found") => (
+            StatusCode::NOT_FOUND,
+            Json(ApiError {
+                code: "TASK_NOT_FOUND".to_string(),
+                message: format!("Task {} not found", id),
+                details: None,
+            }),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiError {
+                code: "DATABASE_ERROR".to_string(),
+                message: format!("Failed to get task context: {}", e),
+                details: None,
+            }),
+        )
+            .into_response(),
+    }
 }

@@ -10,6 +10,26 @@ pub struct Dependency {
     pub created_at: DateTime<Utc>,
 }
 
+/// Task approval record for human task authorization
+/// AI must provide the passphrase to complete a human-owned task
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct TaskApproval {
+    pub id: i64,
+    pub task_id: i64,
+    pub passphrase: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// Response for creating a task approval
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApprovalResponse {
+    pub task_id: i64,
+    pub passphrase: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Task {
     pub id: i64,
@@ -29,6 +49,14 @@ pub struct Task {
     /// Example: "Implementing authentication" vs "Implement authentication"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_form: Option<String>,
+    /// Task owner: 'human' (created via CLI/Dashboard) or 'ai' (created via MCP)
+    /// Human tasks require passphrase authorization for AI to complete
+    #[serde(default = "default_owner")]
+    pub owner: String,
+}
+
+fn default_owner() -> String {
+    "human".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -391,6 +419,7 @@ mod tests {
             first_doing_at: None,
             first_done_at: None,
             active_form: None,
+            owner: "human".to_string(),
         }
     }
 

@@ -196,10 +196,15 @@
     },
     {
       "name": "task_done",
-      "description": "# Core Duty\nCompletes the CURRENTLY FOCUSED task. This is the exit point of the focus-driven workflow.\n\n# Tactical Guide\nThis is a strictly focus-driven atomic command with **NO ID parameter**. It operates ONLY on the current_task_id. Call it only when:\n- All objectives in the task spec are fully met\n- All subtasks have status 'done'\n- You have verified completion\n\n**The operation:**\n1. Verifies all subtasks are done (fails if not)\n2. Sets current task status to 'done'\n3. Clears current_task_id (unfocuses)\n4. Returns next_step_suggestion\n\n**Important:** Do NOT try to pass a task_id parameter. This command has NO parameters.",
+      "description": "# Core Duty\nCompletes the CURRENTLY FOCUSED task. This is the exit point of the focus-driven workflow.\n\n# Tactical Guide\nThis is a strictly focus-driven atomic command. It operates ONLY on the current_task_id. Call it only when:\n- All objectives in the task spec are fully met\n- All subtasks have status 'done'\n- You have verified completion\n\n**The operation:**\n1. Verifies all subtasks are done (fails if not)\n2. For human-owned tasks: verifies passphrase if provided by AI\n3. Sets current task status to 'done'\n4. Clears current_task_id (unfocuses)\n5. Returns next_step_suggestion\n\n**Human Task Protection:**\nTasks created by humans (via CLI/Dashboard) are protected. AI agents must provide a valid passphrase to complete them. Use `ie task approve <ID>` to generate a passphrase.\n\n**Important:** Do NOT pass a task_id parameter. Only passphrase is accepted for AI authorization.",
       "inputSchema": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "passphrase": {
+            "type": "string",
+            "description": "Authorization passphrase for completing human-owned tasks. Required for AI agents to complete tasks created by humans. Obtain from 'ie task approve <ID>' command. Not needed for AI-created tasks."
+          }
+        },
         "additionalProperties": false
       }
     },

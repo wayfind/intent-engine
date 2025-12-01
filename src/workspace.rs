@@ -31,7 +31,7 @@ impl<'a> WorkspaceManager<'a> {
         let task = if let Some(id) = current_task_id {
             sqlx::query_as::<_, Task>(
                 r#"
-                SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form
+                SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner
                 FROM tasks
                 WHERE id = ?
                 "#,
@@ -99,7 +99,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
 
         let response = workspace_mgr.set_current_task(task.id).await.unwrap();
 
@@ -123,8 +126,8 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
-        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
-        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+        let task1 = task_mgr.add_task("Task 1", None, None, None).await.unwrap();
+        let task2 = task_mgr.add_task("Task 2", None, None, None).await.unwrap();
 
         // Set task1 as current
         workspace_mgr.set_current_task(task1.id).await.unwrap();
@@ -142,7 +145,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
         workspace_mgr.set_current_task(task.id).await.unwrap();
 
         let response = workspace_mgr.get_current_task().await.unwrap();
@@ -157,7 +163,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
         let response = workspace_mgr.set_current_task(task.id).await.unwrap();
 
         // Should serialize to JSON without errors
@@ -206,7 +215,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
         workspace_mgr.set_current_task(task.id).await.unwrap();
 
         // Delete the task
@@ -226,7 +238,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", Some("Task spec"), None)
+            .add_task("Test task", Some("Task spec"), None, None)
             .await
             .unwrap();
 
@@ -246,7 +258,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
 
         // Set the same task multiple times (idempotent)
         workspace_mgr.set_current_task(task.id).await.unwrap();
@@ -262,8 +277,8 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
-        let task1 = task_mgr.add_task("Task 1", None, None).await.unwrap();
-        let task2 = task_mgr.add_task("Task 2", None, None).await.unwrap();
+        let task1 = task_mgr.add_task("Task 1", None, None, None).await.unwrap();
+        let task2 = task_mgr.add_task("Task 2", None, None, None).await.unwrap();
 
         workspace_mgr.set_current_task(task1.id).await.unwrap();
         workspace_mgr.set_current_task(task2.id).await.unwrap();
@@ -285,7 +300,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Test task", None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Test task", None, None, None)
+            .await
+            .unwrap();
         workspace_mgr.set_current_task(task.id).await.unwrap();
 
         // Change task status

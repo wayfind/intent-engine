@@ -30,7 +30,7 @@ async fn test_chinese_single_char_search() {
 
     // 创建任务
     task_mgr
-        .add_task("实现用户认证功能", Some("使用JWT实现登录"), None)
+        .add_task("实现用户认证功能", Some("使用JWT实现登录"), None, None)
         .await
         .unwrap();
 
@@ -79,12 +79,18 @@ async fn test_chinese_two_char_search() {
     let task_mgr = TaskManager::new(&pool);
     let search_mgr = SearchManager::new(&pool);
 
-    task_mgr.add_task("实现用户认证", None, None).await.unwrap();
     task_mgr
-        .add_task("添加数据库索引", None, None)
+        .add_task("实现用户认证", None, None, None)
         .await
         .unwrap();
-    task_mgr.add_task("优化查询性能", None, None).await.unwrap();
+    task_mgr
+        .add_task("添加数据库索引", None, None, None)
+        .await
+        .unwrap();
+    task_mgr
+        .add_task("优化查询性能", None, None, None)
+        .await
+        .unwrap();
 
     // 测试常见双字词
     let test_cases = vec![
@@ -129,11 +135,21 @@ async fn test_chinese_multi_char_search() {
     let search_mgr = SearchManager::new(&pool);
 
     task_mgr
-        .add_task("实现JWT用户认证功能", Some("基于Token的认证机制"), None)
+        .add_task(
+            "实现JWT用户认证功能",
+            Some("基于Token的认证机制"),
+            None,
+            None,
+        )
         .await
         .unwrap();
     task_mgr
-        .add_task("优化数据库查询性能", Some("添加索引提升查询速度"), None)
+        .add_task(
+            "优化数据库查询性能",
+            Some("添加索引提升查询速度"),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -192,15 +208,15 @@ async fn test_mixed_language_search() {
     let search_mgr = SearchManager::new(&pool);
 
     task_mgr
-        .add_task("实现JWT认证", Some("JSON Web Token认证"), None)
+        .add_task("实现JWT认证", Some("JSON Web Token认证"), None, None)
         .await
         .unwrap();
     task_mgr
-        .add_task("添加API接口", Some("RESTful API设计"), None)
+        .add_task("添加API接口", Some("RESTful API设计"), None, None)
         .await
         .unwrap();
     task_mgr
-        .add_task("配置OAuth2流程", None, None)
+        .add_task("配置OAuth2流程", None, None, None)
         .await
         .unwrap();
 
@@ -270,11 +286,11 @@ async fn test_japanese_search() {
     let search_mgr = SearchManager::new(&pool);
 
     task_mgr
-        .add_task("ユーザー認証を実装", Some("JWTトークンを使用"), None)
+        .add_task("ユーザー認証を実装", Some("JWTトークンを使用"), None, None)
         .await
         .unwrap();
     task_mgr
-        .add_task("データベース索引", Some("性能向上"), None)
+        .add_task("データベース索引", Some("性能向上"), None, None)
         .await
         .unwrap();
 
@@ -330,7 +346,7 @@ async fn test_edge_cases() {
 
     // 标点符号
     task_mgr
-        .add_task("实现：用户认证", None, None)
+        .add_task("实现：用户认证", None, None, None)
         .await
         .unwrap();
     let results = search_mgr
@@ -342,7 +358,7 @@ async fn test_edge_cases() {
 
     // 数字混合
     task_mgr
-        .add_task("实现OAuth2认证", None, None)
+        .add_task("实现OAuth2认证", None, None, None)
         .await
         .unwrap();
     let results = search_mgr
@@ -354,7 +370,7 @@ async fn test_edge_cases() {
 
     // 空格
     task_mgr
-        .add_task("实现 用户 认证", None, None)
+        .add_task("实现 用户 认证", None, None, None)
         .await
         .unwrap();
     let results = search_mgr
@@ -366,7 +382,7 @@ async fn test_edge_cases() {
 
     // Spec中的搜索
     task_mgr
-        .add_task("任务标题", Some("描述中包含用户信息"), None)
+        .add_task("任务标题", Some("描述中包含用户信息"), None, None)
         .await
         .unwrap();
     let results = search_mgr
@@ -393,6 +409,7 @@ async fn test_search_performance() {
             .add_task(
                 &format!("任务{}: 实现功能{}", i, i % 10),
                 Some(&format!("这是任务{}的详细说明，包含各种关键词", i)),
+                None,
                 None,
             )
             .await
@@ -438,7 +455,10 @@ async fn test_empty_and_special_queries() {
     let task_mgr = TaskManager::new(&pool);
     let search_mgr = SearchManager::new(&pool);
 
-    task_mgr.add_task("测试任务", None, None).await.unwrap();
+    task_mgr
+        .add_task("测试任务", None, None, None)
+        .await
+        .unwrap();
 
     // 空查询
     let results = search_mgr.search("", true, false, None, None, false).await;
@@ -464,7 +484,7 @@ async fn test_case_sensitivity() {
     let search_mgr = SearchManager::new(&pool);
 
     task_mgr
-        .add_task("Implement API", None, None)
+        .add_task("Implement API", None, None, None)
         .await
         .unwrap();
 
@@ -491,7 +511,7 @@ async fn test_korean_search() {
     let search_mgr = SearchManager::new(&pool);
 
     task_mgr
-        .add_task("사용자 인증 구현", Some("JWT 토큰 사용"), None)
+        .add_task("사용자 인증 구현", Some("JWT 토큰 사용"), None, None)
         .await
         .unwrap();
 

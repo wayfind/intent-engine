@@ -26,7 +26,7 @@ async fn test_deep_task_hierarchy() {
     let mut parent_id = None;
     for i in 0..depth {
         let task = task_mgr
-            .add_task(&format!("Level {}", i), None, parent_id)
+            .add_task(&format!("Level {}", i), None, parent_id, None)
             .await
             .unwrap();
         parent_id = Some(task.id);
@@ -56,7 +56,7 @@ async fn test_very_deep_task_hierarchy() {
     let mut parent_id = None;
     for i in 0..depth {
         let task = task_mgr
-            .add_task(&format!("Level {}", i), None, parent_id)
+            .add_task(&format!("Level {}", i), None, parent_id, None)
             .await
             .unwrap();
         parent_id = Some(task.id);
@@ -79,7 +79,7 @@ async fn test_massive_tasks_10k() {
     // Create 10,000 tasks
     for i in 0..count {
         task_mgr
-            .add_task(&format!("Task {}", i), None, None)
+            .add_task(&format!("Task {}", i), None, None, None)
             .await
             .unwrap();
     }
@@ -115,7 +115,7 @@ async fn test_massive_tasks_50k() {
     // Batch insert for better performance
     for i in 0..count {
         task_mgr
-            .add_task(&format!("Task {}", i), None, None)
+            .add_task(&format!("Task {}", i), None, None, None)
             .await
             .unwrap();
 
@@ -155,7 +155,7 @@ async fn test_massive_events() {
     let event_mgr = EventManager::new(&pool);
 
     let task = task_mgr
-        .add_task("Task with many events", None, None)
+        .add_task("Task with many events", None, None, None)
         .await
         .unwrap();
 
@@ -195,7 +195,10 @@ async fn test_wide_task_hierarchy() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
 
-    let parent = task_mgr.add_task("Parent task", None, None).await.unwrap();
+    let parent = task_mgr
+        .add_task("Parent task", None, None, None)
+        .await
+        .unwrap();
 
     let children_count = 1000;
     let start = Instant::now();
@@ -203,7 +206,7 @@ async fn test_wide_task_hierarchy() {
     // Create 1000 children under one parent
     for i in 0..children_count {
         task_mgr
-            .add_task(&format!("Child {}", i), None, Some(parent.id))
+            .add_task(&format!("Child {}", i), None, Some(parent.id), None)
             .await
             .unwrap();
     }
@@ -247,7 +250,7 @@ async fn test_fts5_search_performance() {
     for i in 0..count {
         let keyword = keywords[i % keywords.len()];
         task_mgr
-            .add_task(&format!("{} feature {}", keyword, i), None, None)
+            .add_task(&format!("{} feature {}", keyword, i), None, None, None)
             .await
             .unwrap();
     }
@@ -288,7 +291,7 @@ async fn test_report_generation_performance() {
     // Create diverse workload
     for i in 0..task_count {
         let task = task_mgr
-            .add_task(&format!("Task {}", i), None, None)
+            .add_task(&format!("Task {}", i), None, None, None)
             .await
             .unwrap();
 
@@ -308,7 +311,7 @@ async fn test_report_generation_performance() {
             },
             2 => {
                 task_mgr.start_task(task.id, false).await.unwrap();
-                task_mgr.done_task().await.unwrap();
+                task_mgr.done_task(false).await.unwrap();
             },
             _ => {},
         }
@@ -358,12 +361,12 @@ async fn test_concurrent_task_operations() {
             // Each task does multiple operations
             for j in 0..10 {
                 let task = task_mgr
-                    .add_task(&format!("Task {}-{}", i, j), None, None)
+                    .add_task(&format!("Task {}-{}", i, j), None, None, None)
                     .await
                     .unwrap();
 
                 task_mgr.start_task(task.id, false).await.unwrap();
-                task_mgr.done_task().await.unwrap();
+                task_mgr.done_task(false).await.unwrap();
             }
         });
         handles.push(handle);
@@ -401,13 +404,13 @@ async fn test_stress_task_state_transitions() {
     // Create tasks and cycle through all states
     for i in 0..count {
         let task = task_mgr
-            .add_task(&format!("Task {}", i), None, None)
+            .add_task(&format!("Task {}", i), None, None, None)
             .await
             .unwrap();
 
         // todo -> doing -> done
         task_mgr.start_task(task.id, false).await.unwrap();
-        task_mgr.done_task().await.unwrap();
+        task_mgr.done_task(false).await.unwrap();
     }
 
     let elapsed = start.elapsed();

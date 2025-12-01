@@ -36,6 +36,9 @@ pub enum IntentError {
     #[error("Current directory is not an Intent-Engine project")]
     NotAProject,
 
+    #[error("⛔ HUMAN TASK - AI CANNOT COMPLETE ⛔\n\nTask #{task_id} '{task_name}' was created by a human and can ONLY be completed by a human.\n\n🔹 Please ask the user to complete this task using:\n   • Dashboard: Click the 'Complete' button on task #{task_id}\n   • CLI: Run 'ie task done' while task #{task_id} is focused\n\n⚠️ AI agents are NOT permitted to complete human-created tasks.")]
+    HumanTaskCannotBeCompletedByAI { task_id: i64, task_name: String },
+
     #[error("JSON serialization error: {0}")]
     JsonError(#[from] serde_json::Error),
 
@@ -60,6 +63,7 @@ impl IntentError {
             IntentError::ActionNotAllowed(_) => "ACTION_NOT_ALLOWED",
             IntentError::UncompletedChildren => "UNCOMPLETED_CHILDREN",
             IntentError::NotAProject => "NOT_A_PROJECT",
+            IntentError::HumanTaskCannotBeCompletedByAI { .. } => "HUMAN_TASK_PROTECTED",
             _ => "INTERNAL_ERROR",
         }
     }

@@ -9,7 +9,21 @@ export interface Task {
     priority: number | null
     parent_id: number | null
     created_at: string
+    owner: 'human' | 'ai'
     // ... other fields
+}
+
+export interface ApprovalResponse {
+    task_id: number
+    passphrase: string
+    expires_at: string | null
+}
+
+export interface ApprovalStatus {
+    has_approval: boolean
+    task_id: number
+    created_at?: string
+    expires_at?: string | null
 }
 
 export interface Event {
@@ -513,6 +527,49 @@ export const useAppStore = defineStore('app', () => {
         }
     }
 
+    // Human Task Protection: Approval methods
+    async function createApproval(taskId: number, expiresInHours?: number): Promise<ApprovalResponse | null> {
+        try {
+            const res = await fetch(`/api/tasks/${taskId}/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expires_in_hours: expiresInHours })
+            })
+            if (!res.ok) throw new Error('Failed to create approval')
+            const json = await res.json()
+            return json.data as ApprovalResponse
+        } catch (e) {
+            console.error('Failed to create approval:', e)
+            lastError.value = (e as Error).message
+            return null
+        }
+    }
+
+    async function revokeApproval(taskId: number): Promise<boolean> {
+        try {
+            const res = await fetch(`/api/tasks/${taskId}/approve`, {
+                method: 'DELETE'
+            })
+            return res.ok || res.status === 204
+        } catch (e) {
+            console.error('Failed to revoke approval:', e)
+            lastError.value = (e as Error).message
+            return false
+        }
+    }
+
+    async function getApprovalStatus(taskId: number): Promise<ApprovalStatus | null> {
+        try {
+            const res = await fetch(`/api/tasks/${taskId}/approve`)
+            if (!res.ok) throw new Error('Failed to get approval status')
+            const json = await res.json()
+            return json.data as ApprovalStatus
+        } catch (e) {
+            console.error('Failed to get approval status:', e)
+            return null
+        }
+    }
+
     async function pickNextTask() {
         try {
             const response = await fetch('/api/tasks/next')
@@ -585,6 +642,9 @@ export const useAppStore = defineStore('app', () => {
         addEvent,
         updateEvent,
         deleteEvent,
+        createApproval,
+        revokeApproval,
+        getApprovalStatus,
         pickNextTask,
         search,
         switchProject,

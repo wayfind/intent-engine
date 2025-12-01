@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useAppStore } from '../stores/appStore'
+import { useAppStore, type ApprovalResponse } from '../stores/appStore'
 import { useI18n } from '../composables/useI18n'
 import InPlaceEditor from './InPlaceEditor.vue'
 import ModalDialog from './ModalDialog.vue'
 import TaskForm from './TaskForm.vue'
 import MarkdownRenderer from './MarkdownRenderer.vue'
-import { Trash2, GitBranch, Play, Square, ChevronDown, RotateCcw, Signal } from 'lucide-vue-next'
+import { Trash2, GitBranch, Play, Square, ChevronDown, RotateCcw, Signal, User, Bot, Key } from 'lucide-vue-next'
+import DebugMenu from './DebugMenu.vue'
 
 const store = useAppStore()
 const { t } = useI18n()
@@ -17,6 +18,9 @@ let priorityDropdownTimer: any = null
 const isIdDropdownOpen = ref(false)
 let idDropdownTimer: any = null
 const showSubtaskModal = ref(false)
+const showApprovalModal = ref(false)
+const currentApproval = ref<ApprovalResponse | null>(null)
+const isGeneratingApproval = ref(false)
 
 function updateName(newName: string) {
   if (!task.value) return
@@ -110,6 +114,26 @@ async function createSubtask(data: { name: string, parentId: number | null, prio
   if (!task.value) return
   await store.addTask(data.name, task.value.id, data.priority, data.spec)
   showSubtaskModal.value = false
+}
+
+async function generateApproval() {
+  if (!task.value) return
+  isGeneratingApproval.value = true
+  try {
+    const approval = await store.createApproval(task.value.id)
+    if (approval) {
+      currentApproval.value = approval
+      showApprovalModal.value = true
+    }
+  } finally {
+    isGeneratingApproval.value = false
+  }
+}
+
+function copyPassphrase() {
+  if (currentApproval.value) {
+    navigator.clipboard.writeText(currentApproval.value.passphrase)
+  }
 }
 </script>
 
@@ -291,6 +315,39 @@ async function createSubtask(data: { name: string, parentId: number | null, prio
             </div>
           </div>
 
+          <!-- Owner Badge -->
+          <div class="flex items-center gap-2">
+            <div
+              class="flex items-center gap-1.5 text-xs font-mono bg-sci-base border border-sci-border rounded-sm px-3 h-7"
+              :class="{
+                'text-sci-cyan border-sci-cyan/30': task.owner === 'human',
+                'text-sci-purple border-sci-purple/30': task.owner === 'ai'
+              }"
+            >
+              <User v-if="task.owner === 'human'" class="w-3.5 h-3.5" />
+              <Bot v-else class="w-3.5 h-3.5" />
+              <span class="uppercase tracking-wider font-bold">{{ task.owner || 'HUMAN' }}</span>
+            </div>
+
+            <!-- Authorize AI Button (only for human-owned tasks) -->
+            <button
+              v-if="task.owner === 'human' || !task.owner"
+              @click="generateApproval"
+              :disabled="isGeneratingApproval"
+              class="flex items-center gap-1.5 text-xs font-mono bg-sci-base border border-sci-border rounded-sm px-3 h-7 hover:bg-sci-panel-hover hover:border-sci-cyan hover:text-sci-cyan transition-all"
+              :class="{ 'opacity-50 cursor-wait': isGeneratingApproval }"
+            >
+              <Key class="w-3.5 h-3.5" />
+              <span class="uppercase tracking-wider">{{ isGeneratingApproval ? 'GENERATING...' : 'AUTHORIZE AI' }}</span>
+            </button>
+          </div>
+
+          <!-- Spacer to push debug to right -->
+          <div class="flex-1"></div>
+
+          <!-- Debug Menu (only on port 3000) -->
+          <DebugMenu v-if="task" :task-id="task.id" />
+
           </div>
 
         
@@ -328,19 +385,61 @@ async function createSubtask(data: { name: string, parentId: number | null, prio
     </div>
 
     <!-- Subtask Modal -->
-    <ModalDialog 
-      :is-open="showSubtaskModal" 
+    <ModalDialog
+      :is-open="showSubtaskModal"
       :title="t('SPAWN_SUBTASK')"
       size="4xl"
       @close="showSubtaskModal = false"
     >
-      <TaskForm 
+      <TaskForm
         v-if="task"
         :parent-id="task.id"
         :parent-name="task.name"
         @submit="createSubtask"
         @cancel="showSubtaskModal = false"
       />
+    </ModalDialog>
+
+    <!-- Approval Passphrase Modal -->
+    <ModalDialog
+      :is-open="showApprovalModal"
+      title="AI Authorization Passphrase"
+      size="md"
+      @close="showApprovalModal = false; currentApproval = null"
+    >
+      <div v-if="currentApproval" class="space-y-6">
+        <p class="text-sm text-sci-text-dim">
+          Share this passphrase with your AI agent to authorize task completion.
+          The passphrase is one-time use and will be consumed upon successful verification.
+        </p>
+
+        <div class="bg-sci-panel border border-sci-border rounded-lg p-6 text-center">
+          <p class="text-xs text-sci-text-dim uppercase tracking-wider mb-2">Passphrase</p>
+          <p class="text-4xl font-mono font-bold text-sci-cyan tracking-[0.3em] select-all">
+            {{ currentApproval.passphrase }}
+          </p>
+        </div>
+
+        <div class="flex justify-center gap-4">
+          <button
+            @click="copyPassphrase"
+            class="flex items-center gap-2 px-4 py-2 bg-sci-cyan/10 border border-sci-cyan/30 text-sci-cyan rounded-md hover:bg-sci-cyan/20 transition-colors font-mono text-sm"
+          >
+            <Key class="w-4 h-4" />
+            Copy to Clipboard
+          </button>
+          <button
+            @click="showApprovalModal = false; currentApproval = null"
+            class="px-4 py-2 bg-sci-panel border border-sci-border text-sci-text-dim rounded-md hover:bg-sci-panel-hover transition-colors font-mono text-sm"
+          >
+            Close
+          </button>
+        </div>
+
+        <p v-if="currentApproval.expires_at" class="text-xs text-sci-text-dim text-center">
+          Expires: {{ new Date(currentApproval.expires_at).toLocaleString() }}
+        </p>
+      </div>
     </ModalDialog>
   </div>
   

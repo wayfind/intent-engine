@@ -205,7 +205,9 @@ async fn run(cli: &Cli) -> Result<()> {
         } => {
             let ctx = ProjectContext::load_or_init().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
-            let mut task = task_mgr.add_task(&name, spec.as_deref(), parent).await?;
+            let mut task = task_mgr
+                .add_task(&name, spec.as_deref(), parent, None)
+                .await?; // None = human (CLI)
 
             // Update priority if specified
             if let Some(priority_str) = priority {
@@ -230,7 +232,7 @@ async fn run(cli: &Cli) -> Result<()> {
         Commands::Done => {
             let ctx = ProjectContext::load_or_init().await?;
             let task_mgr = TaskManager::new(&ctx.pool);
-            let task = task_mgr.done_task().await?;
+            let task = task_mgr.done_task(false).await?; // false = human caller (CLI)
             println!("{}", serde_json::to_string_pretty(&task)?);
         },
 

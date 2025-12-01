@@ -47,12 +47,12 @@ async fn test_doing_cascade_single_level() {
     let mgr = TaskManager::new(&pool);
 
     // Create parent task (id=1, status=todo)
-    mgr.add_task("Parent Task", Some("Parent task spec"), None)
+    mgr.add_task("Parent Task", Some("Parent task spec"), None, None)
         .await
         .unwrap();
 
     // Create child task (id=2, status=todo)
-    mgr.add_task("Child Task", Some("Child task spec"), Some(1))
+    mgr.add_task("Child Task", Some("Child task spec"), Some(1), None)
         .await
         .unwrap();
 
@@ -88,9 +88,9 @@ async fn test_doing_cascade_multi_level() {
     let mgr = TaskManager::new(&pool);
 
     // Create task hierarchy
-    mgr.add_task("Grandparent", None, None).await.unwrap();
-    mgr.add_task("Parent", None, Some(1)).await.unwrap();
-    mgr.add_task("Child", None, Some(2)).await.unwrap();
+    mgr.add_task("Grandparent", None, None, None).await.unwrap();
+    mgr.add_task("Parent", None, Some(1), None).await.unwrap();
+    mgr.add_task("Child", None, Some(2), None).await.unwrap();
 
     // Start the deepest child (id=3)
     mgr.start_task(3, false).await.unwrap();
@@ -117,9 +117,9 @@ async fn test_doing_cascade_skip_already_doing() {
     let mgr = TaskManager::new(&pool);
 
     // Create hierarchy
-    mgr.add_task("Parent", None, None).await.unwrap();
-    mgr.add_task("Child1", None, Some(1)).await.unwrap();
-    mgr.add_task("Child2", None, Some(1)).await.unwrap();
+    mgr.add_task("Parent", None, None, None).await.unwrap();
+    mgr.add_task("Child1", None, Some(1), None).await.unwrap();
+    mgr.add_task("Child2", None, Some(1), None).await.unwrap();
 
     // Start first child (parent becomes 'doing')
     mgr.start_task(2, false).await.unwrap();
@@ -128,7 +128,7 @@ async fn test_doing_cascade_skip_already_doing() {
     assert_eq!(parent_first.status, "doing");
 
     // Complete first child
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     // Start second child - parent should already be 'doing', no issue
     mgr.start_task(3, false).await.unwrap();
@@ -148,12 +148,12 @@ async fn test_done_cascade_single_level() {
     let mgr = TaskManager::new(&pool);
 
     // Create parent with one child
-    mgr.add_task("Parent", None, None).await.unwrap();
-    mgr.add_task("Child", None, Some(1)).await.unwrap();
+    mgr.add_task("Parent", None, None, None).await.unwrap();
+    mgr.add_task("Child", None, Some(1), None).await.unwrap();
 
     // Start and complete child
     mgr.start_task(2, false).await.unwrap();
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     // Verify cascade: parent should auto-complete
     let child = mgr.get_task(2).await.unwrap();
@@ -174,13 +174,13 @@ async fn test_done_cascade_multi_level() {
     let mgr = TaskManager::new(&pool);
 
     // Create 3-level hierarchy
-    mgr.add_task("Grandparent", None, None).await.unwrap();
-    mgr.add_task("Parent", None, Some(1)).await.unwrap();
-    mgr.add_task("Child", None, Some(2)).await.unwrap();
+    mgr.add_task("Grandparent", None, None, None).await.unwrap();
+    mgr.add_task("Parent", None, Some(1), None).await.unwrap();
+    mgr.add_task("Child", None, Some(2), None).await.unwrap();
 
     // Complete the child
     mgr.start_task(3, false).await.unwrap();
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     // All should cascade to 'done'
     let child = mgr.get_task(3).await.unwrap();
@@ -204,13 +204,13 @@ async fn test_done_cascade_stops_with_incomplete_siblings() {
     let mgr = TaskManager::new(&pool);
 
     // Create parent with 2 children
-    mgr.add_task("Parent", None, None).await.unwrap();
-    mgr.add_task("Child1", None, Some(1)).await.unwrap();
-    mgr.add_task("Child2", None, Some(1)).await.unwrap();
+    mgr.add_task("Parent", None, None, None).await.unwrap();
+    mgr.add_task("Child1", None, Some(1), None).await.unwrap();
+    mgr.add_task("Child2", None, Some(1), None).await.unwrap();
 
     // Complete only first child
     mgr.start_task(2, false).await.unwrap();
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     // Parent should NOT cascade to 'done' (child2 still todo)
     let child1 = mgr.get_task(2).await.unwrap();
@@ -227,7 +227,7 @@ async fn test_done_cascade_stops_with_incomplete_siblings() {
 
     // Now complete second child
     mgr.start_task(3, false).await.unwrap();
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     // NOW parent should cascade to 'done'
     let parent_final = mgr.get_task(1).await.unwrap();
@@ -252,16 +252,16 @@ async fn test_done_cascade_complex_tree() {
     let mgr = TaskManager::new(&pool);
 
     // Create the tree
-    mgr.add_task("Grandparent", None, None).await.unwrap(); // id=1
-    mgr.add_task("Parent1", None, Some(1)).await.unwrap(); // id=2
-    mgr.add_task("Child1-1", None, Some(2)).await.unwrap(); // id=3
-    mgr.add_task("Child1-2", None, Some(2)).await.unwrap(); // id=4
-    mgr.add_task("Parent2", None, Some(1)).await.unwrap(); // id=5
-    mgr.add_task("Child2-1", None, Some(5)).await.unwrap(); // id=6
+    mgr.add_task("Grandparent", None, None, None).await.unwrap(); // id=1
+    mgr.add_task("Parent1", None, Some(1), None).await.unwrap(); // id=2
+    mgr.add_task("Child1-1", None, Some(2), None).await.unwrap(); // id=3
+    mgr.add_task("Child1-2", None, Some(2), None).await.unwrap(); // id=4
+    mgr.add_task("Parent2", None, Some(1), None).await.unwrap(); // id=5
+    mgr.add_task("Child2-1", None, Some(5), None).await.unwrap(); // id=6
 
     // Complete Child1-1 (id=3)
     mgr.start_task(3, false).await.unwrap();
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     // Parent1 should NOT cascade (Child1-2 incomplete)
     let parent1 = mgr.get_task(2).await.unwrap();
@@ -269,7 +269,7 @@ async fn test_done_cascade_complex_tree() {
 
     // Complete Child1-2 (id=4)
     mgr.start_task(4, false).await.unwrap();
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     // Parent1 should NOW cascade to 'done'
     let parent1_done = mgr.get_task(2).await.unwrap();
@@ -281,7 +281,7 @@ async fn test_done_cascade_complex_tree() {
 
     // Complete Child2-1 (id=6)
     mgr.start_task(6, false).await.unwrap();
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     // Parent2 should cascade
     let parent2 = mgr.get_task(5).await.unwrap();
@@ -303,8 +303,8 @@ async fn test_combined_doing_and_done_cascade() {
     let mgr = TaskManager::new(&pool);
 
     // Create 2-level hierarchy
-    mgr.add_task("Parent", None, None).await.unwrap();
-    mgr.add_task("Child", None, Some(1)).await.unwrap();
+    mgr.add_task("Parent", None, None, None).await.unwrap();
+    mgr.add_task("Child", None, Some(1), None).await.unwrap();
 
     // Initially both 'todo'
     let parent = mgr.get_task(1).await.unwrap();
@@ -321,7 +321,7 @@ async fn test_combined_doing_and_done_cascade() {
     assert_eq!(child_doing.status, "doing");
 
     // Complete child - triggers done cascade
-    mgr.done_task().await.unwrap();
+    mgr.done_task(false).await.unwrap();
 
     let parent_done = mgr.get_task(1).await.unwrap();
     let child_done = mgr.get_task(2).await.unwrap();
