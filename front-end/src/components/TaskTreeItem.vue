@@ -68,8 +68,13 @@ const activeClass = computed(() => {
         <Square v-else class="w-[18px] h-[18px] text-sci-text-dim" />
       </div>
       
-      <span 
-        class="text-xs font-mono truncate flex-1 z-10 transition-colors" 
+      <!-- Task ID -->
+      <span class="text-[10px] font-mono text-sci-text-dim opacity-60 shrink-0">
+        #{{ props.node.id }}
+      </span>
+
+      <span
+        class="text-xs font-mono truncate flex-1 z-10 transition-colors"
         :class="[
           props.node.priority === 1 ? 'text-sci-danger' : '',
           props.node.priority === 2 ? 'text-sci-orange' : '',

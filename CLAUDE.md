@@ -420,3 +420,4 @@ Intent-Engine is designed for **strategic intent tracking**, not tactical todo l
 ---
 
 *End of CLAUDE.md*
+- 把前端启动在1393端口、后端启动在3000端口的开发模式，及其执行命令的细节，记忆下来，每次我说开启本地开发环境，指的就是这两个端口配合。
