@@ -196,7 +196,8 @@ cargo tarpaulin --out Html
 - ✅ **已完成**:
   - pick_next_blocking_tests.rs (7 tests, 272 lines)
   - priority_and_list_tests.rs (8 tests, 266 lines)
-- 📊 **覆盖率**: 380 library 测试 + 15 重写测试
+  - task_edge_cases_tests.rs (12 tests, 296 lines)
+- 📊 **覆盖率**: 380 library 测试 + 27 重写测试
 
 ## 参考
 

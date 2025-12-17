@@ -1,371 +1,295 @@
-// Tests in this file use CLI commands removed in v0.10.0
-// v0.10.0 simplified CLI to just: plan, log, search
-// These tests are kept for reference but disabled by default
-#![cfg(feature = "test-removed-cli-commands")]
+//! Tests for task edge cases and error handling
+//!
+//! These tests verify error handling and boundary conditions for task operations.
+//! The tests use library functions directly rather than CLI commands.
 
-/// Edge case tests for task commands
-/// Focuses on error handling and boundary conditions
-mod common;
+mod test_helpers_rewrite;
 
-use predicates::prelude::*;
+use intent_engine::{
+    dependencies, priority::PriorityLevel, tasks::TaskManager, workspace::WorkspaceManager,
+};
+use test_helpers_rewrite::TestDb;
 
 // ============================================================================
 // Invalid Task ID Tests
 // ============================================================================
 
-#[test]
-fn test_task_get_nonexistent_id() {
-    let temp_dir = common::setup_test_env();
-    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
-    cmd.arg("task").arg("get").arg("99999");
+/// Test getting a non-existent task returns error
+#[tokio::test]
+async fn test_task_get_nonexistent_id() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("Task not found"));
+    // Try to get task with ID that doesn't exist
+    let result = manager.get_task(99999).await;
+
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Task not found"));
 }
 
-#[test]
-fn test_task_update_nonexistent_id() {
-    let temp_dir = common::setup_test_env();
-    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
+/// Test updating a non-existent task returns error
+#[tokio::test]
+async fn test_task_update_nonexistent_id() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    cmd.arg("task")
-        .arg("update")
-        .arg("99999")
-        .arg("--name")
-        .arg("New Name");
+    // Try to update task with ID that doesn't exist
+    let result = manager
+        .update_task(99999, Some("New Name"), None, None, None, None, None)
+        .await;
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("Task not found"));
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Task not found"));
 }
 
-#[test]
-fn test_task_delete_nonexistent_id() {
-    let temp_dir = common::setup_test_env();
-    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
-    cmd.arg("task").arg("del").arg("99999");
+/// Test deleting a non-existent task returns error
+#[tokio::test]
+async fn test_task_delete_nonexistent_id() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("Task not found"));
+    // Try to delete task with ID that doesn't exist
+    let result = manager.delete_task(99999).await;
+
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Task not found"));
 }
 
-#[test]
-fn test_task_start_nonexistent_id() {
-    let temp_dir = common::setup_test_env();
-    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
-    cmd.arg("task").arg("start").arg("99999");
+/// Test starting a non-existent task returns error
+#[tokio::test]
+async fn test_task_start_nonexistent_id() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("Task not found"));
-}
+    // Try to start task with ID that doesn't exist
+    let result = manager.start_task(99999, false).await;
 
-// ============================================================================
-// Empty/Invalid Input Tests
-// ============================================================================
-
-#[test]
-#[ignore]
-fn test_task_add_whitespace_only_name() {
-    let temp_dir = common::setup_test_env();
-    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
-
-    cmd.arg("task").arg("add").arg("--name").arg("   ");
-
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("Task name cannot be empty"));
-}
-
-#[test]
-#[ignore]
-fn test_task_update_empty_name() {
-    let temp_dir = common::setup_test_env();
-
-    // First create a task
-    let mut add_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    add_cmd
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Test Task");
-    add_cmd.assert().success();
-
-    // Try to update with empty name
-    let mut update_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    update_cmd
-        .arg("task")
-        .arg("update")
-        .arg("1")
-        .arg("--name")
-        .arg("");
-
-    update_cmd
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("Task name cannot be empty"));
-}
-
-// ============================================================================
-// Task State Transition Tests
-// ============================================================================
-
-#[test]
-#[ignore]
-fn test_task_done_without_current_task() {
-    let temp_dir = common::setup_test_env();
-    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
-
-    cmd.arg("task").arg("done");
-
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("No task is currently focused"));
-}
-
-#[test]
-#[ignore]
-fn test_task_done_with_uncompleted_children_via_cli() {
-    let temp_dir = common::setup_test_env();
-
-    // Create parent task
-    let mut add_parent = common::ie_command_with_project_dir(temp_dir.path());
-    add_parent
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Parent Task");
-    add_parent.assert().success();
-
-    // Create child task
-    let mut add_child = common::ie_command_with_project_dir(temp_dir.path());
-    add_child
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Child Task")
-        .arg("--parent")
-        .arg("1");
-    add_child.assert().success();
-
-    // Start parent task
-    let mut start_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    start_cmd.assert().success();
-
-    // Try to complete parent without completing child
-    let mut done_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    done_cmd.arg("task").arg("done");
-
-    done_cmd
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("has uncompleted children"));
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Task not found"));
 }
 
 // ============================================================================
 // Dependency Tests
 // ============================================================================
 
-#[test]
-fn test_task_depends_on_self() {
-    let temp_dir = common::setup_test_env();
+/// Test that creating a self-dependency is rejected
+#[tokio::test]
+async fn test_task_depends_on_self() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
     // Create a task
-    let mut add_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    add_cmd.arg("task").arg("add").arg("--name").arg("Task 1");
-    add_cmd.assert().success();
+    let task = manager
+        .add_task("Task 1", None, None, Some("human"))
+        .await
+        .unwrap();
 
     // Try to create self-dependency
-    let mut dep_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    dep_cmd.arg("task").arg("depends-on").arg("1").arg("1");
+    let result = dependencies::add_dependency(db.pool(), task.id, task.id).await;
 
-    dep_cmd
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("Circular dependency detected"));
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Circular dependency detected"));
 }
 
-#[test]
-fn test_task_circular_dependency_detection() {
-    let temp_dir = common::setup_test_env();
+/// Test that circular dependencies are detected and rejected
+#[tokio::test]
+async fn test_task_circular_dependency_detection() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
     // Create three tasks
-    for i in 1..=3 {
-        let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
-        cmd.arg("task")
-            .arg("add")
-            .arg("--name")
-            .arg(format!("Task {}", i));
-        cmd.assert().success();
-    }
+    let task1 = manager
+        .add_task("Task 1", None, None, Some("human"))
+        .await
+        .unwrap();
+    let task2 = manager
+        .add_task("Task 2", None, None, Some("human"))
+        .await
+        .unwrap();
+    let task3 = manager
+        .add_task("Task 3", None, None, Some("human"))
+        .await
+        .unwrap();
 
     // Create dependencies: 1 -> 2 -> 3
-    let mut dep1 = common::ie_command_with_project_dir(temp_dir.path());
-    dep1.arg("task").arg("depends-on").arg("1").arg("2");
-    dep1.assert().success();
-
-    let mut dep2 = common::ie_command_with_project_dir(temp_dir.path());
-    dep2.arg("task").arg("depends-on").arg("2").arg("3");
-    dep2.assert().success();
+    dependencies::add_dependency(db.pool(), task1.id, task2.id)
+        .await
+        .unwrap();
+    dependencies::add_dependency(db.pool(), task2.id, task3.id)
+        .await
+        .unwrap();
 
     // Try to create circular dependency: 3 -> 1
-    let mut dep3 = common::ie_command_with_project_dir(temp_dir.path());
-    dep3.arg("task").arg("depends-on").arg("3").arg("1");
+    let result = dependencies::add_dependency(db.pool(), task3.id, task1.id).await;
 
-    dep3.assert()
-        .failure()
-        .stderr(predicate::str::contains("Circular dependency detected"));
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Circular dependency detected"));
 }
 
-#[test]
-fn test_task_depends_on_nonexistent_task() {
-    let temp_dir = common::setup_test_env();
+/// Test that creating dependency with non-existent task is rejected
+#[tokio::test]
+async fn test_task_depends_on_nonexistent_task() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
     // Create one task
-    let mut add_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    add_cmd.arg("task").arg("add").arg("--name").arg("Task 1");
-    add_cmd.assert().success();
+    let task = manager
+        .add_task("Task 1", None, None, Some("human"))
+        .await
+        .unwrap();
 
-    // Try to create dependency with nonexistent task
-    let mut dep_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    dep_cmd.arg("task").arg("depends-on").arg("1").arg("99999");
+    // Try to create dependency with non-existent task
+    let result = dependencies::add_dependency(db.pool(), task.id, 99999).await;
 
-    dep_cmd
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("Task not found"));
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("Task not found"));
 }
 
 // ============================================================================
-// Spawn Subtask Edge Cases
+// Priority Edge Cases
 // ============================================================================
 
-#[test]
-#[ignore]
-fn test_spawn_subtask_without_current_task() {
-    let temp_dir = common::setup_test_env();
-    let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
-
-    cmd.arg("task")
-        .arg("spawn-subtask")
-        .arg("--name")
-        .arg("Subtask");
-
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("No task is currently focused"));
-}
-
-#[test]
-#[ignore]
-fn test_spawn_subtask_with_empty_name() {
-    let temp_dir = common::setup_test_env();
-
-    // Create and start a task
-    let mut add_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    add_cmd.arg("task").arg("add").arg("--name").arg("Parent");
-    add_cmd.assert().success();
-
-    let mut start_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    start_cmd.assert().success();
-
-    // Try to spawn subtask with empty name
-    let mut spawn_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    spawn_cmd
-        .arg("task")
-        .arg("spawn-subtask")
-        .arg("--name")
-        .arg("");
-
-    spawn_cmd
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("Task name cannot be empty"));
-}
-
-// ============================================================================
-// Priority and Complexity Edge Cases
-// ============================================================================
-
-#[test]
-fn test_task_update_invalid_priority() {
-    let temp_dir = common::setup_test_env();
+/// Test that invalid priority strings are rejected
+#[tokio::test]
+async fn test_task_update_invalid_priority() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
     // Create a task
-    let mut add_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    add_cmd
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Test Task");
-    add_cmd.assert().success();
+    let task = manager
+        .add_task("Test Task", None, None, Some("human"))
+        .await
+        .unwrap();
 
-    // Try to update with invalid priority
-    let mut update_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    update_cmd
-        .arg("task")
-        .arg("update")
-        .arg("1")
-        .arg("--priority")
-        .arg("invalid");
+    // Try to parse invalid priority (this should fail at parse stage)
+    let result = PriorityLevel::parse_to_int("invalid");
 
-    update_cmd
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("Invalid priority"));
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Invalid priority"));
+
+    // Verify task still exists and wasn't modified
+    let retrieved = manager.get_task(task.id).await.unwrap();
+    assert_eq!(retrieved.name, "Test Task");
 }
 
 // ============================================================================
 // Pick Next Edge Cases
 // ============================================================================
 
-#[test]
-fn test_pick_next_with_multiple_tasks() {
-    let temp_dir = common::setup_test_env();
+/// Test pick_next with multiple available tasks
+#[tokio::test]
+async fn test_pick_next_with_multiple_tasks() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    // Create some tasks
-    for i in 1..=3 {
-        let mut cmd = common::ie_command_with_project_dir(temp_dir.path());
-        cmd.arg("task")
-            .arg("add")
-            .arg("--name")
-            .arg(format!("Task {}", i));
-        cmd.assert().success();
-    }
+    // Create multiple tasks
+    let task1 = manager
+        .add_task("Task 1", None, None, Some("human"))
+        .await
+        .unwrap();
+    manager
+        .add_task("Task 2", None, None, Some("human"))
+        .await
+        .unwrap();
+    manager
+        .add_task("Task 3", None, None, Some("human"))
+        .await
+        .unwrap();
 
-    // Pick next should recommend one task
-    let mut pick_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    pick_cmd.arg("task").arg("pick-next");
+    // Pick next should recommend task1 (first created)
+    let result = manager.pick_next().await.unwrap();
 
-    pick_cmd.assert().success();
+    assert!(result.task.is_some());
+    assert_eq!(result.task.unwrap().id, task1.id);
 }
 
-#[test]
-#[ignore]
-fn test_pick_next_with_all_tasks_completed() {
-    let temp_dir = common::setup_test_env();
+/// Test pick_next when all tasks are completed
+#[tokio::test]
+async fn test_pick_next_with_all_tasks_completed() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    // Create, start, and complete a task
-    let mut add_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    add_cmd.arg("task").arg("add").arg("--name").arg("Task 1");
-    add_cmd.assert().success();
+    // Create a task
+    let task = manager
+        .add_task("Task 1", None, None, Some("human"))
+        .await
+        .unwrap();
 
-    let mut start_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    start_cmd.arg("task").arg("start").arg("1");
-    start_cmd.assert().success();
+    // Start and complete the task
+    manager.start_task(task.id, false).await.unwrap();
+    manager.done_task(false).await.unwrap();
 
-    let mut done_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    done_cmd.arg("task").arg("done");
-    done_cmd.assert().success();
+    // Pick next should return None (no tasks available)
+    let result = manager.pick_next().await.unwrap();
 
-    // Try to pick next
-    let mut pick_cmd = common::ie_command_with_project_dir(temp_dir.path());
-    pick_cmd.arg("task").arg("pick-next");
+    assert!(result.task.is_none());
+    assert_eq!(result.suggestion_type, "NONE");
+}
 
-    pick_cmd
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("all tasks completed"));
+// ============================================================================
+// Task State Transition Tests
+// ============================================================================
+
+/// Test that completing parent task with incomplete children fails
+#[tokio::test]
+async fn test_task_done_with_uncompleted_children() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
+
+    // Create parent task
+    let parent = manager
+        .add_task("Parent Task", None, None, Some("human"))
+        .await
+        .unwrap();
+
+    // Create child task
+    manager
+        .add_task("Child Task", None, Some(parent.id), Some("human"))
+        .await
+        .unwrap();
+
+    // Start parent task
+    manager.start_task(parent.id, false).await.unwrap();
+
+    // Try to complete parent without completing child
+    let result = manager.done_task(false).await;
+
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        error.to_string().contains("has uncompleted children")
+            || error
+                .to_string()
+                .contains("Cannot complete task with incomplete subtasks")
+            || error.to_string().contains("Uncompleted children")
+    );
+}
+
+/// Test that calling done_task without a focused task fails
+#[tokio::test]
+async fn test_task_done_without_current_task() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
+    let workspace = WorkspaceManager::new(db.pool());
+
+    // Ensure no task is focused
+    let current = workspace.get_current_task().await.unwrap();
+    assert!(current.current_task_id.is_none());
+
+    // Try to complete without a focused task
+    let result = manager.done_task(false).await;
+
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        error.to_string().contains("No task is currently focused")
+            || error.to_string().contains("No current task")
+    );
 }
