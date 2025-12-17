@@ -1,4 +1,8 @@
 #![allow(deprecated)]
+// Tests in this file use CLI commands removed in v0.10.0
+// v0.10.0 simplified CLI to just: plan, log, search
+// These tests are kept for reference but disabled by default
+#![cfg(feature = "test-removed-cli-commands")]
 
 use assert_cmd::cargo;
 /// CLI integration tests for special characters
