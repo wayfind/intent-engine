@@ -6,571 +6,335 @@
 [![codecov](https://codecov.io/gh/wayfind/intent-engine/branch/main/graph/badge.svg)](https://codecov.io/gh/wayfind/intent-engine)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
-[![Documentation](https://docs.rs/intent-engine/badge.svg)](https://docs.rs/intent-engine)
-
-**Intent-Engine is a minimalist, project-specific strategic intent tracking system designed for human-AI collaboration.**
-
-It's not just another todo list—it's a bridge connecting human strategic thinking with AI execution capabilities, helping answer two critical questions: "Where are we going?" and "Why are we going there?"
 
 ---
 
-## 🎯 What is it?
+## What is this?
 
-Intent-Engine is a CLI tool + database system for recording, tracking, and reviewing **strategic intents**. It provides a shared, traceable "intent layer" for human-AI collaboration.
+**Intent-Engine is AI's external long-term memory.**
 
-**Core Features:**
-- 📝 **Strategic Task Management**: Focus on What and Why, not just How
-- 🧠 **AI's External Long-term Memory**: Persist decision history and context across sessions
-- 🌳 **Hierarchical Problem Decomposition**: Support unlimited levels of parent-child task relationships
-- 📊 **Structured Decision Tracking**: Every key decision is recorded as an event stream
-- 🔄 **JSON-native Interface**: Perfect for AI tool integration
-- ⚡ **Declarative Task Planning** (v0.6): Batch create/update task structures with idempotent `plan` interface
+Think of it as a **shared notebook** between you and AI assistants (like Claude), where:
+- You write down **strategic goals** ("Build authentication system")
+- AI writes down **decisions** ("Chose JWT because...")
+- Both of you can **pick up where you left off** - days or weeks later
 
----
+```
+┌─────────────────────────────────────────────────────────┐
+│  Without Intent-Engine                                  │
+├─────────────────────────────────────────────────────────┤
+│  You: "Let's build authentication"                      │
+│  AI:  "Sure!" [builds something]                        │
+│  --- Next day ---                                       │
+│  You: "Continue authentication"                         │
+│  AI:  "What authentication? Starting from scratch..."   │
+└─────────────────────────────────────────────────────────┘
 
-## 👥 Who is it for?
-
-### Primary Users
-
-1. **Human Developers**: Set strategic goals and record project intentions
-2. **AI Agents**: Understand objectives, execute tasks, and document decision processes
-3. **Human-AI Collaboration Teams**: Maintain context synchronization in long-term projects
-
-### Use Cases
-
-- ✅ Complex projects requiring AI to work continuously across multiple sessions
-- ✅ Technical projects needing to trace "why this decision was made"
-- ✅ System engineering requiring decomposition of large tasks into subtask trees
-- ✅ Automated processes where AI autonomously manages work priorities
-
----
-
-## 💡 What problems does it solve?
-
-### Value for Humans
-
-**Problems with Traditional Task Management Tools (Jira/Linear):**
-- ❌ Focus on tactical execution (Sprints, Story Points), lacking strategic layer
-- ❌ Require extensive manual maintenance (status updates, comments)
-- ❌ Not suitable for AI integration (primarily Web UI)
-
-**Intent-Engine's Solution:**
-- ✅ Strategic intent layer: Each task includes complete **specifications (spec)** and **decision history (events)**
-- ✅ Automation-friendly: AI can autonomously create, update, and switch tasks
-- ✅ CLI + JSON: Perfect AI toolchain integration
-
-### Value for AI
-
-**Limitations of Claude Code TodoWrite:**
-- ❌ **Session-level**: Only exists in current conversation, disappears when session ends
-- ❌ **No History**: Cannot trace previous decisions and thought processes
-- ❌ **Flat Structure**: Lacks hierarchical relationships, difficult to manage complex tasks
-
-**Intent-Engine's Advantages:**
-- ✅ **Project-level**: Persisted to SQLite database, permanently saved across sessions
-- ✅ **Traceable**: Complete event stream records context of every decision
-- ✅ **Hierarchical**: Task tree structure, enforces completing all subtasks before parent task
-- ✅ **Atomic Operations**: Commands like `start`, `pick-next`, `spawn-subtask`, `switch` save 50-70% tokens
+┌─────────────────────────────────────────────────────────┐
+│  With Intent-Engine                                     │
+├─────────────────────────────────────────────────────────┤
+│  You: "Let's build authentication"                      │
+│  AI:  "Sure!" [creates task, builds, records decisions] │
+│  --- Next day ---                                       │
+│  You: "Continue authentication"                         │
+│  AI:  [reads task history] "Resuming... we chose JWT,  │
+│       implemented basic auth, next: OAuth2 integration" │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 📊 Essential Differences from Other Tools
+## Why do I need this?
 
-| Dimension | Intent-Engine | Claude Code TodoWrite | Jira/Linear |
-|-----------|---------------|----------------------|-------------|
-| **Core Philosophy** | Strategic intent layer: What + Why | Tactical execution layer: What (temporary) | Task tracking layer: What + When |
-| **Primary Users** | Humans ↔ AI (bidirectional) | AI internal use (unidirectional) | Human teams (collaborative) |
-| **Lifecycle** | Project-level (cross-session, persistent) | Session-level (temporary, volatile) | Project-level (persistent) |
-| **Data Structure** | Task tree + Event stream + Specifications | Flat list (no hierarchy) | Workflows + Fields + Comments |
-| **History Tracing** | ✅ Complete decision history (events) | ❌ No history | ⚠️ Has comments but no structured decisions |
-| **Interaction Mode** | CLI + JSON (AI-friendly) | Tool Call (AI-specific) | Web UI (human-friendly) |
-| **Granularity** | Coarse-grained (strategic milestones) | Fine-grained (current steps) | Medium-grained (Sprint tasks) |
-| **Core Value** | AI's external long-term memory | AI's working memory (short-term) | Team work coordination |
+### 🤔 The Problem
 
-### Typical Use Case Comparison
+AI agents (Claude, GPT, etc.) are **stateless** - they forget everything when the chat ends:
+- ❌ You can't ask AI to "continue that feature from last week"
+- ❌ You can't see **why** AI made certain decisions
+- ❌ Complex projects become a mess of copy-pasting old conversations
 
-**Intent-Engine:** "Implement user authentication system" (includes complete technical specs, decision history, subtask tree)
-- Lifecycle: Days to weeks
-- AI can resume context anytime via `task start --with-events` and continue working
+### ✅ The Solution
 
-**TodoWrite:** "Modify auth.rs file" (temporary step in current session)
-- Lifecycle: Current session
-- Disappears after session ends, cannot be recovered
-
-**Jira:** "PROJ-123: Add OAuth2 support" (specific task assigned to team)
-- Lifecycle: One Sprint (1-2 weeks)
-- Requires manual status and progress updates
+Intent-Engine gives AI a **persistent memory** stored on your computer:
+- ✅ AI remembers what you were building and why
+- ✅ Every decision is tracked with context
+- ✅ You can pause work, come back anytime, and AI picks up instantly
 
 ---
 
-## 🚀 Quick Start
+## Show me how it works
 
-### 1. Installation
+### Installation (30 seconds)
 
 ```bash
-# Method 1: Cargo Install (Recommended)
+# Install via Cargo (Rust package manager)
 cargo install intent-engine
 
-# Method 2: Download Pre-compiled Binary
-# Visit https://github.com/wayfind/intent-engine/releases
+# Or download binary from releases
+# https://github.com/wayfind/intent-engine/releases
 
-# Verify Installation
+# Verify installation
 ie --version
 ```
 
-> 📖 **Detailed Installation Guide**: See [INSTALLATION.md](docs/en/guide/installation.md) for all installation methods, troubleshooting, and integration options.
+### Example: Building Authentication (3 steps)
 
-### 2. Experience Core Features in 5 Minutes
-
-```bash
-# 1. Add a strategic task
-echo "Implement JWT authentication with token refresh, 7-day validity" | \
-  ie task add --name "Implement user authentication" --spec-stdin
-
-# 2. Start task and view context
-ie task start 1 --with-events
-
-# 3. Discover sub-problem during work? Create subtask and auto-switch
-ie task spawn-subtask --name "Configure JWT secret key"
-
-# 4. Record key decision (subtask is now current task)
-echo "Chose HS256 algorithm, store secret in environment variables" | \
-  ie event add --type decision --data-stdin
-
-# 5. Complete subtask
-ie task done
-
-# 6. Switch back to parent task and complete
-ie task switch 1
-ie task done
-
-# 7. Generate work report
-ie report --since 1d --summary-only
-```
-
-### 3. Declarative Task Planning (v0.6)
-
-Create complex task structures in one go using the `plan` interface:
+**Step 1: Tell AI what to build**
 
 ```bash
-# Create task structure from JSON
-cat > project.json <<'JSON'
+ie plan << 'JSON'
 {
-  "tasks": [
-    {
-      "name": "Implement user authentication",
-      "spec": "JWT + OAuth2 support",
-      "priority": "high",
-      "children": [
-        {
-          "name": "JWT Implementation",
-          "spec": "HS256 algorithm, 7-day validity"
-        },
-        {
-          "name": "OAuth2 Integration",
-          "spec": "Google and GitHub providers",
-          "depends_on": ["JWT Implementation"]
-        }
-      ]
-    }
-  ]
+  "tasks": [{
+    "name": "Build user authentication",
+    "spec": "JWT tokens, OAuth2 support, 7-day session lifetime",
+    "children": [
+      {"name": "Implement JWT"},
+      {"name": "Add OAuth2"}
+    ]
+  }]
 }
 JSON
-
-# Execute the plan (creates all tasks + dependencies)
-ie plan < project.json
-
-# Start working on a specific task
-ie task start 2  # JWT Implementation task
 ```
 
-**Key Benefits:**
-- ✅ Batch create entire task trees
-- ✅ Idempotent: run multiple times → same result
-- ✅ Name-based dependencies (no manual ID management)
-- ✅ Automatic cycle detection
+**Step 2: AI starts working and records decisions**
 
-> 📖 **Full Plan Interface Guide**: See [docs/PLAN_INTERFACE_GUIDE.md](docs/PLAN_INTERFACE_GUIDE.md)
+```bash
+# AI (or you) can start a task
+ie start 1  # Starts "Build user authentication"
 
-> 💡 **More Detailed Tutorial**: See [QUICKSTART.md](QUICKSTART.en.md)
+# While working, AI records key decisions
+ie log decision "Chose HS256 algorithm for JWT signing"
+ie log decision "Store tokens in httpOnly cookies for security"
+```
+
+**Step 3: Resume work anytime**
+
+```bash
+# Days later, you or AI can pick up exactly where you left off
+ie start 1  # Loads task + full decision history
+# AI now knows: what was built, why, and what's next
+```
 
 ---
 
-## 🤖 Claude Code Integration: Zero-Configuration AI Collaboration
+## Integration with AI Assistants
 
-**New in v0.10.0**: Intent-Engine now integrates seamlessly with Claude Code through an embedded system prompt - **no configuration required**.
+### Works with Claude Code (Zero Configuration!)
 
-### Why This Approach?
+If you use **Claude Code** (Anthropic's official CLI), Intent-Engine works **out of the box**:
 
-**Previous MCP Approach (v0.9.x)** vs **System Prompt (v0.10.0)**:
+1. Install Intent-Engine (see above)
+2. Chat with Claude in your project
+3. Say: *"Let's use Intent-Engine to track our work"*
+4. Claude automatically creates tasks, logs decisions, and resumes work
 
-| Aspect | MCP Server (Old) | System Prompt (New) |
-|--------|------------------|---------------------|
-| **Setup Complexity** | Manual JSON configuration | Zero configuration |
-| **Installation** | Multi-step process | Single binary install |
-| **Maintenance** | Restart required for updates | Automatic |
-| **Dashboard Integration** | Separate process | Auto-start daemon |
-| **Real-Time Sync** | Database only | Database + HTTP notifications |
-| **Learning Curve** | High (MCP concepts) | Low (standard CLI) |
+**No setup needed!** Claude Code detects Intent-Engine and uses it automatically.
 
-### Quick Start
+📖 [Setup Guide for Claude Code](docs/en/integration/claude-code-system-prompt.md)
+
+### Works with Any AI Tool
+
+Intent-Engine is just a CLI tool - any AI that can run commands can use it:
+- Gemini CLI
+- Custom GPT agents
+- Cursor AI
+- Any chatbot with bash access
+
+📖 [Generic Integration Guide](docs/en/integration/generic-llm.md)
+
+---
+
+## Core Features
+
+### 🌳 Hierarchical Task Trees
+
+Break big problems into smaller ones, just like you think:
+
+```
+Build Authentication System
+├── Implement JWT
+│   ├── Generate tokens
+│   └── Validate tokens
+└── Add OAuth2
+    ├── Google provider
+    └── GitHub provider
+```
+
+### 📝 Decision History (Events)
+
+Every "why" is recorded:
 
 ```bash
-# 1. Install Intent-Engine
+ie log decision "Chose PostgreSQL over MongoDB for ACID guarantees"
+ie log blocker "Waiting for design approval from team"
+ie log milestone "MVP complete, ready for testing"
+```
+
+### 🎯 Focus-Driven Work
+
+AI (or you) works on **one task at a time**, with full context:
+
+```bash
+ie start 5          # Focus on task #5
+ie log note "..."   # Log notes to current task
+ie done             # Complete current task
+ie pick-next        # AI suggests what to work on next
+```
+
+### 📊 Progress Reports
+
+See what was accomplished:
+
+```bash
+ie search "authentication"  # Find all auth-related work
+```
+
+---
+
+## What makes Intent-Engine different?
+
+### vs. Claude Code TodoWriter
+
+| Feature | Intent-Engine | TodoWriter |
+|---------|--------------|------------|
+| **Persistence** | Saved to disk, never lost | Lost when chat ends |
+| **Decision history** | Full event log with reasoning | No history |
+| **AI resume work** | Yes - load full context | No - starts from scratch |
+| **Cross-session** | Yes | No |
+| **Best for** | Strategic, multi-day work | Current session notes |
+
+### vs. Jira / Linear / Asana
+
+| Feature | Intent-Engine | Project Management Tools |
+|---------|--------------|-------------------------|
+| **AI integration** | Native CLI, JSON output | Web UI only (manual) |
+| **Decision tracking** | Structured event stream | Unstructured comments |
+| **Automation** | AI can create/update tasks | Requires manual input |
+| **Focus** | Strategic "why" + technical specs | Tactical "when" + assignments |
+| **Best for** | Human-AI collaboration | Human team coordination |
+
+---
+
+## Real-World Use Cases
+
+### ✅ Multi-Day Development Projects
+
+**Problem**: You're building a complex feature with AI over multiple sessions
+**Solution**: Intent-Engine remembers progress, decisions, and next steps
+
+### ✅ Code Refactoring
+
+**Problem**: AI suggests changes but you need to verify them later
+**Solution**: Record all refactoring decisions with reasoning
+
+### ✅ Learning from AI
+
+**Problem**: AI makes technical choices but you forget why
+**Solution**: Event log becomes a learning document of best practices
+
+### ✅ Team Handoff
+
+**Problem**: Different team members (or AI agents) work on same project
+**Solution**: Complete context and decision history available to everyone
+
+---
+
+## Documentation
+
+### Quick Links
+
+- 📖 **[Quick Start Guide](QUICKSTART.en.md)** - 5-minute tutorial
+- 🔧 **[Installation Guide](docs/en/guide/installation.md)** - All installation methods
+- 🤖 **[Claude Code Integration](docs/en/integration/claude-code-system-prompt.md)** - Zero-config setup
+- 📚 **[Complete Command Reference](docs/en/guide/command-reference-full.md)** - All commands explained
+- 🧠 **[AI Quick Guide](docs/en/guide/ai-quick-guide.md)** - For AI assistants
+
+### Architecture
+
+- **[CLAUDE.md](CLAUDE.md)** - For AI assistants: how to use Intent-Engine
+- **[AGENT.md](AGENT.md)** - Technical details: data models, atomic operations
+- **[The Intent-Engine Way](docs/en/guide/the-intent-engine-way.md)** - Design philosophy
+
+---
+
+## Download & Install
+
+### Pre-built Binaries
+
+Download for your platform:
+- **[Latest Release](https://github.com/wayfind/intent-engine/releases/latest)**
+  - Linux (x86_64)
+  - macOS (Intel & Apple Silicon)
+  - Windows (x86_64)
+
+### From Source
+
+```bash
+# Requires Rust toolchain (https://rustup.rs)
 cargo install intent-engine
-
-# 2. That's it! Claude Code automatically understands Intent-Engine
-# No configuration files, no MCP setup, no restart required
 ```
 
-### How It Works
-
-Intent-Engine v0.10.0 uses a **345-line embedded system prompt** that teaches Claude Code:
-- ✅ All CLI commands and their usage
-- ✅ Focus-driven workflow patterns
-- ✅ Hierarchical task decomposition
-- ✅ Event tracking best practices
-- ✅ Common mistakes and anti-patterns
-
-**Automatic Features**:
-- **Dashboard Auto-Start**: Dashboard starts automatically when you use any CLI command
-- **Real-Time Sync**: CLI operations instantly update Dashboard UI via HTTP notifications
-- **Cross-Platform**: Works on Linux, macOS, and Windows (including WSL)
-
-### Usage Example
-
-After installation, just use Intent-Engine naturally in conversations:
-
-```
-You: "Help me implement a user authentication system"
-
-Claude: "I'll use Intent-Engine to track this work..."
-        [Executes: ie add "Implement user authentication"]
-        [Executes: ie start 1 --with-events]
-
-        "I've created and started task #1. Let me break this down:
-
-        Based on the requirements, I'll create subtasks for:
-        1. JWT token generation and validation
-        2. User password hashing
-        3. Refresh token mechanism
-
-        Starting with JWT implementation..."
-
-        [Executes: ie add "JWT Implementation" --parent 1]
-        [Executes: ie start 2]
-        [Implements the feature]
-        [Executes: ie log decision "Chose HS256 algorithm because..."]
-        [Executes: ie done]
-```
-
-**Dashboard Feedback**: All these operations appear in real-time in the Dashboard UI (auto-started in background).
-
-### Built-in Help System
-
-Intent-Engine includes comprehensive embedded guides:
+### Package Managers
 
 ```bash
-# AI integration patterns and best practices
-ie guide ai
+# Homebrew (macOS/Linux)
+brew install wayfind/tap/intent-engine
 
-# Migration from TodoWriter to Intent-Engine
-ie guide todowriter
-
-# Core workflow patterns (focus-driven, hierarchical, etc.)
-ie guide workflow
-
-# Real-world usage examples
-ie guide patterns
+# Cargo (cross-platform)
+cargo install intent-engine
 ```
 
-These guides are optimized for AI consumption and cover:
-- ✅ All CLI commands with examples
-- ✅ Common workflows and patterns
-- ✅ Typical mistakes and how to avoid them
-- ✅ Integration with other tools
+---
 
-### Supported AI Assistants
+## Contributing
 
-The system prompt approach works with:
-- ✅ **Claude Code** (native support)
-- ✅ **Claude Desktop** (native support)
-- ✅ **Cursor** (via shell command execution)
-- ✅ **Aider** (via shell command execution)
-- ✅ **Generic LLM CLI tools** (any tool that can execute shell commands)
+We welcome contributions! See [CONTRIBUTING.md](docs/en/contributing/contributing.md)
 
-### Migrating from v0.9.x
+**Areas we'd love help with:**
+- 📝 Documentation improvements
+- 🐛 Bug reports and fixes
+- 🌐 Translations
+- 💡 Feature suggestions
+- 🧪 More test coverage
 
-If you're upgrading from v0.9.x with MCP configuration:
+---
+
+## License
+
+Dual-licensed under either:
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+- Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+
+at your option.
+
+---
+
+## FAQ
+
+**Q: Do I need to know Rust?**
+A: No! Intent-Engine is a pre-built binary. Just install and use.
+
+**Q: Does it send data to the cloud?**
+A: No. Everything is stored locally in `~/.intent-engine/` on your computer.
+
+**Q: Can I use it without AI?**
+A: Yes! It's a powerful task tracker for humans too. But it really shines when AI uses it.
+
+**Q: Is it free?**
+A: Yes, completely open-source and free forever.
+
+**Q: What AI assistants work with it?**
+A: Anything with CLI access: Claude Code (best), custom GPT agents, Gemini CLI, Cursor, etc.
+
+**Q: How is this different from git?**
+A: Git tracks **code changes**. Intent-Engine tracks **strategic decisions and context**. They complement each other.
+
+---
+
+**Ready to give AI long-term memory?**
 
 ```bash
-# 1. Upgrade the binary
-cargo install --force intent-engine
-
-# 2. Remove old MCP configuration
-# Edit Claude's config file and delete the "intent-engine" MCP entry
-# - Linux/macOS: ~/.claude.json
-# - Windows: %APPDATA%\Claude\.claude.json
-
-# 3. Restart Claude Code
-
-# 4. Verify
-ie guide ai
+cargo install intent-engine
+ie --version
 ```
 
-**Your existing database is fully compatible** - no migration needed.
-
-> 📖 **Complete Migration Guide**: See [MIGRATION_v0.10.0.md](MIGRATION_v0.10.0.md)
-
-### Technical Architecture
-
-**Embedded System Prompt**:
-- Compiled into the binary at build time
-- 345 lines of condensed AI guidance
-- Covers all commands, patterns, and anti-patterns
-- Zero external dependencies
-
-**Dashboard Auto-Start**:
-- Cross-platform daemon mode (Unix fork, Windows detached process)
-- PID file management with automatic stale cleanup
-- Health check with 3-second timeout
-- Graceful degradation if Dashboard fails
-
-**Real-Time Sync**:
-- Fire-and-forget HTTP notifications (500ms timeout)
-- Non-blocking CLI operations
-- Dual notification pattern (CLI → Dashboard HTTP, Dashboard → UI WebSocket)
-- Prevents circular dependencies
-
-### Advantages Over MCP
-
-1. **Simpler Mental Model**: Just use CLI commands naturally
-2. **No Configuration**: Works out of the box
-3. **Better Error Messages**: Standard CLI error handling
-4. **Faster Iteration**: No restart required for updates
-5. **More Portable**: No external configuration files
-6. **Real-Time Feedback**: Dashboard auto-starts and stays in sync
-
-### Detailed Documentation
-
-- 📘 [CLAUDE.md](CLAUDE.md) - Complete AI assistant integration guide
-- 📖 [AGENT.md](AGENT.md) - Technical details and data models
-- 📝 [MIGRATION_v0.10.0.md](MIGRATION_v0.10.0.md) - Migration from v0.9.x
-
----
-
-## 🌐 Web Dashboard: Visual Task Management
-
-**New in v0.5**: Intent-Engine now includes a built-in web dashboard for visual task management and monitoring.
-
-### Key Features
-
-- ✅ **Modern Web UI**: Beautiful interface powered by TailwindCSS and HTMX
-- ✅ **Markdown Rendering**: Rich text display with code syntax highlighting
-- ✅ **Real-Time Search**: Instant full-text search across tasks and events
-- ✅ **Task Workflows**: Visual buttons for start, complete, switch, and spawn operations
-- ✅ **Event Tracking**: Timeline view of decisions, blockers, milestones, and notes
-- ✅ **Multi-Project Support**: Run dashboards for multiple projects simultaneously
-
-### Quick Start
-
-```bash
-# Start dashboard (uses fixed port 11391)
-cd /path/to/your/project
-ie dashboard start
-
-# Open in browser automatically
-ie dashboard open
-
-# Or manually access the URL shown in the output
-# http://127.0.0.1:11391
-
-# Check running dashboards
-ie dashboard list
-
-# Stop dashboard
-ie dashboard stop
-```
-
-### Why Use the Dashboard?
-
-**Perfect for:**
-- 👀 **Visualizing Progress**: See task hierarchy and status at a glance
-- 📊 **Browsing History**: Review event timelines with rich Markdown rendering
-- 🎨 **Presenting to Teams**: Share project status via browser
-- 🔍 **Exploring Tasks**: Search and filter large task sets interactively
-
-**Integration:**
-- All changes sync instantly with CLI and Dashboard (shares same database + HTTP notifications)
-- RESTful API available for custom integrations
-
-### Documentation
-
-- 📖 [Dashboard User Guide](docs/dashboard-user-guide.md) - Complete user manual
-- 🔧 [API Reference](docs/dashboard-api-reference.md) - REST API documentation
-- 🏗️ [Architecture Spec](docs/web-dashboard-spec.md) - Technical design
-
----
-
-## ✨ Core Features
-
-### New in v0.4 (2025-11)
-- **🔍 Unified Search Engine**: `search` provides full-text search across both tasks and events, retrieving complete context in a single query
-
-### New in v0.2 (2025-11)
-- **🔗 Task Dependency System**: Define task dependencies, automatically prevent blocked tasks from starting
-- **📊 Smart Event Querying**: Filter events by type and time range, dramatically reduce token usage
-- **🎯 Priority Enum**: Human-friendly priority interface (`critical`/`high`/`medium`/`low`)
-- **📝 Command Rename**: `task find` → `task list` for better clarity
-
-### Core Capabilities
-- **Project Awareness**: Automatically searches upward for `.intent-engine` directory, senses project root
-- **Lazy Initialization**: Write commands auto-initialize project, no manual init needed
-- **Task Tree Management**: Support unlimited levels of parent-child task relationships
-- **Decision History**: Complete event stream recording (decision, blocker, milestone, etc.)
-- **Smart Recommendation**: `pick-next` recommends next task based on context
-- **Atomic Operations**: Commands like `start`, `switch`, `spawn-subtask` save 50-70% tokens
-- **🔍 FTS5 Search Engine**: Millisecond response under GB-scale tasks, unique snippet function highlights matches with `**`, extremely Agent-context-friendly
-- **JSON Output**: All commands output structured JSON, perfect for AI tool integration
-
----
-
-## 📚 Documentation Navigation
-
-### 🎯 Core Documents
-- [**INTERFACE_SPEC.md**](docs/INTERFACE_SPEC.md) - **Interface Specification** (Authoritative)
-- [**QUICKSTART.md**](QUICKSTART.en.md) - 5-minute quick start
-
-### 🚀 Getting Started
-- [**The Intent-Engine Way**](docs/en/guide/the-intent-engine-way.md) - Design philosophy and collaboration patterns (highly recommended)
-- [**Installation Guide**](docs/en/guide/installation.md) - Detailed installation guide and troubleshooting
-
-### 🤖 AI Integration
-- [**AI Quick Guide**](docs/en/guide/ai-quick-guide.md) - AI client quick reference
-- [**CLAUDE.md**](CLAUDE.md) - Complete Claude Code/Desktop integration guide
-- [**AGENT.md**](AGENT.md) - Technical details and data models
-
-### 📖 Deep Dive
-- [**Command Reference**](docs/en/guide/command-reference.md) - Complete command reference
-- [**Task Workflow Analysis**](docs/en/technical/task-workflow-analysis.md) - Token optimization strategy explained
-- [**Performance Report**](docs/en/technical/performance.md) - Performance benchmarks
-- [**Security Testing**](docs/en/technical/security.md) - Security test reports
-- [**Migration Guide (v0.10.0)**](MIGRATION_v0.10.0.md) - Upgrade from v0.9.x (MCP) to v0.10.0 (System Prompt)
-
-### 👥 Contributors
-- [**Contributing Guide**](docs/en/contributing/contributing.md) - How to contribute code
-- [**Release Process**](docs/en/contributing/publish-to-crates-io.md) - Release workflow
-
----
-
-## 🌟 Unique Value of Intent-Engine
-
-### 1. Memory Sharing Layer for Human-AI Collaboration
-- Humans set strategic intents (What + Why)
-- AI executes tactical tasks (How)
-- Intent-Engine records the entire process
-
-### 2. Cross-session Context Recovery
-- AI can resume complete context anytime via `task start --with-events`
-- No need for humans to repeatedly explain background
-
-### 3. Decision Traceability
-- Every key decision is recorded (`event add --type decision`)
-- Future review of "why we chose solution A over solution B"
-
-### 4. Hierarchical Problem Decomposition
-- Support unlimited levels of parent-child tasks
-- Enforces completing all subtasks before parent task completion
-
----
-
-## 🛠️ Technology Stack
-
-- **Language**: Rust 2021
-- **CLI**: clap 4.5
-- **Database**: SQLite with sqlx 0.7
-- **Async Runtime**: tokio 1.35
-- **Full-text Search**: SQLite FTS5
-
----
-
-## 🔧 Development Setup
-
-### First-time Setup for Contributors (Required)
-
-To avoid CI formatting check failures, please run immediately after cloning:
-
-```bash
-./scripts/setup-git-hooks.sh
-```
-
-This installs git pre-commit hooks that automatically run `cargo fmt` before each commit, ensuring code formatting compliance.
-
-### Development Tool Commands
-
-The project provides a Makefile to simplify common operations:
-
-```bash
-make help          # Show all available commands
-make fmt           # Format code
-make check         # Run format, clippy and tests
-make test          # Run all tests
-make setup-hooks   # Install git hooks (same as above script)
-```
-
-> 📖 **Detailed Documentation**: See [scripts/README.md](scripts/README.md) for complete development workflow and automation tools.
-
----
-
-## 🧪 Testing
-
-Intent-Engine includes a complete testing suite:
-
-```bash
-# Run all tests
-cargo test
-
-# Run performance tests
-cargo test --test performance_tests -- --ignored
-
-# View test coverage
-cargo tarpaulin
-```
-
-**Test Statistics**: 500+ tests all passing ✅
-- Unit tests, integration tests, CLI tests
-- Dashboard integration tests
-- Special character security tests
-- Performance and benchmarking tests
-- Windows encoding compatibility tests
-
----
-
-## 📄 License
-
-This project is dual-licensed under MIT or Apache-2.0.
-
-- MIT License - See [LICENSE-MIT](LICENSE-MIT)
-- Apache License 2.0 - See [LICENSE-APACHE](LICENSE-APACHE)
-
----
-
-## 🤝 Contributing
-
-Issues and Pull Requests are welcome!
-
-- [Contributing Guide](docs/en/contributing/contributing.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md) (coming soon)
-
----
-
-## 🔗 Related Links
-
-- [GitHub Repository](https://github.com/wayfind/intent-engine)
-- [Crates.io](https://crates.io/crates/intent-engine)
-- [Documentation](https://docs.rs/intent-engine)
-- [Issue Tracker](https://github.com/wayfind/intent-engine/issues)
-
----
-
-**Next Steps**: Read [The Intent-Engine Way](docs/en/guide/the-intent-engine-way.md) for deep understanding of design philosophy, or check out [QUICKSTART.md](QUICKSTART.en.md) to start using it right away.
+Start with our [5-minute Quick Start →](QUICKSTART.en.md)
