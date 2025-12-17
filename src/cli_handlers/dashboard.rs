@@ -3,9 +3,34 @@ use crate::error::{IntentError, Result};
 use crate::project::ProjectContext;
 
 /// Dashboard server default port
-const DASHBOARD_PORT: u16 = 11391;
+pub const DASHBOARD_PORT: u16 = 11391;
 
-async fn check_dashboard_health(port: u16) -> bool {
+/// Send HTTP shutdown request to Dashboard
+async fn send_shutdown_request(port: u16) -> Result<()> {
+    let url = format!("http://127.0.0.1:{}/api/internal/shutdown", port);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| {
+            IntentError::OtherError(anyhow::anyhow!("Failed to create HTTP client: {}", e))
+        })?;
+
+    let response = client.post(&url).send().await.map_err(|e| {
+        IntentError::OtherError(anyhow::anyhow!("Failed to send shutdown request: {}", e))
+    })?;
+
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(IntentError::OtherError(anyhow::anyhow!(
+            "Shutdown request failed with status: {}",
+            response.status()
+        )))
+    }
+}
+
+pub async fn check_dashboard_health(port: u16) -> bool {
     let health_url = format!("http://127.0.0.1:{}/api/health", port);
 
     match reqwest::Client::builder()
@@ -134,9 +159,194 @@ pub async fn check_mcp_connections() -> serde_json::Value {
     }
 }
 
+/// Start Dashboard in foreground mode
+async fn start_foreground_mode(
+    port: u16,
+    project_path: std::path::PathBuf,
+    db_path: std::path::PathBuf,
+    project_name: String,
+    browser: bool,
+) -> Result<()> {
+    use crate::dashboard::server::DashboardServer;
+
+    let server = DashboardServer::new(port, project_path, db_path).await?;
+
+    println!("Dashboard starting for project: {}", project_name);
+    println!("  Port: {}", port);
+    println!("  URL: http://127.0.0.1:{}", port);
+    println!("\n🚀 Dashboard server running at http://127.0.0.1:{}", port);
+    println!("   Press Ctrl+C to stop\n");
+
+    // Open browser if explicitly requested
+    if browser {
+        let dashboard_url = format!("http://127.0.0.1:{}", port);
+        tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+        println!("🌐 Opening dashboard in browser...");
+        if let Err(e) = open::that(&dashboard_url) {
+            eprintln!("⚠️  Could not open browser automatically: {}", e);
+            eprintln!("   Please manually visit: {}", dashboard_url);
+        }
+        println!();
+    }
+
+    // Run server (blocks until terminated)
+    server.run().await.map_err(IntentError::OtherError)?;
+
+    Ok(())
+}
+
+/// Start Dashboard in daemon (background) mode
+#[cfg(unix)]
+async fn start_daemon_mode(
+    port: u16,
+    project_path: std::path::PathBuf,
+    db_path: std::path::PathBuf,
+    project_name: String,
+    browser: bool,
+) -> Result<()> {
+    use nix::unistd::{fork, ForkResult};
+    use std::fs::OpenOptions;
+    use std::os::unix::io::AsRawFd;
+
+    println!("Starting Dashboard in daemon mode...");
+    println!("  Project: {}", project_name);
+    println!("  Port: {}", port);
+
+    // Prepare log file path
+    let log_file_path = dirs::home_dir()
+        .ok_or_else(|| IntentError::InvalidInput("Could not determine home directory".to_string()))?
+        .join(".intent-engine")
+        .join("dashboard.log");
+
+    // Fork the process
+    match unsafe { fork() } {
+        Ok(ForkResult::Parent { child }) => {
+            // Parent process: just display info and exit
+            let child_pid = child.as_raw() as u32;
+
+            println!("✓ Dashboard started in background");
+            println!("  PID: {}", child_pid);
+            println!("  URL: http://127.0.0.1:{}", port);
+            println!("  Logs: {}", log_file_path.display());
+
+            // Open browser if requested (parent process handles this)
+            if browser {
+                tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+                let dashboard_url = format!("http://127.0.0.1:{}", port);
+                println!("🌐 Opening dashboard in browser...");
+                if let Err(e) = open::that(&dashboard_url) {
+                    eprintln!("⚠️  Could not open browser automatically: {}", e);
+                }
+            }
+
+            Ok(())
+        },
+        Ok(ForkResult::Child) => {
+            // Child process: redirect stdout/stderr to log file and run server
+            let log_file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_file_path)?;
+
+            let log_fd = log_file.as_raw_fd();
+
+            // Redirect stdout and stderr to log file
+            if let Err(e) = nix::unistd::dup2(log_fd, std::io::stdout().as_raw_fd()) {
+                eprintln!("Failed to redirect stdout: {}", e);
+            }
+            if let Err(e) = nix::unistd::dup2(log_fd, std::io::stderr().as_raw_fd()) {
+                eprintln!("Failed to redirect stderr: {}", e);
+            }
+
+            // Start server in child process
+            use crate::dashboard::server::DashboardServer;
+            let server = DashboardServer::new(port, project_path, db_path).await?;
+
+            tracing::info!("Dashboard daemon started (PID: {})", std::process::id());
+            tracing::info!("Port: {}", port);
+            tracing::info!("Log file: {}", log_file_path.display());
+
+            // Run server (blocks until terminated)
+            server.run().await.map_err(IntentError::OtherError)?;
+
+            Ok(())
+        },
+        Err(e) => Err(IntentError::OtherError(anyhow::anyhow!(
+            "Failed to fork process: {}",
+            e
+        ))),
+    }
+}
+
+/// Start Dashboard in daemon (background) mode (Windows)
+#[cfg(windows)]
+async fn start_daemon_mode(
+    port: u16,
+    project_path: std::path::PathBuf,
+    db_path: std::path::PathBuf,
+    project_name: String,
+    browser: bool,
+) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+
+    println!("Starting Dashboard in daemon mode...");
+    println!("  Project: {}", project_name);
+    println!("  Port: {}", port);
+
+    // Prepare log file path
+    let log_file_path = dirs::home_dir()
+        .ok_or_else(|| IntentError::InvalidInput("Could not determine home directory".to_string()))?
+        .join(".intent-engine")
+        .join("dashboard.log");
+
+    // Get current executable path
+    let exe_path = std::env::current_exe()
+        .map_err(|e| IntentError::IoError(format!("Failed to get executable path: {}", e)))?;
+
+    // Spawn detached process
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    const DETACHED_PROCESS: u32 = 0x00000008;
+
+    let child = Command::new(exe_path)
+        .args(&[
+            "dashboard",
+            "start",
+            "--port",
+            &port.to_string(),
+            // Note: We're relaunching without --daemon to avoid infinite loop
+        ])
+        .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
+        .spawn()
+        .map_err(|e| IntentError::IoError(format!("Failed to spawn daemon process: {}", e)))?;
+
+    let child_pid = child.id();
+
+    println!("✓ Dashboard started in background");
+    println!("  PID: {}", child_pid);
+    println!("  URL: http://127.0.0.1:{}", port);
+    println!("  Logs: {}", log_file_path.display());
+
+    // Open browser if requested
+    if browser {
+        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+        let dashboard_url = format!("http://127.0.0.1:{}", port);
+        println!("🌐 Opening dashboard in browser...");
+        if let Err(e) = open::that(&dashboard_url) {
+            eprintln!("⚠️  Could not open browser automatically: {}", e);
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Result<()> {
     match dashboard_cmd {
-        DashboardCommands::Start { port, browser } => {
+        DashboardCommands::Start {
+            port,
+            browser,
+            daemon,
+        } => {
             // Load project context to get project path and DB path
             let project_ctx = ProjectContext::load_or_init().await?;
             let project_path = project_ctx.root.clone();
@@ -166,35 +376,16 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
                 )));
             }
 
-            // Start server in foreground mode
-            use crate::dashboard::server::DashboardServer;
-
-            let server =
-                DashboardServer::new(allocated_port, project_path.clone(), db_path.clone()).await?;
-
-            println!("Dashboard starting for project: {}", project_name);
-            println!("  Port: {}", allocated_port);
-            println!("  URL: http://127.0.0.1:{}", allocated_port);
-            println!(
-                "\n🚀 Dashboard server running at http://127.0.0.1:{}",
-                allocated_port
-            );
-            println!("   Press Ctrl+C to stop\n");
-
-            // Open browser if explicitly requested
-            if browser {
-                let dashboard_url = format!("http://127.0.0.1:{}", allocated_port);
-                tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
-                println!("🌐 Opening dashboard in browser...");
-                if let Err(e) = open::that(&dashboard_url) {
-                    eprintln!("⚠️  Could not open browser automatically: {}", e);
-                    eprintln!("   Please manually visit: {}", dashboard_url);
-                }
-                println!();
+            // Handle daemon mode vs foreground mode
+            if daemon {
+                // Daemon mode: fork process and run in background
+                start_daemon_mode(allocated_port, project_path, db_path, project_name, browser)
+                    .await?;
+            } else {
+                // Foreground mode: run server directly
+                start_foreground_mode(allocated_port, project_path, db_path, project_name, browser)
+                    .await?;
             }
-
-            // Run server (blocks until terminated)
-            server.run().await.map_err(IntentError::OtherError)?;
 
             Ok(())
         },
@@ -206,19 +397,34 @@ pub async fn handle_dashboard_command(dashboard_cmd: DashboardCommands) -> Resul
                 println!("Note: Single Dashboard mode - checking port {}", port);
             }
 
-            // Check if dashboard is running via HTTP health check
-            if check_dashboard_health(port).await {
-                println!("Dashboard is running on port {}", port);
-                println!();
-                println!("To stop the Dashboard:");
-                println!("  - If running in foreground: Press Ctrl+C in the terminal");
-                println!("  - If started by MCP Server: Stop the AI tool (Claude Code, etc.)");
-                #[cfg(unix)]
-                println!("  - Or run: lsof -ti:{} | xargs kill", port);
-                #[cfg(windows)]
-                println!("  - Or find the process in Task Manager");
-            } else {
+            // Check if Dashboard is running via HTTP health check
+            if !check_dashboard_health(port).await {
                 println!("Dashboard not running");
+                return Ok(());
+            }
+
+            // Send shutdown request
+            println!("Stopping Dashboard...");
+            match send_shutdown_request(port).await {
+                Ok(_) => {
+                    // Wait for shutdown to complete
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+                    // Verify shutdown
+                    if !check_dashboard_health(port).await {
+                        println!("✓ Dashboard stopped successfully");
+                    } else {
+                        eprintln!("⚠ Dashboard may still be running");
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Failed to stop Dashboard: {}", e);
+                    eprintln!("\nManual stop instructions:");
+                    #[cfg(unix)]
+                    eprintln!("  Unix:    lsof -ti:{} | xargs kill", port);
+                    #[cfg(windows)]
+                    eprintln!("  Windows: netstat -ano | findstr :{}", port);
+                },
             }
 
             Ok(())

@@ -151,18 +151,24 @@ pub struct PlanResult {
     /// Number of dependencies created
     pub dependency_count: usize,
 
+    /// Currently focused task (if a task has status="doing")
+    /// Includes full task details and event history
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focused_task: Option<crate::db::models::TaskWithEvents>,
+
     /// Optional error message if success = false
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
 impl PlanResult {
-    /// Create a successful result
+    /// Create a successful result with optional focused task
     pub fn success(
         task_id_map: HashMap<String, i64>,
         created_count: usize,
         updated_count: usize,
         dependency_count: usize,
+        focused_task: Option<crate::db::models::TaskWithEvents>,
     ) -> Self {
         Self {
             success: true,
@@ -170,6 +176,7 @@ impl PlanResult {
             created_count,
             updated_count,
             dependency_count,
+            focused_task,
             error: None,
         }
     }
@@ -182,6 +189,7 @@ impl PlanResult {
             created_count: 0,
             updated_count: 0,
             dependency_count: 0,
+            focused_task: None,
             error: Some(message.into()),
         }
     }
@@ -403,28 +411,34 @@ impl<'a> PlanExecutor<'a> {
         // 11. Commit transaction
         tx.commit().await?;
 
-        // 12. Auto-focus the doing task if present
+        // 12. Auto-focus the doing task if present and return full context
         // Find the doing task in the batch
         let doing_task = flat_tasks
             .iter()
             .find(|task| matches!(task.status, Some(TaskStatus::Doing)));
 
-        if let Some(doing_task) = doing_task {
+        let focused_task_response = if let Some(doing_task) = doing_task {
             // Get the task ID from the map
             if let Some(&task_id) = task_id_map.get(&doing_task.name) {
-                // Call task_start to set focus (inherits doing status)
+                // Call task_start with events to get full context
                 use crate::tasks::TaskManager;
                 let task_mgr = TaskManager::new(self.pool);
-                task_mgr.start_task(task_id, false).await?;
+                let response = task_mgr.start_task(task_id, true).await?;
+                Some(response)
+            } else {
+                None
             }
-        }
+        } else {
+            None
+        };
 
-        // 13. Return success result
+        // 13. Return success result with focused task
         Ok(PlanResult::success(
             task_id_map,
             created_count,
             updated_count,
             dep_count,
+            focused_task_response,
         ))
     }
 
@@ -477,8 +491,8 @@ impl<'a> PlanExecutor<'a> {
 
         let result = sqlx::query(
             r#"
-            INSERT INTO tasks (name, spec, priority, status, active_form, first_todo_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (name, spec, priority, status, active_form, first_todo_at, owner)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&task.name)
@@ -487,6 +501,7 @@ impl<'a> PlanExecutor<'a> {
         .bind(status_str)
         .bind(&task.active_form)
         .bind(now)
+        .bind("ai") // Plan-created tasks are AI-owned
         .execute(&mut **tx)
         .await?;
 
@@ -887,13 +902,14 @@ mod tests {
         map.insert("Task 1".to_string(), 1);
         map.insert("Task 2".to_string(), 2);
 
-        let result = PlanResult::success(map.clone(), 2, 0, 1);
+        let result = PlanResult::success(map.clone(), 2, 0, 1, None);
 
         assert!(result.success);
         assert_eq!(result.task_id_map, map);
         assert_eq!(result.created_count, 2);
         assert_eq!(result.updated_count, 0);
         assert_eq!(result.dependency_count, 1);
+        assert_eq!(result.focused_task, None);
         assert_eq!(result.error, None);
     }
 

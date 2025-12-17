@@ -466,10 +466,11 @@ fn test_doctor_in_fresh_environment() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Database Path Resolution"))
-        .stdout(predicate::str::contains("Database Health"))
-        .stdout(predicate::str::contains("checks"))
-        .stdout(predicate::str::contains("overall_status"));
+        .stdout(predicate::str::contains("Database:"))
+        .stdout(predicate::str::contains(
+            "Ancestor directories with databases:",
+        ))
+        .stdout(predicate::str::contains("Dashboard:"));
 }
 
 // ============================================================================

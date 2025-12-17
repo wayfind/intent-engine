@@ -7,6 +7,7 @@ use std::sync::Arc;
 pub struct EventManager<'a> {
     pool: &'a SqlitePool,
     notifier: crate::notifications::NotificationSender,
+    cli_notifier: Option<crate::dashboard::cli_notifier::CliNotifier>,
     project_path: Option<String>,
 }
 
@@ -14,21 +15,9 @@ impl<'a> EventManager<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
         Self {
             pool,
-            notifier: crate::notifications::NotificationSender::new(None, None),
+            notifier: crate::notifications::NotificationSender::new(None),
+            cli_notifier: Some(crate::dashboard::cli_notifier::CliNotifier::new()),
             project_path: None,
-        }
-    }
-
-    /// Create an EventManager with MCP notification support
-    pub fn with_mcp_notifier(
-        pool: &'a SqlitePool,
-        project_path: String,
-        mcp_notifier: tokio::sync::mpsc::UnboundedSender<String>,
-    ) -> Self {
-        Self {
-            pool,
-            notifier: crate::notifications::NotificationSender::new(None, Some(mcp_notifier)),
-            project_path: Some(project_path),
         }
     }
 
@@ -40,7 +29,8 @@ impl<'a> EventManager<'a> {
     ) -> Self {
         Self {
             pool,
-            notifier: crate::notifications::NotificationSender::new(Some(ws_state), None),
+            notifier: crate::notifications::NotificationSender::new(Some(ws_state)),
+            cli_notifier: None, // Dashboard context doesn't need CLI notifier
             project_path: Some(project_path),
         }
     }
@@ -49,21 +39,27 @@ impl<'a> EventManager<'a> {
     async fn notify_event_created(&self, event: &Event) {
         use crate::dashboard::websocket::DatabaseOperationPayload;
 
-        let Some(project_path) = &self.project_path else {
-            return;
-        };
+        // WebSocket notification (Dashboard context)
+        if let Some(project_path) = &self.project_path {
+            let event_json = match serde_json::to_value(event) {
+                Ok(json) => json,
+                Err(e) => {
+                    tracing::warn!("Failed to serialize event for notification: {}", e);
+                    return;
+                },
+            };
 
-        let event_json = match serde_json::to_value(event) {
-            Ok(json) => json,
-            Err(e) => {
-                tracing::warn!("Failed to serialize event for notification: {}", e);
-                return;
-            },
-        };
+            let payload =
+                DatabaseOperationPayload::event_created(event.id, event_json, project_path.clone());
+            self.notifier.send(payload).await;
+        }
 
-        let payload =
-            DatabaseOperationPayload::event_created(event.id, event_json, project_path.clone());
-        self.notifier.send(payload).await;
+        // CLI → Dashboard HTTP notification (CLI context)
+        if let Some(cli_notifier) = &self.cli_notifier {
+            cli_notifier
+                .notify_event_added(event.task_id, event.id)
+                .await;
+        }
     }
 
     /// Internal helper: Notify UI about event update

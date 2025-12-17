@@ -1,5 +1,4 @@
 /// Test to ensure spec-03-interface-current.md stays in sync with actual implementation
-use serde_json::Value;
 use std::fs;
 use std::process::Command;
 
@@ -39,65 +38,29 @@ fn test_spec_version_matches_cargo() {
     );
 }
 
-#[test]
-fn test_spec_lists_all_mcp_tools() {
-    // Read mcp-server.json
-    let mcp_json = fs::read_to_string("mcp-server.json").expect("Failed to read mcp-server.json");
-    let mcp_config: Value =
-        serde_json::from_str(&mcp_json).expect("Failed to parse mcp-server.json");
-
-    // Extract tool names
-    let tools: Vec<String> = mcp_config["tools"]
-        .as_array()
-        .expect("tools is not an array")
-        .iter()
-        .map(|tool| {
-            tool["name"]
-                .as_str()
-                .expect("tool name is not a string")
-                .to_string()
-        })
-        .collect();
-
-    // Read spec-03-interface-current.md
-    let spec = fs::read_to_string("docs/spec-03-interface-current.md")
-        .expect("Failed to read spec-03-interface-current.md");
-
-    // Check that each tool is documented in the spec
-    for tool in &tools {
-        assert!(
-            spec.contains(&format!("`{}`", tool)),
-            "Tool '{}' is missing from spec-03-interface-current.md MCP tools table",
-            tool
-        );
-    }
-
-    println!("✅ All {} MCP tools are documented in spec", tools.len());
-}
+// Note: MCP tools test removed in v0.10.0 - MCP server has been replaced with system prompt approach
 
 #[test]
 fn test_spec_documents_cli_commands() {
     let spec = fs::read_to_string("docs/spec-03-interface-current.md")
         .expect("Failed to read spec-03-interface-current.md");
 
-    // Core CLI commands that must be documented
+    // Core CLI commands for v0.10.0 (simplified structure)
+    // Only check the 3 main commands that must be in spec
     let required_commands = vec![
-        "task add",
-        "task start",
-        "task done",
-        "task spawn-subtask",
-        "task pick-next",
-        "task list",
-        "task search",
-        "event add",
-        "event list",
-        "report",
-        "current",
+        "plan",   // Declarative task creation/update
+        "log",    // Quick event logging
+        "search", // Unified search across tasks and events
     ];
+
+    // Optional utility commands (may not be in spec yet)
+    // "init", "dashboard", "doctor"
 
     for cmd in required_commands {
         assert!(
-            spec.contains(&format!("`{}`", cmd)) || spec.contains(&format!("#### `{}`", cmd)),
+            spec.contains(&format!("`{}`", cmd))
+                || spec.contains(&format!("#### `{}`", cmd))
+                || spec.contains(&format!("`ie {}`", cmd)),
             "Command '{}' is not documented in spec-03-interface-current.md",
             cmd
         );
@@ -108,31 +71,68 @@ fn test_spec_documents_cli_commands() {
 
 #[test]
 fn test_cli_help_matches_spec() {
-    // Test that `task add --help` contains key parameters
-    // Use pre-compiled binary instead of cargo run for speed
+    // Test new CLI structure (v0.10.0): plan, log, search
     let bin_path = env!("CARGO_BIN_EXE_ie");
+
+    // Test 'plan' command help
     let output = Command::new(bin_path)
-        .args(["task", "add", "--help"])
+        .args(["plan", "--help"])
         .output()
-        .expect("Failed to run task add --help");
+        .expect("Failed to run plan --help");
 
     let help_text = String::from_utf8_lossy(&output.stdout);
 
-    // Check for essential parameters (flexible on exact names)
+    // Verify plan command documents format parameter
     assert!(
-        help_text.contains("--name"),
-        "task add --help should document name parameter"
-    );
-    assert!(
-        help_text.contains("--spec") || help_text.contains("spec"),
-        "task add --help should document spec parameter"
-    );
-    assert!(
-        help_text.contains("--parent") || help_text.contains("parent"),
-        "task add --help should document parent parameter"
+        help_text.contains("--format") || help_text.contains("format"),
+        "plan --help should document format parameter"
     );
 
-    println!("✅ CLI help output contains documented parameters");
+    // Test 'log' command help
+    let output = Command::new(bin_path)
+        .args(["log", "--help"])
+        .output()
+        .expect("Failed to run log --help");
+
+    let help_text = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        help_text.contains("event_type")
+            || help_text.contains("decision")
+            || help_text.contains("blocker"),
+        "log --help should document event types"
+    );
+    assert!(
+        help_text.contains("message"),
+        "log --help should document message parameter"
+    );
+    assert!(
+        help_text.contains("--task") || help_text.contains("task"),
+        "log --help should document task parameter"
+    );
+
+    // Test 'search' command help
+    let output = Command::new(bin_path)
+        .args(["search", "--help"])
+        .output()
+        .expect("Failed to run search --help");
+
+    let help_text = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        help_text.contains("query"),
+        "search --help should document query parameter"
+    );
+    assert!(
+        help_text.contains("--tasks") || help_text.contains("tasks"),
+        "search --help should document tasks flag"
+    );
+    assert!(
+        help_text.contains("--events") || help_text.contains("events"),
+        "search --help should document events flag"
+    );
+
+    println!("✅ CLI help output contains documented parameters for new command structure");
 }
 
 #[test]

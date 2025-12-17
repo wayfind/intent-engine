@@ -200,6 +200,7 @@ fn cleanup(mut dashboard: Child, mut mcp: Child) {
 /// that normal project registration works correctly.
 #[test]
 #[serial]
+#[ignore = "MCP functionality removed in v0.10.0 (simplified architecture)"]
 fn test_mcp_connects_to_dashboard_and_registers_project() {
     // Use a non-temporary directory for this test
     // (temporary paths are rejected by our path validation)

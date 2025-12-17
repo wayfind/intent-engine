@@ -12,6 +12,7 @@ pub use crate::db::models::TaskContext;
 pub struct TaskManager<'a> {
     pool: &'a SqlitePool,
     notifier: crate::notifications::NotificationSender,
+    cli_notifier: Option<crate::dashboard::cli_notifier::CliNotifier>,
     project_path: Option<String>,
 }
 
@@ -19,21 +20,9 @@ impl<'a> TaskManager<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
         Self {
             pool,
-            notifier: crate::notifications::NotificationSender::new(None, None),
+            notifier: crate::notifications::NotificationSender::new(None),
+            cli_notifier: Some(crate::dashboard::cli_notifier::CliNotifier::new()),
             project_path: None,
-        }
-    }
-
-    /// Create a TaskManager with MCP notification support
-    pub fn with_mcp_notifier(
-        pool: &'a SqlitePool,
-        project_path: String,
-        mcp_notifier: tokio::sync::mpsc::UnboundedSender<String>,
-    ) -> Self {
-        Self {
-            pool,
-            notifier: crate::notifications::NotificationSender::new(None, Some(mcp_notifier)),
-            project_path: Some(project_path),
         }
     }
 
@@ -45,7 +34,8 @@ impl<'a> TaskManager<'a> {
     ) -> Self {
         Self {
             pool,
-            notifier: crate::notifications::NotificationSender::new(Some(ws_state), None),
+            notifier: crate::notifications::NotificationSender::new(Some(ws_state)),
+            cli_notifier: None, // Dashboard context doesn't need CLI notifier
             project_path: Some(project_path),
         }
     }
@@ -54,54 +44,72 @@ impl<'a> TaskManager<'a> {
     async fn notify_task_created(&self, task: &Task) {
         use crate::dashboard::websocket::DatabaseOperationPayload;
 
-        let Some(project_path) = &self.project_path else {
-            return;
-        };
+        // WebSocket notification (Dashboard context)
+        if let Some(project_path) = &self.project_path {
+            let task_json = match serde_json::to_value(task) {
+                Ok(json) => json,
+                Err(e) => {
+                    tracing::warn!("Failed to serialize task for notification: {}", e);
+                    return;
+                },
+            };
 
-        let task_json = match serde_json::to_value(task) {
-            Ok(json) => json,
-            Err(e) => {
-                tracing::warn!("Failed to serialize task for notification: {}", e);
-                return;
-            },
-        };
+            let payload =
+                DatabaseOperationPayload::task_created(task.id, task_json, project_path.clone());
+            self.notifier.send(payload).await;
+        }
 
-        let payload =
-            DatabaseOperationPayload::task_created(task.id, task_json, project_path.clone());
-        self.notifier.send(payload).await;
+        // CLI → Dashboard HTTP notification (CLI context)
+        if let Some(cli_notifier) = &self.cli_notifier {
+            cli_notifier
+                .notify_task_changed(Some(task.id), "created")
+                .await;
+        }
     }
 
     /// Internal helper: Notify UI about task update
     async fn notify_task_updated(&self, task: &Task) {
         use crate::dashboard::websocket::DatabaseOperationPayload;
 
-        let Some(project_path) = &self.project_path else {
-            return;
-        };
+        // WebSocket notification (Dashboard context)
+        if let Some(project_path) = &self.project_path {
+            let task_json = match serde_json::to_value(task) {
+                Ok(json) => json,
+                Err(e) => {
+                    tracing::warn!("Failed to serialize task for notification: {}", e);
+                    return;
+                },
+            };
 
-        let task_json = match serde_json::to_value(task) {
-            Ok(json) => json,
-            Err(e) => {
-                tracing::warn!("Failed to serialize task for notification: {}", e);
-                return;
-            },
-        };
+            let payload =
+                DatabaseOperationPayload::task_updated(task.id, task_json, project_path.clone());
+            self.notifier.send(payload).await;
+        }
 
-        let payload =
-            DatabaseOperationPayload::task_updated(task.id, task_json, project_path.clone());
-        self.notifier.send(payload).await;
+        // CLI → Dashboard HTTP notification (CLI context)
+        if let Some(cli_notifier) = &self.cli_notifier {
+            cli_notifier
+                .notify_task_changed(Some(task.id), "updated")
+                .await;
+        }
     }
 
     /// Internal helper: Notify UI about task deletion
     async fn notify_task_deleted(&self, task_id: i64) {
         use crate::dashboard::websocket::DatabaseOperationPayload;
 
-        let Some(project_path) = &self.project_path else {
-            return;
-        };
+        // WebSocket notification (Dashboard context)
+        if let Some(project_path) = &self.project_path {
+            let payload = DatabaseOperationPayload::task_deleted(task_id, project_path.clone());
+            self.notifier.send(payload).await;
+        }
 
-        let payload = DatabaseOperationPayload::task_deleted(task_id, project_path.clone());
-        self.notifier.send(payload).await;
+        // CLI → Dashboard HTTP notification (CLI context)
+        if let Some(cli_notifier) = &self.cli_notifier {
+            cli_notifier
+                .notify_task_changed(Some(task_id), "deleted")
+                .await;
+        }
     }
 
     /// Add a new task
@@ -891,8 +899,10 @@ impl<'a> TaskManager<'a> {
             .fetch_one(self.pool)
             .await?;
 
-        // Create the subtask (inherit owner from parent or use default)
-        let subtask = self.add_task(name, spec, Some(parent_id), None).await?;
+        // Create the subtask with AI ownership (CLI operation)
+        let subtask = self
+            .add_task(name, spec, Some(parent_id), Some("ai"))
+            .await?;
 
         // Start the new subtask (sets status to doing and updates current_task_id)
         // This keeps the parent task in 'doing' status (multi-doing design)

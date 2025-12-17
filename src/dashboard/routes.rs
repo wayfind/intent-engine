@@ -37,6 +37,9 @@ pub fn api_routes() -> Router<AppState> {
         .route("/search", get(handlers::search))
         .route("/projects", get(handlers::list_projects))
         .route("/switch-project", post(handlers::switch_project))
+        // Internal routes (CLI → Dashboard communication)
+        .route("/internal/cli-notify", post(handlers::handle_cli_notification))
+        .route("/internal/shutdown", post(handlers::shutdown_handler))
 }
 
 #[cfg(test)]

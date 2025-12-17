@@ -43,6 +43,8 @@ pub struct AppState {
     pub port: u16,
     /// WebSocket state for real-time connections
     pub ws_state: super::websocket::WebSocketState,
+    /// Shutdown signal sender (for graceful shutdown via HTTP)
+    pub shutdown_tx: Arc<tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
 }
 
 /// Dashboard server instance
@@ -125,11 +127,15 @@ impl DashboardServer {
             is_online: true,      // Host is always online
         };
 
+        // Create shutdown channel for graceful shutdown
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
         let state = AppState {
             current_project: Arc::new(RwLock::new(project_context)),
             host_project: host_project_info,
             port: self.port,
             ws_state,
+            shutdown_tx: Arc::new(tokio::sync::Mutex::new(Some(shutdown_tx))),
         };
 
         // Build router
@@ -158,9 +164,17 @@ impl DashboardServer {
             }
         }
 
-        // Run server
-        axum::serve(listener, app).await.context("Server error")?;
+        // Run server with graceful shutdown
+        tracing::info!("Starting server with graceful shutdown support");
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async {
+                shutdown_rx.await.ok();
+                tracing::info!("Shutdown signal received, initiating graceful shutdown");
+            })
+            .await
+            .context("Server error")?;
 
+        tracing::info!("Dashboard server shut down successfully");
         Ok(())
     }
 }

@@ -1,14 +1,35 @@
-use crate::cli::{CurrentAction, EventCommands};
+// Note: CurrentAction and EventCommands removed in v0.10.1 CLI simplification
+// These functions are kept for potential Dashboard/MCP use but not exposed in CLI
+// use crate::cli::{CurrentAction, EventCommands};
 use crate::cli_handlers::read_stdin;
-use crate::cli_handlers::{check_dashboard_status, check_mcp_connections};
 use crate::error::{IntentError, Result};
 use crate::events::EventManager;
 use crate::project::ProjectContext;
 use crate::report::ReportManager;
-use crate::sql_constants;
 use crate::workspace::WorkspaceManager;
-use sqlx::Row;
 use std::path::PathBuf;
+
+// Stub types for deprecated CLI commands (no longer in cli.rs)
+#[allow(dead_code)]
+pub enum CurrentAction {
+    Set { task_id: i64 },
+    Clear,
+}
+
+#[allow(dead_code)]
+pub enum EventCommands {
+    Add {
+        task_id: Option<i64>,
+        log_type: String,
+        data_stdin: bool,
+    },
+    List {
+        task_id: Option<i64>,
+        log_type: Option<String>,
+        since: Option<String>,
+        limit: Option<i64>,
+    },
+}
 
 pub async fn handle_current_command(
     set: Option<i64>,
@@ -179,88 +200,45 @@ pub async fn handle_search_command(
 }
 
 pub async fn handle_doctor_command() -> Result<()> {
-    use serde_json::json;
+    use crate::cli_handlers::dashboard::{check_dashboard_health, DASHBOARD_PORT};
 
-    let mut checks = vec![];
-
-    // 1. Database Path Resolution
+    // Get database path info
     let db_path_info = ProjectContext::get_database_path_info();
-    checks.push(json!({
-        "check": "Database Path Resolution",
-        "status": "✓ INFO",
-        "details": db_path_info
-    }));
 
-    // 2. Database Health
-    match ProjectContext::load_or_init().await {
-        Ok(ctx) => {
-            match sqlx::query(sql_constants::COUNT_TASKS_TOTAL)
-                .fetch_one(&ctx.pool)
-                .await
-            {
-                Ok(row) => {
-                    let count: i64 = row.try_get(0).unwrap_or(0);
-                    checks.push(json!({
-                        "check": "Database Health",
-                        "status": "✓ PASS",
-                        "details": {
-                            "connected": true,
-                            "tasks_count": count,
-                            "message": format!("Database operational with {} tasks", count)
-                        }
-                    }));
-                },
-                Err(e) => {
-                    checks.push(json!({
-                        "check": "Database Health",
-                        "status": "✗ FAIL",
-                        "details": {"error": format!("Query failed: {}", e)}
-                    }));
-                },
-            }
-        },
-        Err(e) => {
-            checks.push(json!({
-                "check": "Database Health",
-                "status": "✗ FAIL",
-                "details": {"error": format!("Failed to load database: {}", e)}
-            }));
-        },
-    }
-
-    // 3-5. New checks
-    checks.push(check_dashboard_status().await);
-    checks.push(check_mcp_connections().await);
-    checks.push(check_session_start_hook());
-
-    // Status summary
-    let has_failures = checks
-        .iter()
-        .any(|c| c["status"].as_str().unwrap_or("").contains("✗ FAIL"));
-    let has_warnings = checks
-        .iter()
-        .any(|c| c["status"].as_str().unwrap_or("").contains("⚠ WARNING"));
-
-    let summary = if has_failures {
-        "✗ Critical issues detected"
-    } else if has_warnings {
-        "⚠ Some optional features need attention"
+    // Print database location
+    println!("Database:");
+    if let Some(db_path) = &db_path_info.final_database_path {
+        println!("  {}", db_path);
     } else {
-        "✓ All systems operational"
-    };
+        println!("  Not found");
+    }
+    println!();
 
-    let result = json!({
-        "summary": summary,
-        "overall_status": if has_failures { "unhealthy" }
-                         else if has_warnings { "warnings" }
-                         else { "healthy" },
-        "checks": checks
-    });
+    // Print ancestor directories with databases
+    let dirs_with_db: Vec<&String> = db_path_info
+        .directories_checked
+        .iter()
+        .filter(|d| d.has_intent_engine)
+        .map(|d| &d.path)
+        .collect();
 
-    println!("{}", serde_json::to_string_pretty(&result)?);
+    if !dirs_with_db.is_empty() {
+        println!("Ancestor directories with databases:");
+        for dir in dirs_with_db {
+            println!("  {}", dir);
+        }
+    } else {
+        println!("Ancestor directories with databases: None");
+    }
+    println!();
 
-    if has_failures {
-        std::process::exit(1);
+    // Check dashboard status
+    print!("Dashboard: ");
+    let dashboard_health = check_dashboard_health(DASHBOARD_PORT).await;
+    if dashboard_health {
+        println!("Running (http://127.0.0.1:{})", DASHBOARD_PORT);
+    } else {
+        println!("Not running (start with 'ie dashboard start')");
     }
 
     Ok(())

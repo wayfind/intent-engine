@@ -30,7 +30,7 @@ pub struct ApprovalResponse {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq)]
 pub struct Task {
     pub id: i64,
     pub parent_id: Option<i64>,
@@ -59,7 +59,7 @@ fn default_owner() -> String {
     "human".to_string()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TaskWithEvents {
     #[serde(flatten)]
     pub task: Task,
@@ -67,13 +67,13 @@ pub struct TaskWithEvents {
     pub events_summary: Option<EventsSummary>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EventsSummary {
     pub total_count: i64,
     pub recent_events: Vec<Event>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq)]
 pub struct Event {
     pub id: i64,
     pub task_id: i64,

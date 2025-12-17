@@ -108,8 +108,9 @@ pub async fn create_task(
         project_path,
     );
 
-    // Note: add_task doesn't support priority - it's set separately via update_task
-    // Dashboard creates human-owned tasks (None = human)
+    // Dashboard creates human-owned tasks (owner=None defaults to 'human')
+    // This distinguishes from CLI-created tasks (owner='ai')
+    // Note: Priority is set separately via update_task if needed
     let result = task_mgr
         .add_task(&req.name, req.spec.as_deref(), req.parent_id, None)
         .await;
@@ -834,5 +835,61 @@ pub async fn get_task_context(
             }),
         )
             .into_response(),
+    }
+}
+
+/// Handle CLI notification (internal endpoint for CLI → Dashboard sync)
+pub async fn handle_cli_notification(
+    State(state): State<AppState>,
+    Json(message): Json<crate::dashboard::cli_notifier::NotificationMessage>,
+) -> impl IntoResponse {
+    tracing::debug!("Received CLI notification: {:?}", message);
+
+    // Broadcast to all WebSocket clients
+    let notification_json = serde_json::to_string(&message).unwrap_or_default();
+    state.ws_state.broadcast_to_ui(&notification_json).await;
+
+    (StatusCode::OK, Json(json!({"success": true}))).into_response()
+}
+
+/// Shutdown the Dashboard server gracefully
+/// POST /api/internal/shutdown
+pub async fn shutdown_handler(State(state): State<AppState>) -> impl IntoResponse {
+    tracing::info!("Shutdown requested via HTTP endpoint");
+
+    // Trigger shutdown signal
+    let mut shutdown = state.shutdown_tx.lock().await;
+    if let Some(tx) = shutdown.take() {
+        if tx.send(()).is_ok() {
+            tracing::info!("Shutdown signal sent successfully");
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "status": "ok",
+                    "message": "Dashboard is shutting down gracefully"
+                })),
+            )
+                .into_response()
+        } else {
+            tracing::error!("Failed to send shutdown signal");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "status": "error",
+                    "message": "Failed to initiate shutdown"
+                })),
+            )
+                .into_response()
+        }
+    } else {
+        tracing::warn!("Shutdown already initiated");
+        (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "status": "error",
+                "message": "Shutdown already in progress"
+            })),
+        )
+            .into_response()
     }
 }

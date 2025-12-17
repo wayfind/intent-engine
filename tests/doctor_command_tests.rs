@@ -2,8 +2,6 @@ mod common;
 
 use std::process::Command;
 
-use serde_json::Value;
-
 #[test]
 fn doctor_reports_database_path_resolution_details() {
     // Use common::setup_test_env() to ensure proper initialization
@@ -31,44 +29,35 @@ fn doctor_reports_database_path_resolution_details() {
     }
 
     let stdout = String::from_utf8(output.stdout).expect("doctor output should be utf-8");
-    let value: Value = serde_json::from_str(&stdout).expect("doctor output should be valid json");
 
-    let checks = value["checks"]
-        .as_array()
-        .expect("doctor output must include checks array");
-    let db_check = checks
-        .iter()
-        .find(|check| check["check"] == "Database Path Resolution")
-        .expect("doctor output must include database path resolution check");
-
-    assert_eq!(db_check["status"], "✓ INFO");
-
-    let details = &db_check["details"];
-    assert_eq!(details["env_var_set"].as_bool(), Some(false));
-
-    let directories = details["directories_checked"]
-        .as_array()
-        .expect("directories_checked should be an array");
+    // Verify simplified natural language output format
     assert!(
-        directories
-            .iter()
-            .any(|entry| entry["is_selected"].as_bool() == Some(true)
-                && entry["has_intent_engine"].as_bool() == Some(true)),
-        "expected at least one directory to be selected during traversal"
+        stdout.contains("Database:"),
+        "Should show database location"
+    );
+    assert!(
+        stdout.contains("project.db"),
+        "Should show project.db in output"
+    );
+    assert!(
+        stdout.contains("Ancestor directories with databases:"),
+        "Should show ancestor directories section"
+    );
+    assert!(
+        stdout.contains("Dashboard:"),
+        "Should show dashboard status"
     );
 
+    // Verify database path is shown
     let expected_db_path = temp_dir
         .path()
         .join(".intent-engine")
         .join("project.db")
         .display()
         .to_string();
-    assert_eq!(
-        details["final_database_path"].as_str(),
-        Some(expected_db_path.as_str())
-    );
-    assert_eq!(
-        details["resolution_method"].as_str(),
-        Some("Upward Directory Traversal")
+    assert!(
+        stdout.contains(&expected_db_path),
+        "Should show the correct database path: {}",
+        expected_db_path
     );
 }

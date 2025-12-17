@@ -32,6 +32,7 @@ fn setup_test_env() -> TempDir {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_unicode_task_name() {
     let temp_dir = setup_test_env();
 
@@ -48,6 +49,7 @@ fn test_cli_unicode_task_name() {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_emoji_task_name() {
     let temp_dir = setup_test_env();
 
@@ -64,6 +66,7 @@ fn test_cli_emoji_task_name() {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_quotes_in_task_name() {
     let temp_dir = setup_test_env();
 
@@ -80,6 +83,7 @@ fn test_cli_quotes_in_task_name() {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_multiline_spec() {
     let temp_dir = setup_test_env();
 
@@ -98,6 +102,7 @@ fn test_cli_multiline_spec() {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_special_chars_in_event() {
     let temp_dir = setup_test_env();
 
@@ -132,6 +137,7 @@ fn test_cli_special_chars_in_event() {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_very_long_task_name() {
     let temp_dir = setup_test_env();
 
@@ -148,6 +154,7 @@ fn test_cli_very_long_task_name() {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_url_in_task_name() {
     let temp_dir = setup_test_env();
 
@@ -162,6 +169,7 @@ fn test_cli_url_in_task_name() {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_shell_metacharacters() {
     let temp_dir = setup_test_env();
 
@@ -176,6 +184,7 @@ fn test_cli_shell_metacharacters() {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_markdown_in_name() {
     let temp_dir = setup_test_env();
 
@@ -190,6 +199,7 @@ fn test_cli_markdown_in_name() {
 }
 
 #[test]
+#[ignore = "Test uses removed CLI commands (v0.10.0 simplified to plan/log/search)"]
 fn test_cli_backslash_path() {
     let temp_dir = setup_test_env();
 

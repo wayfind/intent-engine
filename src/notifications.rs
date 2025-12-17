@@ -1,20 +1,18 @@
-/// Unified notification infrastructure for Dashboard and MCP WebSocket communication
+/// Unified notification infrastructure for Dashboard WebSocket communication
 ///
 /// This module provides a centralized NotificationSender that handles the common
-/// pattern of sending database operation notifications via both WebSocket channels.
+/// pattern of sending database operation notifications via WebSocket.
 use crate::dashboard::websocket::{DatabaseOperationPayload, ProtocolMessage, WebSocketState};
 use std::sync::Arc;
-use tokio::sync::mpsc::UnboundedSender;
 
 /// Centralized notification sender for database operations
 ///
 /// Handles the common 3-step pattern:
 /// 1. Create ProtocolMessage from payload
 /// 2. Serialize to JSON
-/// 3. Send via both WebSocket (Dashboard UI) and MCP channels
+/// 3. Send via WebSocket (Dashboard UI)
 pub struct NotificationSender {
     ws_state: Option<Arc<WebSocketState>>,
-    mcp_notifier: Option<UnboundedSender<String>>,
 }
 
 impl NotificationSender {
@@ -22,15 +20,8 @@ impl NotificationSender {
     ///
     /// # Arguments
     /// * `ws_state` - Optional WebSocket state for Dashboard UI notifications
-    /// * `mcp_notifier` - Optional MCP channel for MCP client notifications
-    pub fn new(
-        ws_state: Option<Arc<WebSocketState>>,
-        mcp_notifier: Option<UnboundedSender<String>>,
-    ) -> Self {
-        Self {
-            ws_state,
-            mcp_notifier,
-        }
+    pub fn new(ws_state: Option<Arc<WebSocketState>>) -> Self {
+        Self { ws_state }
     }
 
     /// Send a database operation notification via all available channels
@@ -58,16 +49,9 @@ impl NotificationSender {
             },
         };
 
-        // Step 3a: Send via Dashboard WebSocket (if available)
+        // Step 3: Send via Dashboard WebSocket (if available)
         if let Some(ws) = &self.ws_state {
             ws.broadcast_to_ui(&json).await;
-        }
-
-        // Step 3b: Send via MCP channel (if available) - non-blocking
-        if let Some(notifier) = &self.mcp_notifier {
-            if let Err(e) = notifier.send(json) {
-                tracing::debug!("Failed to send MCP notification (channel closed): {}", e);
-            }
         }
     }
 }
@@ -78,15 +62,14 @@ mod tests {
 
     #[test]
     fn test_notification_sender_new() {
-        let sender = NotificationSender::new(None, None);
+        let sender = NotificationSender::new(None);
         assert!(sender.ws_state.is_none());
-        assert!(sender.mcp_notifier.is_none());
     }
 
     #[tokio::test]
     async fn test_send_with_no_channels() {
         // Should not panic when no channels are configured
-        let sender = NotificationSender::new(None, None);
+        let sender = NotificationSender::new(None);
         let payload = DatabaseOperationPayload {
             operation: "create".to_string(),
             entity: "task".to_string(),

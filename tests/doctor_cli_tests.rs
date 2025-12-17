@@ -1,14 +1,13 @@
-/// Tests for `ie doctor` CLI command to improve main.rs coverage
-/// Focuses on the handle_doctor_command() function
+/// Tests for `ie doctor` CLI command
+/// Focuses on the simplified natural language output format
 mod common;
 
 use predicates::prelude::*;
-use serde_json::Value;
 use std::fs;
 use tempfile::TempDir;
 
 // ============================================================================
-// Doctor Command Tests
+// Doctor Command Tests (Simplified Output Format)
 // ============================================================================
 
 #[tokio::test]
@@ -28,31 +27,22 @@ async fn test_doctor_basic_success() {
 
     let output = cmd.assert().success();
 
-    // Should contain JSON output
+    // Should contain simplified output
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
 
-    // Parse as JSON
-    let json: Value = serde_json::from_str(&stdout).expect("Output should be valid JSON");
-
-    // Check that checks array exists
-    assert!(json["checks"].is_array());
-
-    // Should have multiple checks
-    let checks = json["checks"].as_array().unwrap();
-    assert!(checks.len() >= 5, "Should have at least 5 checks");
-
-    // Verify specific checks exist - should have exactly 5 checks
-    let check_names: Vec<String> = checks
-        .iter()
-        .filter_map(|c| c["check"].as_str().map(String::from))
-        .collect();
-
-    assert_eq!(checks.len(), 5, "Should have exactly 5 checks");
-    assert!(check_names.contains(&"Database Path Resolution".to_string()));
-    assert!(check_names.contains(&"Database Health".to_string()));
-    assert!(check_names.contains(&"Dashboard".to_string()));
-    assert!(check_names.contains(&"MCP Connections".to_string()));
-    assert!(check_names.contains(&"SessionStart Hook".to_string()));
+    // Check that all three sections exist
+    assert!(
+        stdout.contains("Database:"),
+        "Should show database location"
+    );
+    assert!(
+        stdout.contains("Ancestor directories with databases:"),
+        "Should show ancestor directories"
+    );
+    assert!(
+        stdout.contains("Dashboard:"),
+        "Should show dashboard status"
+    );
 }
 
 #[tokio::test]
@@ -72,8 +62,8 @@ async fn test_doctor_database_location_check() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Database Path Resolution"))
-        .stdout(predicate::str::contains("✓ INFO"));
+        .stdout(predicate::str::contains("Database:"))
+        .stdout(predicate::str::contains("project.db"));
 }
 
 #[tokio::test]
@@ -91,11 +81,11 @@ async fn test_doctor_dashboard_check() {
     let mut cmd = common::ie_command();
     cmd.arg("doctor").current_dir(temp_dir.path());
 
-    // Dashboard check should show WARNING when not running
+    // Dashboard check should show "Not running" when dashboard is not started
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Dashboard"))
-        .stdout(predicate::str::contains("⚠ WARNING"));
+        .stdout(predicate::str::contains("Dashboard:"))
+        .stdout(predicate::str::contains("Not running").or(predicate::str::contains("Running")));
 }
 
 #[tokio::test]
@@ -115,8 +105,7 @@ async fn test_doctor_database_health_check() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Database Health"))
-        .stdout(predicate::str::contains("✓ PASS"));
+        .stdout(predicate::str::contains("Database:"));
 }
 
 #[tokio::test]
@@ -134,11 +123,9 @@ async fn test_doctor_mcp_connections_check() {
     let mut cmd = common::ie_command();
     cmd.arg("doctor").current_dir(temp_dir.path());
 
-    // MCP Connections check should show WARNING when Dashboard not running
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("MCP Connections"))
-        .stdout(predicate::str::contains("⚠ WARNING"));
+    // Simplified doctor no longer shows MCP connections
+    // Just verify it runs successfully
+    cmd.assert().success();
 }
 
 #[tokio::test]
@@ -158,7 +145,7 @@ async fn test_doctor_database_path_resolution() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Database Path Resolution"));
+        .stdout(predicate::str::contains("Database:"));
 }
 
 #[tokio::test]
@@ -178,9 +165,10 @@ async fn test_doctor_mcp_configuration_check() {
 
     let output = cmd.assert().success();
 
-    // MCP check should exist (even if not configured)
+    // Simplified doctor no longer shows MCP configuration
+    // Just verify it runs successfully
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    assert!(stdout.contains("MCP") || stdout.contains("mcp"));
+    assert!(stdout.contains("Database:"));
 }
 
 #[tokio::test]
@@ -200,9 +188,10 @@ async fn test_doctor_hooks_configuration_check() {
 
     let output = cmd.assert().success();
 
-    // Hooks check should exist (even if not configured)
+    // Simplified doctor no longer shows hooks configuration
+    // Just verify it runs successfully
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    assert!(stdout.contains("Hook") || stdout.contains("hook"));
+    assert!(stdout.contains("Database:"));
 }
 
 #[tokio::test]
@@ -223,24 +212,11 @@ async fn test_doctor_json_structure() {
     let output = cmd.assert().success();
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
 
-    // Parse JSON
-    let json: Value = serde_json::from_str(&stdout).expect("Should be valid JSON");
-
-    // Check required fields
-    assert!(json["summary"].is_string());
-    assert!(json["overall_status"].is_string());
-    assert!(json["checks"].is_array());
-
-    // Each check should have proper structure
-    for check in json["checks"].as_array().unwrap() {
-        assert!(check["check"].is_string(), "check field should be string");
-        assert!(check["status"].is_string(), "status field should be string");
-        // details can be string or object (for complex checks like MCP/Hooks)
-        assert!(
-            check["details"].is_string() || check["details"].is_object(),
-            "details should be string or object"
-        );
-    }
+    // Simplified doctor uses natural language, not JSON
+    // Verify the expected sections exist
+    assert!(stdout.contains("Database:"));
+    assert!(stdout.contains("Ancestor directories with databases:"));
+    assert!(stdout.contains("Dashboard:"));
 }
 
 #[tokio::test]
@@ -254,12 +230,11 @@ async fn test_doctor_with_tasks_in_database() {
         .arg(temp_dir.path().to_str().unwrap());
     cmd.assert().success();
 
-    // Add a task
+    // Add a task using plan command
+    let plan_json = r#"{"tasks":[{"name":"Test task for doctor"}]}"#;
     let mut cmd = common::ie_command();
-    cmd.arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Test task for doctor")
+    cmd.arg("plan")
+        .write_stdin(plan_json)
         .current_dir(temp_dir.path());
     cmd.assert().success();
 
@@ -270,11 +245,9 @@ async fn test_doctor_with_tasks_in_database() {
     let output = cmd.assert().success();
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
 
-    // Should report at least 1 task in Database Health check
-    assert!(
-        stdout.contains("Database operational with") && stdout.contains("tasks"),
-        "Should report tasks count in Database Health check"
-    );
+    // Simplified doctor shows database path but not task count
+    // Just verify it runs and shows database info
+    assert!(stdout.contains("Database:"));
 }
 
 #[tokio::test]
