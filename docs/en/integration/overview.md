@@ -8,8 +8,8 @@ Intent-Engine can be integrated into various AI tools and workflows. This guide 
 
 | Integration Method | Applicable Tools | Complexity | Feature Completeness | Recommended Scenario |
 |-------------------|------------------|------------|---------------------|---------------------|
-| [MCP Server](mcp-server.md) | Claude Code/Desktop | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Requires native tool calling, best Claude integration |
-| [Claude Skill](.claude-code/intent-engine.skill.md) | Claude Code | ⭐ | ⭐⭐⭐ | Quick trial, lightweight integration |
+| [System Prompt](claude-code-system-prompt.md) | Claude Code | ⭐ | ⭐⭐⭐⭐⭐ | **Recommended** - Zero configuration, best Claude integration |
+| [Claude Skill](.claude-code/intent-engine.skill.md) | Claude Code | ⭐ | ⭐⭐⭐ | Alternative, lightweight integration |
 | [Direct CLI Call](generic-llm.md) | Any AI Tool | ⭐ | ⭐⭐⭐⭐⭐ | Universal solution, adapt to any AI tool |
 | [Gemini CLI](gemini-cli.md) | Google Gemini | ⭐⭐ | ⭐⭐⭐⭐ | Coming soon |
 | [Cursor](cursor-integration.md) | Cursor Editor | ⭐⭐ | ⭐⭐⭐ | Coming soon |
@@ -25,10 +25,10 @@ Intent-Engine can be integrated into various AI tools and workflows. This guide 
 2. Claude Code will automatically recognize `.claude-code/intent-engine.skill.md`
 3. Ask Claude to use Intent-Engine in conversation
 
-**Production Integration (15 minutes):**
-1. Follow [MCP Server Guide](mcp-server.md) to install
-2. Restart Claude Code
-3. Enjoy native tool calling experience
+**Production Integration (5 minutes):**
+1. Follow [System Prompt Guide](claude-code-system-prompt.md) to setup
+2. Add system prompt to Claude Code configuration
+3. Enjoy zero-configuration experience (no MCP server needed)
 
 ### Using Other AI Tools?
 
@@ -76,16 +76,16 @@ Refer to [CI/CD Integration Guide](ci-cd.md) (coming soon) to use Intent-Engine 
 
 ## Integration Feature Matrix
 
-| Feature | MCP Server | Claude Skill | Generic CLI |
-|---------|-----------|-------------|-------------|
+| Feature | System Prompt | Claude Skill | Generic CLI |
+|---------|--------------|-------------|-------------|
 | Task Management | ✅ | ✅ | ✅ |
 | Event Recording | ✅ | ✅ | ✅ |
 | Work Reports | ✅ | ✅ | ✅ |
-| Native Tool Calling | ✅ | ❌ | ❌ |
-| Auto-completion | ✅ | ❌ | ❌ |
-| Type Checking | ✅ | ❌ | ❌ |
-| Setup Cost | High | Low | Low |
-| Maintenance Cost | Low | Low | Medium |
+| Zero Configuration | ✅ | ✅ | ❌ |
+| Embedded Documentation | ✅ | ❌ | ❌ |
+| Cross-Platform | ✅ | ✅ | ✅ |
+| Setup Cost | Minimal | Low | Low |
+| Maintenance Cost | None | Low | Medium |
 
 ---
 
@@ -95,9 +95,8 @@ Refer to [CI/CD Integration Guide](ci-cd.md) (coming soon) to use Intent-Engine 
 Start
   │
   ├─ Using Claude Code?
-  │   ├─ Yes → Need best experience?
-  │   │   ├─ Yes → MCP Server
-  │   │   └─ No → Claude Skill
+  │   ├─ Yes → [System Prompt](claude-code-system-prompt.md)
+  │   │        (Recommended, zero configuration)
   │   └─ No ↓
   │
   ├─ Using Gemini CLI?

@@ -62,6 +62,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Consistent with other CLI test files using `#![cfg(feature = "test-removed-cli-commands")]`
 - **Test Status**: 380 library tests + 33 rewritten tests = 413 total passing tests
 
+### Documentation
+
+- **Documentation Cleanup**: Removed 31 obsolete documentation files
+  - Removed MCP Server documentation (deprecated in v0.10.0)
+  - Removed WebSocket protocol documentation (superseded by HTTP notifications)
+  - Removed legacy specification files (v0.2.x era)
+  - Removed Phase 1 architecture documents (completed and superseded)
+  - Removed temporary release planning documents (v0.10.0 completed)
+  - Removed old release notes (v0.6.0 and earlier)
+  - Current documentation focuses on v0.10.x+ features only
+
 ## [0.10.0] - 2025-12-16
 
 ### Added
