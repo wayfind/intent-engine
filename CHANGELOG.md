@@ -48,6 +48,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Batch script performance improved for users who don't need Dashboard UI updates
 - Simplified CLI reduces binary size and maintenance overhead
 
+### Tests
+
+- **Test Suite Modernization**: Rewrote 4 test files from CLI-based to library-based testing (33 tests, ~550 lines reduced)
+  - `pick_next_blocking_tests.rs` - 7 tests for dependency blocking (commit f2d5e0e)
+  - `priority_and_list_tests.rs` - 8 tests for priority and filtering (commit 780147a)
+  - `task_edge_cases_tests.rs` - 12 tests for error handling (commit d7f1240)
+  - `task_start_blocking_tests.rs` - 6 tests for start validation (commit 7bb1c7b)
+  - **Performance**: 10x faster execution (5s → 0.3s per file)
+  - **Maintainability**: Tests no longer coupled to CLI interface changes
+- **Feature Gate Fixes**: Added missing feature gate to `cli_special_chars_tests.rs` (commit 6972d61)
+  - Prevents 10 test failures when removed CLI commands are not available
+  - Consistent with other CLI test files using `#![cfg(feature = "test-removed-cli-commands")]`
+- **Test Status**: 380 library tests + 33 rewritten tests = 413 total passing tests
+
 ## [0.10.0] - 2025-12-16
 
 ### Added
