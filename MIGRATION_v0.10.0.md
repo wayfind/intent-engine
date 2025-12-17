@@ -191,11 +191,12 @@ ie guide patterns   # 8 practical usage examples
 User: "Help me implement authentication"
 
 Claude: "I'll use Intent-Engine to track this work..."
-        [Uses: ie add "Implement authentication"]
-        [Uses: ie start 1]
+        [Creates task with ie plan]
+        [Gets context: ie get 1 --with-events]
+        [Updates status: ie plan with status="doing"]
         [Claude implements the feature]
-        [Uses: ie log decision "Chose JWT because..."]
-        [Uses: ie done]
+        [Logs: ie log decision "Chose JWT because..."]
+        [Completes: ie plan with status="done"]
 
 Dashboard: [Shows all changes in real-time]
 ```
@@ -314,19 +315,23 @@ ie add "Test"
 cd ~/my-project
 ie init
 
-# 2. Create first task
-ie add "Implement feature X"
+# 2. Create task with plan
+echo '{"tasks":[{"name":"Implement feature X"}]}' | ie plan
 
-# 3. Start working
-ie start 1
+# 3. Check tasks and get context
+ie list todo
+ie get 1 --with-events
 
-# 4. Track decision
+# 4. Start working (update status)
+echo '{"tasks":[{"name":"Implement feature X","status":"doing"}]}' | ie plan
+
+# 5. Track decisions
 ie log decision "Chose approach A because..."
 
-# 5. Complete
-ie done
+# 6. Complete task
+echo '{"tasks":[{"name":"Implement feature X","status":"done"}]}' | ie plan
 
-# 6. View Dashboard
+# 7. View Dashboard
 ie dashboard open
 ```
 

@@ -95,23 +95,31 @@ ie plan << 'JSON'
 JSON
 ```
 
-**Step 2: AI starts working and records decisions**
+**Step 2: AI works and records progress**
 
 ```bash
-# AI (or you) can start a task
-ie start 1  # Starts "Build user authentication"
+# AI updates task status as work progresses
+echo '{"tasks":[{"name":"Build user authentication","status":"doing"}]}' | ie plan
 
 # While working, AI records key decisions
 ie log decision "Chose HS256 algorithm for JWT signing"
 ie log decision "Store tokens in httpOnly cookies for security"
+
+# Mark task complete when done
+echo '{"tasks":[{"name":"Build user authentication","status":"done"}]}' | ie plan
 ```
 
 **Step 3: Resume work anytime**
 
 ```bash
-# Days later, you or AI can pick up exactly where you left off
-ie start 1  # Loads task + full decision history
-# AI now knows: what was built, why, and what's next
+# Days later, check available tasks
+ie list todo         # See pending tasks
+ie list doing        # See in-progress tasks
+
+# Get full task details including event history
+ie get 1 --with-events
+
+# Continue where you left off - AI now has full context
 ```
 
 ---
@@ -169,15 +177,26 @@ ie log blocker "Waiting for design approval from team"
 ie log milestone "MVP complete, ready for testing"
 ```
 
-### 🎯 Focus-Driven Work
+### 🎯 Declarative Workflow
 
-AI (or you) works on **one task at a time**, with full context:
+AI manages tasks by **declaring state**, following a clear workflow:
 
 ```bash
-ie start 5          # Focus on task #5
-ie log note "..."   # Log notes to current task
-ie done             # Complete current task
-ie pick-next        # AI suggests what to work on next
+# 1. Check available tasks
+ie list todo
+
+# 2. Get task details and history
+ie get 5 --with-events
+
+# 3. Start working (update status)
+echo '{"tasks":[{"name":"My Task","status":"doing"}]}' | ie plan
+
+# 4. Record progress and decisions
+ie log decision "Chose REST over GraphQL for simplicity"
+ie log note "Making good progress on API design"
+
+# 5. Mark complete when done
+echo '{"tasks":[{"name":"My Task","status":"done"}]}' | ie plan
 ```
 
 ### 📊 Progress Reports

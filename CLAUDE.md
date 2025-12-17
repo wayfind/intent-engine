@@ -155,9 +155,10 @@ Intent-Engine works like your brain - **one focused task at a time**:
 User: "Help me implement user authentication"
 
 You:
-1. task_add(name: "Implement user authentication", spec: "...")
-2. task_start(task_id: 42, with_events: true)
-3. Review the context and begin work
+1. Create task with ie plan
+2. Get task details: ie get <id> --with-events
+3. Update status to 'doing': ie plan with status update
+4. Begin work and record decisions with ie log
 ```
 
 ### Pattern 2: Breaking Down Work
@@ -187,12 +188,12 @@ You: "I chose HS256 algorithm because..."
 User: "Let's continue with authentication"
 
 You:
-1. search(query: "authentication")
-   → Find task ID 42 and related events
-2. task_start(task_id: 42, with_events: true)
-   → Get full context with decision history
-3. Review events_summary
-4. Continue from where you left off
+1. ie list doing    # Check active tasks
+2. ie list todo     # Check pending tasks
+3. ie search "authentication"  # Find specific tasks
+4. ie get 42 --with-events     # Get full context with history
+5. ie plan to update status to 'doing'
+6. Continue from where you left off
 ```
 
 ### Pattern 5: Switching Context
