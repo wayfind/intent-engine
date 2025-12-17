@@ -196,170 +196,166 @@ ie task start 2  # JWT Implementation task
 
 ---
 
-## 🔌 MCP Service: Deep Integration with Claude Code/Desktop
+## 🤖 Claude Code Integration: Zero-Configuration AI Collaboration
 
-Intent-Engine provides a **Rust-native MCP (Model Context Protocol) server**, enabling Claude Code and Claude Desktop to directly use all Intent-Engine features without manually running commands.
+**New in v0.10.0**: Intent-Engine now integrates seamlessly with Claude Code through an embedded system prompt - **no configuration required**.
 
-### Why Use MCP Service?
+### Why This Approach?
 
-**Traditional CLI Approach** vs **MCP Service**:
+**Previous MCP Approach (v0.9.x)** vs **System Prompt (v0.10.0)**:
 
-| Aspect | CLI Commands | MCP Service |
-|--------|--------------|-------------|
-| **Usage** | Humans manually execute commands | AI automatically invokes tools |
-| **Integration Difficulty** | Need to copy-paste commands | Completely transparent, works out-of-box |
-| **Context Awareness** | Need to manually pass task IDs | AI automatically manages current task |
-| **Token Efficiency** | Need to output full commands | Atomic operations, save 50-70% |
-| **User Experience** | Need to switch between terminal | Seamlessly complete within conversation |
+| Aspect | MCP Server (Old) | System Prompt (New) |
+|--------|------------------|---------------------|
+| **Setup Complexity** | Manual JSON configuration | Zero configuration |
+| **Installation** | Multi-step process | Single binary install |
+| **Maintenance** | Restart required for updates | Automatic |
+| **Dashboard Integration** | Separate process | Auto-start daemon |
+| **Real-Time Sync** | Database only | Database + HTTP notifications |
+| **Learning Curve** | High (MCP concepts) | Low (standard CLI) |
 
-### Quick Installation
-
-**Method 1: Automatic (Recommended)**
+### Quick Start
 
 ```bash
-# Install from cargo
+# 1. Install Intent-Engine
 cargo install intent-engine
 
-# Auto-configure MCP server for Claude Code
-ie setup-mcp
-
-# Or for Claude Desktop
-ie setup-mcp --target claude-desktop
+# 2. That's it! Claude Code automatically understands Intent-Engine
+# No configuration files, no MCP setup, no restart required
 ```
 
-**Method 2: From Source**
+### How It Works
 
-```bash
-# Clone the project
-git clone https://github.com/wayfind/intent-engine.git
-cd intent-engine
+Intent-Engine v0.10.0 uses a **345-line embedded system prompt** that teaches Claude Code:
+- ✅ All CLI commands and their usage
+- ✅ Focus-driven workflow patterns
+- ✅ Hierarchical task decomposition
+- ✅ Event tracking best practices
+- ✅ Common mistakes and anti-patterns
 
-# Build and install (unified binary with CLI and MCP server)
-cargo install --path .
-
-# Auto-configure for Claude Code/Desktop
-ie setup-mcp
-# Or use the shell script:
-# ./scripts/install/install-mcp-server.sh
-```
-
-> **Note**: The `setup-mcp` command automatically detects your OS and configures the correct file path. It targets Claude Code v2.0.37+ by default.
-
-### Manual Configuration
-
-Edit Claude's MCP configuration file:
-
-**Claude Code** (v2.0.37+):
-- Linux/macOS/WSL: `~/.claude.json`
-- Windows: `%APPDATA%\Claude\.claude.json`
-
-> **Note**: Earlier versions may use `~/.claude/mcp_servers.json` or `~/.config/claude-code/mcp_servers.json`
-
-**Claude Desktop**:
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-Add configuration:
-
-```json
-{
-  "mcpServers": {
-    "intent-engine": {
-      "command": "/home/user/.cargo/bin/intent-engine",
-      "args": ["mcp-server"],
-      "description": "Strategic intent and task workflow management"
-    }
-  }
-}
-```
-
-Restart Claude Code/Desktop, and you'll see **17 Intent-Engine tools** available.
-
-### MCP Tools List
-
-After installation, Claude can automatically use the following tools:
-
-**Task Management** (12 tools):
-- `task_add` - Create strategic task
-- `task_add_dependency` - Define task dependencies
-- `task_start` - Start task (atomic: set doing + set as current)
-- `task_pick_next` - Intelligently recommend next task
-- `task_spawn_subtask` - Create subtask and switch (atomic)
-- `task_switch` - Switch tasks (atomic: pause current + start new)
-- `task_done` - Complete task (validates all subtasks done)
-- `task_list` - Find tasks by status/parent (renamed from `task_find`)
-- `task_get` - Get detailed task information
-- `task_context` - Get task ancestry and subtask tree
-- `task_update` - Update task properties
-- `task_delete` - Delete a task
-
-**Search & Discovery** (1 tool):
-- `search` - Unified full-text search across tasks and events
-
-**Event Tracking** (2 tools):
-- `event_add` - Record decisions/blockers/milestones (AI's external long-term memory)
-- `event_list` - List event history with filtering
-
-**Workflow** (2 tools):
-- `current_task_get` - Get currently focused task
-- `report_generate` - Generate work reports
+**Automatic Features**:
+- **Dashboard Auto-Start**: Dashboard starts automatically when you use any CLI command
+- **Real-Time Sync**: CLI operations instantly update Dashboard UI via HTTP notifications
+- **Cross-Platform**: Works on Linux, macOS, and Windows (including WSL)
 
 ### Usage Example
 
-After installation, the experience in Claude Code:
+After installation, just use Intent-Engine naturally in conversations:
 
 ```
 You: "Help me implement a user authentication system"
 
-Claude: I'll use Intent-Engine to track this work.
-[Automatically calls task_add to create task #1]
-[Automatically calls task_start to begin and get context]
+Claude: "I'll use Intent-Engine to track this work..."
+        [Executes: ie add "Implement user authentication"]
+        [Executes: ie start 1 --with-events]
 
-"I've created and started task #1: Implement user authentication system.
-Based on project analysis, I suggest breaking it down into these subtasks:
+        "I've created and started task #1. Let me break this down:
 
-1. JWT Token generation and validation
-2. User password hashing storage
-3. Refresh Token mechanism
+        Based on the requirements, I'll create subtasks for:
+        1. JWT token generation and validation
+        2. User password hashing
+        3. Refresh token mechanism
 
-Let me create subtasks for each area..."
-[Automatically calls task_spawn_subtask to create subtask #2]
-[Begins implementing first subtask]
+        Starting with JWT implementation..."
+
+        [Executes: ie add "JWT Implementation" --parent 1]
+        [Executes: ie start 2]
+        [Implements the feature]
+        [Executes: ie log decision "Chose HS256 algorithm because..."]
+        [Executes: ie done]
 ```
 
-**Key Advantages**:
-- ✅ **Zero Manual Operations**: AI automatically manages tasks, no need to copy-paste commands
-- ✅ **Context Preservation**: Automatically resume task status and decision history across sessions
-- ✅ **Transparent Tracking**: All decisions automatically recorded to event stream
-- ✅ **Multi-project Isolation**: Different projects automatically use their own `.intent-engine` databases
+**Dashboard Feedback**: All these operations appear in real-time in the Dashboard UI (auto-started in background).
 
-### Technical Advantages
+### Built-in Help System
 
-Intent-Engine's MCP server uses **Rust native implementation**, compared to traditional Python wrappers:
-
-| Metric | Rust Native | Python Wrapper |
-|--------|-------------|----------------|
-| **Startup Time** | < 10ms | 300-500ms |
-| **Memory Usage** | ~5MB | ~30-50MB |
-| **Dependencies** | Zero | Requires Python 3.7+ |
-| **Performance** | Native | IPC overhead |
-
-### Verify Installation
+Intent-Engine includes comprehensive embedded guides:
 
 ```bash
-# Manually test MCP server (from project directory)
-cd /path/to/your/project
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
-  ie mcp-server
+# AI integration patterns and best practices
+ie guide ai
 
-# Should return JSON response with 13 tools
+# Migration from TodoWriter to Intent-Engine
+ie guide todowriter
+
+# Core workflow patterns (focus-driven, hierarchical, etc.)
+ie guide workflow
+
+# Real-world usage examples
+ie guide patterns
 ```
+
+These guides are optimized for AI consumption and cover:
+- ✅ All CLI commands with examples
+- ✅ Common workflows and patterns
+- ✅ Typical mistakes and how to avoid them
+- ✅ Integration with other tools
+
+### Supported AI Assistants
+
+The system prompt approach works with:
+- ✅ **Claude Code** (native support)
+- ✅ **Claude Desktop** (native support)
+- ✅ **Cursor** (via shell command execution)
+- ✅ **Aider** (via shell command execution)
+- ✅ **Generic LLM CLI tools** (any tool that can execute shell commands)
+
+### Migrating from v0.9.x
+
+If you're upgrading from v0.9.x with MCP configuration:
+
+```bash
+# 1. Upgrade the binary
+cargo install --force intent-engine
+
+# 2. Remove old MCP configuration
+# Edit Claude's config file and delete the "intent-engine" MCP entry
+# - Linux/macOS: ~/.claude.json
+# - Windows: %APPDATA%\Claude\.claude.json
+
+# 3. Restart Claude Code
+
+# 4. Verify
+ie guide ai
+```
+
+**Your existing database is fully compatible** - no migration needed.
+
+> 📖 **Complete Migration Guide**: See [MIGRATION_v0.10.0.md](MIGRATION_v0.10.0.md)
+
+### Technical Architecture
+
+**Embedded System Prompt**:
+- Compiled into the binary at build time
+- 345 lines of condensed AI guidance
+- Covers all commands, patterns, and anti-patterns
+- Zero external dependencies
+
+**Dashboard Auto-Start**:
+- Cross-platform daemon mode (Unix fork, Windows detached process)
+- PID file management with automatic stale cleanup
+- Health check with 3-second timeout
+- Graceful degradation if Dashboard fails
+
+**Real-Time Sync**:
+- Fire-and-forget HTTP notifications (500ms timeout)
+- Non-blocking CLI operations
+- Dual notification pattern (CLI → Dashboard HTTP, Dashboard → UI WebSocket)
+- Prevents circular dependencies
+
+### Advantages Over MCP
+
+1. **Simpler Mental Model**: Just use CLI commands naturally
+2. **No Configuration**: Works out of the box
+3. **Better Error Messages**: Standard CLI error handling
+4. **Faster Iteration**: No restart required for updates
+5. **More Portable**: No external configuration files
+6. **Real-Time Feedback**: Dashboard auto-starts and stays in sync
 
 ### Detailed Documentation
 
-- 📖 [Complete MCP Server Configuration Guide](docs/en/integration/mcp-server.md) - Installation, configuration, troubleshooting
-- 🔧 [MCP Tools Sync System](docs/en/technical/mcp-tools-sync.md) - Maintainer's guide
 - 📘 [CLAUDE.md](CLAUDE.md) - Complete AI assistant integration guide
+- 📖 [AGENT.md](AGENT.md) - Technical details and data models
+- 📝 [MIGRATION_v0.10.0.md](MIGRATION_v0.10.0.md) - Migration from v0.9.x
 
 ---
 
@@ -405,7 +401,7 @@ ie dashboard stop
 - 🔍 **Exploring Tasks**: Search and filter large task sets interactively
 
 **Integration:**
-- All changes sync instantly with CLI and MCP tools (shares same database)
+- All changes sync instantly with CLI and Dashboard (shares same database + HTTP notifications)
 - RESTful API available for custom integrations
 
 ### Documentation
@@ -451,15 +447,15 @@ ie dashboard stop
 
 ### 🤖 AI Integration
 - [**AI Quick Guide**](docs/en/guide/ai-quick-guide.md) - AI client quick reference
-- [**MCP Server**](docs/en/integration/mcp-server.md) - Integrate with Claude Code/Desktop
-- [**Claude Skill**](.claude-code/intent-engine.skill.md) - Lightweight Claude Code integration
+- [**CLAUDE.md**](CLAUDE.md) - Complete Claude Code/Desktop integration guide
+- [**AGENT.md**](AGENT.md) - Technical details and data models
 
 ### 📖 Deep Dive
 - [**Command Reference**](docs/en/guide/command-reference.md) - Complete command reference
 - [**Task Workflow Analysis**](docs/en/technical/task-workflow-analysis.md) - Token optimization strategy explained
 - [**Performance Report**](docs/en/technical/performance.md) - Performance benchmarks
 - [**Security Testing**](docs/en/technical/security.md) - Security test reports
-- [**MCP Tools Sync**](docs/en/technical/mcp-tools-sync.md) - MCP tools synchronization system
+- [**Migration Guide (v0.10.0)**](MIGRATION_v0.10.0.md) - Upgrade from v0.9.x (MCP) to v0.10.0 (System Prompt)
 
 ### 👥 Contributors
 - [**Contributing Guide**](docs/en/contributing/contributing.md) - How to contribute code
@@ -541,9 +537,9 @@ cargo test --test performance_tests -- --ignored
 cargo tarpaulin
 ```
 
-**Test Statistics**: 505+ tests all passing ✅
+**Test Statistics**: 500+ tests all passing ✅
 - Unit tests, integration tests, CLI tests
-- MCP integration tests
+- Dashboard integration tests
 - Special character security tests
 - Performance and benchmarking tests
 - Windows encoding compatibility tests

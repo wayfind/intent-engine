@@ -56,8 +56,7 @@ cargo build
 > **Single Source of Truth**: `docs/INTERFACE_SPEC.md`
 >
 > The INTERFACE_SPEC.md document is the **authoritative blueprint** for all Intent-Engine interfaces:
-> - ✅ **CLI Interface**: Command signatures, parameters, atomic behaviors
-> - ✅ **MCP Interface**: Tool definitions, JSON-RPC protocols
+> - ✅ **CLI Interface**: Command signatures, parameters, atomic behaviors, JSON output formats
 > - ✅ **Rust API**: Public types, function signatures
 > - ✅ **Data Models**: Exact field names, types, lifecycle semantics
 > - ✅ **Guarantees**: SemVer stability, breaking change policies
@@ -539,9 +538,9 @@ task done                               # Parent done (all children done)
 ## 📚 Key Documents
 
 - **Authoritative Spec**: `docs/INTERFACE_SPEC.md`
-- **MCP Integration**: `docs/*/integration/mcp-server.md`
-- **Tool Sync**: `docs/*/technical/mcp-tools-sync.md`
-- **Test Files**: `tests/interface_spec_test.rs`, `tests/mcp_tools_sync_test.rs`
+- **AI Integration**: `CLAUDE.md` and `MIGRATION_v0.10.0.md`
+- **Migration Guide**: `MIGRATION_v0.10.0.md` (v0.9.x → v0.10.0)
+- **Test Files**: `tests/interface_spec_test.rs`, Dashboard integration tests
 
 ---
 

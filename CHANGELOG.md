@@ -5,6 +5,102 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.10.1] - TBD
+
+### Added
+
+- **Dashboard Notification Control**: Environment variable `IE_DISABLE_DASHBOARD_NOTIFICATIONS` to disable CLI→Dashboard notifications
+  - Set to `1` or `true` (case-insensitive) to completely disable notifications
+  - Useful for CI/CD pipelines, batch scripts, and users who don't use Dashboard UI
+  - Zero performance overhead when disabled
+- **New `log` Command**: Quick event logging for focused task or specific task
+  - Usage: `ie log decision "message"`, `ie log blocker "message" --task 42`
+  - Supports: decision, blocker, milestone, note
+  - Replaces verbose `ie event add` syntax
+- **Built-in Help System**: Detailed guides integrated into `--help`
+  - `ie plan --help` shows 180-line comprehensive guide
+  - `ie plan -h` shows quick reference (5 lines)
+  - TodoWriter-style examples for easy migration
+  - Common patterns, error handling, best practices
+  - Follows Unix convention: `-h` (short) vs `--help` (detailed)
+
+### Changed
+
+- **BREAKING**: Disabled Dashboard auto-start by default
+  - Dashboard will no longer automatically start in daemon mode on CLI commands
+  - Users must manually start Dashboard with `ie dashboard start` or `ie dashboard start --daemon`
+  - Improves CLI performance and reduces unnecessary background processes
+- **BREAKING**: Simplified CLI to 6 essential commands for AI agents
+  - **Core (3)**: `plan`, `log`, `search`
+  - **System (3)**: `init`, `dashboard`, `doctor`
+  - **Removed**: `task`, `event`, `report`, `current`, `setup`, `session-restore`, `guide`, and all hybrid commands
+  - **Rationale**: CLI designed for AI agents (minimal, batch operations), humans use Dashboard UI (full CRUD)
+  - **Help system**: Detailed guides moved to `--help` (Occam's razor: avoid unnecessary complexity)
+- Reduced Dashboard notification timeout from 500ms to 100ms for faster CLI response
+
+### Performance
+
+- CLI commands skip notification logic entirely when `IE_DISABLE_DASHBOARD_NOTIFICATIONS` is enabled
+- Faster timeout (500ms → 100ms) reduces overhead when Dashboard is offline
+- No Dashboard auto-start overhead when Dashboard is not needed
+- Batch script performance improved for users who don't need Dashboard UI updates
+- Simplified CLI reduces binary size and maintenance overhead
+
+## [0.10.0] - 2025-12-16
+
+### Added
+
+- **Dashboard Auto-Start**: Dashboard automatically starts in daemon mode on any CLI command
+  - Cross-platform support (Unix fork, Windows detached process)
+  - PID file management with automatic stale cleanup
+  - Health checks with 3-second timeout
+- **Real-Time CLI → Dashboard Sync**: CLI operations trigger instant Dashboard UI updates
+  - Fire-and-forget HTTP notifications (500ms timeout)
+  - Non-blocking design for CLI operations
+  - Dual notification pattern (CLI → HTTP, Dashboard → WebSocket)
+- **Enhanced Help System**: Built-in AI guides via `ie guide` command
+  - `ie guide ai` - AI integration patterns (345 lines)
+  - `ie guide todo-writer` - TodoWriter migration guide
+  - `ie guide workflow` - Core workflow patterns
+  - `ie guide patterns` - Real-world usage examples
+- **Embedded System Prompt**: 345-line AI guide compiled into binary
+- **Migration Guide**: Comprehensive v0.9.x → v0.10.0 migration documentation
+
+### Changed
+
+- **BREAKING**: Replaced MCP server with embedded system prompt approach
+  - Removed `ie mcp-server` command
+  - Removed MCP configuration requirements
+  - Zero configuration now required for Claude Code integration
+- Updated architecture from MCP-based to system prompt-based
+- Simplified installation: single binary, no external configuration
+- Improved sync latency: < 100ms (was 1-2s with polling)
+
+### Removed
+
+- **BREAKING**: MCP (Model Context Protocol) server completely removed
+  - `mcp-server.json` schema file
+  - MCP setup and configuration commands
+  - MCP-specific documentation
+- Removed obsolete test: `test_spec_lists_all_mcp_tools`
+
+### Documentation
+
+- Created `MIGRATION_v0.10.0.md` - Migration guide from v0.9.x
+- Created `RELEASE_NOTES_v0.10.0.md` - Detailed release notes
+- Updated `README.md` - Replaced MCP section with Claude Code integration
+- Updated `CLAUDE.md` - Version 0.10 with system prompt approach
+- Updated `AGENT.md` - Removed MCP interface documentation
+- Removed MCP server setup guides
+- Removed MCP tools sync documentation
+
+### Fixed
+
+- Fixed interface spec tests to work without MCP schema file
+- Resolved all compilation warnings in CLI notifier module
+
 ## [0.9.0] - 2025-12-01
 
 ### Documentation

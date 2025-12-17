@@ -1,7 +1,7 @@
 # Intent-Engine: Claude Integration Guide
 
-**Version**: 0.8
-**Target**: Claude Code, Claude Desktop, and AI assistants via MCP
+**Version**: 0.10
+**Target**: Claude Code, Claude Desktop, and AI assistants via system prompt
 
 ---
 
@@ -13,7 +13,7 @@
 >
 > The spec-03-interface-current.md document is the **foundational blueprint** that defines:
 > - ✅ All CLI command signatures and behaviors
-> - ✅ All MCP tool definitions and interfaces
+> - ✅ JSON output formats and data structures
 > - ✅ Data models and their exact field names
 > - ✅ Atomic operation semantics
 > - ✅ Output format specifications
@@ -64,7 +64,7 @@ Intent-Engine works like your brain - **one focused task at a time**:
 
 ---
 
-## 🛠️ Essential MCP Tools
+## 🛠️ Essential CLI Commands
 
 > **For detailed technical specifications**, see [AGENT.md](AGENT.md#essential-commands)
 
@@ -400,8 +400,8 @@ Think of Intent-Engine as:
 
 - **Interface Spec** (authoritative): `docs/spec-03-interface-current.md`
 - **AI Agent Guide** (technical details): `AGENT.md`
-- **MCP Schema**: `mcp-server.json`
-- **Setup Guide**: `docs/*/integration/mcp-server.md`
+- **Migration Guide**: `MIGRATION_v0.10.0.md`
+- **Built-in Guides**: `ie guide ai`, `ie guide workflow`, `ie guide patterns`
 
 > For data models, output formats, and command specifications, see [AGENT.md](AGENT.md)
 
@@ -416,6 +416,156 @@ Intent-Engine is designed for **strategic intent tracking**, not tactical todo l
 - **Hierarchical thinking** over flat lists
 - **Decision history** over task status
 - **Focus** over multitasking
+
+---
+
+## 🏗️ Architecture (v0.10.0+)
+
+### Simplified Communication Model
+
+**Previous Architecture (v0.9.0)**:
+```
+┌─────────────┐     ┌────────────┐     ┌───────────┐
+│ Claude Code │────▶│ MCP Server │◀───▶│ Dashboard │◀───▶│ Frontend │
+│   Instance  │     │ (per proj) │     │ (central) │     │          │
+└─────────────┘     └────────────┘     └───────────┘     └──────────┘
+                    Persistent          Heartbeat          WebSocket
+                    Connection          Mechanism          Connection
+```
+
+**Key Issues**:
+- ❌ Each project required separate MCP server process
+- ❌ Persistent bidirectional connections (complexity)
+- ❌ Heartbeat mechanism needed (overhead)
+- ❌ Projects had "online/offline" states
+- ❌ Connection failures caused data sync issues
+
+---
+
+**Current Architecture (v0.10.0+)**:
+```
+┌─────────────┐
+│ Claude Code │ via ie CLI
+└──────┬──────┘
+       │
+       ▼ (write)
+┌──────────────────┐
+│ Local SQLite DB  │
+│ (project-local)  │
+└──────┬───────────┘
+       │
+       ▼ (single notification)
+┌──────────────────────────┐
+│   Global Dashboard       │
+│   (one instance)         │
+└──────┬───────────────────┘
+       │
+       ▼ (direct read/write)
+┌─────────────────────────────────┐
+│ All Project SQLite DBs          │
+│ (/project-1/tasks.db)            │
+│ (/project-2/tasks.db)            │
+│ (/project-N/tasks.db)            │
+└──────┬──────────────────────────┘
+       │
+       ▼ (query)
+┌──────────────┐
+│   Frontend   │
+│   (Vue SPA)  │
+└──────────────┘
+```
+
+**Key Improvements**:
+- ✅ No MCP servers needed
+- ✅ No persistent connections
+- ✅ No heartbeat overhead
+- ✅ No "online/offline" states
+- ✅ All CLI operations work offline
+- ✅ Dashboard can directly create/modify tasks in any project
+
+---
+
+### Dashboard's New Role
+
+**Previous Role** (v0.9.0):
+- Central server receiving data from multiple MCP servers
+- Maintained WebSocket connections with frontend
+- Relayed commands between AI agents and frontend
+- Required projects to be "online" to function
+
+**Current Role** (v0.10.0+):
+1. **Passive Observer**
+   - Receives unidirectional notifications from CLI operations
+   - No active connections needed
+   - Lightweight, event-driven updates
+
+2. **Direct Database Accessor**
+   - Has direct read/write access to all project SQLite databases
+   - Can query any project's tasks, events, workspace state
+   - No intermediary layer
+
+3. **Human Task Creation Interface**
+   - Humans can create/modify tasks directly via Dashboard UI
+   - Dashboard writes directly to project databases
+   - AI picks up human-created tasks on next CLI operation
+
+4. **Multi-Project Visualizer**
+   - Single dashboard instance monitors all projects
+   - Real-time view across entire workspace
+   - No per-project server setup needed
+
+---
+
+### Communication Flow
+
+**AI Agent Workflow**:
+```
+1. AI executes `ie plan` or `ie add`
+2. CLI writes to local SQLite database
+3. CLI sends single notification to global dashboard (UDP/HTTP)
+4. Dashboard updates frontend views
+5. No acknowledgment needed (fire-and-forget)
+```
+
+**Human Workflow**:
+```
+1. Human opens Dashboard UI
+2. Dashboard queries all project databases directly
+3. Human creates/modifies tasks in UI
+4. Dashboard writes directly to project SQLite DB
+5. AI picks up changes on next CLI read operation
+```
+
+**Key Characteristics**:
+- **Offline-First**: CLI operations never blocked by network
+- **Eventually Consistent**: Dashboard updates async
+- **Fault Tolerant**: Lost notifications don't affect data integrity
+- **Simple**: Unidirectional data flow
+
+---
+
+### Migration Notes
+
+If migrating from v0.9.0:
+1. **Remove MCP Configuration**
+   - No need for `mcp-server.json`
+   - No MCP server processes to manage
+
+2. **Start Global Dashboard** (optional)
+   ```bash
+   ie dashboard start
+   # Monitors all projects automatically
+   ```
+
+3. **All CLI Commands Work Offline**
+   - `ie plan`, `ie add`, `ie start`, etc. always work
+   - No connection state to worry about
+
+4. **Dashboard is Optional**
+   - CLI works independently
+   - Dashboard provides visualization only
+
+For detailed migration guide, see [MIGRATION_v0.10.0.md](MIGRATION_v0.10.0.md)
 
 ---
 

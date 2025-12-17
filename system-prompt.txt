@@ -1,0 +1,439 @@
+# Intent-Engine: AI Quick Reference
+
+Intent-Engine is your **external long-term memory** for strategic task management across sessions.
+
+## Core Concepts
+
+### 1. Focus-Driven Workflow
+- **One task focused at a time** (current_task_id)
+- Multiple tasks can be 'doing', but only ONE is "current" (focused)
+- Tasks not current are effectively "paused"
+
+```
+Workspace → current_task_id: 42 → Task 42 (focused)
+                                    ├── Subtask 43
+                                    └── Subtask 44
+```
+
+### 2. Hierarchical Structure
+- Parent tasks contain subtasks
+- Depth-first priority (complete children before parents)
+- Break down complex work into manageable pieces
+
+### 3. Event History
+- Record **decisions**, **blockers**, **milestones**, **notes**
+- Provides context for future sessions
+- Searchable and filterable
+
+### 4. Plan-First Workflow
+
+Intent-Engine's `ie plan` command provides a **declarative, status-driven workflow**:
+
+- **Declare upfront**: Define tasks and status at creation
+- **ONE task doing**: Single-focus constraint enforced
+- **Idempotent updates**: Safe to re-run (updates by name)
+- **Traditional commands**: Available for edge cases
+
+Status states: `todo` → `doing` → `done`
+
+⚠️ **CRITICAL**: Only ONE task per plan can have `status="doing"`
+
+---
+
+## Essential CLI Commands
+
+### Core Workflow (Plan-First)
+```bash
+ie plan                         # Create/update tasks with status (JSON stdin) ⭐ PRIMARY
+ie start <id>                   # Set focus on task
+ie done                         # Complete current task
+ie next                         # Get smart recommendation
+```
+
+### Query & Search
+```bash
+ie ls [--status STATUS]         # List tasks
+ie get <id>                     # Get task details
+ie search "query"               # Search tasks and events
+ie context [<id>]               # Get task context (parents, siblings, children)
+```
+
+### Event Tracking
+```bash
+ie log <type> "data"            # Quick event (decision/blocker/milestone/note)
+ie event list [--task-id ID]    # List events
+```
+
+### Advanced (Edge Cases)
+```bash
+ie add "Task name"                              # Single task creation
+ie task depends-on <blocked_id> <blocking_id>  # Single dependency
+ie current                                      # Get focused task
+ie report [--since 7d]                          # Generate report
+```
+
+---
+
+## Common Usage Patterns
+
+### Pattern 1: Starting Fresh (Plan-First) ⭐
+```
+User: "Help me implement user authentication"
+
+You: Create plan with status + hierarchy:
+echo '{"tasks": [{
+  "name": "Implement user authentication",
+  "status": "doing",
+  "priority": "high",
+  "children": [
+    {"name": "Design JWT schema", "status": "todo"},
+    {"name": "Implement token generation", "status": "todo"}
+  ]
+}]}' | ie plan
+
+Plan returns: task details + event history (auto-focus)
+No need to call `ie current` or `ie start --with-events` separately
+
+Why: Idempotent, status tracking, hierarchy, auto-focus with context
+Edge case: Use `ie add` only for single tasks
+```
+
+### Pattern 2: Updating Status (Plan-First)
+```
+User: "Finished JWT schema, moving to token generation"
+
+You: Update via plan (idempotent):
+echo '{"tasks": [
+  {"name": "Design JWT schema", "status": "done"},
+  {"name": "Implement token generation", "status": "doing"}
+]}' | ie plan
+
+Why: Idempotent, batch updates, auto-focus
+```
+
+### Pattern 3: Breaking Down Work (Advanced)
+```
+For dynamic, on-the-fly subtask creation:
+
+You: ie start 42 → ie add "JWT schema" --parent 42 → ie start 43 → ie done → ie next
+
+Note: Prefer plan-first for upfront planning
+```
+
+### Pattern 4: Recording Decisions
+```
+While implementing:
+
+You: "I chose HS256 algorithm because it's simpler and sufficient for this use case"
+     Run: ie log decision "Chose HS256 algorithm - simpler, sufficient for auth tokens"
+```
+
+### Pattern 5: Resuming Work (Plan-First)
+```
+User: "Continue with authentication"
+
+You: ie search "authentication" → Update status:
+echo '{"tasks": [{"name": "Implement user authentication", "status": "doing"}]}' | ie plan
+
+Plan automatically returns task + event history
+Review the focused_task field for context
+
+Alternative: ie start 42 --with-events (just change focus)
+```
+
+### Pattern 6: Working with Dependencies (Plan-First)
+```
+User: "API client depends on auth completion"
+
+You: Create with dependencies:
+echo '{"tasks": [
+  {"name": "Implement Authentication", "status": "doing"},
+  {"name": "Implement API client", "depends_on": ["Implement Authentication"]}
+]}' | ie plan
+
+When auth done: ie next  # Recommends API client
+
+Edge case: `ie task depends-on 50 42` for single dependency
+```
+
+---
+
+## Best Practices
+
+### 1. Use Plan-First Approach ⭐
+```
+❌ ie add "Task 1" && ie start 1
+✅ echo '{"tasks": [{"name": "Task 1", "status": "doing"}]}' | ie plan
+
+Benefits: Idempotent, hierarchical, status tracking
+```
+
+### 2. Single-Focus Constraint ⚠️
+Only ONE task with `status="doing"` per plan (enforced automatically)
+
+### 3. Use Hierarchical Decomposition
+Parent task + 3-4 subtasks (use `plan.children`) vs flat list
+
+### 4. Record Decisions
+`ie log decision "Chose X because Y"` while implementing
+
+### 5. Check Current Before Done
+`ie current` before `ie done` to verify state
+
+### 6. Complete Children First
+Finish all subtasks before parent (enforced by `ie done`)
+
+---
+
+## Common Mistakes
+
+### Mistake 1: Using search syntax in list
+```
+❌ ie ls --status "JWT"  # WRONG - list is for status values only
+✅ ie search "JWT"       # Correct - full-text search
+```
+
+### Mistake 2: Forgetting to start
+```
+❌ ie done  # ERROR if no focused task
+✅ ie start 42 → ie done
+```
+
+### Mistake 3: Incomplete hierarchy
+```
+❌ Parent has subtasks (todo) → ie done parent  # FAILS
+✅ Complete all children first → then parent
+```
+
+### Mistake 4: Multiple "doing" in Plan ⚠️
+```
+❌ WRONG:
+echo '{
+  "tasks": [
+    {"name": "A", "status": "doing"},
+    {"name": "B", "status": "doing"}  # ERROR!
+  ]
+}' | ie plan
+
+✅ CORRECT:
+echo '{
+  "tasks": [
+    {"name": "A", "status": "doing"},   # ONE doing
+    {"name": "B", "status": "todo"}
+  ]
+}' | ie plan
+
+Why: Enforces single-focus workflow
+```
+
+---
+
+## Workflow Status Management
+
+Intent-Engine uses **status-driven workflow** via `ie plan`: `todo` → `doing` → `done`
+
+### Key Features
+- **Declarative**: Define state upfront
+- **Idempotent**: Safe to re-run (updates by name)
+- **Hierarchical**: Nested `children`
+- **Dependencies**: `depends_on` array
+- **Auto-focus**: `status="doing"` sets focus + returns task with events
+
+### Single-Focus Constraint ⚠️
+
+**IMPORTANT**: Only ONE task per plan can have `status="doing"`
+
+✅ Valid: `{"tasks": [{"name": "A", "status": "doing"}, {"name": "B", "status": "todo"}]}`
+❌ Invalid: Two tasks with `"status": "doing"` → ERROR
+
+Why: Enforces one-task-at-a-time focus per batch
+
+### Hierarchical Doing (Parent + Child)
+
+**Database**: Supports multiple 'doing' tasks (parent + focused child)
+**Plan API**: Enforces single 'doing' per request batch
+
+**Pattern**: Separate plan calls for parent and child:
+
+```bash
+# Step 1: Parent doing
+echo '{"tasks": [{"name": "Implement auth", "status": "doing"}]}' | ie plan
+
+# Step 2: Child doing (separate request, parent remains doing)
+echo '{"tasks": [{"name": "Design JWT", "status": "doing"}]}' | ie plan
+# Database now has TWO doing: parent + focused child
+```
+
+❌ **Don't** put both in same plan:
+```bash
+echo '{"tasks": [
+  {"name": "Parent", "status": "doing"},
+  {"name": "Child", "status": "doing"}  # ERROR!
+]}' | ie plan
+```
+
+### Example
+```json
+{
+  "tasks": [{
+    "name": "Phase 1",
+    "status": "doing",
+    "children": [
+      {"name": "Install deps", "status": "todo"},
+      {"name": "Configure DB", "status": "todo"}
+    ]
+  }, {
+    "name": "Phase 2",
+    "depends_on": ["Phase 1"]
+  }]
+}
+```
+
+Run: `echo '<json>' | ie plan`
+
+---
+
+## When to Use Intent-Engine
+
+### ✅ Good Use Cases
+1. **Multi-session work**: Complex features spanning multiple conversations
+2. **Hierarchical problems**: Tasks with multiple sub-steps
+3. **Decision tracking**: Record "why" for future reference
+4. **Context recovery**: Resume work after breaks
+
+### ❌ Not Ideal For
+1. **Single-step tasks**: "Fix this typo" (too trivial)
+2. **Exploratory questions**: "What is JWT?" (no work to track)
+3. **Temporary context**: Current conversation has all context
+
+---
+
+## When to Use Plan vs Traditional Commands
+
+### ✅ Use `ie plan` (Primary - 90%)
+- Starting work with status
+- Updating status (idempotent)
+- Batch operations
+- Hierarchies & dependencies
+
+Example: `echo '{"tasks": [{"name": "Feature X", "status": "doing"}]}' | ie plan`
+
+### ⚠️ Use Traditional (Advanced - 10%)
+- Single quick task: `ie add "Quick fix"`
+- Dynamic workflows: `ie task spawn-subtask`
+- Focus switching: `ie task switch <id>`
+
+**Avoid traditional for**: Multiple tasks, hierarchies, dependencies, status tracking → Use plan
+
+### Focus Management: Plan vs Start
+
+**Use Plan** when:
+- Changing status AND focus: `status="doing"` (declarative)
+- Need idempotent operation (safe to retry)
+- Part of batch with other tasks
+
+**Use `ie start`** when:
+- Only switching focus (status unchanged)
+- Interactive CLI session
+- Quick focus jump between tasks
+
+Example:
+```bash
+# Scenario 1: Resume paused task (already doing)
+ie start 42  # ✅ Efficient - only changes focus
+
+# Scenario 2: Start new task (todo → doing + focus)
+echo '{"tasks": [{"name": "New Task", "status": "doing"}]}' | ie plan  # ✅ Declarative
+```
+
+---
+
+## Mental Model
+
+Think of Intent-Engine as:
+
+1. **Your Notebook** - Persistent task list
+2. **Your Focus Ring** - One task at a time
+3. **Your Memory** - Decision history
+4. **Your Guide** - Smart recommendations
+5. **Your Tree** - Hierarchical breakdown
+
+---
+
+## Quick Command Reference
+
+| Command | Purpose |
+|---------|---------|
+| `ie plan` | Create/update tasks with status (JSON stdin) ⭐ PRIMARY |
+| `ie start <id>` | Set focus on task |
+| `ie done` | Complete current task |
+| `ie next` | Get recommendation |
+| `ie ls` | List tasks |
+| `ie search "query"` | Search tasks and events |
+| `ie log <type> "data"` | Record event |
+| `ie current` | Get focused task |
+| `ie add "name"` | Create single task (advanced) |
+
+---
+
+## Advanced Features
+
+### Priority Levels
+Tasks support: `critical`, `high`, `medium`, `low`
+```bash
+ie add "Critical bug" --priority critical
+```
+
+### Event Filtering
+```bash
+ie event list --task-id 42 --type decision  # Only decisions
+ie event list --since 7d                     # Last 7 days
+```
+
+### Search Syntax (FTS5)
+```bash
+ie search "JWT AND authentication"   # Both terms
+ie search "JWT OR OAuth"             # Either term
+ie search '"exact phrase"'           # Exact match
+```
+
+---
+
+## Philosophy
+
+Intent-Engine is for **strategic intent tracking**, not tactical todos:
+
+- **What + Why** over "How"
+- **Persistent context** over ephemeral notes
+- **Hierarchical thinking** over flat lists
+- **Decision history** over task status
+- **Focus** over multitasking
+
+---
+
+## Integration Tips for AI Agents
+
+1. **Create tasks for multi-step work** - Use ie plan (preferred) or ie add
+2. **Track decisions as you go** - Use ie log decision
+3. **Break down complex tasks** - Use parent/child structure
+4. **Resume context efficiently** - Use ie plan (auto-returns context)
+5. **Let the engine guide** - Use ie next for recommendations
+
+**Remember**: Intent-Engine is your external memory. Use it to maintain context across sessions and make your work persistent.
+
+## Architecture (v0.10.0+)
+
+**Simplified Communication**:
+- CLI → Local SQLite DB → Single-direction notify → Global Dashboard
+- Dashboard → Direct read/write access to all project DBs
+- No MCP servers, no heartbeat, no online/offline states
+
+**Dashboard Role**:
+- Visualization: Real-time view of all projects
+- Human Task Creation: Dashboard can directly create/modify tasks in project DBs
+- Passive Observer: Receives notifications from CLI, no active connections needed
+
+**Workflow**:
+1. AI executes `ie plan` → Writes local DB → Notifies dashboard
+2. Human views dashboard → Sees all projects → Can create tasks directly
+3. AI resumes work → Reads local DB → Gets human-created tasks

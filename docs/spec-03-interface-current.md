@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.9
-**Last Updated**: 2025-12-02
+**Version**: 0.10
+**Last Updated**: 2025-12-16
 **Status**: Experimental (Pre-1.0)
 
 ---
@@ -28,6 +28,57 @@
 ---
 
 ## Changelog
+
+### Version 0.10 (2025-12-16)
+
+**Theme**: "Simplified Architecture - System Prompt Integration"
+
+**BREAKING CHANGES:**
+- **Removed MCP Server**: Eliminated MCP integration in favor of system prompt approach
+  - **Old behavior**: Claude Code connected via MCP tools, required persistent MCP server process
+  - **New behavior**: Claude Code uses system prompt + CLI commands directly
+  - **Rationale**: Reduces context overhead (~15K → ~4K tokens), eliminates complexity, enables offline operation
+  - **Impact**: All MCP tools removed, replaced by CLI commands (full feature parity maintained)
+
+**Architecture Changes:**
+- **Unidirectional Communication**: CLI → Local DB → Dashboard (single notification)
+  - Previous: Bidirectional MCP connections with heartbeat mechanism
+  - Current: Fire-and-forget notifications, no persistent connections
+  - Dashboard can directly read/write any project SQLite database
+  - No "online/offline" project states
+
+- **Global Dashboard**: Single dashboard instance monitors all projects
+  - Previous: Each project had separate MCP server connecting to central dashboard
+  - Current: One global dashboard with direct database access
+  - Humans can create/modify tasks via Dashboard UI
+  - AI picks up human-created tasks on next CLI operation
+
+**New Features:**
+- **Plan Auto-Focus Enhancement**: `ie plan` now automatically returns focused task with full context
+  - When plan contains `status="doing"` task, response includes complete task details + event history
+  - Eliminates need for separate `ie current` or `ie start --with-events` calls
+  - Improves efficiency: one API call provides complete context
+
+**Data Model Changes:**
+- `PlanResult`: Added `focused_task: Option<TaskWithEvents>` field
+  - Automatically populated when plan creates/updates a task with `status="doing"`
+  - Contains full task details and events_summary for immediate context access
+
+**Removed:**
+- All MCP server code (`src/mcp/` directory)
+- MCP tool definitions and handlers
+- MCP-specific tests
+- Bidirectional communication infrastructure
+- Heartbeat mechanism
+- Project "online/offline" state tracking
+
+**Migration:**
+- Users should configure Claude Code with system prompt (see integration guides)
+- Remove MCP server configuration from Claude Code settings
+- Use CLI commands directly instead of MCP tools (full feature parity)
+- Dashboard operation now optional (CLI works independently)
+
+---
 
 ### Version 0.8 (2025-11-28)
 

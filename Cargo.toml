@@ -1,6 +1,6 @@
 [package]
 name = "intent-engine"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 rust-version = "1.82"
 authors = ["Intent Engine Contributors"]
@@ -66,10 +66,12 @@ rand = "0.9"
 # Unix process management
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+nix = { version = "0.29", features = ["signal", "process", "fs"] }
 
 # Windows console support
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = ["Win32_System_Console"] }
+winapi = { version = "0.3", features = ["processthreadsapi", "handleapi", "winnt", "minwindef"] }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -80,6 +82,11 @@ rand = "0.9"
 serial_test = "3.0"
 filetime = "0.2"
 reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+
+[features]
+# Feature flag to enable tests for removed CLI commands (v0.10.0 removed: task, event, current, etc.)
+# These tests are disabled by default and can be enabled with: cargo test --features test-removed-cli-commands
+test-removed-cli-commands = []
 
 [[bin]]
 name = "ie"

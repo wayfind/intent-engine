@@ -1,5 +1,11 @@
-/// Tests for `ie logs` CLI command to improve main.rs coverage
-/// Focuses on the handle_logs_command() function and its various branches
+// Tests in this file use CLI commands removed in v0.10.0
+// v0.10.0 simplified CLI to just: plan, log, search
+// These tests are kept for reference but disabled by default
+#![cfg(feature = "test-removed-cli-commands")]
+
+//! Tests for `ie logs` CLI command to improve main.rs coverage
+//! Focuses on the handle_logs_command() function and its various branches
+
 mod common;
 
 use predicates::prelude::*;
