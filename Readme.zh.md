@@ -61,7 +61,7 @@ Intent-Engine 给 AI 一个存在你电脑上的**持久化记忆**：
 
 ---
 
-## 演示一下怎么用
+## AI 如何自动工作
 
 ### 安装（30 秒）
 
@@ -76,50 +76,60 @@ cargo install intent-engine
 ie --version
 ```
 
-### 示例：做一个登录系统（3 步）
+### AI 的自动工作流程
 
-**第 1 步：告诉 AI 要做什么**
+**每次进入 Claude Code 时，AI 会自动：**
 
 ```bash
-ie plan << 'JSON'
-{
+# 1. 自动查找未完成的任务
+ie search "todo doing"
+# → 返回所有待办和进行中的任务及其摘要
+
+# 2. AI 分析并选择重要且优先的任务
+# → 根据优先级、依赖关系、上下文决定
+
+# 3. 通过 ie plan 启动任务（plan 蕴含 start）
+echo '{"tasks":[{"name":"实现用户认证","status":"doing"}]}' | ie plan
+# → 更新任务状态为 doing
+# → 自动获取祖先任务的长时记忆（完整上下文）
+
+# 4. 工作过程中记录决策
+ie log decision "选择 JWT 而不是 Session，因为需要无状态 API"
+ie log note "已完成 token 生成逻辑"
+
+# 5. 完成时更新状态
+echo '{"tasks":[{"name":"实现用户认证","status":"done"}]}' | ie plan
+```
+
+**如果没有未完成的任务：**
+- AI 静默等待你的需求
+- 当你提出**大目标或长期需求**时，AI 自动启动 `ie plan` 创建新任务
+
+### 示例：人类提出新需求
+
+```bash
+# 你说："帮我做一个用户登录系统"
+# AI 判断这是大目标，自动执行：
+
+echo '{
   "tasks": [{
     "name": "做一个用户登录系统",
+    "status": "doing",
     "spec": "JWT 令牌、OAuth2 支持、会话 7 天有效期",
+    "priority": "high",
     "children": [
-      {"name": "实现 JWT"},
-      {"name": "添加 OAuth2"}
+      {"name": "实现 JWT 生成和验证", "status": "todo"},
+      {"name": "添加 OAuth2 集成", "status": "todo"},
+      {"name": "实现会话管理", "status": "todo"}
     ]
   }]
-}
-JSON
-```
+}' | ie plan
 
-**第 2 步：AI 工作并记录进度**
-
-```bash
-# AI 随着工作进展更新任务状态
-echo '{"tasks":[{"name":"做一个用户登录系统","status":"doing"}]}' | ie plan
-
-# 工作时，AI 记录关键决策
-ie log decision "选择 HS256 算法签名 JWT"
-ie log decision "用 httpOnly cookie 存储令牌更安全"
-
-# 完成时标记任务完成
-echo '{"tasks":[{"name":"做一个用户登录系统","status":"done"}]}' | ie plan
-```
-
-**第 3 步：随时恢复工作**
-
-```bash
-# 几天后，查看可用任务
-ie list todo         # 查看待办任务
-ie list doing        # 查看进行中的任务
-
-# 获取完整任务详情和事件历史
-ie get 1 --with-events
-
-# 从中断处继续 - AI 现在拥有完整上下文
+# plan 执行后自动：
+# ✓ 创建任务树（父任务 + 子任务）
+# ✓ 父任务设为 doing 状态（开始工作）
+# ✓ 获取完整长时记忆（如果有祖先任务）
+# ✓ AI 立即开始实现，并持续记录决策
 ```
 
 ---
@@ -128,16 +138,44 @@ ie get 1 --with-events
 
 ### 与 Claude Code 配合（零配置！）
 
-如果你用 **Claude Code**（Anthropic 官方 CLI），Intent-Engine **开箱即用**：
+如果你用 **Claude Code**（Anthropic 官方 CLI），Intent-Engine **完全自动化**：
 
-1. 安装 Intent-Engine（见上方）
-2. 在项目里和 Claude 对话
-3. 说：*"我们用 Intent-Engine 来跟踪工作进度吧"*
-4. Claude 会自动创建任务、记录决策、恢复工作
+**安装后立即可用：**
 
-**无需任何配置！** Claude Code 会自动检测 Intent-Engine 并使用。
+1. 安装 Intent-Engine：`cargo install intent-engine`
+2. 在项目里启动 Claude Code
+3. **无需任何配置！**Claude 会自动：
+   - 每次会话开始时执行 `ie search "todo doing"`
+   - 发现未完成任务时主动询问是否继续
+   - 自动通过 `ie plan` 启动任务并获取长时记忆
+   - 工作中持续用 `ie log` 记录关键决策
+   - 完成后自动更新任务状态
 
-📖 [Claude Code 配置指南](docs/zh-CN/integration/claude-code-system-prompt.md)
+**工作流示例：**
+
+```
+# 场景 1: 有未完成任务
+你：[打开 Claude Code]
+Claude：[自动执行 ie search "todo doing"]
+        "我发现有 3 个待办任务：
+         1. 实现用户认证 (todo)
+         2. 重构数据库层 (doing)
+         3. 修复登录 bug (todo, 优先级高)
+
+         我建议继续 #2，要继续吗？"
+你："好的"
+Claude：[执行 ie plan 启动任务]
+        [获取完整上下文和历史]
+        "好，我看到之前选择了 Repository 模式...让我继续实现"
+
+# 场景 2: 没有任务
+你：[打开 Claude Code] "帮我实现一个 REST API"
+Claude：[判断这是大目标]
+        [自动执行 ie plan 创建任务树]
+        "我创建了任务'实现 REST API'，包含 4 个子任务，现在开始..."
+```
+
+📖 [Claude Code 集成详解](docs/zh-CN/integration/claude-code-system-prompt.md)
 
 ### 与任何 AI 工具配合
 
@@ -177,26 +215,49 @@ ie log blocker "等待团队的设计审批"
 ie log milestone "MVP 完成，可以测试了"
 ```
 
-### 🎯 声明式工作流
+### 🎯 声明式工作流：ie plan 是核心
 
-AI 通过**声明状态**管理任务，遵循清晰的工作流程：
+**ie plan 不仅仅是创建任务 —— 它也是启动任务的方式**
 
 ```bash
-# 1. 检查可用任务
-ie list todo
+# plan 的三重作用：
 
-# 2. 获取任务详情和历史
-ie get 5 --with-events
+# 1️⃣ 创建新任务
+echo '{"tasks":[{"name":"新任务","spec":"..."}]}' | ie plan
 
-# 3. 开始工作（更新状态）
-echo '{"tasks":[{"name":"我的任务","status":"doing"}]}' | ie plan
+# 2️⃣ 更新已有任务（幂等性）
+echo '{"tasks":[{"name":"新任务","spec":"更新后的内容"}]}' | ie plan
 
-# 4. 记录进度和决策
-ie log decision "选择 REST 而不是 GraphQL 以保持简单"
-ie log note "API 设计进展顺利"
+# 3️⃣ 启动任务 = 设置 status="doing"
+echo '{"tasks":[{"name":"新任务","status":"doing"}]}' | ie plan
+# ✓ 任务状态变为 doing
+# ✓ 自动获取祖先任务信息（长时记忆）
+# ✓ AI 获得完整上下文开始工作
+```
 
-# 5. 完成时标记完成
-echo '{"tasks":[{"name":"我的任务","status":"done"}]}' | ie plan
+**完整工作流程**：
+
+```bash
+# 会话开始：AI 自动查找任务
+ie search "todo doing"
+
+# 如果找到任务：AI 通过 plan 启动
+echo '{"tasks":[{"name":"已存在的任务","status":"doing"}]}' | ie plan
+
+# 如果没有任务：等待新需求，然后 plan 创建并启动
+echo '{
+  "tasks": [{
+    "name": "新的大目标",
+    "status": "doing",  # 直接创建为 doing 状态
+    "children": [...]
+  }]
+}' | ie plan
+
+# 工作中：记录决策
+ie log decision "选择方案 A 因为性能更好"
+
+# 完成：更新状态
+echo '{"tasks":[{"name":"任务名","status":"done"}]}' | ie plan
 ```
 
 ### 📊 进度报告
@@ -327,6 +388,12 @@ cargo install intent-engine
 
 ## 常见问题
 
+**问：AI 是如何自动使用 Intent-Engine 的？**
+答：系统提示词会让 AI 在会话开始时自动执行 `ie search "todo doing"`，发现未完成任务就主动询问你是否继续。如果没有任务，AI 会在你提出大目标时自动创建任务树并开始工作。
+
+**问：ie plan 和 ie start 有什么关系？**
+答：在 v0.10.0+ 中，**没有单独的 start 命令**。`ie plan` 配合 `status: "doing"` 就是启动任务的方式。plan 会自动获取祖先任务的长时记忆，让 AI 获得完整上下文。
+
 **问：我需要懂 Rust 吗？**
 答：不需要！Intent-Engine 是预编译的二进制文件，直接安装使用就行。
 
@@ -344,6 +411,9 @@ cargo install intent-engine
 
 **问：和 git 有什么不同？**
 答：Git 追踪**代码变更**。Intent-Engine 追踪**战略决策和上下文**。它们互补。
+
+**问：任务的"长时记忆"是什么意思？**
+答：当你用 `ie plan` 启动任务时，系统会自动获取该任务的祖先任务（父任务、祖父任务等）的所有信息和决策历史。这样 AI 就能理解整个项目的上下文，而不只是当前任务。
 
 ---
 
