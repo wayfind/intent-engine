@@ -26,17 +26,16 @@ All log files are stored in:
 ```
 ~/.intent-engine/logs/
 ├── dashboard.log           # Current Dashboard log
-├── dashboard.log.2025-11-22  # Rotated old log
-├── mcp-server.log          # Current MCP Server log
-└── mcp-server.log.2025-11-21 # Rotated old log
+└── dashboard.log.2025-11-22  # Rotated old log
 ```
+
+> **Note**: MCP Server logs (`mcp-server.log`) were removed in v0.10.0 when MCP support was deprecated.
 
 ### By Running Mode
 
 | Mode | Log File | Format | Description |
 |------|---------|--------|-------------|
-| **Dashboard (daemon)** | `dashboard.log` | Plain text | Background service logs, includes WebSocket connections, project registry, etc. |
-| **MCP Server** | `mcp-server.log` | JSON | MCP protocol logs, machine-parseable |
+| **Dashboard (daemon)** | `dashboard.log` | Plain text | Background service logs, includes HTTP notifications, project registry, etc. |
 
 ---
 
@@ -82,19 +81,16 @@ JSON format, one JSON object per line:
 ```bash
 # Dashboard logs
 tail -f ~/.intent-engine/logs/dashboard.log
-
-# MCP Server logs (with JSON formatting)
-tail -f ~/.intent-engine/logs/mcp-server.log | jq .
 ```
 
 ### Search for Specific Content
 
 ```bash
-# Find errors
+# Find errors in Dashboard logs
 grep ERROR ~/.intent-engine/logs/dashboard.log
 
-# Find MCP operation logs
-jq 'select(.fields.message | contains("Dashboard"))' ~/.intent-engine/logs/mcp-server.log
+# Find notification-related logs
+grep "notification" ~/.intent-engine/logs/dashboard.log
 ```
 
 ### View Rotated Old Logs
@@ -287,11 +283,8 @@ ie dashboard start
 sudo apt install jq  # Ubuntu/Debian
 brew install jq      # macOS
 
-# View all ERROR level logs
-jq 'select(.level == "ERROR")' ~/.intent-engine/logs/mcp-server.log
-
-# View specific time range
-jq 'select(.timestamp > "2025-11-22T07:00:00Z")' ~/.intent-engine/logs/mcp-server.log
+# View specific time range (Dashboard logs)
+grep "2025-11-22" ~/.intent-engine/logs/dashboard.log
 ```
 
 ### 4. Archive Important Logs
@@ -330,7 +323,7 @@ Uses `tracing-appender::rolling::daily`:
 ## Related Resources
 
 - [Troubleshooting Guide](../troubleshooting.md)
-- [MCP Server Integration](../integration/mcp-server.md)
+- [System Prompt Integration](../integration/claude-code-system-prompt.md)
 - [Dashboard Usage](./quickstart.md#dashboard)
 
 ---

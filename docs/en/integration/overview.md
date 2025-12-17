@@ -133,7 +133,7 @@ For detailed installation instructions, see [Installation Guide](../guide/instal
 
 Select the integration method that suits you based on the comparison table above, then refer to the corresponding detailed guide:
 
-- **Claude Code (MCP)**: [mcp-server.md](mcp-server.md)
+- **Claude Code (System Prompt)**: [claude-code-system-prompt.md](claude-code-system-prompt.md)
 - **Claude Code (Skill)**: [.claude-code/intent-engine.skill.md](../../../.claude-code/intent-engine.skill.md)
 - **Generic Integration**: [generic-llm.md](generic-llm.md)
 

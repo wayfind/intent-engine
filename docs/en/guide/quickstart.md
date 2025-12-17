@@ -240,8 +240,9 @@ You've completed Intent-Engine's core workflow:
 
 ### 🔧 Integrate with AI Tools
 
-- [**MCP Server**](docs/en/integration/mcp-server.md) - Integrate with Claude Code/Desktop
-- [**Claude Skill**](.claude-code/intent-engine.skill.md) - Lightweight integration method
+- [**System Prompt**](docs/en/integration/claude-code-system-prompt.md) - Zero-config Claude Code integration (v0.10.0+)
+- [**Claude Skill**](.claude-code/intent-engine.skill.md) - Lightweight alternative integration method
+- [**Generic CLI**](docs/en/integration/generic-llm.md) - Integrate with any AI tool
 
 ### 💻 Pre-contribution Setup
 

@@ -97,18 +97,17 @@ cargo build --release
 sudo cp target/release/intent-engine /usr/local/bin/
 ```
 
-### Method 6: Integrate as MCP Server into Claude Code
+### Method 6: Integrate with Claude Code via System Prompt (v0.10.0+)
 
-Intent-Engine can be integrated into Claude Code as an MCP (Model Context Protocol) server, providing native tool support.
+Intent-Engine integrates with Claude Code using a system prompt approach (MCP removed in v0.10.0).
 
 ```bash
-# Auto-install MCP server
-./scripts/install/install-mcp-server.sh
-
-# Restart Claude Code
+# No installation needed - zero configuration!
+# Claude Code automatically detects Intent-Engine when installed
+ie --version  # Should be v0.10.0+
 ```
 
-For detailed configuration instructions, see [MCP_SETUP.md](../integration/mcp-server.md).
+For detailed configuration instructions, see [System Prompt Guide](../integration/claude-code-system-prompt.md).
 
 ### Method 7: As Claude Code Skill
 
@@ -1641,13 +1640,16 @@ Intent-Engine provides a series of documents helping you understand and use the 
 
 ### Integration Documentation
 
-- **[MCP Setup Guide](../integration/mcp-server.md)** - MCP Server installation guide 🔧
-  - Claude Code MCP integration
-  - Auto-install script
-  - Troubleshooting
+- **[System Prompt Guide](../integration/claude-code-system-prompt.md)** - Zero-config Claude Code integration (v0.10.0+) 🔧
+  - System prompt setup
+  - Zero configuration required
+  - Best Claude integration experience
 
 - **[Claude Code Skill](../../../.claude-code/intent-engine.skill.md)** - Skill configuration
-  - Lightweight Claude Code integration
+  - Lightweight alternative integration
+
+- **[Generic CLI Integration](../integration/generic-llm.md)** - Integrate with any AI tool
+  - Works with any AI tool that supports CLI commands
   - Quick start examples
   - Common patterns
 

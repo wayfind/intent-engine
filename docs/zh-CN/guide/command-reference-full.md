@@ -97,18 +97,17 @@ cargo build --release
 sudo cp target/release/intent-engine /usr/local/bin/
 ```
 
-### 方式 6: 作为 MCP Server 集成到 Claude Code
+### 方式 6: 通过 System Prompt 集成到 Claude Code (v0.10.0+)
 
-Intent-Engine 可以作为 MCP (Model Context Protocol) server 集成到 Claude Code，提供原生工具支持。
+Intent-Engine 使用 system prompt 方式集成到 Claude Code（v0.10.0 移除了 MCP）。
 
 ```bash
-# 自动安装 MCP server
-./scripts/install/install-mcp-server.sh
-
-# 重启 Claude Code
+# 无需安装 - 零配置！
+# Claude Code 自动识别已安装的 Intent-Engine
+ie --version  # 应为 v0.10.0+
 ```
 
-详细配置说明请参见 [MCP_SETUP.md](docs/zh-CN/integration/mcp-server.md)。
+详细配置说明请参见 [System Prompt 指南](../integration/claude-code-system-prompt.md)。
 
 ### 方式 7: 作为 Claude Code Skill
 
@@ -1679,13 +1678,16 @@ Intent-Engine 提供了一系列文档，帮助你从不同角度理解和使用
 
 ### 集成文档
 
-- **[MCP Setup Guide](docs/zh-CN/integration/mcp-server.md)** - MCP Server 安装指南 🔧
-  - Claude Code MCP 集成
-  - 自动安装脚本
-  - 故障排除
+- **[System Prompt 指南](../integration/claude-code-system-prompt.md)** - Claude Code 零配置集成 (v0.10.0+) 🔧
+  - System prompt 设置
+  - 零配置需求
+  - 最佳 Claude 集成体验
 
 - **[Claude Code Skill](.claude-code/intent-engine.skill.md)** - Skill 配置
-  - 轻量级 Claude Code 集成
+  - 轻量级替代集成方式
+
+- **[通用 CLI 集成](../integration/generic-llm.md)** - 集成到任意 AI 工具
+  - 适用于任何支持 CLI 命令的 AI 工具
   - 快速开始示例
   - 常用模式
 

@@ -240,8 +240,9 @@ ie report --since 1d
 
 ### 🔧 集成到 AI 工具
 
-- [**MCP Server**](docs/zh-CN/integration/mcp-server.md) - 集成到 Claude Code/Desktop
-- [**Claude Skill**](.claude-code/intent-engine.skill.md) - 轻量级集成方式
+- [**System Prompt**](docs/zh-CN/integration/claude-code-system-prompt.md) - Claude Code 零配置集成 (v0.10.0+)
+- [**Claude Skill**](.claude-code/intent-engine.skill.md) - 轻量级替代集成方式
+- [**通用 CLI**](docs/zh-CN/integration/generic-llm.md) - 集成到任意 AI 工具
 
 ### 💻 贡献代码前的准备
 

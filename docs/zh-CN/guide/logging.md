@@ -26,17 +26,16 @@ intent-engine 提供统一的文件日志系统，用于记录 Dashboard 和 MCP
 ```
 ~/.intent-engine/logs/
 ├── dashboard.log           # 当前 Dashboard 日志
-├── dashboard.log.2025-11-22  # 轮转的旧日志
-├── mcp-server.log          # 当前 MCP Server 日志
-└── mcp-server.log.2025-11-21 # 轮转的旧日志
+└── dashboard.log.2025-11-22  # 轮转的旧日志
 ```
+
+> **注意**: MCP Server 日志 (`mcp-server.log`) 在 v0.10.0 移除 MCP 支持时被删除。
 
 ### 按运行模式分类
 
 | 模式 | 日志文件 | 格式 | 说明 |
 |------|---------|------|------|
-| **Dashboard (daemon)** | `dashboard.log` | 纯文本 | 后台服务日志，包含 WebSocket 连接、项目注册等 |
-| **MCP Server** | `mcp-server.log` | JSON | MCP 协议日志，便于机器解析 |
+| **Dashboard (daemon)** | `dashboard.log` | 纯文本 | 后台服务日志，包含 HTTP 通知、项目注册等 |
 
 ---
 
@@ -82,19 +81,16 @@ JSON 格式，每行一个 JSON 对象：
 ```bash
 # Dashboard 日志
 tail -f ~/.intent-engine/logs/dashboard.log
-
-# MCP Server 日志（带 JSON 格式化）
-tail -f ~/.intent-engine/logs/mcp-server.log | jq .
 ```
 
 ### 搜索特定内容
 
 ```bash
-# 查找错误
+# 查找 Dashboard 日志中的错误
 grep ERROR ~/.intent-engine/logs/dashboard.log
 
-# 查找 MCP 操作日志
-jq 'select(.fields.message | contains("Dashboard"))' ~/.intent-engine/logs/mcp-server.log
+# 查找通知相关日志
+grep "notification" ~/.intent-engine/logs/dashboard.log
 ```
 
 ### 查看轮转的旧日志
@@ -287,11 +283,8 @@ ie dashboard start
 sudo apt install jq  # Ubuntu/Debian
 brew install jq      # macOS
 
-# 查看所有 ERROR 级别日志
-jq 'select(.level == "ERROR")' ~/.intent-engine/logs/mcp-server.log
-
-# 查看特定时间范围
-jq 'select(.timestamp > "2025-11-22T07:00:00Z")' ~/.intent-engine/logs/mcp-server.log
+# 查看特定时间范围（Dashboard 日志）
+grep "2025-11-22" ~/.intent-engine/logs/dashboard.log
 ```
 
 ### 4. 归档重要日志
@@ -330,7 +323,7 @@ tar -czf logs-backup-$(date +%Y%m%d).tar.gz ~/.intent-engine/logs/*.log
 ## 相关资源
 
 - [故障排查指南](../troubleshooting.md)
-- [MCP Server 集成](../integration/mcp-server.md)
+- [System Prompt 集成](../integration/claude-code-system-prompt.md)
 - [Dashboard 使用](./quickstart.md#dashboard)
 
 ---

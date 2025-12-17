@@ -133,7 +133,7 @@ ie --version
 
 根据上面的对比表格选择适合你的集成方式，然后参考对应的详细指南：
 
-- **Claude Code (MCP)**: [mcp-server.md](mcp-server.md)
+- **Claude Code (System Prompt)**: [claude-code-system-prompt.md](claude-code-system-prompt.md)
 - **Claude Code (Skill)**: [.claude-code/intent-engine.skill.md](../../../.claude-code/intent-engine.skill.md)
 - **通用集成**: [generic-llm.md](generic-llm.md)
 
