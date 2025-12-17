@@ -1,365 +1,260 @@
-// Tests in this file use CLI commands removed in v0.10.0
-// v0.10.0 simplified CLI to just: plan, log, search
-// These tests are kept for reference but disabled by default
-#![cfg(feature = "test-removed-cli-commands")]
+//! Tests for priority levels and task listing/filtering
+//!
+//! These tests verify priority setting, validation, and task list filtering.
+//! The tests use library functions directly rather than CLI commands.
 
-mod common;
+mod test_helpers_rewrite;
 
-use assert_cmd::Command;
-use predicates::prelude::*;
-use serde_json::Value;
-use std::path::PathBuf;
+use intent_engine::{db::models::Task, priority::PriorityLevel, tasks::TaskManager};
+use test_helpers_rewrite::TestDb;
 
-/// Helper to get the binary path
-fn intent_engine_cmd() -> Command {
-    common::ie_command()
-}
-
-/// Helper to create a test project
-fn setup_test_project() -> (tempfile::TempDir, PathBuf) {
-    let temp_dir = common::setup_test_env();
-    let db_path = temp_dir.path().join(".intent-engine").join("project.db");
-
-    (temp_dir, db_path)
-}
-
-/// Helper to add a task via CLI and return its ID
-fn add_task(dir: &PathBuf, name: &str) -> i64 {
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg(name)
-        .assert()
-        .success();
-
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    json["id"].as_i64().unwrap()
-}
-
-#[test]
-fn test_priority_critical() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
+/// Test setting critical priority
+#[tokio::test]
+async fn test_priority_critical() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
     // Add a task
-    let task_id = add_task(&dir.to_path_buf(), "Test Task");
+    let task = manager
+        .add_task("Test Task", None, None, Some("human"))
+        .await
+        .unwrap();
 
     // Update with critical priority
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task_id.to_string())
-        .arg("--priority")
-        .arg("critical")
-        .assert()
-        .success();
+    let critical = PriorityLevel::parse_to_int("critical").unwrap();
+    let updated = manager
+        .update_task(task.id, None, None, None, None, None, Some(critical))
+        .await
+        .unwrap();
 
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["priority"].as_i64().unwrap(), 1);
+    assert_eq!(updated.priority.unwrap(), 1);
 }
 
-#[test]
-fn test_priority_high() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
+/// Test setting high priority
+#[tokio::test]
+async fn test_priority_high() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    let task_id = add_task(&dir.to_path_buf(), "Test Task");
+    let task = manager
+        .add_task("Test Task", None, None, Some("human"))
+        .await
+        .unwrap();
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task_id.to_string())
-        .arg("--priority")
-        .arg("high")
-        .assert()
-        .success();
+    let high = PriorityLevel::parse_to_int("high").unwrap();
+    let updated = manager
+        .update_task(task.id, None, None, None, None, None, Some(high))
+        .await
+        .unwrap();
 
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["priority"].as_i64().unwrap(), 2);
+    assert_eq!(updated.priority.unwrap(), 2);
 }
 
-#[test]
-fn test_priority_medium() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
+/// Test setting medium priority
+#[tokio::test]
+async fn test_priority_medium() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    let task_id = add_task(&dir.to_path_buf(), "Test Task");
+    let task = manager
+        .add_task("Test Task", None, None, Some("human"))
+        .await
+        .unwrap();
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task_id.to_string())
-        .arg("--priority")
-        .arg("medium")
-        .assert()
-        .success();
+    let medium = PriorityLevel::parse_to_int("medium").unwrap();
+    let updated = manager
+        .update_task(task.id, None, None, None, None, None, Some(medium))
+        .await
+        .unwrap();
 
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["priority"].as_i64().unwrap(), 3);
+    assert_eq!(updated.priority.unwrap(), 3);
 }
 
-#[test]
-fn test_priority_low() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
+/// Test setting low priority
+#[tokio::test]
+async fn test_priority_low() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    let task_id = add_task(&dir.to_path_buf(), "Test Task");
+    let task = manager
+        .add_task("Test Task", None, None, Some("human"))
+        .await
+        .unwrap();
 
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task_id.to_string())
-        .arg("--priority")
-        .arg("low")
-        .assert()
-        .success();
+    let low = PriorityLevel::parse_to_int("low").unwrap();
+    let updated = manager
+        .update_task(task.id, None, None, None, None, None, Some(low))
+        .await
+        .unwrap();
 
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["priority"].as_i64().unwrap(), 4);
+    assert_eq!(updated.priority.unwrap(), 4);
 }
 
-#[test]
-fn test_priority_case_insensitive() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
+/// Test priority parsing is case insensitive
+#[tokio::test]
+async fn test_priority_case_insensitive() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
-    let task_id = add_task(&dir.to_path_buf(), "Test Task");
+    let task = manager
+        .add_task("Test Task", None, None, Some("human"))
+        .await
+        .unwrap();
 
     // Test uppercase
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task_id.to_string())
-        .arg("--priority")
-        .arg("HIGH")
-        .assert()
-        .success();
-
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["priority"].as_i64().unwrap(), 2);
+    let high = PriorityLevel::parse_to_int("HIGH").unwrap();
+    let updated = manager
+        .update_task(task.id, None, None, None, None, None, Some(high))
+        .await
+        .unwrap();
+    assert_eq!(updated.priority.unwrap(), 2);
 
     // Test mixed case
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task_id.to_string())
-        .arg("--priority")
-        .arg("CriTiCaL")
-        .assert()
-        .success();
-
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["priority"].as_i64().unwrap(), 1);
+    let critical = PriorityLevel::parse_to_int("CriTiCaL").unwrap();
+    let updated = manager
+        .update_task(task.id, None, None, None, None, None, Some(critical))
+        .await
+        .unwrap();
+    assert_eq!(updated.priority.unwrap(), 1);
 }
 
-#[test]
-fn test_priority_invalid_string() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
-
-    let task_id = add_task(&dir.to_path_buf(), "Test Task");
-
+/// Test invalid priority strings are rejected
+#[tokio::test]
+async fn test_priority_invalid_string() {
     // Test invalid priority string
-    intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task_id.to_string())
-        .arg("--priority")
-        .arg("invalid")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("Invalid priority"));
+    let result = PriorityLevel::parse_to_int("invalid");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Invalid priority"));
 
     // Test empty string
-    intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task_id.to_string())
-        .arg("--priority")
-        .arg("")
-        .assert()
-        .failure();
+    let result = PriorityLevel::parse_to_int("");
+    assert!(result.is_err());
 
     // Test numeric string (old format should fail)
-    intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task_id.to_string())
-        .arg("--priority")
-        .arg("1")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("Invalid priority"));
+    let result = PriorityLevel::parse_to_int("1");
+    assert!(result.is_err());
 }
 
-#[test]
-fn test_priority_ordering_still_works() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
+/// Test priority ordering works correctly
+#[tokio::test]
+async fn test_priority_ordering_still_works() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
     // Create tasks with different priorities
-    let task1_id = add_task(&dir.to_path_buf(), "Low priority task");
-    let task2_id = add_task(&dir.to_path_buf(), "Critical priority task");
-    let task3_id = add_task(&dir.to_path_buf(), "Medium priority task");
-
-    // Set priorities using new string format
-    intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task1_id.to_string())
-        .arg("--priority")
-        .arg("low")
-        .assert()
-        .success();
-
-    intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task2_id.to_string())
-        .arg("--priority")
-        .arg("critical")
-        .assert()
-        .success();
-
-    intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("update")
-        .arg(task3_id.to_string())
-        .arg("--priority")
-        .arg("medium")
-        .assert()
-        .success();
-
-    // List all tasks and verify priorities are stored correctly
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("list")
-        .assert()
-        .success();
-
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    let tasks_array = tasks["tasks"].as_array().unwrap();
-
-    // Find each task and verify priority
-    let task1 = tasks_array
-        .iter()
-        .find(|t| t["id"].as_i64().unwrap() == task1_id)
+    let task1 = manager
+        .add_task("Low priority task", None, None, Some("human"))
+        .await
         .unwrap();
-    assert_eq!(task1["priority"].as_i64().unwrap(), 4); // low = 4
-
-    let task2 = tasks_array
-        .iter()
-        .find(|t| t["id"].as_i64().unwrap() == task2_id)
+    let task2 = manager
+        .add_task("Critical priority task", None, None, Some("human"))
+        .await
         .unwrap();
-    assert_eq!(task2["priority"].as_i64().unwrap(), 1); // critical = 1
-
-    let task3 = tasks_array
-        .iter()
-        .find(|t| t["id"].as_i64().unwrap() == task3_id)
+    let task3 = manager
+        .add_task("Medium priority task", None, None, Some("human"))
+        .await
         .unwrap();
-    assert_eq!(task3["priority"].as_i64().unwrap(), 3); // medium = 3
+
+    // Set priorities
+    let low = PriorityLevel::parse_to_int("low").unwrap();
+    let critical = PriorityLevel::parse_to_int("critical").unwrap();
+    let medium = PriorityLevel::parse_to_int("medium").unwrap();
+
+    manager
+        .update_task(task1.id, None, None, None, None, None, Some(low))
+        .await
+        .unwrap();
+    manager
+        .update_task(task2.id, None, None, None, None, None, Some(critical))
+        .await
+        .unwrap();
+    manager
+        .update_task(task3.id, None, None, None, None, None, Some(medium))
+        .await
+        .unwrap();
+
+    // Query all tasks and verify priorities
+    let all_tasks: Vec<Task> = sqlx::query_as(
+        "SELECT id, parent_id, name, spec, status, complexity, priority, \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         FROM tasks ORDER BY id",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+
+    assert_eq!(all_tasks.len(), 3);
+    assert_eq!(all_tasks[0].priority.unwrap(), 4); // low = 4
+    assert_eq!(all_tasks[1].priority.unwrap(), 1); // critical = 1
+    assert_eq!(all_tasks[2].priority.unwrap(), 3); // medium = 3
 }
 
-#[test]
-fn test_task_list_command() {
-    let (temp_dir, _db_path) = setup_test_project();
-    let dir = temp_dir.path();
+/// Test task list querying with different filters
+#[tokio::test]
+async fn test_task_list_filtering() {
+    let db = TestDb::new().await;
+    let manager = TaskManager::new(db.pool());
 
     // Add some tasks
-    let task1_id = add_task(&dir.to_path_buf(), "Task 1");
-    let _task2_id = add_task(&dir.to_path_buf(), "Task 2");
+    let task1 = manager
+        .add_task("Task 1", None, None, Some("human"))
+        .await
+        .unwrap();
+    let _task2 = manager
+        .add_task("Task 2", None, None, Some("human"))
+        .await
+        .unwrap();
 
     // Create a subtask
-    intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("add")
-        .arg("--name")
-        .arg("Subtask 1")
-        .arg("--parent")
-        .arg(task1_id.to_string())
-        .assert()
-        .success();
+    let _subtask = manager
+        .add_task("Subtask 1", None, Some(task1.id), Some("human"))
+        .await
+        .unwrap();
 
     // List all tasks
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("list")
-        .assert()
-        .success();
+    let all_tasks: Vec<Task> = sqlx::query_as(
+        "SELECT id, parent_id, name, spec, status, complexity, priority, \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         FROM tasks",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(all_tasks.len(), 3);
 
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(tasks["tasks"].as_array().unwrap().len(), 3);
+    // List with status filter (todo)
+    let todo_tasks: Vec<Task> = sqlx::query_as(
+        "SELECT id, parent_id, name, spec, status, complexity, priority, \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         FROM tasks WHERE status = ?",
+    )
+    .bind("todo")
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(todo_tasks.len(), 3);
 
-    // List with status filter (using positional argument)
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("list")
-        .arg("todo")
-        .assert()
-        .success();
+    // List with parent filter (children of task1)
+    let children: Vec<Task> = sqlx::query_as(
+        "SELECT id, parent_id, name, spec, status, complexity, priority, \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         FROM tasks WHERE parent_id = ?",
+    )
+    .bind(task1.id)
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].name, "Subtask 1");
 
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(tasks["tasks"].as_array().unwrap().len(), 3);
-
-    // List with parent filter
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("list")
-        .arg("--parent")
-        .arg(task1_id.to_string())
-        .assert()
-        .success();
-
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(tasks["tasks"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        tasks["tasks"].as_array().unwrap()[0]["name"]
-            .as_str()
-            .unwrap(),
-        "Subtask 1"
-    );
-
-    // List with parent=null filter (top-level only)
-    let output = intent_engine_cmd()
-        .current_dir(dir)
-        .arg("task")
-        .arg("list")
-        .arg("--parent")
-        .arg("null")
-        .assert()
-        .success();
-
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    let tasks: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(tasks["tasks"].as_array().unwrap().len(), 2);
+    // List top-level tasks only (parent_id IS NULL)
+    let top_level: Vec<Task> = sqlx::query_as(
+        "SELECT id, parent_id, name, spec, status, complexity, priority, \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         FROM tasks WHERE parent_id IS NULL",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(top_level.len(), 2);
 }

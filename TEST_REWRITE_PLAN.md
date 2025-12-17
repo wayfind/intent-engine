@@ -193,8 +193,10 @@ cargo tarpaulin --out Html
 
 - ✅ **短期解决**: Feature gate 已添加，CI 通过
 - 🚀 **中期目标**: 重写业务逻辑测试 (进行中)
-- ✅ **已完成**: pick_next_blocking_tests.rs (7 tests, 272 lines)
-- 📊 **覆盖率**: 380 library 测试 + 7 重写测试
+- ✅ **已完成**:
+  - pick_next_blocking_tests.rs (7 tests, 272 lines)
+  - priority_and_list_tests.rs (8 tests, 266 lines)
+- 📊 **覆盖率**: 380 library 测试 + 15 重写测试
 
 ## 参考
 
