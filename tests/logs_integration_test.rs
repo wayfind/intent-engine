@@ -6,7 +6,14 @@ mod common;
 #[test]
 fn test_log_directory_path() {
     let log_dir = intent_engine::logs::log_dir();
-    assert!(log_dir.to_string_lossy().contains(".intent-engine/logs"));
+    let log_dir_str = log_dir.to_string_lossy();
+    // Cross-platform check: accept both forward and backslash separators
+    assert!(
+        log_dir_str.contains(".intent-engine/logs")
+            || log_dir_str.contains(".intent-engine\\logs"),
+        "Expected log directory to contain '.intent-engine/logs' or '.intent-engine\\logs', got: {}",
+        log_dir_str
+    );
 }
 
 #[test]

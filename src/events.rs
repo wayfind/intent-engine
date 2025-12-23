@@ -21,6 +21,16 @@ impl<'a> EventManager<'a> {
         }
     }
 
+    /// Create an EventManager with project path for CLI notifications
+    pub fn with_project_path(pool: &'a SqlitePool, project_path: String) -> Self {
+        Self {
+            pool,
+            notifier: crate::notifications::NotificationSender::new(None),
+            cli_notifier: Some(crate::dashboard::cli_notifier::CliNotifier::new()),
+            project_path: Some(project_path),
+        }
+    }
+
     /// Create an EventManager with WebSocket notification support
     pub fn with_websocket(
         pool: &'a SqlitePool,
@@ -57,7 +67,7 @@ impl<'a> EventManager<'a> {
         // CLI → Dashboard HTTP notification (CLI context)
         if let Some(cli_notifier) = &self.cli_notifier {
             cli_notifier
-                .notify_event_added(event.task_id, event.id)
+                .notify_event_added(event.task_id, event.id, self.project_path.clone())
                 .await;
         }
     }

@@ -16,11 +16,22 @@ pub enum NotificationMessage {
     TaskChanged {
         task_id: Option<i64>,
         operation: String,
+        /// Project path that sent this notification
+        project_path: Option<String>,
     },
     /// Event was added
-    EventAdded { task_id: i64, event_id: i64 },
+    EventAdded {
+        task_id: i64,
+        event_id: i64,
+        /// Project path that sent this notification
+        project_path: Option<String>,
+    },
     /// Workspace state changed (current_task_id updated)
-    WorkspaceChanged { current_task_id: Option<i64> },
+    WorkspaceChanged {
+        current_task_id: Option<i64>,
+        /// Project path that sent this notification
+        project_path: Option<String>,
+    },
 }
 
 /// CLI Notifier for sending notifications to Dashboard
@@ -72,24 +83,46 @@ impl CliNotifier {
     }
 
     /// Notify about task change
-    pub async fn notify_task_changed(&self, task_id: Option<i64>, operation: &str) {
+    pub async fn notify_task_changed(
+        &self,
+        task_id: Option<i64>,
+        operation: &str,
+        project_path: Option<String>,
+    ) {
         self.notify(NotificationMessage::TaskChanged {
             task_id,
             operation: operation.to_string(),
+            project_path,
         })
         .await;
     }
 
     /// Notify about event added
-    pub async fn notify_event_added(&self, task_id: i64, event_id: i64) {
-        self.notify(NotificationMessage::EventAdded { task_id, event_id })
-            .await;
+    pub async fn notify_event_added(
+        &self,
+        task_id: i64,
+        event_id: i64,
+        project_path: Option<String>,
+    ) {
+        self.notify(NotificationMessage::EventAdded {
+            task_id,
+            event_id,
+            project_path,
+        })
+        .await;
     }
 
     /// Notify about workspace change
-    pub async fn notify_workspace_changed(&self, current_task_id: Option<i64>) {
-        self.notify(NotificationMessage::WorkspaceChanged { current_task_id })
-            .await;
+    pub async fn notify_workspace_changed(
+        &self,
+        current_task_id: Option<i64>,
+        project_path: Option<String>,
+    ) {
+        self.notify(NotificationMessage::WorkspaceChanged {
+            current_task_id,
+            project_path,
+        })
+        .await;
     }
 }
 
@@ -119,7 +152,9 @@ mod tests {
     async fn test_notify_non_blocking() {
         // This should not panic even if Dashboard is not running
         let notifier = CliNotifier::with_port(65000); // Port not in use
-        notifier.notify_task_changed(Some(42), "created").await;
+        notifier
+            .notify_task_changed(Some(42), "created", Some("/test/path".to_string()))
+            .await;
 
         // Should return immediately (fire-and-forget)
         // No assertions needed - test passes if no panic

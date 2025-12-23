@@ -59,14 +59,21 @@ pub enum Commands {
 
     /// Unified search across tasks and events
     ///
-    /// Uses FTS5 full-text search with support for AND, OR, NOT, and phrases.
+    /// Smart keyword detection:
+    ///   - Query with ONLY status keywords (todo, doing, done) → filters by status
+    ///   - Query with other words → uses FTS5 full-text search
     ///
-    /// Examples:
+    /// Status filter examples (returns tasks with matching status):
+    ///   ie search "todo doing"     # All unfinished tasks (AI session start)
+    ///   ie search "todo"           # Only todo tasks
+    ///   ie search "done"           # Only completed tasks
+    ///
+    /// FTS5 search examples (full-text search):
     ///   ie search "JWT authentication"
     ///   ie search "API AND client"
     ///   ie search "blocker" --events --no-tasks
     Search {
-        /// Search query (supports FTS5 syntax like "JWT AND authentication")
+        /// Search query: status keywords (todo/doing/done) or FTS5 syntax
         query: String,
 
         /// Search in tasks (default: true)

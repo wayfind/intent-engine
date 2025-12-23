@@ -282,8 +282,8 @@ async fn start_daemon_mode(
 #[cfg(windows)]
 async fn start_daemon_mode(
     port: u16,
-    project_path: std::path::PathBuf,
-    db_path: std::path::PathBuf,
+    _project_path: std::path::PathBuf,
+    _db_path: std::path::PathBuf,
     project_name: String,
     browser: bool,
 ) -> Result<()> {
@@ -301,15 +301,19 @@ async fn start_daemon_mode(
         .join("dashboard.log");
 
     // Get current executable path
-    let exe_path = std::env::current_exe()
-        .map_err(|e| IntentError::IoError(format!("Failed to get executable path: {}", e)))?;
+    let exe_path = std::env::current_exe().map_err(|e| {
+        IntentError::IoError(std::io::Error::other(format!(
+            "Failed to get executable path: {}",
+            e
+        )))
+    })?;
 
     // Spawn detached process
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     const DETACHED_PROCESS: u32 = 0x00000008;
 
     let child = Command::new(exe_path)
-        .args(&[
+        .args([
             "dashboard",
             "start",
             "--port",
@@ -318,7 +322,12 @@ async fn start_daemon_mode(
         ])
         .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
         .spawn()
-        .map_err(|e| IntentError::IoError(format!("Failed to spawn daemon process: {}", e)))?;
+        .map_err(|e| {
+            IntentError::IoError(std::io::Error::other(format!(
+                "Failed to spawn daemon process: {}",
+                e
+            )))
+        })?;
 
     let child_pid = child.id();
 

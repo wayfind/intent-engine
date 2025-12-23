@@ -11,7 +11,7 @@ async fn test_notifications_enabled_by_default() {
 
     // Should not panic even if Dashboard is not running
     // (fire-and-forget behavior)
-    notifier.notify_task_changed(Some(1), "created").await;
+    notifier.notify_task_changed(Some(1), "created", None).await;
 
     // Test passes if no panic occurs
 }
@@ -24,7 +24,7 @@ async fn test_notifications_disabled_via_env_value_1() {
     let notifier = CliNotifier::with_port(65002);
 
     // Should return immediately without attempting connection
-    notifier.notify_task_changed(Some(1), "created").await;
+    notifier.notify_task_changed(Some(1), "created", None).await;
 
     // Cleanup
     std::env::remove_var("IE_DISABLE_DASHBOARD_NOTIFICATIONS");
@@ -40,7 +40,7 @@ async fn test_notifications_disabled_via_env_value_true() {
     let notifier = CliNotifier::with_port(65003);
 
     // Should return immediately without attempting connection
-    notifier.notify_task_changed(Some(1), "created").await;
+    notifier.notify_task_changed(Some(1), "created", None).await;
 
     // Cleanup
     std::env::remove_var("IE_DISABLE_DASHBOARD_NOTIFICATIONS");
@@ -54,7 +54,7 @@ async fn test_notifications_disabled_via_env_value_true_uppercase() {
     let notifier = CliNotifier::with_port(65004);
 
     // Should return immediately without attempting connection
-    notifier.notify_task_changed(Some(1), "created").await;
+    notifier.notify_task_changed(Some(1), "created", None).await;
 
     // Cleanup
     std::env::remove_var("IE_DISABLE_DASHBOARD_NOTIFICATIONS");
@@ -68,7 +68,7 @@ async fn test_notifications_not_disabled_with_other_values() {
     let notifier = CliNotifier::with_port(65005);
 
     // Should attempt notification (but fail gracefully since Dashboard not running)
-    notifier.notify_task_changed(Some(1), "created").await;
+    notifier.notify_task_changed(Some(1), "created", None).await;
 
     // Cleanup
     std::env::remove_var("IE_DISABLE_DASHBOARD_NOTIFICATIONS");
@@ -81,18 +81,21 @@ async fn test_notification_message_types() {
     let notifier = CliNotifier::with_port(65006);
 
     // Test TaskChanged notification
-    notifier.notify_task_changed(Some(42), "updated").await;
+    notifier
+        .notify_task_changed(Some(42), "updated", Some("/test/path".to_string()))
+        .await;
 
     // Test EventAdded notification
-    notifier.notify_event_added(42, 1).await;
+    notifier.notify_event_added(42, 1, None).await;
 
     // Test WorkspaceChanged notification
-    notifier.notify_workspace_changed(Some(42)).await;
+    notifier.notify_workspace_changed(Some(42), None).await;
 
     // Test direct notify with custom message
     let message = NotificationMessage::TaskChanged {
         task_id: Some(42),
         operation: "deleted".to_string(),
+        project_path: Some("/test/path".to_string()),
     };
     notifier.notify(message).await;
 
@@ -106,9 +109,11 @@ async fn test_disabled_notifications_with_all_message_types() {
     let notifier = CliNotifier::with_port(65007);
 
     // All of these should return immediately without attempting connection
-    notifier.notify_task_changed(Some(42), "created").await;
-    notifier.notify_event_added(42, 1).await;
-    notifier.notify_workspace_changed(Some(42)).await;
+    notifier
+        .notify_task_changed(Some(42), "created", None)
+        .await;
+    notifier.notify_event_added(42, 1, None).await;
+    notifier.notify_workspace_changed(Some(42), None).await;
 
     // Cleanup
     std::env::remove_var("IE_DISABLE_DASHBOARD_NOTIFICATIONS");
@@ -121,19 +126,19 @@ async fn test_env_var_checked_per_notification() {
     let notifier = CliNotifier::with_port(65008);
 
     // First notification should work (env var not set)
-    notifier.notify_task_changed(Some(1), "created").await;
+    notifier.notify_task_changed(Some(1), "created", None).await;
 
     // Set env var
     std::env::set_var("IE_DISABLE_DASHBOARD_NOTIFICATIONS", "1");
 
     // Second notification should be disabled
-    notifier.notify_task_changed(Some(2), "created").await;
+    notifier.notify_task_changed(Some(2), "created", None).await;
 
     // Unset env var
     std::env::remove_var("IE_DISABLE_DASHBOARD_NOTIFICATIONS");
 
     // Third notification should work again
-    notifier.notify_task_changed(Some(3), "created").await;
+    notifier.notify_task_changed(Some(3), "created", None).await;
 }
 
 #[test]

@@ -42,11 +42,9 @@ impl SetupTarget {
     /// Get description for the target
     pub fn description(&self) -> &str {
         match self {
-            SetupTarget::ClaudeCode { .. } => {
-                "Install MCP server and session hooks for Claude Code"
-            },
-            SetupTarget::GeminiCli { .. } => "Install MCP server for Google Gemini CLI",
-            SetupTarget::Codex { .. } => "Install MCP server for OpenAI Codex",
+            SetupTarget::ClaudeCode { .. } => "Install session hooks for Claude Code integration",
+            SetupTarget::GeminiCli { .. } => "Integration for Google Gemini CLI (coming soon)",
+            SetupTarget::Codex { .. } => "Integration for OpenAI Codex (coming soon)",
         }
     }
 

@@ -110,7 +110,8 @@ pub async fn handle_event_command(cmd: EventCommands) -> Result<()> {
             data_stdin,
         } => {
             let ctx = ProjectContext::load_or_init().await?;
-            let event_mgr = EventManager::new(&ctx.pool);
+            let project_path = ctx.root.to_string_lossy().to_string();
+            let event_mgr = EventManager::with_project_path(&ctx.pool, project_path);
 
             let data = if data_stdin {
                 read_stdin()?
@@ -164,6 +165,35 @@ pub async fn handle_event_command(cmd: EventCommands) -> Result<()> {
     Ok(())
 }
 
+/// Check if query is a status keyword combination (todo, doing, done)
+/// Returns Some(statuses) if it's a status query, None otherwise
+fn parse_status_keywords(query: &str) -> Option<Vec<String>> {
+    let query_lower = query.to_lowercase();
+    let words: Vec<&str> = query_lower.split_whitespace().collect();
+
+    // Must have at least one word
+    if words.is_empty() {
+        return None;
+    }
+
+    // All words must be status keywords
+    let valid_statuses = ["todo", "doing", "done"];
+    let mut statuses: Vec<String> = Vec::new();
+
+    for word in words {
+        if valid_statuses.contains(&word) {
+            if !statuses.iter().any(|s| s == word) {
+                statuses.push(word.to_string());
+            }
+        } else {
+            // Found a non-status word, not a status query
+            return None;
+        }
+    }
+
+    Some(statuses)
+}
+
 pub async fn handle_search_command(
     query: &str,
     include_tasks: bool,
@@ -172,8 +202,50 @@ pub async fn handle_search_command(
     offset: Option<i64>,
 ) -> Result<()> {
     use crate::search::SearchManager;
+    use crate::tasks::TaskManager;
 
     let ctx = ProjectContext::load_or_init().await?;
+
+    // Check if query is a status keyword combination
+    if let Some(statuses) = parse_status_keywords(query) {
+        // Use TaskManager::find_tasks for status filtering
+        let task_mgr = TaskManager::new(&ctx.pool);
+
+        // Collect tasks for each status
+        let mut all_tasks = Vec::new();
+        for status in &statuses {
+            let result = task_mgr
+                .find_tasks(Some(status), None, None, limit, offset)
+                .await?;
+            all_tasks.extend(result.tasks);
+        }
+
+        // Sort by priority, then by id
+        all_tasks.sort_by(|a, b| {
+            let pri_a = a.priority.unwrap_or(999);
+            let pri_b = b.priority.unwrap_or(999);
+            pri_a.cmp(&pri_b).then_with(|| a.id.cmp(&b.id))
+        });
+
+        // Apply limit if specified
+        let limit = limit.unwrap_or(100) as usize;
+        if all_tasks.len() > limit {
+            all_tasks.truncate(limit);
+        }
+
+        // Print status summary
+        let status_str = statuses.join(", ");
+        eprintln!(
+            "Found {} tasks with status: {}",
+            all_tasks.len(),
+            status_str
+        );
+
+        println!("{}", serde_json::to_string_pretty(&all_tasks)?);
+        return Ok(());
+    }
+
+    // Regular FTS5 search
     let search_mgr = SearchManager::new(&ctx.pool);
 
     let results = search_mgr
@@ -482,7 +554,7 @@ pub fn check_session_start_hook() -> serde_json::Value {
     let user_settings = home.join(".claude/settings.json");
 
     let script_exists = user_hook.exists();
-    let script_executable = if script_exists {
+    let script_executable = script_exists && {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -494,8 +566,6 @@ pub fn check_session_start_hook() -> serde_json::Value {
         {
             true
         }
-    } else {
-        false
     };
 
     let is_configured = if user_settings.exists() {

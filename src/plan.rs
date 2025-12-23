@@ -334,12 +334,24 @@ use sqlx::SqlitePool;
 /// Plan executor for creating/updating task structures
 pub struct PlanExecutor<'a> {
     pool: &'a SqlitePool,
+    project_path: Option<String>,
 }
 
 impl<'a> PlanExecutor<'a> {
     /// Create a new plan executor
     pub fn new(pool: &'a SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            project_path: None,
+        }
+    }
+
+    /// Create a plan executor with project path for dashboard notifications
+    pub fn with_project_path(pool: &'a SqlitePool, project_path: String) -> Self {
+        Self {
+            pool,
+            project_path: Some(project_path),
+        }
     }
 
     /// Execute a plan request (Phase 2: create + update mode)
@@ -422,7 +434,10 @@ impl<'a> PlanExecutor<'a> {
             if let Some(&task_id) = task_id_map.get(&doing_task.name) {
                 // Call task_start with events to get full context
                 use crate::tasks::TaskManager;
-                let task_mgr = TaskManager::new(self.pool);
+                let task_mgr = match &self.project_path {
+                    Some(path) => TaskManager::with_project_path(self.pool, path.clone()),
+                    None => TaskManager::new(self.pool),
+                };
                 let response = task_mgr.start_task(task_id, true).await?;
                 Some(response)
             } else {

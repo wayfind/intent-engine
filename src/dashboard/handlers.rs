@@ -17,7 +17,20 @@ pub async fn list_tasks(
     State(state): State<AppState>,
     Query(query): Query<TaskListQuery>,
 ) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
     let task_mgr = TaskManager::new(&db_pool);
 
     // Convert parent filter to Option<Option<i64>>
@@ -66,7 +79,20 @@ pub async fn list_tasks(
 
 /// Get a single task by ID
 pub async fn get_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
     let task_mgr = TaskManager::new(&db_pool);
 
     match task_mgr.get_task(id).await {
@@ -97,10 +123,25 @@ pub async fn create_task(
     State(state): State<AppState>,
     Json(req): Json<CreateTaskRequest>,
 ) -> impl IntoResponse {
-    let project = state.current_project.read().await;
-    let db_pool = project.db_pool.clone();
-    let project_path = project.project_path.to_string_lossy().to_string();
-    drop(project);
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
+    let project_path = state
+        .get_active_project()
+        .await
+        .map(|p| p.path.to_string_lossy().to_string())
+        .unwrap_or_default();
 
     let task_mgr = TaskManager::with_websocket(
         &db_pool,
@@ -147,10 +188,25 @@ pub async fn update_task(
     Path(id): Path<i64>,
     Json(req): Json<UpdateTaskRequest>,
 ) -> impl IntoResponse {
-    let project = state.current_project.read().await;
-    let db_pool = project.db_pool.clone();
-    let project_path = project.project_path.to_string_lossy().to_string();
-    drop(project);
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
+    let project_path = state
+        .get_active_project()
+        .await
+        .map(|p| p.path.to_string_lossy().to_string())
+        .unwrap_or_default();
 
     let task_mgr = TaskManager::with_websocket(
         &db_pool,
@@ -214,10 +270,25 @@ pub async fn update_task(
 
 /// Delete a task
 pub async fn delete_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let project = state.current_project.read().await;
-    let db_pool = project.db_pool.clone();
-    let project_path = project.project_path.to_string_lossy().to_string();
-    drop(project);
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
+    let project_path = state
+        .get_active_project()
+        .await
+        .map(|p| p.path.to_string_lossy().to_string())
+        .unwrap_or_default();
 
     let task_mgr = TaskManager::with_websocket(
         &db_pool,
@@ -250,10 +321,25 @@ pub async fn delete_task(State(state): State<AppState>, Path(id): Path<i64>) -> 
 
 /// Start a task (set as current)
 pub async fn start_task(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let project = state.current_project.read().await;
-    let db_pool = project.db_pool.clone();
-    let project_path = project.project_path.to_string_lossy().to_string();
-    drop(project);
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
+    let project_path = state
+        .get_active_project()
+        .await
+        .map(|p| p.path.to_string_lossy().to_string())
+        .unwrap_or_default();
 
     let task_mgr = TaskManager::with_websocket(
         &db_pool,
@@ -286,10 +372,25 @@ pub async fn start_task(State(state): State<AppState>, Path(id): Path<i64>) -> i
 
 /// Complete the current task
 pub async fn done_task(State(state): State<AppState>) -> impl IntoResponse {
-    let project = state.current_project.read().await;
-    let db_pool = project.db_pool.clone();
-    let project_path = project.project_path.to_string_lossy().to_string();
-    drop(project);
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
+    let project_path = state
+        .get_active_project()
+        .await
+        .map(|p| p.path.to_string_lossy().to_string())
+        .unwrap_or_default();
 
     let task_mgr = TaskManager::with_websocket(
         &db_pool,
@@ -328,10 +429,20 @@ pub async fn spawn_subtask(
     Path(_parent_id): Path<i64>, // Ignored - uses current task
     Json(req): Json<SpawnSubtaskRequest>,
 ) -> impl IntoResponse {
-    let project = state.current_project.read().await;
-    let db_pool = project.db_pool.clone();
-    let project_path = project.project_path.to_string_lossy().to_string();
-    drop(project);
+    let (db_pool, project_path) = match state.get_active_project_context().await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
 
     let task_mgr = TaskManager::with_websocket(
         &db_pool,
@@ -365,7 +476,20 @@ pub async fn spawn_subtask(
 
 /// Get current task
 pub async fn get_current_task(State(state): State<AppState>) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
     let workspace_mgr = WorkspaceManager::new(&db_pool);
 
     match workspace_mgr.get_current_task().await {
@@ -397,7 +521,20 @@ pub async fn get_current_task(State(state): State<AppState>) -> impl IntoRespons
 
 /// Pick next task recommendation
 pub async fn pick_next_task(State(state): State<AppState>) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
     let task_mgr = TaskManager::new(&db_pool);
 
     match task_mgr.pick_next().await {
@@ -420,7 +557,20 @@ pub async fn list_events(
     Path(task_id): Path<i64>,
     Query(query): Query<EventListQuery>,
 ) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
     let event_mgr = EventManager::new(&db_pool);
 
     // Signature: list_events(task_id, limit, log_type, since)
@@ -452,10 +602,20 @@ pub async fn create_event(
     Path(task_id): Path<i64>,
     Json(req): Json<CreateEventRequest>,
 ) -> impl IntoResponse {
-    let project = state.current_project.read().await;
-    let db_pool = project.db_pool.clone();
-    let project_path = project.project_path.to_string_lossy().to_string();
-    drop(project);
+    let (db_pool, project_path) = match state.get_active_project_context().await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
 
     let event_mgr = EventManager::with_websocket(
         &db_pool,
@@ -500,10 +660,20 @@ pub async fn update_event(
     Path((task_id, event_id)): Path<(i64, i64)>,
     Json(req): Json<UpdateEventRequest>,
 ) -> impl IntoResponse {
-    let project = state.current_project.read().await;
-    let db_pool = project.db_pool.clone();
-    let project_path = project.project_path.to_string_lossy().to_string();
-    drop(project);
+    let (db_pool, project_path) = match state.get_active_project_context().await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
 
     let event_mgr = EventManager::with_websocket(
         &db_pool,
@@ -562,10 +732,20 @@ pub async fn delete_event(
     State(state): State<AppState>,
     Path((task_id, event_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let project = state.current_project.read().await;
-    let db_pool = project.db_pool.clone();
-    let project_path = project.project_path.to_string_lossy().to_string();
-    drop(project);
+    let (db_pool, project_path) = match state.get_active_project_context().await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
 
     let event_mgr = EventManager::with_websocket(
         &db_pool,
@@ -635,7 +815,20 @@ pub async fn search(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
     let search_mgr = SearchManager::new(&db_pool);
 
     match search_mgr
@@ -664,19 +857,24 @@ pub async fn search(
 
 /// List all registered projects (from in-memory state)
 pub async fn list_projects(State(state): State<AppState>) -> impl IntoResponse {
-    // Use the same method as WebSocket init for consistency
-    let projects_info = {
-        let current_project = state.current_project.read().await;
-        state
-            .ws_state
-            .get_online_projects_with_current(
-                &current_project.project_name,
-                &current_project.project_path,
-                &current_project.db_path,
-                &state.host_project,
-                state.port,
-            )
-            .await
+    // Get active project info and use ws_state for project list
+    let projects_info = match state.get_active_project().await {
+        Some(active) => {
+            state
+                .ws_state
+                .get_online_projects_with_current(
+                    &active.name,
+                    &active.path,
+                    &active.db_path,
+                    &state.host_project,
+                    state.port,
+                )
+                .await
+        },
+        None => {
+            // No active project, just return host project info
+            vec![state.host_project.clone()]
+        },
     };
 
     // Convert ProjectInfo to API response format with additional metadata
@@ -713,79 +911,44 @@ pub async fn switch_project(
     State(state): State<AppState>,
     Json(req): Json<SwitchProjectRequest>,
 ) -> impl IntoResponse {
-    use super::server::ProjectContext;
     use std::path::PathBuf;
 
     // Parse and validate project path
     let project_path = PathBuf::from(&req.project_path);
 
-    if !project_path.exists() {
+    // Add project to known projects (validates path and db existence)
+    if let Err(e) = state.add_project(project_path.clone()).await {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiError {
                 code: "PROJECT_NOT_FOUND".to_string(),
-                message: format!("Project path does not exist: {}", project_path.display()),
+                message: e,
                 details: None,
             }),
         )
             .into_response();
     }
 
-    // Construct database path
-    let db_path = project_path.join(".intent-engine").join("project.db");
-
-    if !db_path.exists() {
+    // Switch to the new project
+    if let Err(e) = state.switch_active_project(project_path.clone()).await {
         return (
-            StatusCode::NOT_FOUND,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiError {
-                code: "DATABASE_NOT_FOUND".to_string(),
-                message: format!(
-                    "Database not found at {}. Is this an Intent-Engine project?",
-                    db_path.display()
-                ),
+                code: "SWITCH_ERROR".to_string(),
+                message: e,
                 details: None,
             }),
         )
             .into_response();
     }
 
-    // Create new database connection using the shared helper
-    // This ensures consistent configuration (WAL mode, timeouts) and correct path handling
-    let new_db_pool = match crate::db::create_pool(&db_path).await {
-        Ok(pool) => pool,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiError {
-                    code: "DATABASE_CONNECTION_ERROR".to_string(),
-                    message: format!("Failed to connect to database: {}", e),
-                    details: None,
-                }),
-            )
-                .into_response();
-        },
-    };
-
-    // Extract project name
+    // Get project info for response
     let project_name = project_path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
         .to_string();
-
-    // Create new project context
-    let new_context = ProjectContext {
-        db_pool: new_db_pool,
-        project_name: project_name.clone(),
-        project_path: project_path.clone(),
-        db_path: db_path.clone(),
-    };
-
-    // Update the current project (write lock)
-    {
-        let mut current = state.current_project.write().await;
-        *current = new_context;
-    }
+    let db_path = project_path.join(".intent-engine").join("project.db");
 
     tracing::info!(
         "Switched to project: {} at {}",
@@ -812,7 +975,20 @@ pub async fn get_task_context(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    let db_pool = state.current_project.read().await.db_pool.clone();
+    let db_pool = match state.get_active_db_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "DATABASE_ERROR".to_string(),
+                    message: e,
+                    details: None,
+                }),
+            )
+                .into_response()
+        },
+    };
     let task_mgr = TaskManager::new(&db_pool);
 
     match task_mgr.get_task_context(id).await {
@@ -843,7 +1019,41 @@ pub async fn handle_cli_notification(
     State(state): State<AppState>,
     Json(message): Json<crate::dashboard::cli_notifier::NotificationMessage>,
 ) -> impl IntoResponse {
+    use crate::dashboard::cli_notifier::NotificationMessage;
+    use std::path::PathBuf;
+
     tracing::debug!("Received CLI notification: {:?}", message);
+
+    // Extract project_path from notification
+    let project_path = match &message {
+        NotificationMessage::TaskChanged { project_path, .. } => project_path.clone(),
+        NotificationMessage::EventAdded { project_path, .. } => project_path.clone(),
+        NotificationMessage::WorkspaceChanged { project_path, .. } => project_path.clone(),
+    };
+
+    // If project_path is provided, register it as a known project
+    if let Some(ref path_str) = project_path {
+        let project_path = PathBuf::from(path_str);
+
+        // Add project to known projects (this is idempotent - safe to call multiple times)
+        if let Err(e) = state.add_project(project_path.clone()).await {
+            tracing::warn!("Failed to add project from CLI notification: {}", e);
+        } else {
+            // Switch to this project as the active one
+            if let Err(e) = state.switch_active_project(project_path.clone()).await {
+                tracing::warn!("Failed to switch to project from CLI notification: {}", e);
+            } else {
+                let project_name = project_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown");
+                tracing::info!(
+                    "Auto-switched to project: {} (from CLI notification)",
+                    project_name
+                );
+            }
+        }
+    }
 
     // Broadcast to all WebSocket clients
     let notification_json = serde_json::to_string(&message).unwrap_or_default();

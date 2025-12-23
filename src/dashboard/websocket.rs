@@ -635,9 +635,11 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                                     project: project_info,
                                 },
                             );
-                            state_for_recv
-                                .broadcast_to_ui(&ui_msg.to_json().unwrap())
-                                .await;
+                            if let Ok(json) = ui_msg.to_json() {
+                                state_for_recv.broadcast_to_ui(&json).await;
+                            } else {
+                                tracing::error!("Failed to serialize project_online message");
+                            }
                         },
                         "pong" => {
                             // Client responded to our ping - heartbeat confirmed
@@ -701,9 +703,11 @@ async fn handle_mcp_socket(socket: WebSocket, state: WebSocketState) {
                     "project_offline",
                     ProjectOfflinePayload { project_path: path.clone() },
                 );
-                state
-                    .broadcast_to_ui(&ui_msg.to_json().unwrap())
-                    .await;
+                if let Ok(json) = ui_msg.to_json() {
+                    state.broadcast_to_ui(&json).await;
+                } else {
+                    tracing::error!("Failed to serialize project_offline message");
+                }
 
                 tracing::info!("MCP disconnected: {}", path);
             }
@@ -814,19 +818,24 @@ async fn handle_ui_socket(socket: WebSocket, app_state: crate::dashboard::server
                                     // Send init after welcome (protocol-compliant flow)
                                     // Re-fetch projects in case state changed
                                     let current_projects = {
-                                        let current_project =
-                                            app_state_for_recv.current_project.read().await;
                                         let port = app_state_for_recv.port;
-                                        app_state_for_recv
-                                            .ws_state
-                                            .get_online_projects_with_current(
-                                                &current_project.project_name,
-                                                &current_project.project_path,
-                                                &current_project.db_path,
-                                                &app_state_for_recv.host_project,
-                                                port,
-                                            )
-                                            .await
+                                        match app_state_for_recv.get_active_project().await {
+                                            Some(active) => {
+                                                app_state_for_recv
+                                                    .ws_state
+                                                    .get_online_projects_with_current(
+                                                        &active.name,
+                                                        &active.path,
+                                                        &active.db_path,
+                                                        &app_state_for_recv.host_project,
+                                                        port,
+                                                    )
+                                                    .await
+                                            },
+                                            None => {
+                                                vec![app_state_for_recv.host_project.clone()]
+                                            },
+                                        }
                                     };
                                     let _ = send_protocol_message(
                                         &tx,

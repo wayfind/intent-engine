@@ -94,7 +94,8 @@ async fn run(cli: &Cli) -> Result<()> {
 
             // Execute the plan
             let ctx = ProjectContext::load_or_init().await?;
-            let executor = PlanExecutor::new(&ctx.pool);
+            let project_path = ctx.root.to_string_lossy().to_string();
+            let executor = PlanExecutor::with_project_path(&ctx.pool, project_path);
             let result = executor.execute(&request).await?;
 
             // Format output
@@ -160,7 +161,8 @@ async fn run(cli: &Cli) -> Result<()> {
             format,
         } => {
             let ctx = ProjectContext::load_or_init().await?;
-            let event_mgr = EventManager::new(&ctx.pool);
+            let project_path = ctx.root.to_string_lossy().to_string();
+            let event_mgr = EventManager::with_project_path(&ctx.pool, project_path);
             let workspace_mgr = WorkspaceManager::new(&ctx.pool);
 
             // Determine task_id: use --task flag, or fall back to current focused task

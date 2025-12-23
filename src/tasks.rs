@@ -26,6 +26,16 @@ impl<'a> TaskManager<'a> {
         }
     }
 
+    /// Create a TaskManager with project path for CLI notifications
+    pub fn with_project_path(pool: &'a SqlitePool, project_path: String) -> Self {
+        Self {
+            pool,
+            notifier: crate::notifications::NotificationSender::new(None),
+            cli_notifier: Some(crate::dashboard::cli_notifier::CliNotifier::new()),
+            project_path: Some(project_path),
+        }
+    }
+
     /// Create a TaskManager with WebSocket notification support
     pub fn with_websocket(
         pool: &'a SqlitePool,
@@ -62,7 +72,7 @@ impl<'a> TaskManager<'a> {
         // CLI → Dashboard HTTP notification (CLI context)
         if let Some(cli_notifier) = &self.cli_notifier {
             cli_notifier
-                .notify_task_changed(Some(task.id), "created")
+                .notify_task_changed(Some(task.id), "created", self.project_path.clone())
                 .await;
         }
     }
@@ -89,7 +99,7 @@ impl<'a> TaskManager<'a> {
         // CLI → Dashboard HTTP notification (CLI context)
         if let Some(cli_notifier) = &self.cli_notifier {
             cli_notifier
-                .notify_task_changed(Some(task.id), "updated")
+                .notify_task_changed(Some(task.id), "updated", self.project_path.clone())
                 .await;
         }
     }
@@ -107,7 +117,7 @@ impl<'a> TaskManager<'a> {
         // CLI → Dashboard HTTP notification (CLI context)
         if let Some(cli_notifier) = &self.cli_notifier {
             cli_notifier
-                .notify_task_changed(Some(task_id), "deleted")
+                .notify_task_changed(Some(task_id), "deleted", self.project_path.clone())
                 .await;
         }
     }

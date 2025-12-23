@@ -9,6 +9,7 @@ use axum::{
 use rust_embed::RustEmbed;
 use serde::Serialize;
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -24,20 +25,21 @@ use super::websocket;
 #[folder = "static/"]
 struct StaticAssets;
 
-/// Project context that can be switched dynamically
-#[derive(Clone)]
-pub struct ProjectContext {
-    pub db_pool: SqlitePool,
-    pub project_name: String,
-    pub project_path: PathBuf,
+/// Minimal project info (no connection pool - SQLite is fast enough to open on demand)
+#[derive(Clone, Debug)]
+pub struct ProjectInfo {
+    pub name: String,
+    pub path: PathBuf,
     pub db_path: PathBuf,
 }
 
 /// Dashboard server state shared across handlers
 #[derive(Clone)]
 pub struct AppState {
-    /// Current active project (wrapped in `Arc<RwLock>` for dynamic switching)
-    pub current_project: Arc<RwLock<ProjectContext>>,
+    /// Known projects (path -> info). No connection pools - SQLite opens fast.
+    pub known_projects: Arc<RwLock<HashMap<PathBuf, ProjectInfo>>>,
+    /// Currently active project path (for UI display)
+    pub active_project_path: Arc<RwLock<PathBuf>>,
     /// The project that started the Dashboard (always considered online)
     pub host_project: super::websocket::ProjectInfo,
     pub port: u16,
@@ -45,6 +47,87 @@ pub struct AppState {
     pub ws_state: super::websocket::WebSocketState,
     /// Shutdown signal sender (for graceful shutdown via HTTP)
     pub shutdown_tx: Arc<tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
+}
+
+impl AppState {
+    /// Get database pool for a project (opens on demand - SQLite is fast)
+    pub async fn get_db_pool(&self, project_path: &PathBuf) -> Result<SqlitePool, String> {
+        let projects = self.known_projects.read().await;
+        if let Some(info) = projects.get(project_path) {
+            let db_url = format!("sqlite://{}", info.db_path.display());
+            SqlitePool::connect(&db_url)
+                .await
+                .map_err(|e| format!("Failed to connect to database: {}", e))
+        } else {
+            Err(format!("Project not found: {}", project_path.display()))
+        }
+    }
+
+    /// Get database pool for the active project
+    pub async fn get_active_db_pool(&self) -> Result<SqlitePool, String> {
+        let active_path = self.active_project_path.read().await.clone();
+        self.get_db_pool(&active_path).await
+    }
+
+    /// Add a new project (or update existing)
+    pub async fn add_project(&self, path: PathBuf) -> Result<(), String> {
+        if !path.exists() {
+            return Err(format!("Project path does not exist: {}", path.display()));
+        }
+
+        let db_path = path.join(".intent-engine").join("project.db");
+        if !db_path.exists() {
+            return Err(format!("Database not found: {}", db_path.display()));
+        }
+
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let info = ProjectInfo {
+            name,
+            path: path.clone(),
+            db_path,
+        };
+
+        let mut projects = self.known_projects.write().await;
+        projects.insert(path, info);
+        Ok(())
+    }
+
+    /// Get active project info
+    pub async fn get_active_project(&self) -> Option<ProjectInfo> {
+        let active_path = self.active_project_path.read().await;
+        let projects = self.known_projects.read().await;
+        projects.get(&*active_path).cloned()
+    }
+
+    /// Switch active project
+    pub async fn switch_active_project(&self, path: PathBuf) -> Result<(), String> {
+        let projects = self.known_projects.read().await;
+        if !projects.contains_key(&path) {
+            return Err(format!("Project not registered: {}", path.display()));
+        }
+        drop(projects);
+
+        let mut active = self.active_project_path.write().await;
+        *active = path;
+        Ok(())
+    }
+
+    /// Get active project's db_pool and path (backward compatibility helper)
+    /// Returns (db_pool, project_path_string)
+    pub async fn get_active_project_context(&self) -> Result<(SqlitePool, String), String> {
+        let db_pool = self.get_active_db_pool().await?;
+        let project_path = self
+            .get_active_project()
+            .await
+            .map(|p| p.path.to_string_lossy().to_string())
+            .unwrap_or_default();
+        Ok((db_pool, project_path))
+    }
 }
 
 /// Dashboard server instance
@@ -63,9 +146,9 @@ struct HealthResponse {
     version: String,
 }
 
-/// Project info response
+/// Project info response (for API)
 #[derive(Serialize)]
-struct ProjectInfo {
+struct ProjectInfoResponse {
     name: String,
     path: String,
     database: String,
@@ -101,19 +184,14 @@ impl DashboardServer {
 
     /// Run the Dashboard server
     pub async fn run(self) -> Result<()> {
-        // Create database connection pool
-        let db_url = format!("sqlite://{}", self.db_path.display());
-        let db_pool = SqlitePool::connect(&db_url)
-            .await
-            .context("Failed to connect to database")?;
-
-        // Create project context
-        let project_context = ProjectContext {
-            db_pool,
-            project_name: self.project_name.clone(),
-            project_path: self.project_path.clone(),
+        // Initialize known projects with the host project
+        let mut known_projects = HashMap::new();
+        let host_info = ProjectInfo {
+            name: self.project_name.clone(),
+            path: self.project_path.clone(),
             db_path: self.db_path.clone(),
         };
+        known_projects.insert(self.project_path.clone(), host_info);
 
         // Create shared state
         let ws_state = websocket::WebSocketState::new();
@@ -131,7 +209,8 @@ impl DashboardServer {
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
         let state = AppState {
-            current_project: Arc::new(RwLock::new(project_context)),
+            known_projects: Arc::new(RwLock::new(known_projects)),
+            active_project_path: Arc::new(RwLock::new(self.project_path.clone())),
             host_project: host_project_info,
             port: self.port,
             ws_state,
@@ -313,32 +392,44 @@ async fn health_handler() -> Json<HealthResponse> {
 
 /// Project info handler
 /// Returns current Dashboard project info from the single source of truth (WebSocketState)
-async fn info_handler(State(state): State<AppState>) -> Json<ProjectInfo> {
-    let project = state.current_project.read().await;
+async fn info_handler(State(state): State<AppState>) -> Json<ProjectInfoResponse> {
+    let active_project = state.get_active_project().await;
 
-    // Get project info from WebSocketState (single source of truth)
-    let projects = state
-        .ws_state
-        .get_online_projects_with_current(
-            &project.project_name,
-            &project.project_path,
-            &project.db_path,
-            &state.host_project,
-            state.port,
-        )
-        .await;
+    match active_project {
+        Some(project) => {
+            // Get project info from WebSocketState (single source of truth)
+            let projects = state
+                .ws_state
+                .get_online_projects_with_current(
+                    &project.name,
+                    &project.path,
+                    &project.db_path,
+                    &state.host_project,
+                    state.port,
+                )
+                .await;
 
-    // Return the first project (which is always the current Dashboard project)
-    let current_project = projects.first().expect("Current project must exist");
+            // Return the first project (which is always the current Dashboard project)
+            let current_project = projects.first().expect("Current project must exist");
 
-    Json(ProjectInfo {
-        name: current_project.name.clone(),
-        path: current_project.path.clone(),
-        database: current_project.db_path.clone(),
-        port: state.port,
-        is_online: current_project.is_online,
-        mcp_connected: current_project.mcp_connected,
-    })
+            Json(ProjectInfoResponse {
+                name: current_project.name.clone(),
+                path: current_project.path.clone(),
+                database: current_project.db_path.clone(),
+                port: state.port,
+                is_online: current_project.is_online,
+                mcp_connected: current_project.mcp_connected,
+            })
+        },
+        None => Json(ProjectInfoResponse {
+            name: "unknown".to_string(),
+            path: "".to_string(),
+            database: "".to_string(),
+            port: state.port,
+            is_online: false,
+            mcp_connected: false,
+        }),
+    }
 }
 
 /// 404 Not Found handler
@@ -370,8 +461,8 @@ mod tests {
     }
 
     #[test]
-    fn test_project_info_serialization() {
-        let info = ProjectInfo {
+    fn test_project_info_response_serialization() {
+        let info = ProjectInfoResponse {
             name: "test-project".to_string(),
             path: "/path/to/project".to_string(),
             database: "/path/to/db".to_string(),

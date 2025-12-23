@@ -47,7 +47,7 @@ fn test_claude_code_description() {
     };
     assert_eq!(
         target.description(),
-        "Install MCP server and session hooks for Claude Code"
+        "Install session hooks for Claude Code integration"
     );
 }
 
@@ -58,7 +58,7 @@ fn test_gemini_cli_description() {
     };
     assert_eq!(
         target.description(),
-        "Install MCP server for Google Gemini CLI"
+        "Integration for Google Gemini CLI (coming soon)"
     );
 }
 
@@ -67,7 +67,10 @@ fn test_codex_description() {
     let target = SetupTarget::Codex {
         status: TargetStatus::ComingSoon,
     };
-    assert_eq!(target.description(), "Install MCP server for OpenAI Codex");
+    assert_eq!(
+        target.description(),
+        "Integration for OpenAI Codex (coming soon)"
+    );
 }
 
 // ============================================================================
@@ -161,7 +164,7 @@ fn test_format_for_menu_claude_code() {
 
     // Should contain key components
     assert!(formatted.contains("Claude Code"));
-    assert!(formatted.contains("Install MCP server"));
+    assert!(formatted.contains("session hooks"));
     assert!(formatted.contains("Status:"));
 }
 

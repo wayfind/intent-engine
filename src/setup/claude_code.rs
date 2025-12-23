@@ -110,73 +110,18 @@ impl ClaudeCodeSetup {
         let claude_dir = Self::get_user_claude_dir()?;
         Self::setup_hooks_and_settings(&claude_dir, opts, &mut files_modified)?;
 
-        // Setup MCP configuration
-        let mcp_result = self.setup_mcp_config(opts, &mut files_modified)?;
-
         Ok(SetupResult {
             success: true,
             message: "User-level Claude Code setup complete!".to_string(),
             files_modified,
-            connectivity_test: Some(mcp_result),
-        })
-    }
-
-    /// Setup MCP server configuration
-    fn setup_mcp_config(
-        &self,
-        opts: &SetupOptions,
-        files_modified: &mut Vec<PathBuf>,
-    ) -> Result<ConnectivityResult> {
-        let config_path = if let Some(ref path) = opts.config_path {
-            path.clone()
-        } else {
-            let home = get_home_dir()?;
-            home.join(".claude.json")
-        };
-
-        // Find binary
-        let binary_path = find_ie_binary()?;
-        println!("✓ Found binary: {}", binary_path.display());
-
-        // Read or create config
-        let mut config = read_json_config(&config_path)?;
-
-        // Check if already configured
-        if let Some(mcp_servers) = config.get("mcpServers") {
-            if mcp_servers.get("intent-engine").is_some() && !opts.force {
-                return Ok(ConnectivityResult {
-                    passed: false,
-                    details: "intent-engine already configured in MCP config".to_string(),
-                });
-            }
-        }
-
-        // Add intent-engine configuration
-        if config.get("mcpServers").is_none() {
-            config["mcpServers"] = json!({});
-        }
-
-        config["mcpServers"]["intent-engine"] = json!({
-            "command": binary_path.to_string_lossy(),
-            "args": ["mcp-server"],
-            "description": "Strategic intent and task workflow management"
-        });
-
-        write_json_config(&config_path, &config)?;
-        files_modified.push(config_path.clone());
-        println!("✓ Updated {}", config_path.display());
-
-        Ok(ConnectivityResult {
-            passed: true,
-            details: format!("MCP configured at {}", config_path.display()),
+            connectivity_test: None,
         })
     }
 
     /// Setup for project-level installation
     fn setup_project_level(&self, opts: &SetupOptions) -> Result<SetupResult> {
         println!("📦 Setting up project-level Claude Code integration...\n");
-        println!("⚠️  Note: Project-level setup is for advanced users.");
-        println!("    MCP config will still be in ~/.claude.json (user-level)\n");
+        println!("⚠️  Note: Project-level setup is for advanced users.\n");
 
         let mut files_modified = Vec::new();
 
@@ -184,14 +129,11 @@ impl ClaudeCodeSetup {
         let claude_dir = Self::get_project_claude_dir()?;
         Self::setup_hooks_and_settings(&claude_dir, opts, &mut files_modified)?;
 
-        // MCP config still goes to user-level
-        let mcp_result = self.setup_mcp_config(opts, &mut files_modified)?;
-
         Ok(SetupResult {
             success: true,
             message: "Project-level setup complete!".to_string(),
             files_modified,
-            connectivity_test: Some(mcp_result),
+            connectivity_test: None,
         })
     }
 }
@@ -452,99 +394,5 @@ mod tests {
         // Verify structure
         assert!(settings.get("hooks").is_some());
         assert!(settings["hooks"].get("SessionStart").is_some());
-    }
-
-    #[test]
-    fn test_setup_mcp_config_creates_new_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join(".claude.json");
-
-        let opts = SetupOptions {
-            force: false,
-            scope: SetupScope::User,
-            config_path: Some(config_path.clone()),
-        };
-        let mut files_modified = Vec::new();
-
-        let setup = ClaudeCodeSetup;
-        let result = setup.setup_mcp_config(&opts, &mut files_modified);
-
-        assert!(result.is_ok());
-        assert!(config_path.exists());
-
-        // Verify content
-        let content = std::fs::read_to_string(&config_path).unwrap();
-        let config: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert!(config["mcpServers"]["intent-engine"].is_object());
-    }
-
-    #[test]
-    fn test_setup_mcp_config_preserves_existing() {
-        let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join(".claude.json");
-
-        // Create existing config with other servers
-        let existing_config = json!({
-            "mcpServers": {
-                "other-server": {
-                    "command": "other-cmd"
-                }
-            }
-        });
-        std::fs::write(
-            &config_path,
-            serde_json::to_string_pretty(&existing_config).unwrap(),
-        )
-        .unwrap();
-
-        let opts = SetupOptions {
-            force: true,
-            scope: SetupScope::User,
-            config_path: Some(config_path.clone()),
-        };
-        let mut files_modified = Vec::new();
-
-        let setup = ClaudeCodeSetup;
-        setup.setup_mcp_config(&opts, &mut files_modified).unwrap();
-
-        // Verify both servers exist
-        let content = std::fs::read_to_string(&config_path).unwrap();
-        let config: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert!(config["mcpServers"]["other-server"].is_object());
-        assert!(config["mcpServers"]["intent-engine"].is_object());
-    }
-
-    #[test]
-    fn test_setup_mcp_config_no_force_skips_existing() {
-        let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join(".claude.json");
-
-        // Create existing config with intent-engine
-        let existing_config = json!({
-            "mcpServers": {
-                "intent-engine": {
-                    "command": "old-cmd"
-                }
-            }
-        });
-        std::fs::write(
-            &config_path,
-            serde_json::to_string_pretty(&existing_config).unwrap(),
-        )
-        .unwrap();
-
-        let opts = SetupOptions {
-            force: false,
-            scope: SetupScope::User,
-            config_path: Some(config_path.clone()),
-        };
-        let mut files_modified = Vec::new();
-
-        let setup = ClaudeCodeSetup;
-        let result = setup.setup_mcp_config(&opts, &mut files_modified).unwrap();
-
-        // Should return false (already configured)
-        assert!(!result.passed);
-        assert!(result.details.contains("already configured"));
     }
 }
