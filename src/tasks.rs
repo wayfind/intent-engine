@@ -162,6 +162,155 @@ impl<'a> TaskManager<'a> {
         Ok(task)
     }
 
+    // =========================================================================
+    // Transaction-aware methods (for batch operations like PlanExecutor)
+    // These methods do NOT notify - caller is responsible for notifications
+    // =========================================================================
+
+    /// Create a task within a transaction (no notification)
+    ///
+    /// This is used by PlanExecutor for batch operations where:
+    /// - Multiple tasks need atomic creation
+    /// - Notification should happen after all tasks are committed
+    ///
+    /// # Arguments
+    /// * `tx` - The active transaction
+    /// * `name` - Task name
+    /// * `spec` - Optional task specification
+    /// * `priority` - Optional priority (1=critical, 2=high, 3=medium, 4=low)
+    /// * `status` - Optional status string ("todo", "doing", "done")
+    /// * `active_form` - Optional active form description
+    /// * `owner` - Task owner ("human" or "ai")
+    ///
+    /// # Returns
+    /// The ID of the created task
+    pub async fn create_task_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        name: &str,
+        spec: Option<&str>,
+        priority: Option<i32>,
+        status: Option<&str>,
+        active_form: Option<&str>,
+        owner: &str,
+    ) -> Result<i64> {
+        let now = Utc::now();
+        let status = status.unwrap_or("todo");
+        let priority = priority.unwrap_or(3); // Default: medium
+
+        let result = sqlx::query(
+            r#"
+            INSERT INTO tasks (name, spec, priority, status, active_form, first_todo_at, owner)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(name)
+        .bind(spec)
+        .bind(priority)
+        .bind(status)
+        .bind(active_form)
+        .bind(now)
+        .bind(owner)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    /// Update a task within a transaction (no notification)
+    ///
+    /// Only updates fields that are Some - supports partial updates.
+    /// Does NOT update name (used for identity) or timestamps.
+    ///
+    /// # Arguments
+    /// * `tx` - The active transaction
+    /// * `task_id` - ID of the task to update
+    /// * `spec` - New spec (if Some)
+    /// * `priority` - New priority (if Some)
+    /// * `status` - New status (if Some)
+    /// * `active_form` - New active form (if Some)
+    pub async fn update_task_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        task_id: i64,
+        spec: Option<&str>,
+        priority: Option<i32>,
+        status: Option<&str>,
+        active_form: Option<&str>,
+    ) -> Result<()> {
+        // Update spec if provided
+        if let Some(spec) = spec {
+            sqlx::query("UPDATE tasks SET spec = ? WHERE id = ?")
+                .bind(spec)
+                .bind(task_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+
+        // Update priority if provided
+        if let Some(priority) = priority {
+            sqlx::query("UPDATE tasks SET priority = ? WHERE id = ?")
+                .bind(priority)
+                .bind(task_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+
+        // Update status if provided
+        if let Some(status) = status {
+            sqlx::query("UPDATE tasks SET status = ? WHERE id = ?")
+                .bind(status)
+                .bind(task_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+
+        // Update active_form if provided
+        if let Some(active_form) = active_form {
+            sqlx::query("UPDATE tasks SET active_form = ? WHERE id = ?")
+                .bind(active_form)
+                .bind(task_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Set parent_id for a task within a transaction (no notification)
+    ///
+    /// Used to establish parent-child relationships after tasks are created.
+    pub async fn set_parent_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        task_id: i64,
+        parent_id: i64,
+    ) -> Result<()> {
+        sqlx::query("UPDATE tasks SET parent_id = ? WHERE id = ?")
+            .bind(parent_id)
+            .bind(task_id)
+            .execute(&mut **tx)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Notify Dashboard about a batch operation
+    ///
+    /// Call this after committing a transaction that created/updated multiple tasks.
+    /// Sends a single "batch_update" notification instead of per-task notifications.
+    pub async fn notify_batch_changed(&self) {
+        if let Some(cli_notifier) = &self.cli_notifier {
+            cli_notifier
+                .notify_task_changed(None, "batch_update", self.project_path.clone())
+                .await;
+        }
+    }
+
+    // =========================================================================
+    // End of transaction-aware methods
+    // =========================================================================
+
     /// Get a task by ID
     pub async fn get_task(&self, id: i64) -> Result<Task> {
         let task = sqlx::query_as::<_, Task>(

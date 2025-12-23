@@ -328,7 +328,6 @@ pub fn find_duplicate_names(tasks: &[TaskTree]) -> Vec<String> {
 // ============================================================================
 
 use crate::error::{IntentError, Result};
-use chrono::Utc;
 use sqlx::SqlitePool;
 
 /// Plan executor for creating/updating task structures
@@ -351,6 +350,14 @@ impl<'a> PlanExecutor<'a> {
         Self {
             pool,
             project_path: Some(project_path),
+        }
+    }
+
+    /// Get TaskManager configured for this executor
+    fn get_task_manager(&self) -> crate::tasks::TaskManager<'a> {
+        match &self.project_path {
+            Some(path) => crate::tasks::TaskManager::with_project_path(self.pool, path.clone()),
+            None => crate::tasks::TaskManager::new(self.pool),
         }
     }
 
@@ -389,41 +396,77 @@ impl<'a> PlanExecutor<'a> {
             return Ok(PlanResult::error(e.to_string()));
         }
 
-        // 8. Execute in transaction
+        // 8. Get TaskManager for transaction operations
+        let task_mgr = self.get_task_manager();
+
+        // 9. Execute in transaction
         let mut tx = self.pool.begin().await?;
 
-        // 8. Create or update tasks based on existence
+        // 10. Create or update tasks based on existence
         let mut task_id_map = HashMap::new();
         let mut created_count = 0;
         let mut updated_count = 0;
 
         for task in &flat_tasks {
             if let Some(&existing_id) = existing.get(&task.name) {
-                // Task exists -> UPDATE
-                self.update_task_in_tx(&mut tx, existing_id, task).await?;
+                // Task exists -> UPDATE via TaskManager
+                task_mgr
+                    .update_task_in_tx(
+                        &mut tx,
+                        existing_id,
+                        task.spec.as_deref(),
+                        task.priority.as_ref().map(|p| p.to_int()),
+                        task.status.as_ref().map(|s| s.as_db_str()),
+                        task.active_form.as_deref(),
+                    )
+                    .await?;
                 task_id_map.insert(task.name.clone(), existing_id);
                 updated_count += 1;
             } else {
-                // Task doesn't exist -> CREATE
-                let id = self.create_task_in_tx(&mut tx, task).await?;
+                // Task doesn't exist -> CREATE via TaskManager
+                let id = task_mgr
+                    .create_task_in_tx(
+                        &mut tx,
+                        &task.name,
+                        task.spec.as_deref(),
+                        task.priority.as_ref().map(|p| p.to_int()),
+                        task.status.as_ref().map(|s| s.as_db_str()),
+                        task.active_form.as_deref(),
+                        "ai", // Plan-created tasks are AI-owned
+                    )
+                    .await?;
                 task_id_map.insert(task.name.clone(), id);
                 created_count += 1;
             }
         }
 
-        // 9. Build parent-child relationships
-        self.build_parent_child_relations(&mut tx, &flat_tasks, &task_id_map)
-            .await?;
+        // 11. Build parent-child relationships via TaskManager
+        for task in &flat_tasks {
+            if let Some(parent_name) = &task.parent_name {
+                let task_id = task_id_map.get(&task.name).ok_or_else(|| {
+                    IntentError::InvalidInput(format!("Task not found: {}", task.name))
+                })?;
+                let parent_id = task_id_map.get(parent_name).ok_or_else(|| {
+                    IntentError::InvalidInput(format!("Parent task not found: {}", parent_name))
+                })?;
+                task_mgr
+                    .set_parent_in_tx(&mut tx, *task_id, *parent_id)
+                    .await?;
+            }
+        }
 
-        // 10. Build dependencies
+        // 12. Build dependencies
         let dep_count = self
             .build_dependencies(&mut tx, &flat_tasks, &task_id_map)
             .await?;
 
-        // 11. Commit transaction
+        // 13. Commit transaction
         tx.commit().await?;
 
-        // 12. Auto-focus the doing task if present and return full context
+        // 14. Notify Dashboard about the batch change (via TaskManager)
+        task_mgr.notify_batch_changed().await;
+
+        // 15. Auto-focus the doing task if present and return full context
         // Find the doing task in the batch
         let doing_task = flat_tasks
             .iter()
@@ -433,11 +476,6 @@ impl<'a> PlanExecutor<'a> {
             // Get the task ID from the map
             if let Some(&task_id) = task_id_map.get(&doing_task.name) {
                 // Call task_start with events to get full context
-                use crate::tasks::TaskManager;
-                let task_mgr = match &self.project_path {
-                    Some(path) => TaskManager::with_project_path(self.pool, path.clone()),
-                    None => TaskManager::new(self.pool),
-                };
                 let response = task_mgr.start_task(task_id, true).await?;
                 Some(response)
             } else {
@@ -447,7 +485,7 @@ impl<'a> PlanExecutor<'a> {
             None
         };
 
-        // 13. Return success result with focused task
+        // 16. Return success result with focused task
         Ok(PlanResult::success(
             task_id_map,
             created_count,
@@ -487,119 +525,6 @@ impl<'a> PlanExecutor<'a> {
         }
 
         Ok(map)
-    }
-
-    /// Create a single task in a transaction
-    async fn create_task_in_tx(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        task: &FlatTask,
-    ) -> Result<i64> {
-        let now = Utc::now();
-        let priority = task.priority.as_ref().map(|p| p.to_int()).unwrap_or(3); // Default: medium
-
-        // Determine status - use provided status or default to 'todo'
-        let status_str = match &task.status {
-            Some(status) => status.as_db_str(),
-            None => "todo",
-        };
-
-        let result = sqlx::query(
-            r#"
-            INSERT INTO tasks (name, spec, priority, status, active_form, first_todo_at, owner)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(&task.name)
-        .bind(&task.spec)
-        .bind(priority)
-        .bind(status_str)
-        .bind(&task.active_form)
-        .bind(now)
-        .bind("ai") // Plan-created tasks are AI-owned
-        .execute(&mut **tx)
-        .await?;
-
-        Ok(result.last_insert_rowid())
-    }
-
-    /// Update a single task in a transaction (Phase 2)
-    /// Only updates non-None fields to support partial updates
-    async fn update_task_in_tx(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        task_id: i64,
-        task: &FlatTask,
-    ) -> Result<()> {
-        // Update spec if provided
-        if let Some(spec) = &task.spec {
-            sqlx::query("UPDATE tasks SET spec = ? WHERE id = ?")
-                .bind(spec)
-                .bind(task_id)
-                .execute(&mut **tx)
-                .await?;
-        }
-
-        // Update priority if provided
-        if let Some(priority) = &task.priority {
-            sqlx::query("UPDATE tasks SET priority = ? WHERE id = ?")
-                .bind(priority.to_int())
-                .bind(task_id)
-                .execute(&mut **tx)
-                .await?;
-        }
-
-        // Update status if provided (for TodoWriter compatibility)
-        if let Some(status) = &task.status {
-            sqlx::query("UPDATE tasks SET status = ? WHERE id = ?")
-                .bind(status.as_db_str())
-                .bind(task_id)
-                .execute(&mut **tx)
-                .await?;
-        }
-
-        // Update active_form if provided (for TodoWriter compatibility)
-        if let Some(active_form) = &task.active_form {
-            sqlx::query("UPDATE tasks SET active_form = ? WHERE id = ?")
-                .bind(active_form)
-                .bind(task_id)
-                .execute(&mut **tx)
-                .await?;
-        }
-
-        // Note: We don't update name or timestamps
-        // - name: Used for identity, changing it would break references
-        // - timestamps: Should preserve original creation time
-
-        Ok(())
-    }
-
-    /// Build parent-child relationships
-    async fn build_parent_child_relations(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        flat_tasks: &[FlatTask],
-        task_id_map: &HashMap<String, i64>,
-    ) -> Result<()> {
-        for task in flat_tasks {
-            if let Some(parent_name) = &task.parent_name {
-                let task_id = task_id_map.get(&task.name).ok_or_else(|| {
-                    IntentError::InvalidInput(format!("Task not found: {}", task.name))
-                })?;
-
-                let parent_id = task_id_map.get(parent_name).ok_or_else(|| {
-                    IntentError::InvalidInput(format!("Parent task not found: {}", parent_name))
-                })?;
-
-                sqlx::query("UPDATE tasks SET parent_id = ? WHERE id = ?")
-                    .bind(parent_id)
-                    .bind(task_id)
-                    .execute(&mut **tx)
-                    .await?;
-            }
-        }
-
-        Ok(())
     }
 
     /// Build dependency relationships

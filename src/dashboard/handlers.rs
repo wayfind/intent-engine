@@ -1055,8 +1055,57 @@ pub async fn handle_cli_notification(
         }
     }
 
-    // Broadcast to all WebSocket clients
-    let notification_json = serde_json::to_string(&message).unwrap_or_default();
+    // Convert CLI notification to frontend-compatible format and broadcast
+    let ui_message = match &message {
+        NotificationMessage::TaskChanged {
+            task_id,
+            operation,
+            project_path,
+        } => {
+            // Convert to db_operation format that frontend already handles
+            json!({
+                "type": "db_operation",
+                "payload": {
+                    "entity": "task",
+                    "operation": operation,
+                    "affected_ids": task_id.map(|id| vec![id]).unwrap_or_default(),
+                    "project_path": project_path
+                }
+            })
+        },
+        NotificationMessage::EventAdded {
+            task_id,
+            event_id,
+            project_path,
+        } => {
+            json!({
+                "type": "db_operation",
+                "payload": {
+                    "entity": "event",
+                    "operation": "created",
+                    "affected_ids": vec![*event_id],
+                    "task_id": task_id,
+                    "project_path": project_path
+                }
+            })
+        },
+        NotificationMessage::WorkspaceChanged {
+            current_task_id,
+            project_path,
+        } => {
+            json!({
+                "type": "db_operation",
+                "payload": {
+                    "entity": "workspace",
+                    "operation": "updated",
+                    "current_task_id": current_task_id,
+                    "project_path": project_path
+                }
+            })
+        },
+    };
+
+    let notification_json = serde_json::to_string(&ui_message).unwrap_or_default();
     state.ws_state.broadcast_to_ui(&notification_json).await;
 
     (StatusCode::OK, Json(json!({"success": true}))).into_response()
