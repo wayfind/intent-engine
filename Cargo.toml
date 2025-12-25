@@ -76,7 +76,7 @@ winapi = { version = "0.3", features = ["processthreadsapi", "handleapi", "winnt
 tempfile = "3.8"
 assert_cmd = "2.0"
 predicates = "3.0"
-criterion = { version = "0.7", features = ["async_tokio"] }
+criterion = { version = "0.8", features = ["async_tokio"] }
 rand = "0.9"
 serial_test = "3.0"
 filetime = "0.2"
