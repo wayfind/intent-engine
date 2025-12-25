@@ -30,7 +30,7 @@ mod datetime_format {
     }
 }
 
-/// Custom date serialization for Option<DateTime<Utc>>
+/// Custom date serialization for `Option<DateTime<Utc>>`
 mod option_datetime_format {
     use chrono::{DateTime, Utc};
     use serde::{self, Deserialize, Deserializer, Serializer};
