@@ -5,126 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.10.1] - 2025-12-25
 
-## [0.10.1] - TBD
+### Bug Fixes
 
-### Added
-
-- **Dashboard Notification Control**: Environment variable `IE_DISABLE_DASHBOARD_NOTIFICATIONS` to disable CLI→Dashboard notifications
-  - Set to `1` or `true` (case-insensitive) to completely disable notifications
-  - Useful for CI/CD pipelines, batch scripts, and users who don't use Dashboard UI
-  - Zero performance overhead when disabled
-- **New `log` Command**: Quick event logging for focused task or specific task
-  - Usage: `ie log decision "message"`, `ie log blocker "message" --task 42`
-  - Supports: decision, blocker, milestone, note
-  - Replaces verbose `ie event add` syntax
-- **Built-in Help System**: Detailed guides integrated into `--help`
-  - `ie plan --help` shows 180-line comprehensive guide
-  - `ie plan -h` shows quick reference (5 lines)
-  - TodoWriter-style examples for easy migration
-  - Common patterns, error handling, best practices
-  - Follows Unix convention: `-h` (short) vs `--help` (detailed)
-
-### Changed
-
-- **BREAKING**: Disabled Dashboard auto-start by default
-  - Dashboard will no longer automatically start in daemon mode on CLI commands
-  - Users must manually start Dashboard with `ie dashboard start` or `ie dashboard start --daemon`
-  - Improves CLI performance and reduces unnecessary background processes
-- **BREAKING**: Simplified CLI to 6 essential commands for AI agents
-  - **Core (3)**: `plan`, `log`, `search`
-  - **System (3)**: `init`, `dashboard`, `doctor`
-  - **Removed**: `task`, `event`, `report`, `current`, `setup`, `session-restore`, `guide`, and all hybrid commands
-  - **Rationale**: CLI designed for AI agents (minimal, batch operations), humans use Dashboard UI (full CRUD)
-  - **Help system**: Detailed guides moved to `--help` (Occam's razor: avoid unnecessary complexity)
-- Reduced Dashboard notification timeout from 500ms to 100ms for faster CLI response
-
-### Performance
-
-- CLI commands skip notification logic entirely when `IE_DISABLE_DASHBOARD_NOTIFICATIONS` is enabled
-- Faster timeout (500ms → 100ms) reduces overhead when Dashboard is offline
-- No Dashboard auto-start overhead when Dashboard is not needed
-- Batch script performance improved for users who don't need Dashboard UI updates
-- Simplified CLI reduces binary size and maintenance overhead
-
-### Tests
-
-- **Test Suite Modernization**: Rewrote 4 test files from CLI-based to library-based testing (33 tests, ~550 lines reduced)
-  - `pick_next_blocking_tests.rs` - 7 tests for dependency blocking (commit f2d5e0e)
-  - `priority_and_list_tests.rs` - 8 tests for priority and filtering (commit 780147a)
-  - `task_edge_cases_tests.rs` - 12 tests for error handling (commit d7f1240)
-  - `task_start_blocking_tests.rs` - 6 tests for start validation (commit 7bb1c7b)
-  - **Performance**: 10x faster execution (5s → 0.3s per file)
-  - **Maintainability**: Tests no longer coupled to CLI interface changes
-- **Feature Gate Fixes**: Added missing feature gate to `cli_special_chars_tests.rs` (commit 6972d61)
-  - Prevents 10 test failures when removed CLI commands are not available
-  - Consistent with other CLI test files using `#![cfg(feature = "test-removed-cli-commands")]`
-- **Test Status**: 380 library tests + 33 rewritten tests = 413 total passing tests
+- Ignore RUSTSEC-2025-0134 unmaintained advisory for rustls-pemfile
 
 ### Documentation
 
-- **Documentation Cleanup**: Removed 31 obsolete documentation files
-  - Removed MCP Server documentation (deprecated in v0.10.0)
-  - Removed WebSocket protocol documentation (superseded by HTTP notifications)
-  - Removed legacy specification files (v0.2.x era)
-  - Removed Phase 1 architecture documents (completed and superseded)
-  - Removed temporary release planning documents (v0.10.0 completed)
-  - Removed old release notes (v0.6.0 and earlier)
-  - Current documentation focuses on v0.10.x+ features only
+- Update CHANGELOG for v0.9.0
+- Add test rewrite plan for business logic tests
+- Update CHANGELOG with test suite modernization work
+- Remove 31 obsolete documentation files
+- Fix all cross-references to deleted MCP files
+- Rewrite README for clarity and accessibility
+- Rewrite Chinese README for clarity and accessibility
+- Update workflow documentation to emphasize plan-centric approach
+- Major README rewrite to reflect AI's automatic workflow
+- Rewrite README for clarity and impact
 
-## [0.10.0] - 2025-12-16
+### Features
 
-### Added
+- Migrate Dashboard to HTTP shutdown, remove PID file management
+- Multi-session focus support and cleanup
 
-- **Dashboard Auto-Start**: Dashboard automatically starts in daemon mode on any CLI command
-  - Cross-platform support (Unix fork, Windows detached process)
-  - PID file management with automatic stale cleanup
-  - Health checks with 3-second timeout
-- **Real-Time CLI → Dashboard Sync**: CLI operations trigger instant Dashboard UI updates
-  - Fire-and-forget HTTP notifications (500ms timeout)
-  - Non-blocking design for CLI operations
-  - Dual notification pattern (CLI → HTTP, Dashboard → WebSocket)
-- **Enhanced Help System**: Built-in AI guides via `ie guide` command
-  - `ie guide ai` - AI integration patterns (345 lines)
-  - `ie guide todo-writer` - TodoWriter migration guide
-  - `ie guide workflow` - Core workflow patterns
-  - `ie guide patterns` - Real-world usage examples
-- **Embedded System Prompt**: 345-line AI guide compiled into binary
-- **Migration Guide**: Comprehensive v0.9.x → v0.10.0 migration documentation
+### Miscellaneous Tasks
 
-### Changed
+- V0.10.1 - test fixes and docs cleanup
+- Update Cargo.lock for v0.10.1
 
-- **BREAKING**: Replaced MCP server with embedded system prompt approach
-  - Removed `ie mcp-server` command
-  - Removed MCP configuration requirements
-  - Zero configuration now required for Claude Code integration
-- Updated architecture from MCP-based to system prompt-based
-- Simplified installation: single binary, no external configuration
-- Improved sync latency: < 100ms (was 1-2s with polling)
+### Refactor
 
-### Removed
+- Multi-project concurrent support
+- PlanExecutor uses TaskManager as single source of truth
 
-- **BREAKING**: MCP (Model Context Protocol) server completely removed
-  - `mcp-server.json` schema file
-  - MCP setup and configuration commands
-  - MCP-specific documentation
-- Removed obsolete test: `test_spec_lists_all_mcp_tools`
+### Testing
 
-### Documentation
-
-- Created `MIGRATION_v0.10.0.md` - Migration guide from v0.9.x
-- Created `RELEASE_NOTES_v0.10.0.md` - Detailed release notes
-- Updated `README.md` - Replaced MCP section with Claude Code integration
-- Updated `CLAUDE.md` - Version 0.10 with system prompt approach
-- Updated `AGENT.md` - Removed MCP interface documentation
-- Removed MCP server setup guides
-- Removed MCP tools sync documentation
-
-### Fixed
-
-- Fixed interface spec tests to work without MCP schema file
-- Resolved all compilation warnings in CLI notifier module
+- Fix all test failures after HTTP shutdown migration
+- Rewrite pick_next_blocking tests to use library functions
+- Rewrite priority_and_list tests to use library functions
+- Rewrite task_edge_cases_tests to use library functions (12 tests)
+- Rewrite task_start_blocking_tests to use library functions (6 tests)
+- Add feature gate to cli_special_chars_tests
 
 ## [0.9.0] - 2025-12-01
 
