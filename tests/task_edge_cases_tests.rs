@@ -280,7 +280,7 @@ async fn test_task_done_without_current_task() {
     let workspace = WorkspaceManager::new(db.pool());
 
     // Ensure no task is focused
-    let current = workspace.get_current_task().await.unwrap();
+    let current = workspace.get_current_task(None).await.unwrap();
     assert!(current.current_task_id.is_none());
 
     // Try to complete without a focused task

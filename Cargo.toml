@@ -46,7 +46,7 @@ thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }
 tracing-appender = "0.2"
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.35", features = ["rt-multi-thread", "net", "sync", "time", "macros"] }
 anyhow = "1.0"
 encoding_rs = "0.8"
 which = "8.0"
@@ -58,9 +58,8 @@ tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
 rust-embed = "8.0"
 mime_guess = "2.0"
 open = "5.3"
-tokio-tungstenite = "0.24"
 futures-util = "0.3"
-reqwest = { version = "0.11", default-features = false, features = ["json", "blocking", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rand = "0.9"
 
 # Unix process management
@@ -81,7 +80,8 @@ criterion = { version = "0.7", features = ["async_tokio"] }
 rand = "0.9"
 serial_test = "3.0"
 filetime = "0.2"
-reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+tokio-tungstenite = "0.24"  # Matches axum's version for WebSocket tests
 
 [features]
 # Feature flag to enable tests for removed CLI commands (v0.10.0 removed: task, event, current, etc.)
@@ -95,3 +95,26 @@ path = "src/main.rs"
 [[bench]]
 name = "performance"
 harness = false
+
+# ============================================================
+# Compilation Profile Optimizations for Memory Usage
+# ============================================================
+
+[profile.dev]
+# Reduce debug info to save memory during compilation
+debug = 1
+
+[profile.dev.package."*"]
+# Optimize dependencies even in dev mode for faster iteration
+opt-level = 1
+
+[profile.test]
+# Reduce debug info in test builds
+debug = 1
+opt-level = 1
+
+[profile.release]
+# Enable LTO for smaller binary size
+lto = "thin"
+# Single codegen unit for better optimization
+codegen-units = 1

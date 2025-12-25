@@ -334,6 +334,8 @@ use sqlx::SqlitePool;
 pub struct PlanExecutor<'a> {
     pool: &'a SqlitePool,
     project_path: Option<String>,
+    /// Default parent ID for root-level tasks (auto-parenting to focused task)
+    default_parent_id: Option<i64>,
 }
 
 impl<'a> PlanExecutor<'a> {
@@ -342,6 +344,7 @@ impl<'a> PlanExecutor<'a> {
         Self {
             pool,
             project_path: None,
+            default_parent_id: None,
         }
     }
 
@@ -350,7 +353,15 @@ impl<'a> PlanExecutor<'a> {
         Self {
             pool,
             project_path: Some(project_path),
+            default_parent_id: None,
         }
+    }
+
+    /// Set default parent ID for root-level tasks (auto-parenting to focused task)
+    /// When set, new root-level tasks will automatically become children of this task
+    pub fn with_default_parent(mut self, parent_id: i64) -> Self {
+        self.default_parent_id = Some(parent_id);
+        self
     }
 
     /// Get TaskManager configured for this executor
@@ -406,6 +417,8 @@ impl<'a> PlanExecutor<'a> {
         let mut task_id_map = HashMap::new();
         let mut created_count = 0;
         let mut updated_count = 0;
+        let mut newly_created_names: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         for task in &flat_tasks {
             if let Some(&existing_id) = existing.get(&task.name) {
@@ -436,6 +449,7 @@ impl<'a> PlanExecutor<'a> {
                     )
                     .await?;
                 task_id_map.insert(task.name.clone(), id);
+                newly_created_names.insert(task.name.clone());
                 created_count += 1;
             }
         }
@@ -452,6 +466,22 @@ impl<'a> PlanExecutor<'a> {
                 task_mgr
                     .set_parent_in_tx(&mut tx, *task_id, *parent_id)
                     .await?;
+            }
+        }
+
+        // 11b. Auto-parent newly created root tasks to default_parent_id (focused task)
+        if let Some(default_parent) = self.default_parent_id {
+            for task in &flat_tasks {
+                // Only auto-parent if:
+                // 1. Task was newly created (not updated)
+                // 2. Task has no explicit parent in the plan
+                if newly_created_names.contains(&task.name) && task.parent_name.is_none() {
+                    if let Some(&task_id) = task_id_map.get(&task.name) {
+                        task_mgr
+                            .set_parent_in_tx(&mut tx, task_id, default_parent)
+                            .await?;
+                    }
+                }
             }
         }
 

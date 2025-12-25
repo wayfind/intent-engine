@@ -17,10 +17,10 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0', // Listen on all addresses
-    port: 1393,
+    port: 3000,
     hmr: {
       // Force HMR to use the correct port if behind a proxy/tunnel
-      clientPort: 1393
+      clientPort: 3000
     },
     watch: {
       // Use polling if file system events aren't propagating (common in some VMs/Docker)
@@ -28,11 +28,11 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:11391',
         changeOrigin: true
       },
       '/ws': {
-        target: 'ws://localhost:3000',
+        target: 'ws://localhost:11391',
         ws: true
       }
     }

@@ -137,7 +137,7 @@ impl<'a> SessionRestoreManager<'a> {
             .and_then(|p| p.to_str().map(String::from));
 
         // Get current task
-        let current_task_id = match workspace_mgr.get_current_task().await {
+        let current_task_id = match workspace_mgr.get_current_task(None).await {
             Ok(response) => {
                 if let Some(id) = response.current_task_id {
                     id
@@ -469,7 +469,7 @@ mod tests {
             .unwrap();
 
         let workspace_mgr = WorkspaceManager::new(pool);
-        workspace_mgr.set_current_task(task.id).await.unwrap();
+        workspace_mgr.set_current_task(task.id, None).await.unwrap();
 
         // Restore session
         let restore_mgr = SessionRestoreManager::new(pool);
@@ -516,7 +516,10 @@ mod tests {
             .update_task(current.id, None, None, None, Some("doing"), None, None)
             .await
             .unwrap();
-        workspace_mgr.set_current_task(current.id).await.unwrap();
+        workspace_mgr
+            .set_current_task(current.id, None)
+            .await
+            .unwrap();
 
         let _sibling3 = task_mgr
             .add_task("Sibling 3", None, Some(parent.id), None)
@@ -604,7 +607,7 @@ mod tests {
             .add_task("Test task", Some(&long_spec), None, None)
             .await
             .unwrap();
-        workspace_mgr.set_current_task(task.id).await.unwrap();
+        workspace_mgr.set_current_task(task.id, None).await.unwrap();
 
         // Restore
         let restore_mgr = SessionRestoreManager::new(pool);
@@ -667,7 +670,7 @@ mod tests {
             .add_task("Test task", None, None, None)
             .await
             .unwrap();
-        workspace_mgr.set_current_task(task.id).await.unwrap();
+        workspace_mgr.set_current_task(task.id, None).await.unwrap();
 
         // Add 10 events
         for i in 0..10 {
@@ -700,7 +703,7 @@ mod tests {
             .add_task("Test task", None, None, None)
             .await
             .unwrap();
-        workspace_mgr.set_current_task(task.id).await.unwrap();
+        workspace_mgr.set_current_task(task.id, None).await.unwrap();
 
         // Add 10 events
         for i in 0..10 {

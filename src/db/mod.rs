@@ -212,6 +212,45 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Create sessions table for multi-session focus support (v0.11.0)
+    // Each Claude Code session can have its own focused task
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id TEXT PRIMARY KEY,
+            current_task_id INTEGER,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_active_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (current_task_id) REFERENCES tasks(id) ON DELETE SET NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Create index for session cleanup queries
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_sessions_last_active
+        ON sessions(last_active_at)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Migrate existing current_task_id from workspace_state to default session (v0.11.0)
+    // This ensures backward compatibility - existing focus is preserved in session "-1"
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO sessions (session_id, current_task_id, created_at, last_active_at)
+        SELECT '-1', CAST(value AS INTEGER), datetime('now'), datetime('now')
+        FROM workspace_state
+        WHERE key = 'current_task_id' AND value IS NOT NULL AND value != ''
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     // Create dependencies table for v0.2.0
     sqlx::query(
         r#"
@@ -298,12 +337,12 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await; // Ignore error if column already exists
 
-    // Update schema version to 0.9.0
+    // Update schema version to 0.11.0
     sqlx::query(
         r#"
         INSERT INTO workspace_state (key, value)
-        VALUES ('schema_version', '0.9.0')
-        ON CONFLICT(key) DO UPDATE SET value = '0.9.0'
+        VALUES ('schema_version', '0.11.0')
+        ON CONFLICT(key) DO UPDATE SET value = '0.11.0'
         "#,
     )
     .execute(pool)
@@ -649,11 +688,11 @@ mod tests {
                 .await
                 .unwrap();
 
-        assert_eq!(version, "0.9.0");
+        assert_eq!(version, "0.11.0");
     }
 
     #[tokio::test]
-    async fn test_migration_idempotency_v0_9_0() {
+    async fn test_migration_idempotency_v0_11_0() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let pool = create_pool(&db_path).await.unwrap();
@@ -680,6 +719,34 @@ mod tests {
                 .await
                 .unwrap();
 
-        assert_eq!(version, "0.9.0");
+        assert_eq!(version, "0.11.0");
+    }
+
+    #[tokio::test]
+    async fn test_sessions_table_created() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        // Verify sessions table exists
+        let tables: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert!(tables.contains(&"sessions".to_string()));
+
+        // Verify index exists
+        let indices: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_sessions_last_active'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert!(indices.contains(&"idx_sessions_last_active".to_string()));
     }
 }

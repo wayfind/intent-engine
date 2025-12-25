@@ -135,9 +135,10 @@ export const useAppStore = defineStore('app', () => {
     // Actions
     function connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        // In development (port 1393), connect directly to backend (port 3000) to avoid proxy issues
-        const host = window.location.port === '1393'
-            ? `${window.location.hostname}:3000`
+        // In development mode (port 3000), connect to backend on port 11391
+        // In production, frontend is served by backend, so use same host
+        const host = window.location.port === '3000'
+            ? `${window.location.hostname}:11391`
             : window.location.host
         const url = `${protocol}//${host}/ws/ui`
 
@@ -610,6 +611,29 @@ export const useAppStore = defineStore('app', () => {
         if (idx >= 0) projects.value.splice(idx, 1)
     }
 
+    async function removeProjectFromRegistry(path: string) {
+        try {
+            const res = await fetch('/api/remove-project', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_path: path })
+            })
+            if (res.ok) {
+                removeProject(path)
+                // If removed project was current, switch to first available
+                if (currentProject.value?.path === path && projects.value.length > 0) {
+                    const first = projects.value[0]
+                    if (first) {
+                        await switchProject(first.path)
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to remove project:', e)
+            lastError.value = (e as Error).message
+        }
+    }
+
     function toggleTheme() {
         isCyberpunkMode.value = !isCyberpunkMode.value
     }
@@ -649,6 +673,7 @@ export const useAppStore = defineStore('app', () => {
         search,
         switchProject,
         removeProject,
+        removeProjectFromRegistry,
         toggleTheme
     }
 })

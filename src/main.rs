@@ -95,7 +95,18 @@ async fn run(cli: &Cli) -> Result<()> {
             // Execute the plan
             let ctx = ProjectContext::load_or_init().await?;
             let project_path = ctx.root.to_string_lossy().to_string();
-            let executor = PlanExecutor::with_project_path(&ctx.pool, project_path);
+
+            // Get current focused task for auto-parenting
+            let workspace_mgr = WorkspaceManager::new(&ctx.pool);
+            let current = workspace_mgr.get_current_task(None).await?;
+
+            // Create executor with project path, then optionally set default parent
+            let mut executor = PlanExecutor::with_project_path(&ctx.pool, project_path);
+            if let Some(current_task_id) = current.current_task_id {
+                // Auto-parent new root tasks to the focused task
+                executor = executor.with_default_parent(current_task_id);
+            }
+
             let result = executor.execute(&request).await?;
 
             // Format output
@@ -169,7 +180,7 @@ async fn run(cli: &Cli) -> Result<()> {
             let target_task_id = if let Some(tid) = task {
                 tid
             } else {
-                let current_response = workspace_mgr.get_current_task().await?;
+                let current_response = workspace_mgr.get_current_task(None).await?;
                 let current_task = current_response.task.ok_or_else(|| {
                     IntentError::ActionNotAllowed(
                         "No current task set. Use --task <ID> or start a task first.".to_string(),
@@ -210,6 +221,118 @@ async fn run(cli: &Cli) -> Result<()> {
         Commands::Dashboard(dashboard_cmd) => handle_dashboard_command(dashboard_cmd).await?,
 
         Commands::Doctor => handle_doctor_command().await?,
+
+        Commands::Status {
+            task_id,
+            with_events,
+            format,
+        } => {
+            use intent_engine::db::models::{NoFocusResponse, TaskBrief};
+            use intent_engine::tasks::TaskManager;
+
+            let ctx = ProjectContext::load_or_init().await?;
+            let task_mgr = TaskManager::new(&ctx.pool);
+            let workspace_mgr = WorkspaceManager::new(&ctx.pool);
+
+            // Determine which task to show status for
+            let target_task_id = if let Some(id) = task_id {
+                // Explicit task ID provided
+                Some(id)
+            } else {
+                // Use current focused task
+                let current = workspace_mgr.get_current_task(None).await?;
+                current.current_task_id
+            };
+
+            match target_task_id {
+                Some(id) => {
+                    // Get status for the specified task
+                    let status = task_mgr.get_status(id, with_events).await?;
+
+                    if format == "json" {
+                        println!("{}", serde_json::to_string_pretty(&status)?);
+                    } else {
+                        // Text format
+                        println!(
+                            "🔦 Task #{}: {}",
+                            status.focused_task.id, status.focused_task.name
+                        );
+                        println!("   Status: {}", status.focused_task.status);
+                        if let Some(spec) = &status.focused_task.spec {
+                            println!("   Spec: {}", spec);
+                        }
+
+                        if !status.ancestors.is_empty() {
+                            println!("\n📍 Ancestors:");
+                            for ancestor in &status.ancestors {
+                                println!(
+                                    "   #{}: {} [{}]",
+                                    ancestor.id, ancestor.name, ancestor.status
+                                );
+                            }
+                        }
+
+                        if !status.siblings.is_empty() {
+                            println!("\n👥 Siblings ({}):", status.siblings.len());
+                            for sibling in &status.siblings {
+                                println!(
+                                    "   #{}: {} [{}]",
+                                    sibling.id, sibling.name, sibling.status
+                                );
+                            }
+                        }
+
+                        if !status.descendants.is_empty() {
+                            println!("\n📦 Descendants ({}):", status.descendants.len());
+                            for desc in &status.descendants {
+                                let indent = if desc.parent_id == Some(id) {
+                                    "   "
+                                } else {
+                                    "      "
+                                };
+                                println!("{}#{}: {} [{}]", indent, desc.id, desc.name, desc.status);
+                            }
+                        }
+
+                        if let Some(events) = &status.events {
+                            println!("\n📝 Events ({}):", events.len());
+                            for event in events.iter().take(10) {
+                                println!(
+                                    "   [{}] {}",
+                                    event.log_type,
+                                    event.discussion_data.chars().take(60).collect::<String>()
+                                );
+                            }
+                        }
+                    }
+                },
+                None => {
+                    // No focused task - show root tasks
+                    let root_tasks = task_mgr.get_root_tasks().await?;
+                    let root_briefs: Vec<TaskBrief> =
+                        root_tasks.iter().map(TaskBrief::from).collect();
+
+                    let response = NoFocusResponse {
+                        message:
+                            "No focused task. Use 'ie plan' with status:'doing' to start a task."
+                                .to_string(),
+                        root_tasks: root_briefs,
+                    };
+
+                    if format == "json" {
+                        println!("{}", serde_json::to_string_pretty(&response)?);
+                    } else {
+                        println!("⚠️  {}", response.message);
+                        if !response.root_tasks.is_empty() {
+                            println!("\n📋 Root tasks:");
+                            for task in &response.root_tasks {
+                                println!("   #{}: {} [{}]", task.id, task.name, task.status);
+                            }
+                        }
+                    }
+                },
+            }
+        },
     }
 
     Ok(())

@@ -26,14 +26,19 @@ async fn setup_test_db() -> (TempDir, SqlitePool) {
 }
 
 async fn get_current_task_id(pool: &SqlitePool) -> Option<i64> {
-    sqlx::query_scalar::<_, String>(
-        "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-    )
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten()
-    .and_then(|s| s.parse::<i64>().ok())
+    // Note: We need to handle the case where current_task_id is NULL
+    // Using query_as with a wrapper struct to properly handle nullable column
+    #[derive(sqlx::FromRow)]
+    struct SessionRow {
+        current_task_id: Option<i64>,
+    }
+
+    sqlx::query_as::<_, SessionRow>("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|row| row.current_task_id)
 }
 
 #[tokio::test]

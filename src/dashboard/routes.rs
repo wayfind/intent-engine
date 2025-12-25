@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, patch, post},
+    routing::{get, post, put},
     Router,
 };
 
@@ -14,6 +14,7 @@ pub fn api_routes() -> Router<AppState> {
         .route(
             "/tasks/:id",
             get(handlers::get_task)
+                .put(handlers::update_task)
                 .patch(handlers::update_task)
                 .delete(handlers::delete_task),
         )
@@ -29,7 +30,9 @@ pub fn api_routes() -> Router<AppState> {
         )
         .route(
             "/tasks/:id/events/:event_id",
-            patch(handlers::update_event).delete(handlers::delete_event),
+            put(handlers::update_event)
+                .patch(handlers::update_event)
+                .delete(handlers::delete_event),
         )
         // Global routes
         .route("/current-task", get(handlers::get_current_task))
@@ -37,6 +40,7 @@ pub fn api_routes() -> Router<AppState> {
         .route("/search", get(handlers::search))
         .route("/projects", get(handlers::list_projects))
         .route("/switch-project", post(handlers::switch_project))
+        .route("/remove-project", post(handlers::remove_project))
         // Internal routes (CLI → Dashboard communication)
         .route("/internal/cli-notify", post(handlers::handle_cli_notification))
         .route("/internal/shutdown", post(handlers::shutdown_handler))

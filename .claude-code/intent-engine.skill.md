@@ -1,213 +1,179 @@
-# Intent-Engine Skill
+# Intent-Engine Skill (v0.10)
 
-Strategic intent and task workflow management for human-AI collaboration.
+AI 长期任务记忆系统 - 跨 session 持久化、层级任务、决策记录
 
-## Quick Start
+## 触发条件
 
-```bash
-# Create a task to capture intent
-echo "Implement OAuth2 login with Google and GitHub support" | \
-  ie task add --name "OAuth2 Login" --spec-stdin
+当以下情况出现时，使用 ie 而不是 TodoWrite：
 
-# Start working on it
-ie task start 1 --with-events
+- 用户说"帮我实现 X 功能"（多步骤工作）
+- 用户说"继续昨天的工作"（跨 session）
+- 用户问"之前为什么这么决定"（决策历史）
+- 任务需要保留超过当前会话
+- 任务有 3+ 个子步骤
 
-# Record a decision
-echo "Using Passport.js for OAuth strategy implementation" | \
-  ie event add --task-id 1 --type decision --data-stdin
+**简单规则**：会丢了可惜 → 用 ie，用完即弃 → 用 TodoWrite
 
-# Complete the task (task 1 is currently focused)
-ie task done
-```
+---
 
-## Core Workflow
+## 标准工作流
 
-### 1. Capture Strategic Intent
-
-When a requirement is complex enough (multi-step, needs context, long-term):
+### 1. Session 开始：恢复上下文
 
 ```bash
-ie task add --name "Task Name" [--parent PARENT_ID]
-# With specification:
-echo "Detailed spec in markdown..." | \
-  ie task add --name "Task Name" --spec-stdin
+ie status
 ```
 
-### 2. Activate & Get Context (ATOMIC)
+返回：当前聚焦任务、祖先链、兄弟任务、子孙任务
 
-Always use this to start work:
+### 2. 创建/更新任务：声明式操作
 
 ```bash
-ie task start <ID> --with-events
+# 创建任务
+echo '{"tasks":[{"name":"实现用户认证","status":"doing"}]}' | ie plan
+
+# 创建带子任务的层级结构
+echo '{"tasks":[{
+  "name":"实现用户认证",
+  "status":"doing",
+  "children":[
+    {"name":"设计数据库模式","status":"todo"},
+    {"name":"实现登录API","status":"todo"}
+  ]
+}]}' | ie plan
+
+# 更新任务状态
+echo '{"tasks":[{"name":"设计数据库模式","status":"doing"}]}' | ie plan
+
+# 完成任务
+echo '{"tasks":[{"name":"设计数据库模式","status":"done"}]}' | ie plan
 ```
 
-This single call:
-- Updates status to 'doing'
-- Sets as current task
-- Returns full spec + event history
+**关键特性**：
+- 幂等操作：相同 name 会更新而非重复创建
+- 自动聚焦：status:"doing" 的任务自动成为当前聚焦任务
+- 自动父子：有聚焦任务时，新建的根任务自动成为其子任务
 
-### 3. Smart Task Selection (NEW)
-
-When you have multiple tasks and need to optimize order:
+### 3. 记录决策：ie log
 
 ```bash
-# First, evaluate tasks
-ie task update 1 --complexity 7 --priority 10
-ie task update 2 --complexity 3 --priority 8
-
-# Then intelligently pick next batch
-ie task pick-next --max-count 3 --capacity 5
+ie log decision "选择 JWT 而非 Session，因为需要支持移动端"
+ie log blocker "等待第三方 API 密钥"
+ie log milestone "核心功能完成"
+ie log note "考虑后续添加缓存优化"
 ```
 
-Selects by: priority DESC, complexity ASC (do important+simple first)
-
-### 4. Handle Sub-problems (ATOMIC, NEW)
-
-When you discover a blocking sub-problem:
+### 4. 搜索历史：ie search
 
 ```bash
-ie task spawn-subtask --name "Subtask Name"
-# With spec:
-echo "Subtask details..." | \
-  ie task spawn-subtask --name "Subtask Name" --spec-stdin
+ie search "todo doing"           # 查找所有未完成任务
+ie search "authentication"       # 全文搜索任务和事件
+ie search "decision JWT"         # 搜索特定决策
 ```
 
-This single call:
-- Creates subtask under current task
-- Sets subtask to 'doing'
-- Switches current task to subtask
-
-### 5. Switch Between Tasks (ATOMIC, NEW)
-
-When juggling multiple tasks:
+### 5. 查看任意任务上下文
 
 ```bash
-ie task switch <ID>
+ie status 42                     # 查看任务 42 的完整上下文（不改变聚焦）
+ie status 42 -e                  # 包含事件历史
 ```
 
-This single call:
-- Updates to 'doing' if needed
-- Sets as current task
-- Returns context with events
+---
 
-### 6. Record Key Events (AI's External Memory)
+## 常用模式
 
-Log every critical decision, blocker, or milestone:
+### 模式 A：新功能开发
 
 ```bash
-# Decision
-echo "Chose library A over B because..." | \
-  ie event add --task-id <ID> --type decision --data-stdin
+# 1. 创建任务并开始
+echo '{"tasks":[{
+  "name":"实现支付功能",
+  "spec":"支持微信、支付宝支付",
+  "status":"doing",
+  "children":[
+    {"name":"集成微信支付SDK"},
+    {"name":"集成支付宝SDK"},
+    {"name":"实现统一支付接口"}
+  ]
+}]}' | ie plan
 
-# Blocker
-echo "Need API key from team lead" | \
-  ie event add --task-id <ID> --type blocker --data-stdin
+# 2. 记录设计决策
+ie log decision "采用策略模式统一支付接口"
 
-# Milestone
-echo "Database migration complete" | \
-  ie event add --task-id <ID> --type milestone --data-stdin
+# 3. 逐个完成子任务
+echo '{"tasks":[{"name":"集成微信支付SDK","status":"doing"}]}' | ie plan
+# ... 工作 ...
+echo '{"tasks":[{"name":"集成微信支付SDK","status":"done"}]}' | ie plan
+
+# 4. 所有子任务完成后，完成父任务
+echo '{"tasks":[{"name":"实现支付功能","status":"done"}]}' | ie plan
 ```
 
-Event types: `decision`, `blocker`, `milestone`, `discussion`, `note`
-
-### 7. Complete Task
-
-Only when all objectives achieved and all subtasks done:
+### 模式 B：跨 Session 继续工作
 
 ```bash
-ie task done
+# Session 开始时
+ie status
+
+# 看到聚焦任务和子任务列表，继续工作
+echo '{"tasks":[{"name":"当前子任务","status":"doing"}]}' | ie plan
 ```
 
-**Important**: This command operates on the current focused task only. It does not accept an ID parameter.
-- If you need to complete a non-current task, first switch to it: `ie task switch <ID>` or `ie current --set <ID>`
-- System enforces: parent can't complete until all children are done.
-
-### 8. Generate Reports (Token-Efficient)
-
-Always use `--summary-only` unless you need full details:
+### 模式 C：处理阻塞
 
 ```bash
-# Weekly summary (recommended)
-ie report --since 7d --summary-only
+# 记录阻塞
+ie log blocker "需要产品经理确认需求细节"
 
-# Full details for specific status
-ie report --status done --since 7d
+# 切换到其他任务
+echo '{"tasks":[{"name":"另一个任务","status":"doing"}]}' | ie plan
 
-# Search with FTS5
-ie report --filter-name "auth" --summary-only
+# 阻塞解除后回来
+ie search "todo doing"
+echo '{"tasks":[{"name":"之前被阻塞的任务","status":"doing"}]}' | ie plan
 ```
 
-## Common Patterns
-
-### Pattern 1: Discover Multiple Issues
+### 模式 D：回顾决策历史
 
 ```bash
-# Create todos
-ie task add --name "Fix bug A"
-ie task add --name "Fix bug B"
-ie task add --name "Fix bug C"
+# 搜索相关决策
+ie search "decision 认证"
 
-# Evaluate
-ie task update 1 --complexity 3 --priority 10
-ie task update 2 --complexity 7 --priority 8
-ie task update 3 --complexity 2 --priority 5
-
-# Auto-select optimal order
-ie task pick-next --max-count 3
+# 查看特定任务的完整历史
+ie status 42 -e
 ```
 
-### Pattern 2: Recursive Problem Decomposition
+---
 
-```bash
-# Start parent task
-ie task start 1 --with-events
+## ie vs TodoWrite 对比
 
-# Discover sub-problem
-ie task spawn-subtask --name "Sub-problem A"
+| 能力 | TodoWrite | ie |
+|------|-----------|-----|
+| 持久化 | Session 内 | 永久 |
+| 层级任务 | 否 | 是 |
+| 决策记录 | 否 | ie log |
+| 跨 Session | 否 | ie status |
+| 搜索历史 | 否 | ie search |
+| 可视化 | 否 | ie dashboard |
 
-# Discover nested sub-problem
-ie task spawn-subtask --name "Sub-sub-problem"
+---
 
-# Complete from deepest to shallowest (each spawn-subtask auto-focuses the subtask)
-ie task done  # Completes current (sub-sub-problem)
-ie task switch 2  # Switch to parent
-ie task done  # Completes current (sub-problem A)
-ie task switch 1  # Switch to root
-ie task done  # Completes current (parent task)
-```
+## 命令速查
 
-### Pattern 3: Recover Context After Interruption
+| 命令 | 用途 |
+|------|------|
+| `ie status [id]` | 查看任务上下文（Session 开始必用）|
+| `ie plan` | 创建/更新/完成任务（stdin JSON）|
+| `ie log <type> <msg>` | 记录 decision/blocker/milestone/note |
+| `ie search <query>` | 搜索任务和事件 |
+| `ie dashboard start` | 启动 Web 可视化界面 |
 
-```bash
-# Get current task
-ie current
+---
 
-# Get full context
-ie task get <ID> --with-events
+## 注意事项
 
-# Review recent events
-ie event list --task-id <ID> --limit 10
-```
-
-## Why Use Atomic Commands?
-
-| Traditional | Token Cost | Atomic | Token Cost | Savings |
-|------------|-----------|--------|-----------|---------|
-| find + update + set | 3 calls | pick-next | 1 call | **67%** |
-| add + start + set | 3 calls | spawn-subtask | 1 call | **67%** |
-| update + set + get | 3 calls | switch | 1 call | **67%** |
-
-## Key Principles
-
-1. **Intent-First**: Create task before executing
-2. **Record Everything Critical**: Events are AI's long-term memory
-3. **Use Atomic Operations**: Single call > multiple calls
-4. **Maintain Hierarchy**: Use parent-child for structure
-5. **Always Get Context**: Use `--with-events` when starting/switching
-6. **Summary-Only Reports**: Save tokens unless full detail needed
-
-## See Also
-
-- [The Intent-Engine Way](../THE_INTENT_ENGINE_WAY.md) - Full philosophy guide
-- [README.md](../README.md) - Complete command reference
-- [MCP Setup](../MCP_SETUP.md) - MCP server installation
+1. **ie plan 是幂等的**：相同 name 会更新，不会重复创建
+2. **父任务完成前提**：所有子任务必须先完成
+3. **自动聚焦**：status:"doing" 自动设为当前任务
+4. **自动父子**：有聚焦任务时，新任务自动成为其子任务
+5. **JSON 格式**：ie plan 从 stdin 读取 JSON

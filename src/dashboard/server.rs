@@ -117,6 +117,24 @@ impl AppState {
         Ok(())
     }
 
+    /// Remove a project from known projects and global registry
+    pub async fn remove_project(&self, path: &PathBuf) -> Result<(), String> {
+        // Don't allow removing the host project
+        if *path == PathBuf::from(&self.host_project.path) {
+            return Err("Cannot remove the host project".to_string());
+        }
+
+        // Remove from known projects
+        let mut projects = self.known_projects.write().await;
+        projects.remove(path);
+
+        // Remove from global registry
+        let path_str = path.to_string_lossy().to_string();
+        crate::global_projects::remove_project(&path_str);
+
+        Ok(())
+    }
+
     /// Get active project's db_pool and path (backward compatibility helper)
     /// Returns (db_pool, project_path_string)
     pub async fn get_active_project_context(&self) -> Result<(SqlitePool, String), String> {
@@ -191,7 +209,45 @@ impl DashboardServer {
             path: self.project_path.clone(),
             db_path: self.db_path.clone(),
         };
-        known_projects.insert(self.project_path.clone(), host_info);
+        // Use canonical path string as key for consistent comparison on Windows
+        let host_key = self
+            .project_path
+            .canonicalize()
+            .unwrap_or_else(|_| self.project_path.clone());
+        known_projects.insert(host_key, host_info);
+
+        // Load projects from global registry
+        let registry = crate::global_projects::ProjectsRegistry::load();
+        for entry in registry.projects {
+            let path = PathBuf::from(&entry.path);
+            // Use canonical path for comparison to handle Windows path normalization
+            let canonical_path = path.canonicalize().unwrap_or_else(|_| path.clone());
+            // Skip if already added (host project)
+            if known_projects.contains_key(&canonical_path) {
+                continue;
+            }
+            let db_path = path.join(".intent-engine").join("project.db");
+            if db_path.exists() {
+                let name = entry.name.unwrap_or_else(|| {
+                    path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string()
+                });
+                known_projects.insert(
+                    canonical_path,
+                    ProjectInfo {
+                        name,
+                        path,
+                        db_path,
+                    },
+                );
+            }
+        }
+        tracing::info!(
+            "Loaded {} projects from global registry",
+            known_projects.len()
+        );
 
         // Create shared state
         let ws_state = websocket::WebSocketState::new();

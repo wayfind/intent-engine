@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_get_code_page() {
-        let _cp = get_console_code_page();
+        let cp = get_console_code_page();
 
         #[cfg(windows)]
         {

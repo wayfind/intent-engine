@@ -44,7 +44,7 @@ pub struct UpdateTaskRequest {
 /// Create event request
 #[derive(Deserialize)]
 pub struct CreateEventRequest {
-    #[serde(rename = "type")]
+    #[serde(alias = "type", alias = "event_type")]
     pub event_type: String,
     pub data: String,
 }
@@ -52,7 +52,11 @@ pub struct CreateEventRequest {
 /// Update event request
 #[derive(Deserialize)]
 pub struct UpdateEventRequest {
-    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        alias = "type",
+        alias = "event_type",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub event_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,

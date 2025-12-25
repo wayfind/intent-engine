@@ -130,9 +130,15 @@ async fn run_dataset_test(total_tasks: usize) {
 
         // Try to set as current and complete
         if sqlx::query(
-            "INSERT OR REPLACE INTO workspace_state (key, value) VALUES ('current_task_id', ?)",
+            r#"
+            INSERT INTO sessions (session_id, current_task_id, created_at, last_active_at)
+            VALUES ('-1', ?, datetime('now'), datetime('now'))
+            ON CONFLICT(session_id) DO UPDATE SET
+                current_task_id = excluded.current_task_id,
+                last_active_at = datetime('now')
+            "#,
         )
-        .bind(task_id.to_string())
+        .bind(task_id)
         .execute(&pool)
         .await
         .is_ok()

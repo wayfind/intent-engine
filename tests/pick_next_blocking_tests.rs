@@ -146,7 +146,7 @@ async fn test_pick_next_blocked_subtask() {
         .unwrap();
 
     // Set parent as current task
-    workspace.set_current_task(parent.id).await.unwrap();
+    workspace.set_current_task(parent.id, None).await.unwrap();
 
     // Pick next should recommend subtask1 (depth-first priority)
     let result = manager.pick_next().await.unwrap();

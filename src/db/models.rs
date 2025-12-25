@@ -402,6 +402,51 @@ impl PickNextResponse {
     }
 }
 
+/// Simplified task info for siblings/descendants in status response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskBrief {
+    pub id: i64,
+    pub name: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<i64>,
+}
+
+impl From<&Task> for TaskBrief {
+    fn from(task: &Task) -> Self {
+        Self {
+            id: task.id,
+            name: task.name.clone(),
+            status: task.status.clone(),
+            parent_id: task.parent_id,
+        }
+    }
+}
+
+/// Response for ie status command - the "spotlight" view of a task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusResponse {
+    /// The focused task with full details
+    pub focused_task: Task,
+    /// Ancestor chain from immediate parent to root (full details)
+    pub ancestors: Vec<Task>,
+    /// Sibling tasks (id + name + status)
+    pub siblings: Vec<TaskBrief>,
+    /// All descendant tasks recursively (id + name + status + parent_id)
+    pub descendants: Vec<TaskBrief>,
+    /// Optional event history
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub events: Option<Vec<Event>>,
+}
+
+/// Response when no task is focused
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoFocusResponse {
+    pub message: String,
+    /// Root-level tasks (no parent)
+    pub root_tasks: Vec<TaskBrief>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

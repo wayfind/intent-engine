@@ -1,8 +1,29 @@
 use clap::{Parser, Subcommand};
 
+const LONG_ABOUT: &str = r#"
+Intent-Engine - AI 长期任务记忆系统
+
+比 Claude Code 内置的 TodoWrite 多了什么？
+  ✅ 跨 session 持久化（永远不会丢失）
+  ✅ 层级任务树（父子关系、依赖）
+  ✅ 决策记录（为什么这么做）
+  ✅ Web Dashboard（可视化管理）
+
+何时用 ie 而不是 TodoWrite？
+  • 会丢了可惜 → 用 ie
+  • 用完即弃 → 用 TodoWrite
+
+AI 工作流：
+  ie status   ← Session 开始时运行，恢复上下文
+  ie plan     ← 声明式任务管理（创建/更新/完成）
+  ie log      ← 记录决策、阻塞、里程碑
+  ie search   ← 搜索任务和历史事件
+"#;
+
 #[derive(Parser, Clone)]
 #[command(name = "intent-engine")]
-#[command(about = "A command-line database service for tracking strategic intent", long_about = None)]
+#[command(about = "AI 长期任务记忆系统 - 跨 session 持久化、层级任务、决策记录")]
+#[command(long_about = LONG_ABOUT)]
 #[command(version)]
 pub struct Cli {
     /// Enable verbose output (-v)
@@ -116,6 +137,31 @@ pub enum Commands {
 
     /// Check system health and dependencies
     Doctor,
+
+    /// Show current task context (focus spotlight)
+    ///
+    /// Displays the focused task with its complete context:
+    /// - Current task details (full info)
+    /// - Ancestors chain (full info)
+    /// - Siblings (id + name + status)
+    /// - Descendants (id + name + status + parent_id)
+    ///
+    /// Examples:
+    ///   ie status              # Show current focused task context
+    ///   ie status 42           # Show task 42's context (without changing focus)
+    ///   ie status -e           # Include event history
+    Status {
+        /// Task ID to inspect (optional, defaults to current focused task)
+        task_id: Option<i64>,
+
+        /// Include event history
+        #[arg(short = 'e', long)]
+        with_events: bool,
+
+        /// Output format (text or json)
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]

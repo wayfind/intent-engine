@@ -1,5 +1,6 @@
 use crate::db::{create_pool, run_migrations};
 use crate::error::{IntentError, Result};
+use crate::global_projects;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -404,11 +405,16 @@ impl ProjectContext {
 
     /// Load project context, initializing if necessary (for write commands)
     pub async fn load_or_init() -> Result<Self> {
-        match Self::load().await {
-            Ok(ctx) => Ok(ctx),
-            Err(IntentError::NotAProject) => Self::initialize_project().await,
-            Err(e) => Err(e),
-        }
+        let ctx = match Self::load().await {
+            Ok(ctx) => ctx,
+            Err(IntentError::NotAProject) => Self::initialize_project().await?,
+            Err(e) => return Err(e),
+        };
+
+        // Register project in global registry for Dashboard discovery
+        global_projects::register_project(&ctx.root);
+
+        Ok(ctx)
     }
 }
 

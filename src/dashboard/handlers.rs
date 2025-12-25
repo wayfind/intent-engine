@@ -492,7 +492,7 @@ pub async fn get_current_task(State(state): State<AppState>) -> impl IntoRespons
     };
     let workspace_mgr = WorkspaceManager::new(&db_pool);
 
-    match workspace_mgr.get_current_task().await {
+    match workspace_mgr.get_current_task(None).await {
         Ok(response) => {
             if response.task.is_some() {
                 (StatusCode::OK, Json(ApiResponse { data: response })).into_response()
@@ -855,50 +855,30 @@ pub async fn search(
     }
 }
 
-/// List all registered projects (from in-memory state)
+/// List all registered projects (from known_projects state loaded from global registry)
 pub async fn list_projects(State(state): State<AppState>) -> impl IntoResponse {
-    // Get active project info and use ws_state for project list
-    let projects_info = match state.get_active_project().await {
-        Some(active) => {
-            state
-                .ws_state
-                .get_online_projects_with_current(
-                    &active.name,
-                    &active.path,
-                    &active.db_path,
-                    &state.host_project,
-                    state.port,
-                )
-                .await
-        },
-        None => {
-            // No active project, just return host project info
-            vec![state.host_project.clone()]
-        },
-    };
-
-    // Convert ProjectInfo to API response format with additional metadata
     let port = state.port;
     let pid = std::process::id();
+    let host_path = state.host_project.path.clone();
 
-    let projects: Vec<serde_json::Value> = projects_info
-        .iter()
+    // Read from known_projects (loaded from global registry at startup)
+    let known_projects = state.known_projects.read().await;
+
+    let projects: Vec<serde_json::Value> = known_projects
+        .values()
         .map(|proj| {
+            let is_host = proj.path.to_string_lossy() == host_path;
             json!({
                 "name": proj.name,
-                "path": proj.path,
+                "path": proj.path.to_string_lossy(),
                 "port": port,
                 "pid": pid,
                 "url": format!("http://127.0.0.1:{}", port),
                 "started_at": chrono::Utc::now().to_rfc3339(),
-                "mcp_connected": proj.mcp_connected,
-                "is_online": proj.is_online,  // Now included!
-                "mcp_agent": proj.agent,
-                "mcp_last_seen": if proj.mcp_connected {
-                    Some(chrono::Utc::now().to_rfc3339())
-                } else {
-                    None::<String>
-                },
+                "mcp_connected": false,
+                "is_online": is_host,  // Only host project is "online"
+                "mcp_agent": None::<String>,
+                "mcp_last_seen": None::<String>,
             })
         })
         .collect();
@@ -968,6 +948,42 @@ pub async fn switch_project(
         }),
     )
         .into_response()
+}
+
+/// Remove a project from the Dashboard and global registry
+/// DELETE /api/projects
+pub async fn remove_project(
+    State(state): State<AppState>,
+    Json(req): Json<SwitchProjectRequest>,
+) -> impl IntoResponse {
+    use std::path::PathBuf;
+
+    let project_path = PathBuf::from(&req.project_path);
+
+    match state.remove_project(&project_path).await {
+        Ok(()) => {
+            tracing::info!("Removed project: {}", req.project_path);
+            (
+                StatusCode::OK,
+                Json(ApiResponse {
+                    data: json!({
+                        "success": true,
+                        "removed_path": req.project_path,
+                    }),
+                }),
+            )
+                .into_response()
+        },
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "REMOVE_FAILED".to_string(),
+                message: e,
+                details: None,
+            }),
+        )
+            .into_response(),
+    }
 }
 
 /// Get task context (ancestors, siblings, children)

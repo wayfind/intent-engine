@@ -46,7 +46,7 @@ pub async fn handle_current_command(
             task_id
         );
         eprintln!();
-        let response = workspace_mgr.set_current_task(task_id).await?;
+        let response = workspace_mgr.set_current_task(task_id, None).await?;
         println!("✓ Switched to task #{}", task_id);
         println!("{}", serde_json::to_string_pretty(&response)?);
         return Ok(());
@@ -61,7 +61,7 @@ pub async fn handle_current_command(
                 task_id
             );
             eprintln!();
-            let response = workspace_mgr.set_current_task(task_id).await?;
+            let response = workspace_mgr.set_current_task(task_id, None).await?;
             println!("✓ Switched to task #{}", task_id);
             println!("{}", serde_json::to_string_pretty(&response)?);
         },
@@ -69,14 +69,12 @@ pub async fn handle_current_command(
             eprintln!("⚠️  Warning: 'ie current clear' is a low-level atomic command.");
             eprintln!("   For normal use, prefer 'ie task done' or 'ie task switch' which ensures data consistency.");
             eprintln!();
-            sqlx::query("DELETE FROM workspace_state WHERE key = 'current_task_id'")
-                .execute(&ctx.pool)
-                .await?;
+            workspace_mgr.clear_current_task(None).await?;
             println!("✓ Current task cleared");
         },
         None => {
             // Default: display current task in JSON format
-            let response = workspace_mgr.get_current_task().await?;
+            let response = workspace_mgr.get_current_task(None).await?;
             println!("{}", serde_json::to_string_pretty(&response)?);
         },
     }
@@ -126,15 +124,16 @@ pub async fn handle_event_command(cmd: EventCommands) -> Result<()> {
                 // Use the provided task_id
                 id
             } else {
-                // Fall back to current_task_id
-                let current_task_id: Option<String> = sqlx::query_scalar(
-                    "SELECT value FROM workspace_state WHERE key = 'current_task_id'",
-                )
-                .fetch_optional(&ctx.pool)
-                .await?;
+                // Fall back to current_task_id from sessions table for this session
+                let session_id = crate::workspace::resolve_session_id(None);
+                let current_task_id: Option<i64> =
+                    sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                        .bind(&session_id)
+                        .fetch_optional(&ctx.pool)
+                        .await?
+                        .flatten();
 
                 current_task_id
-                    .and_then(|s| s.parse::<i64>().ok())
                     .ok_or_else(|| IntentError::InvalidInput(
                         "No current task is set and --task-id was not provided. Use 'current --set <ID>' to set a task first.".to_string(),
                     ))?

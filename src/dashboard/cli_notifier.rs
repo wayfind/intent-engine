@@ -72,14 +72,11 @@ impl CliNotifier {
 
         let url = format!("{}/api/internal/cli-notify", self.base_url);
 
-        // Fire-and-forget: don't block CLI command on Dashboard response
-        let client = self.client.clone();
-        tokio::spawn(async move {
-            if let Err(e) = client.post(&url).json(&message).send().await {
-                tracing::debug!("Failed to notify Dashboard: {}", e);
-                // Silently ignore errors - Dashboard might not be running
-            }
-        });
+        // Send notification - short timeout to avoid blocking CLI for too long
+        if let Err(e) = self.client.post(&url).json(&message).send().await {
+            tracing::debug!("Failed to notify Dashboard: {}", e);
+            // Silently ignore errors - Dashboard might not be running
+        }
     }
 
     /// Notify about task change

@@ -70,9 +70,8 @@ feature-depth = 1
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
-    # rustls-pemfile is unmaintained but not a security vulnerability.
-    # This comes from reqwest 0.11.x - will be resolved when upgrading to reqwest 0.12.x
-    { id = "RUSTSEC-2025-0134", reason = "unmaintained advisory, not a security issue; reqwest upgrade planned" },
+    # Add advisories to ignore here if needed
+    # Example: { id = "RUSTSEC-XXXX-XXXX", reason = "reason for ignoring" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.

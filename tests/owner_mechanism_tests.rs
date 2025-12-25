@@ -121,7 +121,7 @@ async fn test_ai_cannot_complete_human_owned_task() -> Result<()> {
         .await?;
 
     // Set as current task
-    workspace_mgr.set_current_task(task.id).await?;
+    workspace_mgr.set_current_task(task.id, None).await?;
 
     // Try to complete as AI (is_ai_caller=true)
     let result = task_mgr.done_task(true).await;
@@ -159,7 +159,7 @@ async fn test_human_can_complete_human_owned_task() -> Result<()> {
         .await?;
 
     // Set as current task and doing status
-    workspace_mgr.set_current_task(task.id).await?;
+    workspace_mgr.set_current_task(task.id, None).await?;
     task_mgr
         .update_task(task.id, None, None, None, Some("doing"), None, None)
         .await?;
@@ -187,7 +187,7 @@ async fn test_ai_can_complete_ai_owned_task() -> Result<()> {
     let task = task_mgr.add_task("AI Task", None, None, Some("ai")).await?;
 
     // Set as current task and doing status
-    workspace_mgr.set_current_task(task.id).await?;
+    workspace_mgr.set_current_task(task.id, None).await?;
     task_mgr
         .update_task(task.id, None, None, None, Some("doing"), None, None)
         .await?;

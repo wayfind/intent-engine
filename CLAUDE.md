@@ -1,7 +1,82 @@
-# Intent-Engine: Claude Integration Guide
+# Intent-Engine: AI 长期任务记忆系统
 
 **Version**: 0.10
-**Target**: Claude Code, Claude Desktop, and AI assistants via system prompt
+**Target**: Claude Code, Claude Desktop, and AI assistants
+
+---
+
+## ⚡ 快速决策：TodoWrite vs ie
+
+**你已经有了 TodoWrite**（Claude Code 内置）。何时用 ie？
+
+| 场景 | 用 TodoWrite | 用 ie |
+|------|-------------|-------|
+| 单次会话内的简单清单 | ✅ | |
+| 跨 session 的项目工作 | | ✅ |
+| 需要记录"为什么这么决定" | | ✅ |
+| 复杂的多层级任务分解 | | ✅ |
+| 需要后续回顾决策历史 | | ✅ |
+| 临时性、不需要保留的任务 | ✅ | |
+
+**简单规则**：
+- **会丢了可惜** → 用 ie
+- **用完即弃** → 用 TodoWrite
+
+---
+
+## 🚀 Session 开始标准动作
+
+**每次新 session 开始时，先运行**：
+
+```bash
+ie status
+```
+
+这会告诉你：
+- 当前聚焦的任务是什么（如果有）
+- 有哪些子任务待完成
+- 上次工作到哪里了
+- 兄弟任务的进度
+
+**无聚焦任务时**，`ie status` 会显示所有根任务，帮你选择从哪里开始。
+
+---
+
+## 🧠 任务管理决策树
+
+当用户请求涉及任务时，按以下规则决策：
+
+```
+用户请求涉及任务？
+    │
+    ├─ 是否需要跨 session 保留？
+    │   ├─ 否 → TodoWrite
+    │   └─ 是 → ie ✓
+    │
+    ├─ 是否有多个子步骤（3+）？
+    │   ├─ 1-2 步 → TodoWrite
+    │   └─ 3+ 步 → ie（利用层级结构）✓
+    │
+    ├─ 是否需要记录"为什么这么做"？
+    │   ├─ 否 → TodoWrite
+    │   └─ 是 → ie（用 ie log 记录决策）✓
+    │
+    └─ 是否是已存在的 ie 项目？
+        └─ 运行 ie status 检查
+            ├─ 有进行中的任务 → 继续用 ie ✓
+            └─ 无任务 → 根据上述规则决定
+```
+
+---
+
+## 🔧 核心命令速查
+
+| 命令 | 用途 | 示例 |
+|------|------|------|
+| `ie status [id]` | 查看任务上下文 | `ie status` 或 `ie status 42` |
+| `ie plan` | 创建/更新/完成任务 | `echo '{"tasks":[...]}' \| ie plan` |
+| `ie log <type> <msg>` | 记录决策/阻塞/里程碑 | `ie log decision "选择 JWT"` |
+| `ie search <query>` | 搜索任务和事件 | `ie search "todo doing"` |
 
 ---
 
@@ -64,87 +139,60 @@ Intent-Engine works like your brain - **one focused task at a time**:
 
 ---
 
-## 🛠️ Essential CLI Commands
+## 🛠️ CLI Commands (v0.10.0)
 
-> **For detailed technical specifications**, see [AGENT.md](AGENT.md#essential-commands)
+> **Simplified 6-command CLI** - All task operations go through `plan`
 
-### Core Workflow Tools
+### Core Commands
 
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `task_start` | Begin working (sets focus) | `task_id`, `with_events` |
-| `task_done` | Complete current task | (no parameters) |
-| `task_switch` | Change focus to another task | `task_id` |
-| `task_pick_next` | Get smart recommendation | (no parameters) |
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `ie plan` | Create/update tasks (from stdin JSON) | `echo '{"tasks":[...]}' \| ie plan` |
+| `ie log <type> <message>` | Record events | `ie log decision "Chose JWT"` |
+| `ie search <query>` | Search tasks and events | `ie search "todo doing"` |
+| `ie init` | Initialize project | `ie init` |
+| `ie dashboard <cmd>` | Dashboard management | `ie dashboard start` |
+| `ie doctor` | Check system health | `ie doctor` |
 
-### Planning Tools
+### Plan Command - The Universal Tool
 
-| Tool | Purpose | Key Parameters | Use Case |
-|------|---------|----------------|----------|
-| `plan` ⭐ | Declarative batch task creation | `tasks: TaskTree[]` | **Batch operations**, hierarchies, dependencies |
-| `task_add` | Create single task (imperative) | `name`, `spec`, `priority` | **Single tasks**, interactive CLI |
-| `task_spawn_subtask` | Create and focus on subtask | `name`, `spec` | **Dynamic workflows**, interactive |
-| `task_add_dependency` | Add single dependency | `blocked_task_id`, `blocking_task_id` | **Single dependencies**, precise control |
+`ie plan` handles ALL task operations through JSON:
 
-**When to use `plan`**:
-- ✅ Creating multiple related tasks at once
-- ✅ Complex task hierarchies (parent/child relationships)
-- ✅ Tasks with dependencies (automatic cycle detection)
-- ✅ Idempotent operations (safe to run multiple times)
-- ✅ Importing from external systems (YAML/JSON)
+```bash
+# Create tasks
+echo '{"tasks":[{"name":"Implement auth","status":"doing"}]}' | ie plan
 
-**When to use traditional tools** (`task_add`, etc.):
-- ✅ Single task creation
-- ✅ Interactive CLI sessions
-- ✅ Fine-grained control over each step
-- ✅ Simple, straightforward operations
+# Update task status
+echo '{"tasks":[{"name":"Implement auth","status":"done"}]}' | ie plan
 
-> 💡 **See [PLAN_INTERFACE_GUIDE.md](docs/PLAN_INTERFACE_GUIDE.md) for detailed usage patterns and migration examples**
+# Create hierarchical tasks
+echo '{"tasks":[{
+  "name":"Parent task",
+  "status":"doing",
+  "children":[
+    {"name":"Subtask 1","status":"todo"},
+    {"name":"Subtask 2","status":"todo"}
+  ]
+}]}' | ie plan
+```
 
-### Query Tools
+### Log Command - Event Recording
 
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `task_list` | Filter by status/parent | `status`, `parent` |
+```bash
+ie log decision "Chose HS256 for JWT signing"
+ie log blocker "API rate limit hit"
+ie log milestone "MVP feature complete"
+ie log note "Consider caching optimization"
+ie log decision "message" --task 42  # Target specific task
+```
 
-### Search and Discovery
+### Search Command - Smart Query
 
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `search` | Search tasks AND events | `query`, `include_tasks`, `include_events` |
-
-**Search capabilities**:
-- Supports FTS5 syntax: `AND`, `OR`, `NOT`, `"phrases"`
-- Returns mixed results with task ancestry for events
-- Example: `search(query: "JWT AND authentication")`
-
-### Event Tracking
-
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `event_add` | Record decision/blocker/note | `type`, `data`, `task_id?` |
-| `event_list` | Query events with filters | `task_id?`, `type?`, `since?`, `limit?` |
-
-**Event types**: `decision`, `blocker`, `milestone`, `note`
-
-**Filtering** (new in v0.2):
-- By type: `event_list(type: "decision")`
-- By time: `event_list(since: "7d")`
-- Combined: `event_list(type: "blocker", since: "24h")`
-
-### Workspace and Reporting
-
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `current_task_get` | Get focused task | (no parameters) |
-| `report_generate` | Generate summary report | `since`, `summary_only` |
-
-### New Features (v0.2+)
-
-**Priority Levels**: Tasks support `critical`, `high`, `medium`, `low`
-**Dependencies**: Use `task_add_dependency` to model prerequisites
-**Event Filtering**: Filter by type, time range, or both
-**Unified Search**: Search across both tasks and events
+```bash
+ie search "todo doing"           # Status filter (unfinished tasks)
+ie search "JWT authentication"   # FTS5 full-text search
+ie search "API AND client"       # Boolean operators
+```
 
 ---
 
@@ -156,7 +204,7 @@ User: "Help me implement user authentication"
 
 You:
 1. Create task with ie plan
-2. Get task details: ie get <id> --with-events
+2. Search for context: ie search "authentication"
 3. Update status to 'doing': ie plan with status update
 4. Begin work and record decisions with ie log
 ```
@@ -166,13 +214,19 @@ You:
 User: "Let's add authentication"
 
 You:
-1. task_start(task_id: 42)
-2. Analyze the spec
-3. task_spawn_subtask(name: "Design JWT schema")
-   → Now subtask is focused
-4. Work on subtask
-5. task_done() when subtask complete
-6. task_pick_next() → Recommends next subtask
+1. Create parent task with subtasks using ie plan:
+   echo '{"tasks":[{
+     "name":"Implement authentication",
+     "status":"doing",
+     "children":[
+       {"name":"Design JWT schema","status":"todo"},
+       {"name":"Implement token validation","status":"todo"}
+     ]
+   }]}' | ie plan
+2. Update subtask status as you work:
+   echo '{"tasks":[{"name":"Design JWT schema","status":"doing"}]}' | ie plan
+3. Complete subtask:
+   echo '{"tasks":[{"name":"Design JWT schema","status":"done"}]}' | ie plan
 ```
 
 ### Pattern 3: Recording Decisions
@@ -180,7 +234,7 @@ You:
 While implementing JWT:
 
 You: "I chose HS256 algorithm because..."
-     event_add(type: "decision", data: "Chose HS256 because...")
+     ie log decision "Chose HS256 for performance and simplicity"
 ```
 
 ### Pattern 4: Resuming Work
@@ -188,12 +242,11 @@ You: "I chose HS256 algorithm because..."
 User: "Let's continue with authentication"
 
 You:
-1. ie list doing    # Check active tasks
-2. ie list todo     # Check pending tasks
-3. ie search "authentication"  # Find specific tasks
-4. ie get 42 --with-events     # Get full context with history
-5. ie plan to update status to 'doing'
-6. Continue from where you left off
+1. ie search "todo doing"       # Check unfinished tasks
+2. ie search "authentication"   # Find specific tasks
+3. Update status to continue:
+   echo '{"tasks":[{"name":"Implement authentication","status":"doing"}]}' | ie plan
+4. Continue from where you left off
 ```
 
 ### Pattern 5: Switching Context
@@ -201,53 +254,47 @@ You:
 User: "Let's pause auth and fix that bug"
 
 You:
-1. event_add(type: "note", data: "Pausing to handle bug #123")
-2. task_switch(task_id: 67)  # Bug fix task
-   → Pauses auth, starts bug fix
+1. ie log note "Pausing auth to handle bug #123"
+2. Create/update bug fix task:
+   echo '{"tasks":[{"name":"Fix bug #123","status":"doing"}]}' | ie plan
 3. Fix the bug
-4. task_done()
-5. task_switch(task_id: 42)  # Back to auth
+4. Mark done and return:
+   echo '{"tasks":[
+     {"name":"Fix bug #123","status":"done"},
+     {"name":"Implement authentication","status":"doing"}
+   ]}' | ie plan
 ```
 
-### Pattern 6: Working with Dependencies (new in v0.2)
+### Pattern 6: Working with Dependencies
 ```
-User: "Implement the API client, but it depends on authentication being done first"
+User: "Implement the API client, but it depends on authentication"
 
 You:
-1. task_list(status: "doing")
-   → Find current auth task (ID 42)
-2. task_add(name: "Implement API client", priority: "high")
-   → Creates task ID 50
-3. task_add_dependency(blocked_task_id: 50, blocking_task_id: 42)
-   → API client now depends on auth completion
-4. Continue working on task 42 (auth)
-5. When task 42 is done, task_pick_next() will recommend task 50
+1. Create both tasks with dependency:
+   echo '{"tasks":[
+     {"name":"Implement authentication","status":"doing"},
+     {"name":"Implement API client","status":"todo","depends_on":["Implement authentication"]}
+   ]}' | ie plan
+2. Complete auth first, then API client becomes unblocked
 ```
 
-### Pattern 7: Smart Event Filtering (new in v0.2)
+### Pattern 7: Smart Search
 ```
-User: "What decisions did we make on the authentication task?"
+User: "What decisions did we make on authentication?"
 
 You:
-1. search(query: "authentication")
-   → Find task ID 42 and decision events
-2. event_list(task_id: 42, type: "decision")
-   → Get only decision events (efficient!)
-3. Review and summarize the decisions
-
-Alternative - Recent blockers:
-event_list(task_id: 42, type: "blocker", since: "7d")
-→ Get blockers from last week only
+1. ie search "authentication decision"  # FTS5 search
+2. Review and summarize the decisions
 ```
 
 ---
 
 ## 💡 Best Practices
 
-### 1. Always Start Tasks
+### 1. Use Status-Based Workflow
 ```
-❌ DON'T: task_done() without starting
-✅ DO:    task_start(42) then task_done()
+❌ DON'T: Forget to update status
+✅ DO:    echo '{"tasks":[{"name":"Task","status":"doing"}]}' | ie plan
 ```
 
 ### 2. Use Hierarchical Decomposition
@@ -259,62 +306,59 @@ event_list(task_id: 42, type: "blocker", since: "7d")
 ### 3. Record Important Decisions
 ```
 ❌ DON'T: Just implement without context
-✅ DO:    event_add() for key design choices
+✅ DO:    ie log decision "Chose X because..."
 ```
 
-### 4. Leverage with_events
+### 4. Use Search for Context
 ```
-❌ DON'T: Start task without history
-✅ DO:    task_start(task_id, with_events: true)
+❌ DON'T: Start without checking history
+✅ DO:    ie search "todo doing" before starting
 ```
 
-### 5. Let pick-next Guide You
+### 5. Keep Tasks Updated
 ```
-❌ DON'T: Manually search for next task
-✅ DO:    task_pick_next() for smart recommendation
+❌ DON'T: Forget to mark tasks done
+✅ DO:    Update status promptly via ie plan
 ```
 
 ---
 
 ## ⚠️ Common Mistakes
 
-### Mistake 1: Passing ID to task_done
+### Mistake 1: Forgetting to update status
 ```
-❌ task_done(task_id: 42)  # WRONG - no parameters
+❌ Work on task without updating status
 
-✅ task_start(42)           # Set focus first
-   task_done()              # Then complete
-```
-
-### Mistake 2: Using list for text search
-```
-❌ task_list(status: "JWT")  # WRONG - list is metadata only (status, parent)
-
-✅ search(query: "JWT")  # Correct - searches tasks and events
+✅ echo '{"tasks":[{"name":"My Task","status":"doing"}]}' | ie plan
+   # ... do work ...
+   echo '{"tasks":[{"name":"My Task","status":"done"}]}' | ie plan
 ```
 
-### Mistake 3: Not checking current task
+### Mistake 2: Using search incorrectly
 ```
-❌ Assume no task is focused
-   task_done()  # ERROR
+❌ ie search "status:doing"  # WRONG - not a filter syntax
 
-✅ current_task_get()  # Check first
-   If focused: task_done()
-   If not: task_start() first
+✅ ie search "todo doing"    # Status keywords only → filter mode
+✅ ie search "JWT auth"      # Contains non-status words → FTS5 search
 ```
 
-### Mistake 4: Trying to complete parent with incomplete children
+### Mistake 3: Creating duplicate tasks
 ```
-❌ task_start(42)        # Parent
-   task_done()           # ERROR: has incomplete subtasks
+❌ Run same ie plan twice → creates duplicates? NO!
 
-✅ task_start(42)        # Parent
-   task_spawn_subtask()  # Child 1
-   task_done()           # Complete child 1
-   task_spawn_subtask()  # Child 2
-   task_done()           # Complete child 2
-   task_switch(42)       # Back to parent
-   task_done()           # Now works - all children done
+✅ ie plan is idempotent - same name = update, not create
+```
+
+### Mistake 4: Completing parent with incomplete children
+```
+❌ Mark parent done while children are still todo
+
+✅ Complete all children first, then parent:
+   echo '{"tasks":[
+     {"name":"Child 1","status":"done"},
+     {"name":"Child 2","status":"done"},
+     {"name":"Parent","status":"done"}
+   ]}' | ie plan
 ```
 
 ---
@@ -360,10 +404,10 @@ event_list(task_id: 42, type: "blocker", since: "7d")
 ### With Claude Code
 
 When user says:
-- "Help me implement X" → Create task, track work
-- "What's next?" → Use pick-next
-- "Why did we...?" → Check events
-- "Continue authentication" → Start task, load context
+- "Help me implement X" → Create task via `ie plan`, track work
+- "What's next?" → Use `ie search "todo doing"`
+- "Why did we...?" → Use `ie search` for events
+- "Continue authentication" → Update status via `ie plan`
 
 ### Task Lifecycle
 
@@ -371,16 +415,16 @@ When user says:
 User Request
     │
     ▼
-task_add ──────────────┐
-    │                  │ (strategic planning)
-    ▼                  │
-task_start ─────────────┤
-    │                  │ (active work)
-    ├── event_add      │
-    ├── task_spawn_subtask
-    │                  │
-    ▼                  │
-task_done ─────────────┘
+ie plan (create) ──────────┐
+    │                      │ (strategic planning)
+    ▼                      │
+ie plan (status:doing) ────┤
+    │                      │ (active work)
+    ├── ie log             │
+    ├── ie plan (children) │
+    │                      │
+    ▼                      │
+ie plan (status:done) ─────┘
 ```
 
 ---
@@ -391,8 +435,8 @@ Think of Intent-Engine as:
 
 1. **Your Notebook** - Persistent task list across sessions
 2. **Your Focus Ring** - One task at a time (current_task_id)
-3. **Your Memory** - Decision history in events
-4. **Your Guide** - Smart recommendations (pick-next)
+3. **Your Memory** - Decision history in events (ie log)
+4. **Your Search** - Find anything with ie search
 5. **Your Tree** - Hierarchical problem breakdown
 
 ---
@@ -401,8 +445,7 @@ Think of Intent-Engine as:
 
 - **Interface Spec** (authoritative): `docs/spec-03-interface-current.md`
 - **AI Agent Guide** (technical details): `AGENT.md`
-- **Migration Guide**: `MIGRATION_v0.10.0.md`
-- **Built-in Guides**: `ie guide ai`, `ie guide workflow`, `ie guide patterns`
+- **Plan Command Guide**: `ie plan --help`
 
 > For data models, output formats, and command specifications, see [AGENT.md](AGENT.md)
 

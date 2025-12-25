@@ -468,6 +468,99 @@ impl<'a> TaskManager<'a> {
         })
     }
 
+    /// Get all descendants of a task recursively (children, grandchildren, etc.)
+    /// Uses recursive CTE for efficient querying
+    pub async fn get_descendants(&self, task_id: i64) -> Result<Vec<Task>> {
+        let descendants = sqlx::query_as::<_, Task>(
+            r#"
+            WITH RECURSIVE descendants AS (
+                SELECT id, parent_id, name, spec, status, complexity, priority,
+                       first_todo_at, first_doing_at, first_done_at, active_form, owner
+                FROM tasks
+                WHERE parent_id = ?
+
+                UNION ALL
+
+                SELECT t.id, t.parent_id, t.name, t.spec, t.status, t.complexity, t.priority,
+                       t.first_todo_at, t.first_doing_at, t.first_done_at, t.active_form, t.owner
+                FROM tasks t
+                INNER JOIN descendants d ON t.parent_id = d.id
+            )
+            SELECT * FROM descendants
+            ORDER BY parent_id NULLS FIRST, priority ASC NULLS LAST, id ASC
+            "#,
+        )
+        .bind(task_id)
+        .fetch_all(self.pool)
+        .await?;
+
+        Ok(descendants)
+    }
+
+    /// Get status response for a task (the "spotlight" view)
+    /// This is the main method for `ie status` command
+    pub async fn get_status(
+        &self,
+        task_id: i64,
+        with_events: bool,
+    ) -> Result<crate::db::models::StatusResponse> {
+        use crate::db::models::{StatusResponse, TaskBrief};
+
+        // Get task context (reuse existing method)
+        let context = self.get_task_context(task_id).await?;
+
+        // Get all descendants recursively
+        let descendants_full = self.get_descendants(task_id).await?;
+
+        // Convert siblings and descendants to brief format
+        let siblings: Vec<TaskBrief> = context.siblings.iter().map(TaskBrief::from).collect();
+        let descendants: Vec<TaskBrief> = descendants_full.iter().map(TaskBrief::from).collect();
+
+        // Get events if requested
+        let events = if with_events {
+            let event_mgr = crate::events::EventManager::new(self.pool);
+            Some(
+                event_mgr
+                    .list_events(Some(task_id), Some(50), None, None)
+                    .await?,
+            )
+        } else {
+            None
+        };
+
+        Ok(StatusResponse {
+            focused_task: context.task,
+            ancestors: context.ancestors,
+            siblings,
+            descendants,
+            events,
+        })
+    }
+
+    /// Get root tasks (tasks with no parent) for NoFocusResponse
+    pub async fn get_root_tasks(&self) -> Result<Vec<Task>> {
+        let tasks = sqlx::query_as::<_, Task>(
+            r#"
+            SELECT id, parent_id, name, spec, status, complexity, priority,
+                   first_todo_at, first_doing_at, first_done_at, active_form, owner
+            FROM tasks
+            WHERE parent_id IS NULL
+            ORDER BY
+                CASE status
+                    WHEN 'doing' THEN 0
+                    WHEN 'todo' THEN 1
+                    WHEN 'done' THEN 2
+                END,
+                priority ASC NULLS LAST,
+                id ASC
+            "#,
+        )
+        .fetch_all(self.pool)
+        .await?;
+
+        Ok(tasks)
+    }
+
     /// Get events summary for a task
     async fn get_events_summary(&self, task_id: i64) -> Result<EventsSummary> {
         let total_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE task_id = ?")
@@ -649,6 +742,9 @@ impl<'a> TaskManager<'a> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
 
+        // Resolve session_id for FocusAware sorting
+        let session_id = crate::workspace::resolve_session_id(None);
+
         // Build WHERE clause
         let mut where_clause = String::from("WHERE 1=1");
         let mut conditions = Vec::new();
@@ -666,6 +762,9 @@ impl<'a> TaskManager<'a> {
                 where_clause.push_str(" AND parent_id IS NULL");
             }
         }
+
+        // Track if FocusAware mode needs session_id bind
+        let uses_session_bind = matches!(sort_by, TaskSortBy::FocusAware);
 
         // Build ORDER BY clause based on sort mode
         let order_clause = match sort_by {
@@ -693,7 +792,7 @@ impl<'a> TaskManager<'a> {
                 // Focus-aware: current focused task → doing tasks → todo tasks
                 r#"ORDER BY
                     CASE
-                        WHEN t.id = (SELECT value FROM workspace_state WHERE key = 'current_task_id') THEN 0
+                        WHEN t.id = (SELECT current_task_id FROM sessions WHERE session_id = ?) THEN 0
                         WHEN t.status = 'doing' THEN 1
                         WHEN t.status = 'todo' THEN 2
                         ELSE 3
@@ -721,6 +820,10 @@ impl<'a> TaskManager<'a> {
         let mut q = sqlx::query_as::<_, Task>(&main_query);
         for cond in conditions {
             q = q.bind(cond);
+        }
+        // Bind session_id for FocusAware ORDER BY clause
+        if uses_session_bind {
+            q = q.bind(&session_id);
         }
         q = q.bind(limit);
         q = q.bind(offset);
@@ -765,6 +868,16 @@ impl<'a> TaskManager<'a> {
 
     /// Start a task (atomic: update status + set current)
     pub async fn start_task(&self, id: i64, with_events: bool) -> Result<TaskWithEvents> {
+        // Check if task exists first
+        let task_exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
+            .bind(id)
+            .fetch_one(self.pool)
+            .await?;
+
+        if !task_exists {
+            return Err(IntentError::TaskNotFound(id));
+        }
+
         // Check if task is blocked by incomplete dependencies
         use crate::dependencies::get_incomplete_blocking_tasks;
         if let Some(blocking_tasks) = get_incomplete_blocking_tasks(self.pool, id).await? {
@@ -791,14 +904,20 @@ impl<'a> TaskManager<'a> {
         .execute(&mut *tx)
         .await?;
 
-        // Set as current task
+        // Set as current task in sessions table
+        // Use session_id from environment if available
+        let session_id = crate::workspace::resolve_session_id(None);
         sqlx::query(
             r#"
-            INSERT OR REPLACE INTO workspace_state (key, value)
-            VALUES ('current_task_id', ?)
+            INSERT INTO sessions (session_id, current_task_id, created_at, last_active_at)
+            VALUES (?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(session_id) DO UPDATE SET
+                current_task_id = excluded.current_task_id,
+                last_active_at = datetime('now')
             "#,
         )
-        .bind(id.to_string())
+        .bind(&session_id)
+        .bind(id)
         .execute(&mut *tx)
         .await?;
 
@@ -827,19 +946,20 @@ impl<'a> TaskManager<'a> {
     ///   When true and task is human-owned, the operation will fail.
     ///   Human tasks can only be completed via CLI or Dashboard.
     pub async fn done_task(&self, is_ai_caller: bool) -> Result<DoneTaskResponse> {
+        let session_id = crate::workspace::resolve_session_id(None);
         let mut tx = self.pool.begin().await?;
 
-        // Get the current task ID
-        let current_task_id: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+        // Get the current task ID from sessions table
+        let current_task_id: Option<i64> =
+            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(&session_id)
                 .fetch_optional(&mut *tx)
-                .await?;
+                .await?
+                .flatten();
 
-        let id = current_task_id.and_then(|s| s.parse::<i64>().ok()).ok_or(
-            IntentError::InvalidInput(
-                "No current task is set. Use 'current --set <ID>' to set a task first.".to_string(),
-            ),
-        )?;
+        let id = current_task_id.ok_or(IntentError::InvalidInput(
+            "No current task is set. Use 'current --set <ID>' to set a task first.".to_string(),
+        ))?;
 
         // Get the task info before completing it (including owner)
         let task_info: (String, Option<i64>, String) =
@@ -885,8 +1005,9 @@ impl<'a> TaskManager<'a> {
         .execute(&mut *tx)
         .await?;
 
-        // Clear the current task
-        sqlx::query("DELETE FROM workspace_state WHERE key = 'current_task_id'")
+        // Clear the current task in sessions table for this session
+        sqlx::query("UPDATE sessions SET current_task_id = NULL, last_active_at = datetime('now') WHERE session_id = ?")
+            .bind(&session_id)
             .execute(&mut *tx)
             .await?;
 
@@ -1042,15 +1163,18 @@ impl<'a> TaskManager<'a> {
         name: &str,
         spec: Option<&str>,
     ) -> Result<SpawnSubtaskResponse> {
-        // Get current task
-        let current_task_id: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+        // Get current task from sessions table for this session
+        let session_id = crate::workspace::resolve_session_id(None);
+        let current_task_id: Option<i64> =
+            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(&session_id)
                 .fetch_optional(self.pool)
-                .await?;
+                .await?
+                .flatten();
 
-        let parent_id = current_task_id.and_then(|s| s.parse::<i64>().ok()).ok_or(
-            IntentError::InvalidInput("No current task to create subtask under".to_string()),
-        )?;
+        let parent_id = current_task_id.ok_or(IntentError::InvalidInput(
+            "No current task to create subtask under".to_string(),
+        ))?;
 
         // Get parent task info
         let parent_name: String = sqlx::query_scalar(crate::sql_constants::SELECT_TASK_NAME)
@@ -1185,43 +1309,45 @@ impl<'a> TaskManager<'a> {
     ///
     /// This command does NOT modify task status.
     pub async fn pick_next(&self) -> Result<PickNextResponse> {
-        // Step 1: Check if there's a current focused task
-        let current_task_id: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+        // Step 1: Check if there's a current focused task for this session
+        let session_id = crate::workspace::resolve_session_id(None);
+        let current_task_id: Option<i64> =
+            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(&session_id)
                 .fetch_optional(self.pool)
-                .await?;
+                .await?
+                .flatten();
 
-        if let Some(current_id_str) = current_task_id.as_ref() {
-            if let Ok(current_id) = current_id_str.parse::<i64>() {
-                // Step 1a: First priority - Get **doing** subtasks of current focused task
-                // Exclude tasks blocked by incomplete dependencies
-                let doing_subtasks = sqlx::query_as::<_, Task>(
-                    r#"
-                            SELECT id, parent_id, name, spec, status, complexity, priority,
-                                   first_todo_at, first_doing_at, first_done_at, active_form, owner
-                            FROM tasks
-                            WHERE parent_id = ? AND status = 'doing'
-                              AND NOT EXISTS (
-                                SELECT 1 FROM dependencies d
-                                JOIN tasks bt ON d.blocking_task_id = bt.id
-                                WHERE d.blocked_task_id = tasks.id
-                                  AND bt.status != 'done'
-                              )
-                            ORDER BY COALESCE(priority, 999999) ASC, id ASC
-                            LIMIT 1
-                            "#,
-                )
-                .bind(current_id)
-                .fetch_optional(self.pool)
-                .await?;
+        if let Some(current_id) = current_task_id {
+            // Step 1a: First priority - Get **doing** subtasks of current focused task
+            // Exclude tasks blocked by incomplete dependencies
+            let doing_subtasks = sqlx::query_as::<_, Task>(
+                r#"
+                        SELECT id, parent_id, name, spec, status, complexity, priority,
+                               first_todo_at, first_doing_at, first_done_at, active_form, owner
+                        FROM tasks
+                        WHERE parent_id = ? AND status = 'doing'
+                          AND NOT EXISTS (
+                            SELECT 1 FROM dependencies d
+                            JOIN tasks bt ON d.blocking_task_id = bt.id
+                            WHERE d.blocked_task_id = tasks.id
+                              AND bt.status != 'done'
+                          )
+                        ORDER BY COALESCE(priority, 999999) ASC, id ASC
+                        LIMIT 1
+                        "#,
+            )
+            .bind(current_id)
+            .fetch_optional(self.pool)
+            .await?;
 
-                if let Some(task) = doing_subtasks {
-                    return Ok(PickNextResponse::focused_subtask(task));
-                }
+            if let Some(task) = doing_subtasks {
+                return Ok(PickNextResponse::focused_subtask(task));
+            }
 
-                // Step 1b: Second priority - Get **todo** subtasks if no doing subtasks
-                let todo_subtasks = sqlx::query_as::<_, Task>(
-                    r#"
+            // Step 1b: Second priority - Get **todo** subtasks if no doing subtasks
+            let todo_subtasks = sqlx::query_as::<_, Task>(
+                r#"
                             SELECT id, parent_id, name, spec, status, complexity, priority,
                                    first_todo_at, first_doing_at, first_done_at, active_form, owner
                             FROM tasks
@@ -1235,43 +1361,38 @@ impl<'a> TaskManager<'a> {
                             ORDER BY COALESCE(priority, 999999) ASC, id ASC
                             LIMIT 1
                             "#,
-                )
-                .bind(current_id)
-                .fetch_optional(self.pool)
-                .await?;
+            )
+            .bind(current_id)
+            .fetch_optional(self.pool)
+            .await?;
 
-                if let Some(task) = todo_subtasks {
-                    return Ok(PickNextResponse::focused_subtask(task));
-                }
+            if let Some(task) = todo_subtasks {
+                return Ok(PickNextResponse::focused_subtask(task));
             }
         }
 
         // Step 2a: Third priority - Get top-level **doing** tasks (excluding current task)
         // Exclude tasks blocked by incomplete dependencies
-        let doing_top_level = if let Some(current_id_str) = current_task_id.as_ref() {
-            if let Ok(current_id) = current_id_str.parse::<i64>() {
-                sqlx::query_as::<_, Task>(
-                    r#"
-                    SELECT id, parent_id, name, spec, status, complexity, priority,
-                           first_todo_at, first_doing_at, first_done_at, active_form, owner
-                    FROM tasks
-                    WHERE parent_id IS NULL AND status = 'doing' AND id != ?
-                      AND NOT EXISTS (
-                        SELECT 1 FROM dependencies d
-                        JOIN tasks bt ON d.blocking_task_id = bt.id
-                        WHERE d.blocked_task_id = tasks.id
-                          AND bt.status != 'done'
-                      )
-                    ORDER BY COALESCE(priority, 999999) ASC, id ASC
-                    LIMIT 1
-                    "#,
-                )
-                .bind(current_id)
-                .fetch_optional(self.pool)
-                .await?
-            } else {
-                None
-            }
+        let doing_top_level = if let Some(current_id) = current_task_id {
+            sqlx::query_as::<_, Task>(
+                r#"
+                SELECT id, parent_id, name, spec, status, complexity, priority,
+                       first_todo_at, first_doing_at, first_done_at, active_form, owner
+                FROM tasks
+                WHERE parent_id IS NULL AND status = 'doing' AND id != ?
+                  AND NOT EXISTS (
+                    SELECT 1 FROM dependencies d
+                    JOIN tasks bt ON d.blocking_task_id = bt.id
+                    WHERE d.blocked_task_id = tasks.id
+                      AND bt.status != 'done'
+                  )
+                ORDER BY COALESCE(priority, 999999) ASC, id ASC
+                LIMIT 1
+                "#,
+            )
+            .bind(current_id)
+            .fetch_optional(self.pool)
+            .await?
         } else {
             sqlx::query_as::<_, Task>(
                 r#"
@@ -1589,13 +1710,14 @@ mod tests {
         assert!(started.task.first_doing_at.is_some());
 
         // Verify it's set as current task
-        let current: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+        let current: Option<i64> =
+            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
                 .fetch_optional(ctx.pool())
                 .await
-                .unwrap();
+                .unwrap()
+                .flatten();
 
-        assert_eq!(current, Some(task.id.to_string()));
+        assert_eq!(current, Some(task.id));
     }
 
     #[tokio::test]
@@ -1647,11 +1769,12 @@ mod tests {
         }
 
         // Verify current task is cleared
-        let current: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+        let current: Option<i64> =
+            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
                 .fetch_optional(ctx.pool())
                 .await
-                .unwrap();
+                .unwrap()
+                .flatten();
 
         assert!(current.is_none());
     }
@@ -1783,13 +1906,14 @@ mod tests {
         assert_eq!(response.parent_task.name, "Parent task");
 
         // Verify subtask is now the current task
-        let current: Option<String> =
-            sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'current_task_id'")
+        let current: Option<i64> =
+            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
                 .fetch_optional(ctx.pool())
                 .await
-                .unwrap();
+                .unwrap()
+                .flatten();
 
-        assert_eq!(current, Some(response.subtask.id.to_string()));
+        assert_eq!(current, Some(response.subtask.id));
 
         // Verify subtask is in doing status
         let retrieved = manager.get_task(response.subtask.id).await.unwrap();
@@ -2224,9 +2348,15 @@ mod tests {
 
         // Set subtask as current
         sqlx::query(
-            "INSERT OR REPLACE INTO workspace_state (key, value) VALUES ('current_task_id', ?)",
+            r#"
+            INSERT INTO sessions (session_id, current_task_id, created_at, last_active_at)
+            VALUES ('-1', ?, datetime('now'), datetime('now'))
+            ON CONFLICT(session_id) DO UPDATE SET
+                current_task_id = excluded.current_task_id,
+                last_active_at = datetime('now')
+            "#,
         )
-        .bind(subtask.id.to_string())
+        .bind(subtask.id)
         .execute(ctx.pool())
         .await
         .unwrap();
@@ -2795,7 +2925,7 @@ mod tests {
         let parent = task_mgr.add_task("Parent", None, None, None).await.unwrap();
         let parent_started = task_mgr.start_task(parent.id, false).await.unwrap();
         workspace_mgr
-            .set_current_task(parent_started.task.id)
+            .set_current_task(parent_started.task.id, None)
             .await
             .unwrap();
 
@@ -2806,7 +2936,10 @@ mod tests {
             .unwrap();
         task_mgr.start_task(doing_subtask.id, false).await.unwrap();
         // Switch back to parent so doing_subtask is "pending" (doing but not current)
-        workspace_mgr.set_current_task(parent.id).await.unwrap();
+        workspace_mgr
+            .set_current_task(parent.id, None)
+            .await
+            .unwrap();
 
         let _todo_subtask = task_mgr
             .add_task("Todo Subtask", None, Some(parent.id), None)
@@ -2839,7 +2972,7 @@ mod tests {
         assert_eq!(task_a_started.task.status, "doing");
 
         // Verify task A is current
-        let current = workspace_mgr.get_current_task().await.unwrap();
+        let current = workspace_mgr.get_current_task(None).await.unwrap();
         assert_eq!(current.current_task_id, Some(task_a.id));
 
         // Create and start task B
@@ -2848,7 +2981,7 @@ mod tests {
         assert_eq!(task_b_started.task.status, "doing");
 
         // Verify task B is now current
-        let current = workspace_mgr.get_current_task().await.unwrap();
+        let current = workspace_mgr.get_current_task(None).await.unwrap();
         assert_eq!(current.current_task_id, Some(task_b.id));
 
         // Verify task A is still doing (not reverted to todo)
