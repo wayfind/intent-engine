@@ -184,6 +184,7 @@ impl<'a> TaskManager<'a> {
     ///
     /// # Returns
     /// The ID of the created task
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_task_in_tx(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,

@@ -120,7 +120,7 @@ impl AppState {
     /// Remove a project from known projects and global registry
     pub async fn remove_project(&self, path: &PathBuf) -> Result<(), String> {
         // Don't allow removing the host project
-        if *path == PathBuf::from(&self.host_project.path) {
+        if path.as_path() == std::path::Path::new(&self.host_project.path) {
             return Err("Cannot remove the host project".to_string());
         }
 
