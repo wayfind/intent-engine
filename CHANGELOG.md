@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update workflow documentation to emphasize plan-centric approach
 - Major README rewrite to reflect AI's automatic workflow
 - Rewrite README for clarity and impact
+- Update CHANGELOG for v0.10.1
 
 ### Features
 
@@ -33,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - V0.10.1 - test fixes and docs cleanup
 - Update Cargo.lock for v0.10.1
+- Remove obsolete MCP and dashboard integration tests
 
 ### Refactor
 
