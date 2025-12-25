@@ -1,9 +1,9 @@
 # Plan Command - Complete Guide
 
 Reads a JSON plan from stdin and creates/updates tasks atomically.
-Supports hierarchical nesting, name-based dependencies, and status management.
+Supports hierarchical nesting, explicit parent assignment, dependencies, and status management.
 
-## 🎯 Quick Start
+## Quick Start
 
 ```bash
 # Simplest example - create a task
@@ -19,7 +19,7 @@ echo '{
 }' | ie plan
 ```
 
-## 🌳 Core Features
+## Core Features
 
 ### 1. Hierarchical Tasks (children)
 ```bash
@@ -36,7 +36,29 @@ echo '{
 }' | ie plan
 ```
 
-### 2. Dependencies (depends_on)
+### 2. Explicit Parent Assignment (parent_id)
+
+Control task hierarchy explicitly using `parent_id`:
+
+```bash
+# Create a root task (ignores focused task auto-parenting)
+echo '{"tasks":[{"name":"Independent Task","parent_id":null}]}' | ie plan
+
+# Assign to specific parent by ID
+echo '{"tasks":[{"name":"Child Task","parent_id":42}]}' | ie plan
+
+# Move existing task to new parent
+echo '{"tasks":[{"name":"Existing Task","parent_id":99}]}' | ie plan
+```
+
+**Three-state logic:**
+- `parent_id` absent → Default behavior (auto-parent to focused task)
+- `parent_id: null` → Explicitly create as root task
+- `parent_id: 42` → Explicitly set parent to task #42
+
+**Priority:** `children` nesting > `parent_id` > auto-parenting
+
+### 3. Dependencies (depends_on)
 ```bash
 echo '{
   "tasks": [
@@ -48,7 +70,7 @@ echo '{
 }' | ie plan
 ```
 
-### 3. Idempotent Updates (by name)
+### 4. Idempotent Updates (by name)
 ```bash
 # Run 1 - create
 echo '{"tasks":[{"name":"Login","status":"todo"}]}' | ie plan
@@ -60,7 +82,27 @@ echo '{"tasks":[{"name":"Login","status":"doing"}]}' | ie plan
 echo '{"tasks":[{"name":"Login","status":"done"}]}' | ie plan
 ```
 
-## 📊 Common Patterns
+## JSON Schema
+
+```typescript
+{
+  "tasks": [
+    {
+      "name": string,           // Required: task name (used as identifier)
+      "spec": string?,          // Optional: description/specification
+      "status": "todo"|"doing"|"done"?,  // Optional: task status
+      "priority": "critical"|"high"|"medium"|"low"?,
+      "active_form": string?,   // Optional: display text when doing
+      "parent_id": number|null?, // Optional: explicit parent (null = root)
+      "children": TaskTree[]?,  // Optional: nested child tasks
+      "depends_on": string[]?,  // Optional: dependency names
+      "task_id": number?        // Optional: force update specific task
+    }
+  ]
+}
+```
+
+## Common Patterns
 
 ### Sprint Planning
 ```bash
@@ -94,20 +136,32 @@ echo '{
 }' | ie plan
 ```
 
-## 🔑 Key Concepts
+### Creating Independent Tasks
+```bash
+# When you need a task NOT under the current focus
+echo '{
+  "tasks": [{
+    "name": "Unrelated Bug Fix",
+    "parent_id": null,
+    "status": "todo"
+  }]
+}' | ie plan
+```
 
-**Idempotent**: Safe to run multiple times (updates by name)
-**Batch**: Create multiple tasks in one operation
-**Hierarchical**: Nest tasks with children
-**Dependencies**: Automatic cycle detection
-**Status**: todo/doing/done (only one doing allowed)
-**Focus**: Doing task auto-focuses
+## Key Concepts
 
-## 🚫 Common Errors
+- **Idempotent**: Safe to run multiple times (updates by name)
+- **Batch**: Create multiple tasks in one operation
+- **Hierarchical**: Nest tasks with children or parent_id
+- **Dependencies**: Automatic cycle detection
+- **Status**: todo/doing/done (only one doing allowed per batch)
+- **Focus**: Doing task auto-focuses
+
+## Common Errors
 
 **Multiple doing tasks**:
 ```bash
-# ❌ Error - only one doing allowed
+# Error - only one doing allowed per batch
 echo '{"tasks":[
   {"name":"A","status":"doing"},
   {"name":"B","status":"doing"}
@@ -116,14 +170,14 @@ echo '{"tasks":[
 
 **Circular dependencies**:
 ```bash
-# ❌ Error - A depends on B, B depends on A
+# Error - A depends on B, B depends on A
 echo '{"tasks":[
   {"name":"A","depends_on":["B"]},
   {"name":"B","depends_on":["A"]}
 ]}' | ie plan
 ```
 
-## 💡 TodoWriter Migration
+## TodoWriter Migration
 
 | TodoWriter | Intent-Engine |
 |-----------|---------------|
@@ -151,34 +205,36 @@ echo '{
 }' | ie plan
 ```
 
-## 🎓 Best Practices
+## Best Practices
 
 1. **Start simple**: Flat list first, add hierarchy when needed
 2. **Batch operations**: Create related tasks together
 3. **Clear names**: "Implement JWT auth" not "Do auth"
 4. **2-3 levels max**: Avoid deep nesting
 5. **Sync progress**: Use plan to update status
+6. **Use parent_id: null**: When creating tasks independent of current focus
 
-## 📚 Related Commands
+## Related Commands
 
+- `ie status` - View current task context
 - `ie log decision "message"` - Record decisions
 - `ie search "query"` - Search tasks
 - `ie plan --format json` - JSON output
 
-## 🔍 Output Formats
+## Output Formats
 
 **Text (default)**:
 ```
-✓ Plan executed successfully
+Plan executed successfully
 
 Created: 3 tasks
 Updated: 1 tasks
 Dependencies: 2
 
 Task ID mapping:
-  Login → #42
-  Database → #43
-  Tests → #44
+  Login -> #42
+  Database -> #43
+  Tests -> #44
 ```
 
 **JSON** (`--format json`):
@@ -192,4 +248,4 @@ Task ID mapping:
 
 ---
 
-💡 **Principle**: Plan is declarative - tell the system "what you want", not "how to do it"
+**Principle**: Plan is declarative - tell the system "what you want", not "how to do it"

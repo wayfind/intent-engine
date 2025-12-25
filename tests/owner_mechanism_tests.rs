@@ -66,6 +66,7 @@ async fn test_plan_creates_ai_owned_tasks() -> Result<()> {
             children: None,
             depends_on: None,
             task_id: None,
+            parent_id: None,
         }],
     };
 

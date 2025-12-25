@@ -2,11 +2,77 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+/// Custom date serialization module - formats to seconds precision
+mod datetime_format {
+    use chrono::{DateTime, Utc};
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    const FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
+
+    pub fn serialize<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = date.format(FORMAT).to_string();
+        serializer.serialize_str(&s)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        // Try parsing with our format first, then fall back to RFC 3339
+        DateTime::parse_from_str(&s, FORMAT)
+            .map(|dt| dt.with_timezone(&Utc))
+            .or_else(|_| DateTime::parse_from_rfc3339(&s).map(|dt| dt.with_timezone(&Utc)))
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+/// Custom date serialization for Option<DateTime<Utc>>
+mod option_datetime_format {
+    use chrono::{DateTime, Utc};
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    const FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
+
+    pub fn serialize<S>(date: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match date {
+            Some(dt) => {
+                let s = dt.format(FORMAT).to_string();
+                serializer.serialize_some(&s)
+            },
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt: Option<String> = Option::deserialize(deserializer)?;
+        match opt {
+            Some(s) => DateTime::parse_from_str(&s, FORMAT)
+                .map(|dt| Some(dt.with_timezone(&Utc)))
+                .or_else(|_| {
+                    DateTime::parse_from_rfc3339(&s).map(|dt| Some(dt.with_timezone(&Utc)))
+                })
+                .map_err(serde::de::Error::custom),
+            None => Ok(None),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Dependency {
     pub id: i64,
     pub blocking_task_id: i64,
     pub blocked_task_id: i64,
+    #[serde(with = "datetime_format")]
     pub created_at: DateTime<Utc>,
 }
 
@@ -17,7 +83,9 @@ pub struct TaskApproval {
     pub id: i64,
     pub task_id: i64,
     pub passphrase: String,
+    #[serde(with = "datetime_format")]
     pub created_at: DateTime<Utc>,
+    #[serde(with = "option_datetime_format")]
     pub expires_at: Option<DateTime<Utc>>,
 }
 
@@ -26,7 +94,10 @@ pub struct TaskApproval {
 pub struct ApprovalResponse {
     pub task_id: i64,
     pub passphrase: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "option_datetime_format"
+    )]
     pub expires_at: Option<DateTime<Utc>>,
 }
 
@@ -42,8 +113,11 @@ pub struct Task {
     pub complexity: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<i32>,
+    #[serde(with = "option_datetime_format")]
     pub first_todo_at: Option<DateTime<Utc>>,
+    #[serde(with = "option_datetime_format")]
     pub first_doing_at: Option<DateTime<Utc>>,
+    #[serde(with = "option_datetime_format")]
     pub first_done_at: Option<DateTime<Utc>>,
     /// Present progressive form for UI display when task is in_progress
     /// Example: "Implementing authentication" vs "Implement authentication"
@@ -77,6 +151,7 @@ pub struct EventsSummary {
 pub struct Event {
     pub id: i64,
     pub task_id: i64,
+    #[serde(with = "datetime_format")]
     pub timestamp: DateTime<Utc>,
     pub log_type: String,
     pub discussion_data: String,
@@ -114,7 +189,9 @@ pub struct StatusBreakdown {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DateRange {
+    #[serde(with = "datetime_format")]
     pub from: DateTime<Utc>,
+    #[serde(with = "datetime_format")]
     pub to: DateTime<Utc>,
 }
 

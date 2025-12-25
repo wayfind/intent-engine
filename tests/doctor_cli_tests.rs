@@ -109,26 +109,6 @@ async fn test_doctor_database_health_check() {
 }
 
 #[tokio::test]
-async fn test_doctor_mcp_connections_check() {
-    let temp_dir = TempDir::new().unwrap();
-
-    // Initialize project
-    let mut cmd = common::ie_command();
-    cmd.arg("init")
-        .arg("--at")
-        .arg(temp_dir.path().to_str().unwrap());
-    cmd.assert().success();
-
-    // Run doctor
-    let mut cmd = common::ie_command();
-    cmd.arg("doctor").current_dir(temp_dir.path());
-
-    // Simplified doctor no longer shows MCP connections
-    // Just verify it runs successfully
-    cmd.assert().success();
-}
-
-#[tokio::test]
 async fn test_doctor_database_path_resolution() {
     let temp_dir = TempDir::new().unwrap();
 
@@ -146,29 +126,6 @@ async fn test_doctor_database_path_resolution() {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Database:"));
-}
-
-#[tokio::test]
-async fn test_doctor_mcp_configuration_check() {
-    let temp_dir = TempDir::new().unwrap();
-
-    // Initialize project
-    let mut cmd = common::ie_command();
-    cmd.arg("init")
-        .arg("--at")
-        .arg(temp_dir.path().to_str().unwrap());
-    cmd.assert().success();
-
-    // Run doctor
-    let mut cmd = common::ie_command();
-    cmd.arg("doctor").current_dir(temp_dir.path());
-
-    let output = cmd.assert().success();
-
-    // Simplified doctor no longer shows MCP configuration
-    // Just verify it runs successfully
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    assert!(stdout.contains("Database:"));
 }
 
 #[tokio::test]

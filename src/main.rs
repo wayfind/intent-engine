@@ -133,8 +133,24 @@ async fn run(cli: &Cli) -> Result<()> {
                         println!("  ID: {}", focused.task.id);
                         println!("  Name: {}", focused.task.name);
                         println!("  Status: {}", focused.task.status);
+                        if let Some(parent_id) = focused.task.parent_id {
+                            println!("  Parent: #{}", parent_id);
+                        }
+                        if let Some(priority) = focused.task.priority {
+                            println!("  Priority: {}", priority);
+                        }
                         if let Some(spec) = &focused.task.spec {
                             println!("  Spec: {}", spec);
+                        }
+                        println!("  Owner: {}", focused.task.owner);
+                        if let Some(ts) = focused.task.first_todo_at {
+                            println!("  First todo: {}", ts.format("%Y-%m-%d %H:%M:%S UTC"));
+                        }
+                        if let Some(ts) = focused.task.first_doing_at {
+                            println!("  First doing: {}", ts.format("%Y-%m-%d %H:%M:%S UTC"));
+                        }
+                        if let Some(ts) = focused.task.first_done_at {
+                            println!("  First done: {}", ts.format("%Y-%m-%d %H:%M:%S UTC"));
                         }
 
                         // Display event summary if present
@@ -148,7 +164,7 @@ async fn run(cli: &Cli) -> Result<()> {
                                     println!(
                                         "      [{}] {}: {}",
                                         event.log_type,
-                                        event.timestamp.format("%Y-%m-%d %H:%M"),
+                                        event.timestamp.format("%Y-%m-%d %H:%M:%S"),
                                         event.discussion_data
                                     );
                                 }
@@ -202,8 +218,13 @@ async fn run(cli: &Cli) -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&event)?);
             } else {
                 println!("✓ Event recorded");
+                println!("  ID: {}", event.id);
                 println!("  Type: {}", event_type_str);
                 println!("  Task: #{}", target_task_id);
+                println!(
+                    "  Time: {}",
+                    event.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+                );
                 println!("  Message: {}", message);
             }
         },
@@ -214,7 +235,8 @@ async fn run(cli: &Cli) -> Result<()> {
             events,
             limit,
             offset,
-        } => handle_search_command(&query, tasks, events, limit, offset).await?,
+            format,
+        } => handle_search_command(&query, tasks, events, limit, offset, &format).await?,
 
         Commands::Init { at, force } => handle_init_command(at, force).await?,
 
@@ -252,32 +274,81 @@ async fn run(cli: &Cli) -> Result<()> {
                     if format == "json" {
                         println!("{}", serde_json::to_string_pretty(&status)?);
                     } else {
-                        // Text format
-                        println!(
-                            "🔦 Task #{}: {}",
-                            status.focused_task.id, status.focused_task.name
-                        );
-                        println!("   Status: {}", status.focused_task.status);
-                        if let Some(spec) = &status.focused_task.spec {
+                        // Text format - focused task
+                        let ft = &status.focused_task;
+                        println!("🔦 Task #{}: {}", ft.id, ft.name);
+                        println!("   Status: {}", ft.status);
+                        if let Some(parent_id) = ft.parent_id {
+                            println!("   Parent: #{}", parent_id);
+                        }
+                        if let Some(priority) = ft.priority {
+                            println!("   Priority: {}", priority);
+                        }
+                        if let Some(spec) = &ft.spec {
                             println!("   Spec: {}", spec);
+                        }
+                        println!("   Owner: {}", ft.owner);
+                        if let Some(ts) = ft.first_todo_at {
+                            println!("   First todo: {}", ts.format("%Y-%m-%d %H:%M:%S UTC"));
+                        }
+                        if let Some(ts) = ft.first_doing_at {
+                            println!("   First doing: {}", ts.format("%Y-%m-%d %H:%M:%S UTC"));
+                        }
+                        if let Some(ts) = ft.first_done_at {
+                            println!("   First done: {}", ts.format("%Y-%m-%d %H:%M:%S UTC"));
                         }
 
                         if !status.ancestors.is_empty() {
-                            println!("\n📍 Ancestors:");
+                            println!("\n📍 Ancestors ({}):", status.ancestors.len());
                             for ancestor in &status.ancestors {
+                                let parent_info = ancestor
+                                    .parent_id
+                                    .map(|p| format!(" (parent: #{})", p))
+                                    .unwrap_or_default();
+                                let priority_info = ancestor
+                                    .priority
+                                    .map(|p| format!(" [P{}]", p))
+                                    .unwrap_or_default();
                                 println!(
-                                    "   #{}: {} [{}]",
-                                    ancestor.id, ancestor.name, ancestor.status
+                                    "   #{}: {} [{}]{}{}",
+                                    ancestor.id,
+                                    ancestor.name,
+                                    ancestor.status,
+                                    parent_info,
+                                    priority_info
                                 );
+                                if let Some(spec) = &ancestor.spec {
+                                    println!("      Spec: {}", spec);
+                                }
+                                println!("      Owner: {}", ancestor.owner);
+                                if let Some(ts) = ancestor.first_todo_at {
+                                    print!("      todo: {} ", ts.format("%m-%d %H:%M:%S"));
+                                }
+                                if let Some(ts) = ancestor.first_doing_at {
+                                    print!("doing: {} ", ts.format("%m-%d %H:%M:%S"));
+                                }
+                                if let Some(ts) = ancestor.first_done_at {
+                                    print!("done: {}", ts.format("%m-%d %H:%M:%S"));
+                                }
+                                if ancestor.first_todo_at.is_some()
+                                    || ancestor.first_doing_at.is_some()
+                                    || ancestor.first_done_at.is_some()
+                                {
+                                    println!();
+                                }
                             }
                         }
 
                         if !status.siblings.is_empty() {
                             println!("\n👥 Siblings ({}):", status.siblings.len());
                             for sibling in &status.siblings {
+                                let parent_info = sibling
+                                    .parent_id
+                                    .map(|p| format!(" (parent: #{})", p))
+                                    .unwrap_or_default();
                                 println!(
-                                    "   #{}: {} [{}]",
-                                    sibling.id, sibling.name, sibling.status
+                                    "   #{}: {} [{}]{}",
+                                    sibling.id, sibling.name, sibling.status, parent_info
                                 );
                             }
                         }
@@ -285,12 +356,14 @@ async fn run(cli: &Cli) -> Result<()> {
                         if !status.descendants.is_empty() {
                             println!("\n📦 Descendants ({}):", status.descendants.len());
                             for desc in &status.descendants {
-                                let indent = if desc.parent_id == Some(id) {
-                                    "   "
-                                } else {
-                                    "      "
-                                };
-                                println!("{}#{}: {} [{}]", indent, desc.id, desc.name, desc.status);
+                                let parent_info = desc
+                                    .parent_id
+                                    .map(|p| format!(" (parent: #{})", p))
+                                    .unwrap_or_default();
+                                println!(
+                                    "   #{}: {} [{}]{}",
+                                    desc.id, desc.name, desc.status, parent_info
+                                );
                             }
                         }
 
@@ -298,8 +371,10 @@ async fn run(cli: &Cli) -> Result<()> {
                             println!("\n📝 Events ({}):", events.len());
                             for event in events.iter().take(10) {
                                 println!(
-                                    "   [{}] {}",
+                                    "   #{} [{}] {}: {}",
+                                    event.id,
                                     event.log_type,
+                                    event.timestamp.format("%Y-%m-%d %H:%M:%S"),
                                     event.discussion_data.chars().take(60).collect::<String>()
                                 );
                             }

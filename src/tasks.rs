@@ -295,6 +295,22 @@ impl<'a> TaskManager<'a> {
         Ok(())
     }
 
+    /// Clear parent_id for a task in a transaction (make it a root task)
+    ///
+    /// Used when explicitly setting parent_id to null in JSON.
+    pub async fn clear_parent_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        task_id: i64,
+    ) -> Result<()> {
+        sqlx::query("UPDATE tasks SET parent_id = NULL WHERE id = ?")
+            .bind(task_id)
+            .execute(&mut **tx)
+            .await?;
+
+        Ok(())
+    }
+
     /// Notify Dashboard about a batch operation
     ///
     /// Call this after committing a transaction that created/updated multiple tasks.
@@ -1710,8 +1726,10 @@ mod tests {
         assert!(started.task.first_doing_at.is_some());
 
         // Verify it's set as current task
+        let session_id = crate::workspace::resolve_session_id(None);
         let current: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
+            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(&session_id)
                 .fetch_optional(ctx.pool())
                 .await
                 .unwrap()
@@ -1769,8 +1787,10 @@ mod tests {
         }
 
         // Verify current task is cleared
+        let session_id = crate::workspace::resolve_session_id(None);
         let current: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
+            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(&session_id)
                 .fetch_optional(ctx.pool())
                 .await
                 .unwrap()
@@ -1906,8 +1926,10 @@ mod tests {
         assert_eq!(response.parent_task.name, "Parent task");
 
         // Verify subtask is now the current task
+        let session_id = crate::workspace::resolve_session_id(None);
         let current: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
+            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(&session_id)
                 .fetch_optional(ctx.pool())
                 .await
                 .unwrap()
@@ -2347,15 +2369,17 @@ mod tests {
             .unwrap();
 
         // Set subtask as current
+        let session_id = crate::workspace::resolve_session_id(None);
         sqlx::query(
             r#"
             INSERT INTO sessions (session_id, current_task_id, created_at, last_active_at)
-            VALUES ('-1', ?, datetime('now'), datetime('now'))
+            VALUES (?, ?, datetime('now'), datetime('now'))
             ON CONFLICT(session_id) DO UPDATE SET
                 current_task_id = excluded.current_task_id,
                 last_active_at = datetime('now')
             "#,
         )
+        .bind(&session_id)
         .bind(subtask.id)
         .execute(ctx.pool())
         .await

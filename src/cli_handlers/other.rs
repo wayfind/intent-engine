@@ -199,6 +199,7 @@ pub async fn handle_search_command(
     include_events: bool,
     limit: Option<i64>,
     offset: Option<i64>,
+    format: &str,
 ) -> Result<()> {
     use crate::search::SearchManager;
     use crate::tasks::TaskManager;
@@ -232,15 +233,64 @@ pub async fn handle_search_command(
             all_tasks.truncate(limit);
         }
 
-        // Print status summary
-        let status_str = statuses.join(", ");
-        eprintln!(
-            "Found {} tasks with status: {}",
-            all_tasks.len(),
-            status_str
-        );
-
-        println!("{}", serde_json::to_string_pretty(&all_tasks)?);
+        if format == "json" {
+            println!("{}", serde_json::to_string_pretty(&all_tasks)?);
+        } else {
+            // Text format: status filter results
+            let status_str = statuses.join(", ");
+            println!(
+                "Tasks with status [{}]: {} found",
+                status_str,
+                all_tasks.len()
+            );
+            println!();
+            for task in &all_tasks {
+                let status_icon = match task.status.as_str() {
+                    "todo" => "○",
+                    "doing" => "●",
+                    "done" => "✓",
+                    _ => "?",
+                };
+                let parent_info = task
+                    .parent_id
+                    .map(|p| format!(" (parent: #{})", p))
+                    .unwrap_or_default();
+                let priority_info = task
+                    .priority
+                    .map(|p| format!(" [P{}]", p))
+                    .unwrap_or_default();
+                println!(
+                    "  {} #{} {}{}{}",
+                    status_icon, task.id, task.name, parent_info, priority_info
+                );
+                if let Some(spec) = &task.spec {
+                    if !spec.is_empty() {
+                        let truncated = if spec.len() > 60 {
+                            format!("{}...", &spec[..57])
+                        } else {
+                            spec.clone()
+                        };
+                        println!("      Spec: {}", truncated);
+                    }
+                }
+                println!("      Owner: {}", task.owner);
+                if let Some(ts) = task.first_todo_at {
+                    print!("      todo: {} ", ts.format("%m-%d %H:%M:%S"));
+                }
+                if let Some(ts) = task.first_doing_at {
+                    print!("doing: {} ", ts.format("%m-%d %H:%M:%S"));
+                }
+                if let Some(ts) = task.first_done_at {
+                    print!("done: {}", ts.format("%m-%d %H:%M:%S"));
+                }
+                if task.first_todo_at.is_some()
+                    || task.first_doing_at.is_some()
+                    || task.first_done_at.is_some()
+                {
+                    println!();
+                }
+            }
+        }
         return Ok(());
     }
 
@@ -251,22 +301,115 @@ pub async fn handle_search_command(
         .search(query, include_tasks, include_events, limit, offset, false)
         .await?;
 
-    // Print pagination info
-    eprintln!(
-        "Found {} tasks, {} events (showing {} results)",
-        results.total_tasks,
-        results.total_events,
-        results.results.len()
-    );
+    if format == "json" {
+        println!("{}", serde_json::to_string_pretty(&results)?);
+    } else {
+        use crate::db::models::SearchResult;
 
-    if results.has_more {
-        eprintln!(
-            "Use --offset {} to see more results",
-            results.offset + results.limit
+        // Text format: FTS5 search results
+        println!(
+            "Search: \"{}\" → {} tasks, {} events (limit: {}, offset: {})",
+            query, results.total_tasks, results.total_events, results.limit, results.offset
         );
-    }
+        println!();
 
-    println!("{}", serde_json::to_string_pretty(&results.results)?);
+        for result in &results.results {
+            match result {
+                SearchResult::Task {
+                    task,
+                    match_field,
+                    match_snippet,
+                } => {
+                    let status_icon = match task.status.as_str() {
+                        "todo" => "○",
+                        "doing" => "●",
+                        "done" => "✓",
+                        _ => "?",
+                    };
+                    let parent_info = task
+                        .parent_id
+                        .map(|p| format!(" (parent: #{})", p))
+                        .unwrap_or_default();
+                    let priority_info = task
+                        .priority
+                        .map(|p| format!(" [P{}]", p))
+                        .unwrap_or_default();
+                    println!(
+                        "  {} #{} {} [match: {}]{}{}",
+                        status_icon, task.id, task.name, match_field, parent_info, priority_info
+                    );
+                    if let Some(spec) = &task.spec {
+                        if !spec.is_empty() {
+                            let truncated = if spec.len() > 60 {
+                                format!("{}...", &spec[..57])
+                            } else {
+                                spec.clone()
+                            };
+                            println!("      Spec: {}", truncated);
+                        }
+                    }
+                    if !match_snippet.is_empty() {
+                        println!("      Snippet: {}", match_snippet);
+                    }
+                    println!("      Owner: {}", task.owner);
+                    if let Some(ts) = task.first_todo_at {
+                        print!("      todo: {} ", ts.format("%m-%d %H:%M:%S"));
+                    }
+                    if let Some(ts) = task.first_doing_at {
+                        print!("doing: {} ", ts.format("%m-%d %H:%M:%S"));
+                    }
+                    if let Some(ts) = task.first_done_at {
+                        print!("done: {}", ts.format("%m-%d %H:%M:%S"));
+                    }
+                    if task.first_todo_at.is_some()
+                        || task.first_doing_at.is_some()
+                        || task.first_done_at.is_some()
+                    {
+                        println!();
+                    }
+                },
+                SearchResult::Event {
+                    event,
+                    task_chain,
+                    match_snippet,
+                } => {
+                    let icon = match event.log_type.as_str() {
+                        "decision" => "💡",
+                        "blocker" => "🚫",
+                        "milestone" => "🎯",
+                        _ => "📝",
+                    };
+                    println!(
+                        "  {} #{} [{}] (task #{}) {}",
+                        icon,
+                        event.id,
+                        event.log_type,
+                        event.task_id,
+                        event.timestamp.format("%Y-%m-%d %H:%M:%S")
+                    );
+                    println!("      Message: {}", event.discussion_data);
+                    if !match_snippet.is_empty() {
+                        println!("      Snippet: {}", match_snippet);
+                    }
+                    if !task_chain.is_empty() {
+                        let chain_str: Vec<String> = task_chain
+                            .iter()
+                            .map(|t| format!("#{} {}", t.id, t.name))
+                            .collect();
+                        println!("      Task chain: {}", chain_str.join(" → "));
+                    }
+                },
+            }
+        }
+
+        if results.has_more {
+            println!();
+            println!(
+                "  ... more results available (use --offset {})",
+                results.offset + results.limit
+            );
+        }
+    }
     Ok(())
 }
 

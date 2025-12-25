@@ -517,8 +517,18 @@ mod tests {
         // Test explicit param takes priority
         assert_eq!(resolve_session_id(Some("explicit")), "explicit");
 
-        // Test empty explicit falls through
-        assert_eq!(resolve_session_id(Some("")), DEFAULT_SESSION_ID);
+        // Test empty explicit falls through to env var or default
+        let empty_result = resolve_session_id(Some(""));
+        // When IE_SESSION_ID is set, it uses that; otherwise uses DEFAULT_SESSION_ID
+        if let Ok(env_session) = std::env::var("IE_SESSION_ID") {
+            if !env_session.is_empty() {
+                assert_eq!(empty_result, env_session);
+            } else {
+                assert_eq!(empty_result, DEFAULT_SESSION_ID);
+            }
+        } else {
+            assert_eq!(empty_result, DEFAULT_SESSION_ID);
+        }
 
         // Test None falls through to default (env var may or may not be set)
         let result = resolve_session_id(None);

@@ -1,28 +1,30 @@
 use clap::{Parser, Subcommand};
 
 const LONG_ABOUT: &str = r#"
-Intent-Engine - AI 长期任务记忆系统
+Intent-Engine - AI Long-Term Task Memory System
 
-比 Claude Code 内置的 TodoWrite 多了什么？
-  ✅ 跨 session 持久化（永远不会丢失）
-  ✅ 层级任务树（父子关系、依赖）
-  ✅ 决策记录（为什么这么做）
-  ✅ Web Dashboard（可视化管理）
+What does it offer beyond Claude Code's built-in TodoWrite?
+  ✅ Cross-session persistence (never lost)
+  ✅ Hierarchical task trees (parent-child, dependencies)
+  ✅ Decision logs (why you made choices)
+  ✅ Web Dashboard (visual management)
 
-何时用 ie 而不是 TodoWrite？
-  • 会丢了可惜 → 用 ie
-  • 用完即弃 → 用 TodoWrite
+When to use ie instead of TodoWrite?
+  • Would be a shame to lose it → use ie
+  • Use once and discard → use TodoWrite
 
-AI 工作流：
-  ie status   ← Session 开始时运行，恢复上下文
-  ie plan     ← 声明式任务管理（创建/更新/完成）
-  ie log      ← 记录决策、阻塞、里程碑
-  ie search   ← 搜索任务和历史事件
+AI Workflow:
+  ie status   ← Run at session start to restore context
+  ie plan     ← Declarative task management (create/update/complete)
+  ie log      ← Record decisions, blockers, milestones
+  ie search   ← Search tasks and event history
 "#;
 
 #[derive(Parser, Clone)]
 #[command(name = "intent-engine")]
-#[command(about = "AI 长期任务记忆系统 - 跨 session 持久化、层级任务、决策记录")]
+#[command(
+    about = "AI Long-Term Task Memory - Cross-session persistence, hierarchical tasks, decision logs"
+)]
 #[command(long_about = LONG_ABOUT)]
 #[command(version)]
 pub struct Cli {
@@ -112,6 +114,10 @@ pub enum Commands {
         /// Result offset for pagination (default: 0)
         #[arg(long)]
         offset: Option<i64>,
+
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Initialize a new Intent-Engine project
@@ -159,7 +165,7 @@ pub enum Commands {
         with_events: bool,
 
         /// Output format (text or json)
-        #[arg(long, default_value = "json")]
+        #[arg(long, default_value = "text")]
         format: String,
     },
 }

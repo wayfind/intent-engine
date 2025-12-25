@@ -33,7 +33,10 @@ async fn get_current_task_id(pool: &SqlitePool) -> Option<i64> {
         current_task_id: Option<i64>,
     }
 
-    sqlx::query_as::<_, SessionRow>("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
+    // Use the same session_id resolution as the application
+    let session_id = intent_engine::workspace::resolve_session_id(None);
+    sqlx::query_as::<_, SessionRow>("SELECT current_task_id FROM sessions WHERE session_id = ?")
+        .bind(&session_id)
         .fetch_optional(pool)
         .await
         .ok()

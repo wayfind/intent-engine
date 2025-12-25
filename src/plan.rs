@@ -49,6 +49,38 @@ pub struct TaskTree {
     /// Used for UI display when task is in_progress
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_form: Option<String>,
+
+    /// Explicit parent task ID
+    /// - None: use default behavior (auto-parent to focused task for new root tasks)
+    /// - Some(None): explicitly create as root task (no parent)
+    /// - Some(Some(id)): explicitly set parent to task with given ID
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_parent_id"
+    )]
+    pub parent_id: Option<Option<i64>>,
+}
+
+/// Custom deserializer for parent_id field
+/// Handles the three-state logic:
+/// - Field absent → None (handled by #[serde(default)])
+/// - Field is null → Some(None) (explicit root task)
+/// - Field is number → Some(Some(id)) (explicit parent)
+fn deserialize_parent_id<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<i64>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // When this function is called, the field EXISTS in the JSON.
+    // (Field-absent case is handled by #[serde(default)] returning None)
+    //
+    // Now we deserialize the value:
+    // - null → inner Option is None → we return Some(None)
+    // - number → inner Option is Some(n) → we return Some(Some(n))
+    let inner: Option<i64> = Option::deserialize(deserializer)?;
+    Ok(Some(inner))
 }
 
 /// Task status for workflow management
@@ -220,11 +252,17 @@ pub struct FlatTask {
     pub name: String,
     pub spec: Option<String>,
     pub priority: Option<PriorityValue>,
+    /// Parent from children nesting (takes precedence over explicit_parent_id)
     pub parent_name: Option<String>,
     pub depends_on: Vec<String>,
     pub task_id: Option<i64>,
     pub status: Option<TaskStatus>,
     pub active_form: Option<String>,
+    /// Explicit parent_id from JSON
+    /// - None: use default behavior (auto-parent to focused task for new root tasks)
+    /// - Some(None): explicitly create as root task (no parent)
+    /// - Some(Some(id)): explicitly set parent to task with given ID
+    pub explicit_parent_id: Option<Option<i64>>,
 }
 
 pub fn flatten_task_tree(tasks: &[TaskTree]) -> Vec<FlatTask> {
@@ -244,6 +282,7 @@ fn flatten_task_tree_recursive(tasks: &[TaskTree], parent_name: Option<String>) 
             task_id: task.task_id,
             status: task.status.clone(),
             active_form: task.active_form.clone(),
+            explicit_parent_id: task.parent_id,
         };
 
         flat.push(flat_task);
@@ -469,13 +508,47 @@ impl<'a> PlanExecutor<'a> {
             }
         }
 
-        // 11b. Auto-parent newly created root tasks to default_parent_id (focused task)
+        // 11b. Handle explicit parent_id (takes precedence over auto-parenting)
+        // Priority: children nesting > explicit parent_id > auto-parent
+        for task in &flat_tasks {
+            // Skip if parent was set via children nesting
+            if task.parent_name.is_some() {
+                continue;
+            }
+
+            // Handle explicit parent_id
+            if let Some(explicit_parent) = &task.explicit_parent_id {
+                let task_id = task_id_map.get(&task.name).ok_or_else(|| {
+                    IntentError::InvalidInput(format!("Task not found: {}", task.name))
+                })?;
+
+                match explicit_parent {
+                    None => {
+                        // parent_id: null → explicitly set as root task (clear parent)
+                        task_mgr.clear_parent_in_tx(&mut tx, *task_id).await?;
+                    },
+                    Some(parent_id) => {
+                        // parent_id: N → set parent to task N (validate exists)
+                        // Note: parent task may be in this batch or already in DB
+                        task_mgr
+                            .set_parent_in_tx(&mut tx, *task_id, *parent_id)
+                            .await?;
+                    },
+                }
+            }
+        }
+
+        // 11c. Auto-parent newly created root tasks to default_parent_id (focused task)
         if let Some(default_parent) = self.default_parent_id {
             for task in &flat_tasks {
                 // Only auto-parent if:
                 // 1. Task was newly created (not updated)
-                // 2. Task has no explicit parent in the plan
-                if newly_created_names.contains(&task.name) && task.parent_name.is_none() {
+                // 2. Task has no explicit parent in the plan (children nesting)
+                // 3. Task has no explicit parent_id in JSON
+                if newly_created_names.contains(&task.name)
+                    && task.parent_name.is_none()
+                    && task.explicit_parent_id.is_none()
+                {
                     if let Some(&task_id) = task_id_map.get(&task.name) {
                         task_mgr
                             .set_parent_in_tx(&mut tx, task_id, default_parent)
@@ -857,6 +930,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             }],
         };
 
@@ -911,6 +985,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Child 2".to_string(),
@@ -921,12 +996,14 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
             ]),
             depends_on: None,
             task_id: None,
             status: None,
             active_form: None,
+            parent_id: None,
         };
 
         let json = serde_json::to_string_pretty(&tree).unwrap();
@@ -959,6 +1036,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             },
             TaskTree {
                 name: "Task 2".to_string(),
@@ -969,6 +1047,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             },
         ];
 
@@ -992,6 +1071,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Child 2".to_string(),
@@ -1006,17 +1086,20 @@ mod tests {
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     }]),
                     depends_on: None,
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
             ]),
             depends_on: None,
             task_id: None,
             status: None,
             active_form: None,
+            parent_id: None,
         }];
 
         let names = extract_all_names(&tasks);
@@ -1034,6 +1117,7 @@ mod tests {
             task_id: None,
             status: None,
             active_form: None,
+            parent_id: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -1061,6 +1145,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Child 2".to_string(),
@@ -1071,12 +1156,14 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
             ]),
             depends_on: None,
             task_id: None,
             status: None,
             active_form: None,
+            parent_id: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -1106,6 +1193,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                explicit_parent_id: None,
             },
             FlatTask {
                 name: "Task 2".to_string(),
@@ -1116,6 +1204,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                explicit_parent_id: None,
             },
         ];
 
@@ -1139,6 +1228,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                explicit_parent_id: None,
             },
             FlatTask {
                 name: "Task 2".to_string(),
@@ -1149,6 +1239,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                explicit_parent_id: None,
             },
         ];
 
@@ -1181,6 +1272,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                explicit_parent_id: None,
             },
             FlatTask {
                 name: "New Task".to_string(),
@@ -1191,6 +1283,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                explicit_parent_id: None,
             },
         ];
 
@@ -1218,6 +1311,7 @@ mod tests {
             task_id: Some(99), // Explicit task_id
             status: None,
             active_form: None,
+            explicit_parent_id: None,
         }];
 
         let existing = HashMap::new(); // Not in existing
@@ -1244,6 +1338,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             },
             TaskTree {
                 name: "Task 2".to_string(),
@@ -1254,6 +1349,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             },
         ];
 
@@ -1273,6 +1369,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             },
             TaskTree {
                 name: "Unique".to_string(),
@@ -1283,6 +1380,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             },
             TaskTree {
                 name: "Duplicate".to_string(),
@@ -1293,6 +1391,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             },
         ];
 
@@ -1316,11 +1415,13 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             }]),
             depends_on: None,
             task_id: None,
             status: None,
             active_form: None,
+            parent_id: None,
         }];
 
         let duplicates = find_duplicate_names(&tasks);
@@ -1359,21 +1460,25 @@ mod tests {
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     }]),
                     depends_on: None,
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 }]),
                 depends_on: None,
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             }]),
             depends_on: None,
             task_id: None,
             status: None,
             active_form: None,
+            parent_id: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -1405,6 +1510,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             })
             .collect();
 
@@ -1417,6 +1523,7 @@ mod tests {
             task_id: None,
             status: None,
             active_form: None,
+            parent_id: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -1446,6 +1553,7 @@ mod tests {
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     },
                     TaskTree {
                         name: "Task 1.2".to_string(),
@@ -1460,17 +1568,20 @@ mod tests {
                             task_id: None,
                             status: None,
                             active_form: None,
+                            parent_id: None,
                         }]),
                         depends_on: None,
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     },
                 ]),
                 depends_on: None,
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             },
             TaskTree {
                 name: "Task 2".to_string(),
@@ -1481,6 +1592,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             },
         ];
 
@@ -1527,6 +1639,7 @@ mod tests {
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     },
                     TaskTree {
                         name: "Subtask B".to_string(),
@@ -1537,12 +1650,14 @@ mod tests {
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     },
                 ]),
                 depends_on: None,
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             }],
         };
 
@@ -1627,6 +1742,7 @@ mod tests {
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     },
                     TaskTree {
                         name: "Child 2".to_string(),
@@ -1637,12 +1753,14 @@ mod tests {
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     },
                 ]),
                 depends_on: None,
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             }],
         };
 
@@ -1702,6 +1820,7 @@ mod tests {
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     },
                     TaskTree {
                         name: "Child 2".to_string(),
@@ -1712,12 +1831,14 @@ mod tests {
                         task_id: None,
                         status: None,
                         active_form: None,
+                        parent_id: None,
                     },
                 ]),
                 depends_on: None,
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             }],
         };
 
@@ -1764,6 +1885,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Layer 1".to_string(),
@@ -1774,6 +1896,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Layer 2".to_string(),
@@ -1784,6 +1907,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Integration".to_string(),
@@ -1794,6 +1918,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
             ],
         };
@@ -1868,6 +1993,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             }],
         };
 
@@ -1902,6 +2028,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Task B".to_string(),
@@ -1912,6 +2039,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
             ],
         };
@@ -1952,6 +2080,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Task B".to_string(),
@@ -1962,6 +2091,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Task C".to_string(),
@@ -1972,6 +2102,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
             ],
         };
@@ -2017,6 +2148,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Task B".to_string(),
@@ -2027,6 +2159,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Task C".to_string(),
@@ -2037,6 +2170,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Task D".to_string(),
@@ -2047,6 +2181,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
             ],
         };
@@ -2079,6 +2214,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             }],
         };
 
@@ -2129,6 +2265,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "Task B".to_string(),
@@ -2139,6 +2276,7 @@ mod tests {
                     task_id: None,
                     status: None,
                     active_form: None,
+                    parent_id: None,
                 },
             ],
         };
@@ -2178,6 +2316,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             });
         }
 
@@ -2220,6 +2359,7 @@ mod tests {
                 task_id: None,
                 status: None,
                 active_form: None,
+                parent_id: None,
             }
         }
 
@@ -2256,6 +2396,7 @@ mod tests {
             task_id: Some(42),
             status: None,
             active_form: None,
+            parent_id: None,
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -2292,6 +2433,7 @@ mod dataflow_tests {
                 task_id: None,
                 status: Some(TaskStatus::Doing),
                 active_form: Some("Testing complete dataflow now".to_string()),
+                parent_id: None,
             }],
         };
 
@@ -2328,5 +2470,310 @@ mod dataflow_tests {
         println!("✅ 完整数据流验证成功！");
         println!("   Plan工具写入 -> Task读取 -> JSON序列化 -> MCP输出");
         println!("   active_form: {:?}", task.active_form);
+    }
+}
+
+#[cfg(test)]
+mod parent_id_tests {
+    use super::*;
+    use crate::test_utils::test_helpers::TestContext;
+
+    #[test]
+    fn test_parent_id_json_deserialization_absent() {
+        // Field absent → None (use default behavior)
+        let json = r#"{"name": "Test Task"}"#;
+        let task: TaskTree = serde_json::from_str(json).unwrap();
+        assert_eq!(task.parent_id, None);
+    }
+
+    #[test]
+    fn test_parent_id_json_deserialization_null() {
+        // Field is null → Some(None) (explicit root task)
+        let json = r#"{"name": "Test Task", "parent_id": null}"#;
+        let task: TaskTree = serde_json::from_str(json).unwrap();
+        assert_eq!(task.parent_id, Some(None));
+    }
+
+    #[test]
+    fn test_parent_id_json_deserialization_number() {
+        // Field is number → Some(Some(id)) (explicit parent)
+        let json = r#"{"name": "Test Task", "parent_id": 42}"#;
+        let task: TaskTree = serde_json::from_str(json).unwrap();
+        assert_eq!(task.parent_id, Some(Some(42)));
+    }
+
+    #[test]
+    fn test_flatten_propagates_parent_id() {
+        let tasks = vec![TaskTree {
+            name: "Task with explicit parent".to_string(),
+            spec: None,
+            priority: None,
+            children: None,
+            depends_on: None,
+            task_id: None,
+            status: None,
+            active_form: None,
+            parent_id: Some(Some(99)),
+        }];
+
+        let flat = flatten_task_tree(&tasks);
+        assert_eq!(flat.len(), 1);
+        assert_eq!(flat[0].explicit_parent_id, Some(Some(99)));
+    }
+
+    #[test]
+    fn test_flatten_propagates_null_parent_id() {
+        let tasks = vec![TaskTree {
+            name: "Explicit root task".to_string(),
+            spec: None,
+            priority: None,
+            children: None,
+            depends_on: None,
+            task_id: None,
+            status: None,
+            active_form: None,
+            parent_id: Some(None), // Explicit null
+        }];
+
+        let flat = flatten_task_tree(&tasks);
+        assert_eq!(flat.len(), 1);
+        assert_eq!(flat[0].explicit_parent_id, Some(None));
+    }
+
+    #[tokio::test]
+    async fn test_explicit_parent_id_sets_parent() {
+        let ctx = TestContext::new().await;
+
+        // First create a parent task
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Parent Task".to_string(),
+                spec: Some("This is the parent".to_string()),
+                priority: None,
+                children: None,
+                depends_on: None,
+                task_id: None,
+                status: Some(TaskStatus::Doing),
+                active_form: None,
+                parent_id: None,
+            }],
+        };
+
+        let executor = PlanExecutor::new(&ctx.pool);
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let parent_id = *result1.task_id_map.get("Parent Task").unwrap();
+
+        // Now create a child task using explicit parent_id
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Child Task".to_string(),
+                spec: Some("This uses explicit parent_id".to_string()),
+                priority: None,
+                children: None,
+                depends_on: None,
+                task_id: None,
+                status: None,
+                active_form: None,
+                parent_id: Some(Some(parent_id)),
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+        assert!(result2.success);
+        let child_id = *result2.task_id_map.get("Child Task").unwrap();
+
+        // Verify parent-child relationship
+        let row: (Option<i64>,) = sqlx::query_as("SELECT parent_id FROM tasks WHERE id = ?")
+            .bind(child_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(row.0, Some(parent_id));
+    }
+
+    #[tokio::test]
+    async fn test_explicit_null_parent_id_creates_root() {
+        let ctx = TestContext::new().await;
+
+        // Create a task with explicit null parent_id (should be root)
+        // Even when default_parent_id is set
+        let request = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Explicit Root Task".to_string(),
+                spec: Some("Should be root despite default parent".to_string()),
+                priority: None,
+                children: None,
+                depends_on: None,
+                task_id: None,
+                status: Some(TaskStatus::Doing),
+                active_form: None,
+                parent_id: Some(None), // Explicit null = root
+            }],
+        };
+
+        // Create executor with a default parent
+        // First create a "default parent" task
+        let parent_request = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Default Parent".to_string(),
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                task_id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+            }],
+        };
+        let executor = PlanExecutor::new(&ctx.pool);
+        let parent_result = executor.execute(&parent_request).await.unwrap();
+        let default_parent_id = *parent_result.task_id_map.get("Default Parent").unwrap();
+
+        // Now execute with default parent set, but our task has explicit null parent_id
+        let executor_with_default =
+            PlanExecutor::new(&ctx.pool).with_default_parent(default_parent_id);
+        let result = executor_with_default.execute(&request).await.unwrap();
+        assert!(result.success);
+        let task_id = *result.task_id_map.get("Explicit Root Task").unwrap();
+
+        // Verify it's a root task (parent_id is NULL)
+        let row: (Option<i64>,) = sqlx::query_as("SELECT parent_id FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            row.0, None,
+            "Task with explicit null parent_id should be root"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_children_nesting_takes_precedence_over_parent_id() {
+        let ctx = TestContext::new().await;
+
+        // Create a task hierarchy where children nesting should override parent_id
+        let request = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Parent via Nesting".to_string(),
+                spec: None,
+                priority: None,
+                children: Some(vec![TaskTree {
+                    name: "Child via Nesting".to_string(),
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    task_id: None,
+                    status: None,
+                    active_form: None,
+                    parent_id: Some(Some(999)), // This should be ignored!
+                }]),
+                depends_on: None,
+                task_id: None,
+                status: Some(TaskStatus::Doing),
+                active_form: None,
+                parent_id: None,
+            }],
+        };
+
+        let executor = PlanExecutor::new(&ctx.pool);
+        let result = executor.execute(&request).await.unwrap();
+        assert!(result.success);
+
+        let parent_id = *result.task_id_map.get("Parent via Nesting").unwrap();
+        let child_id = *result.task_id_map.get("Child via Nesting").unwrap();
+
+        // Verify child's parent is "Parent via Nesting", not 999
+        let row: (Option<i64>,) = sqlx::query_as("SELECT parent_id FROM tasks WHERE id = ?")
+            .bind(child_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            row.0,
+            Some(parent_id),
+            "Children nesting should take precedence"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_modify_existing_task_parent() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Create two independent tasks
+        let request1 = PlanRequest {
+            tasks: vec![
+                TaskTree {
+                    name: "Task A".to_string(),
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    task_id: None,
+                    status: Some(TaskStatus::Doing),
+                    active_form: None,
+                    parent_id: None,
+                },
+                TaskTree {
+                    name: "Task B".to_string(),
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    task_id: None,
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                },
+            ],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let task_a_id = *result1.task_id_map.get("Task A").unwrap();
+        let task_b_id = *result1.task_id_map.get("Task B").unwrap();
+
+        // Verify both are root tasks initially
+        let row: (Option<i64>,) = sqlx::query_as("SELECT parent_id FROM tasks WHERE id = ?")
+            .bind(task_b_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(row.0, None, "Task B should initially be root");
+
+        // Now update Task B to be a child of Task A using parent_id
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Task B".to_string(), // Same name = update
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                task_id: None,
+                status: None,
+                active_form: None,
+                parent_id: Some(Some(task_a_id)), // Set parent to Task A
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+        assert!(result2.success);
+        assert_eq!(result2.updated_count, 1, "Should update existing task");
+
+        // Verify Task B is now a child of Task A
+        let row: (Option<i64>,) = sqlx::query_as("SELECT parent_id FROM tasks WHERE id = ?")
+            .bind(task_b_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            row.0,
+            Some(task_a_id),
+            "Task B should now be child of Task A"
+        );
     }
 }

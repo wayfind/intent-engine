@@ -31,6 +31,7 @@ async fn manual_test_plan_with_status_and_active_form() {
                     task_id: None,
                     status: Some(TaskStatus::Todo),
                     active_form: Some("设计JWT Token结构中".to_string()),
+                    parent_id: None,
                 },
                 TaskTree {
                     name: "【测试】实现登录API".to_string(),
@@ -41,12 +42,14 @@ async fn manual_test_plan_with_status_and_active_form() {
                     task_id: None,
                     status: Some(TaskStatus::Todo),
                     active_form: Some("实现登录API中".to_string()),
+                    parent_id: None,
                 },
             ]),
             depends_on: None,
             task_id: None,
             status: Some(TaskStatus::Todo), // 使用Todo避免约束冲突
             active_form: Some("正在实现用户认证功能".to_string()),
+            parent_id: None,
         }],
     };
 
@@ -104,6 +107,7 @@ async fn manual_test_plan_with_status_and_active_form() {
             task_id: None,
             status: Some(TaskStatus::Doing),
             active_form: Some("尝试违反约束".to_string()),
+            parent_id: None,
         }],
     };
 
