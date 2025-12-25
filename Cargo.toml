@@ -81,7 +81,7 @@ rand = "0.9"
 serial_test = "3.0"
 filetime = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-tokio-tungstenite = "0.24"  # Matches axum's version for WebSocket tests
+tokio-tungstenite = "0.28"  # Matches axum's version for WebSocket tests
 
 [features]
 # Feature flag to enable tests for removed CLI commands (v0.10.0 removed: task, event, current, etc.)
