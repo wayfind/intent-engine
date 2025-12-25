@@ -44,9 +44,9 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Initialize project for MCP tests
+      - name: Initialize project for tests
         run: |
-          # MCP tests use current_project_dir() which needs .intent-engine initialized
+          # Initialize project for tests
           cargo run --bin ie -- doctor
 
       - name: Generate coverage
@@ -58,7 +58,6 @@ jobs:
           cargo llvm-cov --test cli_special_chars_tests --all-features --no-clean --lcov --output-path lcov.info
           cargo llvm-cov --test integration_tests --all-features --no-clean --lcov --output-path lcov.info
           cargo llvm-cov --test interface_spec_test --all-features --no-clean --lcov --output-path lcov.info
-          cargo llvm-cov --test mcp_integration_test --all-features --no-clean --lcov --output-path lcov.info -- --test-threads=1
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
