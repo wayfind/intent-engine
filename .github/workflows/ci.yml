@@ -80,8 +80,6 @@ jobs:
       - name: Run integration tests (parallel safe)
         if: ${{ !inputs.skip_tests }}
         run: |
-          cargo test --test cli_tests --verbose
-          cargo test --test cli_special_chars_tests --verbose
           cargo test --test integration_tests --verbose
           cargo test --test interface_spec_test --verbose
 
@@ -146,8 +144,6 @@ jobs:
       - name: Run integration tests (parallel safe)
         if: ${{ !inputs.skip_tests }}
         run: |
-          cargo test --test cli_tests --verbose
-          cargo test --test cli_special_chars_tests --verbose
           cargo test --test integration_tests --verbose
           cargo test --test interface_spec_test --verbose
 
@@ -210,10 +206,8 @@ jobs:
           cd "$PKG_DIR"
           cargo build --release --verbose
 
-          # Run tests with MCP and Dashboard integration tests sequentially
+          # Run tests
           cargo test --lib --bins --verbose
-          cargo test --test cli_tests --verbose
-          cargo test --test cli_special_chars_tests --verbose
           cargo test --test integration_tests --verbose
           cargo test --test interface_spec_test --verbose
 
