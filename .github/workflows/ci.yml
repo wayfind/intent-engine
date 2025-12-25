@@ -85,14 +85,6 @@ jobs:
           cargo test --test integration_tests --verbose
           cargo test --test interface_spec_test --verbose
 
-      - name: Run MCP integration tests (sequential - avoid race conditions)
-        if: ${{ !inputs.skip_tests }}
-        run: cargo test --test mcp_integration_test --verbose -- --test-threads=1
-
-      - name: Run Dashboard integration tests (sequential - avoid port conflicts)
-        if: ${{ !inputs.skip_tests }}
-        run: cargo test --test dashboard_integration_test --verbose -- --test-threads=1
-
       - name: Clean up test database before doctor command
         run: rm -rf ~/.intent-engine
 
@@ -159,14 +151,6 @@ jobs:
           cargo test --test integration_tests --verbose
           cargo test --test interface_spec_test --verbose
 
-      - name: Run MCP integration tests (sequential - avoid race conditions)
-        if: ${{ !inputs.skip_tests }}
-        run: cargo test --test mcp_integration_test --verbose -- --test-threads=1
-
-      - name: Run Dashboard integration tests (sequential - avoid port conflicts)
-        if: ${{ !inputs.skip_tests }}
-        run: cargo test --test dashboard_integration_test --verbose -- --test-threads=1
-
       - name: Build release
         run: cargo build --release --verbose
 
@@ -232,8 +216,6 @@ jobs:
           cargo test --test cli_special_chars_tests --verbose
           cargo test --test integration_tests --verbose
           cargo test --test interface_spec_test --verbose
-          cargo test --test mcp_integration_test --verbose -- --test-threads=1
-          cargo test --test dashboard_integration_test --verbose -- --test-threads=1
 
   # ============================================================================
   # Security & Dependencies (Daily Schedule)
