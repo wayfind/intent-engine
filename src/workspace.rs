@@ -48,12 +48,13 @@ impl<'a> WorkspaceManager<'a> {
         let session_id = resolve_session_id(session_id);
 
         // Try to get from sessions table first
-        let current_task_id: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&session_id)
-                .fetch_optional(self.pool)
-                .await?
-                .flatten();
+        let current_task_id: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(self.pool)
+        .await?
+        .flatten();
 
         // Update last_active_at if session exists
         if current_task_id.is_some() {
@@ -97,10 +98,11 @@ impl<'a> WorkspaceManager<'a> {
         let session_id = resolve_session_id(session_id);
 
         // Check if task exists
-        let task_exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
-            .bind(task_id)
-            .fetch_one(self.pool)
-            .await?;
+        let task_exists: bool =
+            sqlx::query_scalar::<_, bool>(crate::sql_constants::CHECK_TASK_EXISTS)
+                .bind(task_id)
+                .fetch_one(self.pool)
+                .await?;
 
         if !task_exists {
             return Err(IntentError::TaskNotFound(task_id));

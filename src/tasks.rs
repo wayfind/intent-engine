@@ -889,10 +889,11 @@ impl<'a> TaskManager<'a> {
     #[tracing::instrument(skip(self))]
     pub async fn start_task(&self, id: i64, with_events: bool) -> Result<TaskWithEvents> {
         // Check if task exists first
-        let task_exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
-            .bind(id)
-            .fetch_one(self.pool)
-            .await?;
+        let task_exists: bool =
+            sqlx::query_scalar::<_, bool>(crate::sql_constants::CHECK_TASK_EXISTS)
+                .bind(id)
+                .fetch_one(self.pool)
+                .await?;
 
         if !task_exists {
             return Err(IntentError::TaskNotFound(id));
@@ -971,12 +972,13 @@ impl<'a> TaskManager<'a> {
         let mut tx = self.pool.begin().await?;
 
         // Get the current task ID from sessions table
-        let current_task_id: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&session_id)
-                .fetch_optional(&mut *tx)
-                .await?
-                .flatten();
+        let current_task_id: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .flatten();
 
         let id = current_task_id.ok_or(IntentError::InvalidInput(
             "No current task is set. Use 'current --set <ID>' to set a task first.".to_string(),
@@ -1000,7 +1002,7 @@ impl<'a> TaskManager<'a> {
         }
 
         // Check if all children are done
-        let uncompleted_children: i64 = sqlx::query_scalar(
+        let uncompleted_children: i64 = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done'",
         )
         .bind(id)
@@ -1035,7 +1037,7 @@ impl<'a> TaskManager<'a> {
         // Determine next step suggestion based on context
         let next_step_suggestion = if let Some(parent_task_id) = parent_id {
             // Task has a parent - check sibling status
-            let remaining_siblings: i64 = sqlx::query_scalar(
+            let remaining_siblings: i64 = sqlx::query_scalar::<_, i64>(
                 "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ?",
             )
             .bind(parent_task_id)
@@ -1046,7 +1048,7 @@ impl<'a> TaskManager<'a> {
             if remaining_siblings == 0 {
                 // All siblings are done - parent is ready
                 let parent_name: String =
-                    sqlx::query_scalar(crate::sql_constants::SELECT_TASK_NAME)
+                    sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
                         .bind(parent_task_id)
                         .fetch_one(&mut *tx)
                         .await?;
@@ -1062,7 +1064,7 @@ impl<'a> TaskManager<'a> {
             } else {
                 // Siblings remain
                 let parent_name: String =
-                    sqlx::query_scalar(crate::sql_constants::SELECT_TASK_NAME)
+                    sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
                         .bind(parent_task_id)
                         .fetch_one(&mut *tx)
                         .await?;
@@ -1079,10 +1081,11 @@ impl<'a> TaskManager<'a> {
             }
         } else {
             // No parent - check if this was a top-level task with children or standalone
-            let child_count: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_CHILDREN_TOTAL)
-                .bind(id)
-                .fetch_one(&mut *tx)
-                .await?;
+            let child_count: i64 =
+                sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_CHILDREN_TOTAL)
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await?;
 
             if child_count > 0 {
                 // Top-level task with children completed
@@ -1096,7 +1099,7 @@ impl<'a> TaskManager<'a> {
                 }
             } else {
                 // Check if workspace is clear
-                let remaining_tasks: i64 = sqlx::query_scalar(
+                let remaining_tasks: i64 = sqlx::query_scalar::<_, i64>(
                     "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ?",
                 )
                 .bind(id)
@@ -1138,7 +1141,7 @@ impl<'a> TaskManager<'a> {
 
     /// Check if a task exists
     async fn check_task_exists(&self, id: i64) -> Result<()> {
-        let exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
+        let exists: bool = sqlx::query_scalar::<_, bool>(crate::sql_constants::CHECK_TASK_EXISTS)
             .bind(id)
             .fetch_one(self.pool)
             .await?;
@@ -1163,10 +1166,11 @@ impl<'a> TaskManager<'a> {
             }
 
             let parent: Option<i64> =
-                sqlx::query_scalar(crate::sql_constants::SELECT_TASK_PARENT_ID)
+                sqlx::query_scalar::<_, Option<i64>>(crate::sql_constants::SELECT_TASK_PARENT_ID)
                     .bind(current_id)
                     .fetch_optional(self.pool)
-                    .await?;
+                    .await?
+                    .flatten();
 
             match parent {
                 Some(pid) => current_id = pid,
@@ -1186,22 +1190,24 @@ impl<'a> TaskManager<'a> {
     ) -> Result<SpawnSubtaskResponse> {
         // Get current task from sessions table for this session
         let session_id = crate::workspace::resolve_session_id(None);
-        let current_task_id: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&session_id)
-                .fetch_optional(self.pool)
-                .await?
-                .flatten();
+        let current_task_id: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(self.pool)
+        .await?
+        .flatten();
 
         let parent_id = current_task_id.ok_or(IntentError::InvalidInput(
             "No current task to create subtask under".to_string(),
         ))?;
 
         // Get parent task info
-        let parent_name: String = sqlx::query_scalar(crate::sql_constants::SELECT_TASK_NAME)
-            .bind(parent_id)
-            .fetch_one(self.pool)
-            .await?;
+        let parent_name: String =
+            sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
+                .bind(parent_id)
+                .fetch_one(self.pool)
+                .await?;
 
         // Create the subtask with AI ownership (CLI operation)
         let subtask = self
@@ -1246,9 +1252,10 @@ impl<'a> TaskManager<'a> {
         let mut tx = self.pool.begin().await?;
 
         // Get current doing count
-        let doing_count: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_TASKS_DOING)
-            .fetch_one(&mut *tx)
-            .await?;
+        let doing_count: i64 =
+            sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_TASKS_DOING)
+                .fetch_one(&mut *tx)
+                .await?;
 
         // Calculate available capacity
         let available = capacity_limit.saturating_sub(doing_count as usize);
@@ -1332,12 +1339,13 @@ impl<'a> TaskManager<'a> {
     pub async fn pick_next(&self) -> Result<PickNextResponse> {
         // Step 1: Check if there's a current focused task for this session
         let session_id = crate::workspace::resolve_session_id(None);
-        let current_task_id: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&session_id)
-                .fetch_optional(self.pool)
-                .await?
-                .flatten();
+        let current_task_id: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(self.pool)
+        .await?
+        .flatten();
 
         if let Some(current_id) = current_task_id {
             // Step 1a: First priority - Get **doing** subtasks of current focused task
@@ -1466,19 +1474,21 @@ impl<'a> TaskManager<'a> {
 
         // Step 3: No recommendation - determine why
         // Check if there are any tasks at all
-        let total_tasks: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_TASKS_TOTAL)
-            .fetch_one(self.pool)
-            .await?;
+        let total_tasks: i64 =
+            sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_TASKS_TOTAL)
+                .fetch_one(self.pool)
+                .await?;
 
         if total_tasks == 0 {
             return Ok(PickNextResponse::no_tasks_in_project());
         }
 
         // Check if all tasks are completed
-        let todo_or_doing_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE status IN ('todo', 'doing')")
-                .fetch_one(self.pool)
-                .await?;
+        let todo_or_doing_count: i64 = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM tasks WHERE status IN ('todo', 'doing')",
+        )
+        .fetch_one(self.pool)
+        .await?;
 
         if todo_or_doing_count == 0 {
             return Ok(PickNextResponse::all_tasks_completed());
@@ -1732,13 +1742,14 @@ mod tests {
 
         // Verify it's set as current task
         let session_id = crate::workspace::resolve_session_id(None);
-        let current: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&session_id)
-                .fetch_optional(ctx.pool())
-                .await
-                .unwrap()
-                .flatten();
+        let current: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(ctx.pool())
+        .await
+        .unwrap()
+        .flatten();
 
         assert_eq!(current, Some(task.id));
     }
@@ -1793,13 +1804,14 @@ mod tests {
 
         // Verify current task is cleared
         let session_id = crate::workspace::resolve_session_id(None);
-        let current: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&session_id)
-                .fetch_optional(ctx.pool())
-                .await
-                .unwrap()
-                .flatten();
+        let current: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(ctx.pool())
+        .await
+        .unwrap()
+        .flatten();
 
         assert!(current.is_none());
     }
@@ -1932,13 +1944,14 @@ mod tests {
 
         // Verify subtask is now the current task
         let session_id = crate::workspace::resolve_session_id(None);
-        let current: Option<i64> =
-            sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&session_id)
-                .fetch_optional(ctx.pool())
-                .await
-                .unwrap()
-                .flatten();
+        let current: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(ctx.pool())
+        .await
+        .unwrap()
+        .flatten();
 
         assert_eq!(current, Some(response.subtask.id));
 
@@ -1980,10 +1993,11 @@ mod tests {
         }
 
         // Verify total doing count
-        let doing_count: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_TASKS_DOING)
-            .fetch_one(ctx.pool())
-            .await
-            .unwrap();
+        let doing_count: i64 =
+            sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_TASKS_DOING)
+                .fetch_one(ctx.pool())
+                .await
+                .unwrap();
 
         assert_eq!(doing_count, 5);
     }
@@ -2016,10 +2030,11 @@ mod tests {
         assert_eq!(picked.len(), 3);
 
         // Verify total doing count
-        let doing_count: i64 = sqlx::query_scalar(crate::sql_constants::COUNT_TASKS_DOING)
-            .fetch_one(ctx.pool())
-            .await
-            .unwrap();
+        let doing_count: i64 =
+            sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_TASKS_DOING)
+                .fetch_one(ctx.pool())
+                .await
+                .unwrap();
 
         assert_eq!(doing_count, 5);
     }

@@ -103,7 +103,7 @@ impl<'a> ReportManager<'a> {
         let total_events = if let Some(ref evts) = events {
             evts.len() as i64
         } else {
-            sqlx::query_scalar(crate::sql_constants::COUNT_EVENTS_TOTAL)
+            sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_EVENTS_TOTAL)
                 .fetch_one(self.pool)
                 .await?
         };

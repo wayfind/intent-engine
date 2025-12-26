@@ -126,12 +126,13 @@ pub async fn handle_event_command(cmd: EventCommands) -> Result<()> {
             } else {
                 // Fall back to current_task_id from sessions table for this session
                 let session_id = crate::workspace::resolve_session_id(None);
-                let current_task_id: Option<i64> =
-                    sqlx::query_scalar("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                        .bind(&session_id)
-                        .fetch_optional(&ctx.pool)
-                        .await?
-                        .flatten();
+                let current_task_id: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+                    "SELECT current_task_id FROM sessions WHERE session_id = ?",
+                )
+                .bind(&session_id)
+                .fetch_optional(&ctx.pool)
+                .await?
+                .flatten();
 
                 current_task_id
                     .ok_or_else(|| IntentError::InvalidInput(

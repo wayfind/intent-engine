@@ -104,19 +104,21 @@ pub async fn add_dependency(
     blocked_task_id: i64,
 ) -> Result<Dependency> {
     // Verify both tasks exist
-    let blocking_exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM tasks WHERE id = ?")
-        .bind(blocking_task_id)
-        .fetch_one(pool)
-        .await?;
+    let blocking_exists: bool =
+        sqlx::query_scalar::<_, bool>("SELECT COUNT(*) > 0 FROM tasks WHERE id = ?")
+            .bind(blocking_task_id)
+            .fetch_one(pool)
+            .await?;
 
     if !blocking_exists {
         return Err(IntentError::TaskNotFound(blocking_task_id));
     }
 
-    let blocked_exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM tasks WHERE id = ?")
-        .bind(blocked_task_id)
-        .fetch_one(pool)
-        .await?;
+    let blocked_exists: bool =
+        sqlx::query_scalar::<_, bool>("SELECT COUNT(*) > 0 FROM tasks WHERE id = ?")
+            .bind(blocked_task_id)
+            .fetch_one(pool)
+            .await?;
 
     if !blocked_exists {
         return Err(IntentError::TaskNotFound(blocked_task_id));

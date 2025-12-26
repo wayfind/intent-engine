@@ -113,10 +113,11 @@ impl<'a> EventManager<'a> {
         discussion_data: &str,
     ) -> Result<Event> {
         // Check if task exists
-        let task_exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
-            .bind(task_id)
-            .fetch_one(self.pool)
-            .await?;
+        let task_exists: bool =
+            sqlx::query_scalar::<_, bool>(crate::sql_constants::CHECK_TASK_EXISTS)
+                .bind(task_id)
+                .fetch_one(self.pool)
+                .await?;
 
         if !task_exists {
             return Err(IntentError::TaskNotFound(task_id));
@@ -244,10 +245,11 @@ impl<'a> EventManager<'a> {
     ) -> Result<Vec<Event>> {
         // Check if task exists (only if task_id provided)
         if let Some(tid) = task_id {
-            let task_exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
-                .bind(tid)
-                .fetch_one(self.pool)
-                .await?;
+            let task_exists: bool =
+                sqlx::query_scalar::<_, bool>(crate::sql_constants::CHECK_TASK_EXISTS)
+                    .bind(tid)
+                    .fetch_one(self.pool)
+                    .await?;
 
             if !task_exists {
                 return Err(IntentError::TaskNotFound(tid));
