@@ -18,6 +18,10 @@ jobs:
     name: Publish to npm
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      id-token: write  # Required for npm OIDC trusted publishing
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -106,25 +110,21 @@ jobs:
           echo "Updated all package versions to $VERSION"
 
       - name: Publish platform packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # Publish platform packages first (order doesn't matter)
           for pkg in intent-engine-linux-x64 intent-engine-linux-arm64 \
                      intent-engine-darwin-x64 intent-engine-darwin-arm64 intent-engine-win32-x64; do
             echo "Publishing $pkg..."
             cd npm/$pkg
-            npm publish --access public || echo "Package $pkg may already exist, continuing..."
+            npm publish --provenance --access public || echo "Package $pkg may already exist, continuing..."
             cd ../..
           done
 
       - name: Publish main package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           echo "Publishing intent-engine..."
           cd npm/intent-engine
-          npm publish --access public
+          npm publish --provenance --access public
 
       - name: Summary
         run: |
