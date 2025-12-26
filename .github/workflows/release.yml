@@ -131,7 +131,13 @@ jobs:
 
           ## 📦 Installation
 
-          ### Using cargo-binstall (Recommended)
+          ### Using Homebrew (macOS/Linux)
+          ```bash
+          brew tap wayfind/tap
+          brew install intent-engine
+          ```
+
+          ### Using cargo-binstall (Recommended for Rust users)
           ```bash
           cargo binstall intent-engine
           ```

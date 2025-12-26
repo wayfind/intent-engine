@@ -1,0 +1,144 @@
+name: Update Homebrew Formula
+
+# Automatically update homebrew-tap after a successful release
+# This workflow is triggered when a new release is published
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.10.1)'
+        required: true
+        type: string
+
+jobs:
+  update-formula:
+    name: Update Homebrew Formula
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout intent-engine
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION (tag: $TAG)"
+
+      - name: Download release assets and calculate SHA256
+        id: sha256
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}"
+
+          echo "Downloading release assets for v${VERSION}..."
+
+          # Download and calculate SHA256 for each platform
+          for platform in macos-aarch64 macos-x86_64 linux-aarch64 linux-x86_64; do
+            url="${BASE_URL}/intent-engine-${platform}.tar.gz"
+            echo "Downloading ${platform}..."
+
+            if curl -sL "$url" -o "/tmp/${platform}.tar.gz"; then
+              sha256=$(sha256sum "/tmp/${platform}.tar.gz" | cut -d' ' -f1)
+              echo "${platform}_sha256=${sha256}" >> $GITHUB_OUTPUT
+              echo "  ${platform}: ${sha256}"
+            else
+              echo "::error::Failed to download ${url}"
+              exit 1
+            fi
+          done
+
+      - name: Generate updated formula
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          cat > /tmp/intent-engine.rb << 'FORMULA_EOF'
+          class IntentEngine < Formula
+            desc "AI long-term task memory system - cross-session persistence, hierarchical tasks, decision records"
+            homepage "https://github.com/wayfind/intent-engine"
+            version "VERSION_PLACEHOLDER"
+            license "MIT OR Apache-2.0"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/wayfind/intent-engine/releases/download/v#{version}/intent-engine-macos-aarch64.tar.gz"
+                sha256 "MACOS_ARM64_SHA256_PLACEHOLDER"
+              else
+                url "https://github.com/wayfind/intent-engine/releases/download/v#{version}/intent-engine-macos-x86_64.tar.gz"
+                sha256 "MACOS_X86_64_SHA256_PLACEHOLDER"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/wayfind/intent-engine/releases/download/v#{version}/intent-engine-linux-aarch64.tar.gz"
+                sha256 "LINUX_ARM64_SHA256_PLACEHOLDER"
+              else
+                url "https://github.com/wayfind/intent-engine/releases/download/v#{version}/intent-engine-linux-x86_64.tar.gz"
+                sha256 "LINUX_X86_64_SHA256_PLACEHOLDER"
+              end
+            end
+
+            def install
+              bin.install "ie"
+            end
+
+            test do
+              system "#{bin}/ie", "--version"
+            end
+          end
+          FORMULA_EOF
+
+          # Replace placeholders with actual values
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/" /tmp/intent-engine.rb
+          sed -i "s/MACOS_ARM64_SHA256_PLACEHOLDER/${{ steps.sha256.outputs.macos-aarch64_sha256 }}/" /tmp/intent-engine.rb
+          sed -i "s/MACOS_X86_64_SHA256_PLACEHOLDER/${{ steps.sha256.outputs.macos-x86_64_sha256 }}/" /tmp/intent-engine.rb
+          sed -i "s/LINUX_ARM64_SHA256_PLACEHOLDER/${{ steps.sha256.outputs.linux-aarch64_sha256 }}/" /tmp/intent-engine.rb
+          sed -i "s/LINUX_X86_64_SHA256_PLACEHOLDER/${{ steps.sha256.outputs.linux-x86_64_sha256 }}/" /tmp/intent-engine.rb
+
+          echo "Generated formula:"
+          cat /tmp/intent-engine.rb
+
+      - name: Push to homebrew-tap
+        uses: dmnemec/copy_file_to_another_repo_action@main
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        with:
+          source_file: '/tmp/intent-engine.rb'
+          destination_repo: 'wayfind/homebrew-tap'
+          destination_folder: 'Formula'
+          destination_branch: 'main'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          user_name: 'github-actions[bot]'
+          commit_message: 'Update intent-engine to ${{ steps.version.outputs.version }}'
+
+      - name: Summary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "## 🍺 Homebrew Formula Updated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Installation" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "brew tap wayfind/tap" >> $GITHUB_STEP_SUMMARY
+          echo "brew install intent-engine" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### SHA256 Checksums" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | SHA256 |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS ARM64 | \`${{ steps.sha256.outputs.macos-aarch64_sha256 }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS x86_64 | \`${{ steps.sha256.outputs.macos-x86_64_sha256 }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linux ARM64 | \`${{ steps.sha256.outputs.linux-aarch64_sha256 }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linux x86_64 | \`${{ steps.sha256.outputs.linux-x86_64_sha256 }}\` |" >> $GITHUB_STEP_SUMMARY
