@@ -17,6 +17,13 @@ EOF
     exit 0
 fi
 
+# Initialize project if not exists
+if [ -n "$CLAUDE_PROJECT_DIR" ] && [ ! -d "$CLAUDE_PROJECT_DIR/.intent-engine" ]; then
+    ie init --at "$CLAUDE_PROJECT_DIR" 2>/dev/null
+fi
+
+# Run status from project root
+cd "$CLAUDE_PROJECT_DIR" 2>/dev/null
 IE_SESSION_ID="$session_id" ie status 2>/dev/null
 
 cat << 'EOF'
