@@ -22,7 +22,7 @@ jobs:
   build-linux-x64:
     uses: ./.github/workflows/_build-release.yml
     with:
-      os: ubuntu-latest
+      os: ubuntu-22.04  # Use older Ubuntu for better GLIBC compatibility
       target: x86_64-unknown-linux-gnu
       artifact-name: ie
       asset-name: intent-engine-linux-x86_64
@@ -30,7 +30,7 @@ jobs:
   build-linux-arm64:
     uses: ./.github/workflows/_build-release.yml
     with:
-      os: ubuntu-latest
+      os: ubuntu-22.04  # Use older Ubuntu for better GLIBC compatibility
       target: aarch64-unknown-linux-gnu
       artifact-name: ie
       asset-name: intent-engine-linux-aarch64
