@@ -30,11 +30,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ inputs.target }}
+
+      - name: Show Rust version
+        run: |
+          rustc --version
+          cargo --version
 
       - name: Install cross-compilation tools (Linux ARM64)
         if: inputs.target == 'aarch64-unknown-linux-gnu'
@@ -54,7 +61,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: v1-rust
+          prefix-key: v2-rust
           shared-key: release-${{ inputs.target }}
           cache-all-crates: true
 
