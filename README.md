@@ -68,28 +68,33 @@ When AI starts a session, it runs `ie status`. Everything comes back:
 
 ## Integration
 
-### Claude Code
-
-**Option A: Plugin (Recommended)**
+### Step 1: Install Binary
 
 ```bash
-# 1. Install ie
 cargo install intent-engine
+# or: brew install wayfind/tap/intent-engine
+# or: npm install -g intent-engine
+```
 
-# 2. Install plugin (auto-enables session hook)
+### Step 2: Enable for Claude Code
+
+**Option A: Plugin**
+
+```bash
 /plugin install github:wayfind/intent-engine/claude-plugin
 ```
 
-**Option B: Manual**
+Auto-runs `ie status` at session start.
 
-1. Install: `cargo install intent-engine`
-2. Add [CLAUDE.md](CLAUDE.md) to your project
-3. Start Claude Code — it reads CLAUDE.md automatically
+**Option B: System Prompt**
 
-### Any AI with CLI Access
+```bash
+claude --append-system-prompt "Use ie plan instead of TodoWrite. Commands: ie status, echo '{...}'|ie plan, ie log, ie search"
+```
 
-Intent-Engine is just a CLI. Any AI that can run commands can use it:
-- Gemini CLI, Cursor, custom agents, etc.
+### Other AI Assistants
+
+Any AI with CLI access can use `ie` commands directly.
 
 ---
 
@@ -121,9 +126,10 @@ Code changes. Intent persists.
 ## Quick Reference
 
 ```bash
-# Installation
+# Install
 cargo install intent-engine
 # or: brew install wayfind/tap/intent-engine
+# or: npm install -g intent-engine
 
 # Core commands
 ie status                    # Current context

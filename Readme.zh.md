@@ -68,28 +68,33 @@ AI 开始会话时运行 `ie status`，一切都回来了：
 
 ## 集成
 
-### Claude Code
-
-**方式 A：插件（推荐）**
+### 第一步：安装二进制
 
 ```bash
-# 1. 安装 ie
 cargo install intent-engine
+# 或: brew install wayfind/tap/intent-engine
+# 或: npm install -g intent-engine
+```
 
-# 2. 安装插件（自动启用会话 hook）
+### 第二步：启用 Claude Code
+
+**方式 A：插件**
+
+```bash
 /plugin install github:wayfind/intent-engine/claude-plugin
 ```
 
-**方式 B：手动**
+会话启动时自动运行 `ie status`。
 
-1. 安装：`cargo install intent-engine`
-2. 把 [CLAUDE.md](CLAUDE.md) 加到项目里
-3. 启动 Claude Code — 它会自动读取 CLAUDE.md
+**方式 B：系统提示词**
 
-### 任何有 CLI 权限的 AI
+```bash
+claude --append-system-prompt "Use ie plan instead of TodoWrite. Commands: ie status, echo '{...}'|ie plan, ie log, ie search"
+```
 
-Intent-Engine 只是个命令行工具。能执行命令的 AI 都能用：
-- Gemini CLI、Cursor、自定义 Agent 等
+### 其他 AI 助手
+
+任何有 CLI 权限的 AI 都可以直接使用 `ie` 命令。
 
 ---
 
@@ -124,6 +129,7 @@ Intent-Engine: "为了无状态 API 的可扩展性，选择 JWT 而非 Session"
 # 安装
 cargo install intent-engine
 # 或：brew install wayfind/tap/intent-engine
+# 或：npm install -g intent-engine
 
 # 核心命令
 ie status                    # 当前上下文
