@@ -1,0 +1,13 @@
+{
+  "name": "intent-engine-linux-arm64",
+  "version": "0.10.1",
+  "description": "intent-engine binary for Linux ARM64",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wayfind/intent-engine.git"
+  },
+  "license": "MIT OR Apache-2.0",
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "files": ["bin"]
+}

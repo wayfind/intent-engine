@@ -1,0 +1,147 @@
+name: Publish to npm
+
+# Publishes platform packages to npm after a successful release
+# Triggers: when a GitHub release is published
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.10.1)'
+        required: true
+        type: string
+
+jobs:
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION (tag: $TAG)"
+
+      - name: Download release assets
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}"
+
+          echo "Downloading release assets for v${VERSION}..."
+
+          # Download each platform's tarball
+          mkdir -p downloads
+
+          # Linux x64
+          curl -sL "${BASE_URL}/intent-engine-linux-x86_64.tar.gz" -o downloads/linux-x64.tar.gz
+          tar -xzf downloads/linux-x64.tar.gz -C downloads
+          mv downloads/ie npm/intent-engine-linux-x64/bin/ie
+          chmod +x npm/intent-engine-linux-x64/bin/ie
+
+          # Linux ARM64
+          curl -sL "${BASE_URL}/intent-engine-linux-aarch64.tar.gz" -o downloads/linux-arm64.tar.gz
+          tar -xzf downloads/linux-arm64.tar.gz -C downloads
+          mv downloads/ie npm/intent-engine-linux-arm64/bin/ie
+          chmod +x npm/intent-engine-linux-arm64/bin/ie
+
+          # macOS x64
+          curl -sL "${BASE_URL}/intent-engine-macos-x86_64.tar.gz" -o downloads/darwin-x64.tar.gz
+          tar -xzf downloads/darwin-x64.tar.gz -C downloads
+          mv downloads/ie npm/intent-engine-darwin-x64/bin/ie
+          chmod +x npm/intent-engine-darwin-x64/bin/ie
+
+          # macOS ARM64
+          curl -sL "${BASE_URL}/intent-engine-macos-aarch64.tar.gz" -o downloads/darwin-arm64.tar.gz
+          tar -xzf downloads/darwin-arm64.tar.gz -C downloads
+          mv downloads/ie npm/intent-engine-darwin-arm64/bin/ie
+          chmod +x npm/intent-engine-darwin-arm64/bin/ie
+
+          # Windows x64
+          curl -sL "${BASE_URL}/intent-engine-windows-x86_64.exe.zip" -o downloads/win32-x64.zip
+          unzip -o downloads/win32-x64.zip -d downloads
+          mv downloads/ie.exe npm/intent-engine-win32-x64/bin/ie.exe
+
+          echo "All binaries downloaded and placed in npm packages"
+
+      - name: Update package versions
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Update version in all package.json files
+          for pkg in npm/intent-engine npm/intent-engine-linux-x64 npm/intent-engine-linux-arm64 \
+                     npm/intent-engine-darwin-x64 npm/intent-engine-darwin-arm64 npm/intent-engine-win32-x64; do
+            jq --arg v "$VERSION" '.version = $v' "$pkg/package.json" > "$pkg/package.json.tmp"
+            mv "$pkg/package.json.tmp" "$pkg/package.json"
+          done
+
+          # Update optionalDependencies versions in main package
+          jq --arg v "$VERSION" '
+            .optionalDependencies["intent-engine-darwin-arm64"] = $v |
+            .optionalDependencies["intent-engine-darwin-x64"] = $v |
+            .optionalDependencies["intent-engine-linux-arm64"] = $v |
+            .optionalDependencies["intent-engine-linux-x64"] = $v |
+            .optionalDependencies["intent-engine-win32-x64"] = $v
+          ' npm/intent-engine/package.json > npm/intent-engine/package.json.tmp
+          mv npm/intent-engine/package.json.tmp npm/intent-engine/package.json
+
+          echo "Updated all package versions to $VERSION"
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # Publish platform packages first (order doesn't matter)
+          for pkg in intent-engine-linux-x64 intent-engine-linux-arm64 \
+                     intent-engine-darwin-x64 intent-engine-darwin-arm64 intent-engine-win32-x64; do
+            echo "Publishing $pkg..."
+            cd npm/$pkg
+            npm publish --access public || echo "Package $pkg may already exist, continuing..."
+            cd ../..
+          done
+
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "Publishing intent-engine..."
+          cd npm/intent-engine
+          npm publish --access public
+
+      - name: Summary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "## 📦 Published to npm" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Packages" >> $GITHUB_STEP_SUMMARY
+          echo "- [intent-engine](https://www.npmjs.com/package/intent-engine)" >> $GITHUB_STEP_SUMMARY
+          echo "- intent-engine-linux-x64" >> $GITHUB_STEP_SUMMARY
+          echo "- intent-engine-linux-arm64" >> $GITHUB_STEP_SUMMARY
+          echo "- intent-engine-darwin-x64" >> $GITHUB_STEP_SUMMARY
+          echo "- intent-engine-darwin-arm64" >> $GITHUB_STEP_SUMMARY
+          echo "- intent-engine-win32-x64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Installation" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g intent-engine" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

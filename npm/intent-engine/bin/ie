@@ -1,0 +1,28 @@
+#!/usr/bin/env node
+
+"use strict";
+
+const { spawn } = require("child_process");
+const { getBinaryPath } = require("../lib/main");
+
+try {
+  const binaryPath = getBinaryPath();
+  const args = process.argv.slice(2);
+
+  const child = spawn(binaryPath, args, {
+    stdio: "inherit",
+    env: process.env,
+  });
+
+  child.on("error", (err) => {
+    console.error(`Failed to start intent-engine: ${err.message}`);
+    process.exit(1);
+  });
+
+  child.on("close", (code) => {
+    process.exit(code ?? 0);
+  });
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}

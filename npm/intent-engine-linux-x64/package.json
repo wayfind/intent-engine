@@ -1,0 +1,13 @@
+{
+  "name": "intent-engine-linux-x64",
+  "version": "0.10.1",
+  "description": "intent-engine binary for Linux x64",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wayfind/intent-engine.git"
+  },
+  "license": "MIT OR Apache-2.0",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "files": ["bin"]
+}

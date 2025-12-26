@@ -1,0 +1,40 @@
+{
+  "name": "intent-engine",
+  "version": "0.10.1",
+  "description": "AI long-term task memory system - cross-session persistence, hierarchical tasks, decision records",
+  "keywords": [
+    "cli",
+    "ai",
+    "task-management",
+    "productivity",
+    "claude",
+    "llm"
+  ],
+  "homepage": "https://github.com/wayfind/intent-engine",
+  "bugs": {
+    "url": "https://github.com/wayfind/intent-engine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wayfind/intent-engine.git"
+  },
+  "license": "MIT OR Apache-2.0",
+  "author": "wayfind",
+  "bin": {
+    "ie": "bin/ie"
+  },
+  "files": [
+    "bin",
+    "lib"
+  ],
+  "optionalDependencies": {
+    "intent-engine-darwin-arm64": "0.10.1",
+    "intent-engine-darwin-x64": "0.10.1",
+    "intent-engine-linux-arm64": "0.10.1",
+    "intent-engine-linux-x64": "0.10.1",
+    "intent-engine-win32-x64": "0.10.1"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}
