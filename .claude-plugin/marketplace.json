@@ -1,0 +1,16 @@
+{
+  "name": "intent-engine",
+  "owner": {
+    "name": "wayfind"
+  },
+  "metadata": {
+    "description": "AI Long-Term Task Memory plugins"
+  },
+  "plugins": [
+    {
+      "name": "intent-engine",
+      "source": "./claude-plugin",
+      "description": "Auto-install ie, session hook, and skill for task memory"
+    }
+  ]
+}
