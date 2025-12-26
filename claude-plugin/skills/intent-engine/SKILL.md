@@ -7,6 +7,9 @@ When user mentions: tasks, planning, todo, decisions, "ie", cross-session work, 
 Before using ie commands, check and install if needed:
 
 ```bash
+# Ensure we're in project root
+cd "$CLAUDE_PROJECT_DIR"
+
 if ! command -v ie &> /dev/null; then
   echo "Installing intent-engine..."
   if command -v cargo &> /dev/null; then
@@ -29,7 +32,10 @@ Use `ie plan` instead of TodoWrite for:
 - Decision tracking
 
 ## Commands
+Always run from project root (`$CLAUDE_PROJECT_DIR`):
+
 ```bash
+cd "$CLAUDE_PROJECT_DIR"
 ie status                      # Current task context
 echo '{"tasks":[...]}' | ie plan   # Create/update tasks
 ie log decision "..."          # Record decisions
