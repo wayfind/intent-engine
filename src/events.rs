@@ -54,7 +54,7 @@ impl<'a> EventManager<'a> {
             let event_json = match serde_json::to_value(event) {
                 Ok(json) => json,
                 Err(e) => {
-                    tracing::warn!("Failed to serialize event for notification: {}", e);
+                    tracing::warn!(error = %e, "Failed to serialize event for notification");
                     return;
                 },
             };

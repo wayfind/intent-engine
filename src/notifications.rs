@@ -44,7 +44,7 @@ impl NotificationSender {
         let json = match msg.to_json() {
             Ok(j) => j,
             Err(e) => {
-                tracing::warn!("Failed to serialize notification message: {}", e);
+                tracing::warn!(error = %e, "Failed to serialize notification message");
                 return;
             },
         };

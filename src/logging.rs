@@ -199,25 +199,6 @@ pub fn init_logging(config: LoggingConfig) -> io::Result<()> {
     Ok(())
 }
 
-/// Initialize logging from environment variables
-pub fn init_from_env() -> io::Result<()> {
-    let _level = match std::env::var("IE_LOG_LEVEL").as_deref() {
-        Ok("error") => Level::ERROR,
-        Ok("warn") => Level::WARN,
-        Ok("info") => Level::INFO,
-        Ok("debug") => Level::DEBUG,
-        Ok("trace") => Level::TRACE,
-        _ => Level::INFO,
-    };
-
-    let json = std::env::var("IE_LOG_JSON").as_deref() == Ok("true");
-    let verbose = std::env::var("IE_LOG_VERBOSE").as_deref() == Ok("true");
-    let quiet = std::env::var("IE_LOG_QUIET").as_deref() == Ok("true");
-
-    let config = LoggingConfig::from_args(quiet, verbose, json);
-    init_logging(config)
-}
-
 /// Clean up old log files based on retention policy
 ///
 /// Scans the log directory and removes files older than the specified retention period.
@@ -278,7 +259,7 @@ pub fn cleanup_old_logs(log_dir: &std::path::Path, retention_days: u32) -> io::R
                         );
                     },
                     Err(e) => {
-                        tracing::warn!("Failed to remove old log file {}: {}", path.display(), e);
+                        tracing::warn!(path = %path.display(), error = %e, "Failed to remove old log file");
                     },
                 }
             }
@@ -294,108 +275,6 @@ pub fn cleanup_old_logs(log_dir: &std::path::Path, retention_days: u32) -> io::R
     }
 
     Ok(())
-}
-
-/// Log macros for common intent-engine operations
-#[macro_export]
-macro_rules! log_project_operation {
-    ($operation:expr, $project_path:expr) => {
-        tracing::info!(
-            operation = $operation,
-            project_path = %$project_path.display(),
-            "Project operation"
-        );
-    };
-    ($operation:expr, $project_path:expr, $details:expr) => {
-        tracing::info!(
-            operation = $operation,
-            project_path = %$project_path.display(),
-            details = $details,
-            "Project operation"
-        );
-    };
-}
-
-#[macro_export]
-macro_rules! log_mcp_operation {
-    ($operation:expr, $method:expr) => {
-        tracing::debug!(
-            operation = $operation,
-            mcp_method = $method,
-            "MCP operation"
-        );
-    };
-    ($operation:expr, $method:expr, $details:expr) => {
-        tracing::debug!(
-            operation = $operation,
-            mcp_method = $method,
-            details = $details,
-            "MCP operation"
-        );
-    };
-}
-
-#[macro_export]
-macro_rules! log_dashboard_operation {
-    ($operation:expr) => {
-        tracing::info!(operation = $operation, "Dashboard operation");
-    };
-    ($operation:expr, $details:expr) => {
-        tracing::info!(
-            operation = $operation,
-            details = $details,
-            "Dashboard operation"
-        );
-    };
-}
-
-#[macro_export]
-macro_rules! log_task_operation {
-    ($operation:expr, $task_id:expr) => {
-        tracing::info!(operation = $operation, task_id = $task_id, "Task operation");
-    };
-    ($operation:expr, $task_id:expr, $details:expr) => {
-        tracing::info!(
-            operation = $operation,
-            task_id = $task_id,
-            details = $details,
-            "Task operation"
-        );
-    };
-}
-
-#[macro_export]
-macro_rules! log_registry_operation {
-    ($operation:expr, $count:expr) => {
-        tracing::debug!(
-            operation = $operation,
-            project_count = $count,
-            "Registry operation"
-        );
-    };
-}
-
-/// Utility macro for structured error logging
-#[macro_export]
-macro_rules! log_error {
-    ($error:expr, $context:expr) => {
-        tracing::error!(
-            error = %$error,
-            context = $context,
-            "Operation failed"
-        );
-    };
-}
-
-/// Utility macro for structured warning logging
-#[macro_export]
-macro_rules! log_warning {
-    ($message:expr) => {
-        tracing::warn!($message);
-    };
-    ($message:expr, $details:expr) => {
-        tracing::warn!(message = $message, details = $details, "Warning");
-    };
 }
 
 /// Get log file path for a given application mode

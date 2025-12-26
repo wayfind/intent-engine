@@ -115,7 +115,7 @@ pub fn register_project(project_path: &Path) {
     let mut registry = ProjectsRegistry::load();
     registry.register_project(project_path);
     if let Err(e) = registry.save() {
-        tracing::warn!("Failed to save global projects registry: {}", e);
+        tracing::warn!(error = %e, "Failed to save global projects registry");
     }
 }
 
@@ -125,7 +125,7 @@ pub fn remove_project(project_path: &str) -> bool {
     let removed = registry.remove_project(project_path);
     if removed {
         if let Err(e) = registry.save() {
-            tracing::warn!("Failed to save global projects registry: {}", e);
+            tracing::warn!(error = %e, "Failed to save global projects registry");
         }
     }
     removed

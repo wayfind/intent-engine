@@ -63,7 +63,7 @@ pub async fn list_tasks(
     {
         Ok(result) => (StatusCode::OK, Json(ApiResponse { data: result })).into_response(),
         Err(e) => {
-            tracing::error!("Failed to fetch tasks: {}", e);
+            tracing::error!(error = %e, "Failed to fetch tasks");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiError {

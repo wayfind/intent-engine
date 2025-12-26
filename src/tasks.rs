@@ -59,7 +59,7 @@ impl<'a> TaskManager<'a> {
             let task_json = match serde_json::to_value(task) {
                 Ok(json) => json,
                 Err(e) => {
-                    tracing::warn!("Failed to serialize task for notification: {}", e);
+                    tracing::warn!(error = %e, "Failed to serialize task for notification");
                     return;
                 },
             };
@@ -86,7 +86,7 @@ impl<'a> TaskManager<'a> {
             let task_json = match serde_json::to_value(task) {
                 Ok(json) => json,
                 Err(e) => {
-                    tracing::warn!("Failed to serialize task for notification: {}", e);
+                    tracing::warn!(error = %e, "Failed to serialize task for notification");
                     return;
                 },
             };
@@ -124,6 +124,7 @@ impl<'a> TaskManager<'a> {
 
     /// Add a new task
     /// owner: 'human' (created via CLI/Dashboard) or 'ai' (created via MCP)
+    #[tracing::instrument(skip(self), fields(task_name = %name))]
     pub async fn add_task(
         &self,
         name: &str,
@@ -329,6 +330,7 @@ impl<'a> TaskManager<'a> {
     // =========================================================================
 
     /// Get a task by ID
+    #[tracing::instrument(skip(self))]
     pub async fn get_task(&self, id: i64) -> Result<Task> {
         let task = sqlx::query_as::<_, Task>(
             r#"
@@ -884,6 +886,7 @@ impl<'a> TaskManager<'a> {
     }
 
     /// Start a task (atomic: update status + set current)
+    #[tracing::instrument(skip(self))]
     pub async fn start_task(&self, id: i64, with_events: bool) -> Result<TaskWithEvents> {
         // Check if task exists first
         let task_exists: bool = sqlx::query_scalar(crate::sql_constants::CHECK_TASK_EXISTS)
@@ -962,6 +965,7 @@ impl<'a> TaskManager<'a> {
     /// * `is_ai_caller` - Whether this is called from AI (MCP) or human (CLI/Dashboard).
     ///   When true and task is human-owned, the operation will fail.
     ///   Human tasks can only be completed via CLI or Dashboard.
+    #[tracing::instrument(skip(self))]
     pub async fn done_task(&self, is_ai_caller: bool) -> Result<DoneTaskResponse> {
         let session_id = crate::workspace::resolve_session_id(None);
         let mut tx = self.pool.begin().await?;

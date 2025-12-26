@@ -412,6 +412,7 @@ impl<'a> PlanExecutor<'a> {
     }
 
     /// Execute a plan request (Phase 2: create + update mode)
+    #[tracing::instrument(skip(self, request), fields(task_count = request.tasks.len()))]
     pub async fn execute(&self, request: &PlanRequest) -> Result<PlanResult> {
         // 1. Check for duplicate names in the request
         let duplicates = find_duplicate_names(&request.tasks);

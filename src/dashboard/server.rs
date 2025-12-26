@@ -283,13 +283,13 @@ impl DashboardServer {
             .await
             .with_context(|| format!("Failed to bind to {}", addr))?;
 
-        tracing::info!("Dashboard server listening on {}", addr);
+        tracing::info!(address = %addr, "Dashboard server listening");
         tracing::warn!(
-            "⚠️  Dashboard is accessible from external IPs. Access via http://localhost:{} or http://<your-ip>:{}",
-            self.port, self.port
+            port = self.port,
+            "⚠️  Dashboard is accessible from external IPs"
         );
-        tracing::info!("Project: {}", self.project_name);
-        tracing::info!("Database: {}", self.db_path.display());
+        tracing::info!(project = %self.project_name, "Project loaded");
+        tracing::info!(db_path = %self.db_path.display(), "Database path");
 
         // Ignore SIGHUP signal on Unix systems to prevent termination when terminal closes
         #[cfg(unix)]

@@ -43,6 +43,7 @@ impl<'a> WorkspaceManager<'a> {
     }
 
     /// Get the current task for a session
+    #[tracing::instrument(skip(self))]
     pub async fn get_current_task(&self, session_id: Option<&str>) -> Result<CurrentTaskResponse> {
         let session_id = resolve_session_id(session_id);
 
@@ -87,6 +88,7 @@ impl<'a> WorkspaceManager<'a> {
     }
 
     /// Set the current task for a session
+    #[tracing::instrument(skip(self))]
     pub async fn set_current_task(
         &self,
         task_id: i64,
