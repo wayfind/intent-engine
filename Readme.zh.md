@@ -68,27 +68,28 @@ AI 开始会话时运行 `ie status`，一切都回来了：
 
 ## 集成
 
-### 第一步：安装二进制
-
-```bash
-cargo install intent-engine
-# 或: brew install wayfind/tap/intent-engine
-# 或: npm install -g intent-engine
-```
-
-### 第二步：启用 Claude Code
-
-**方式 A：插件**
+### Claude Code（一键安装）
 
 ```bash
 /plugin install github:wayfind/intent-engine/claude-plugin
 ```
 
-会话启动时自动运行 `ie status`。
+搞定。插件会：
+- 自动安装 `ie` 二进制（通过 cargo/npm/brew）
+- 会话启动时运行 `ie status`
+- 引导 Claude 用 `ie plan` 替代 TodoWrite
 
-**方式 B：系统提示词**
+### 手动安装
+
+如果你偏好手动配置：
 
 ```bash
+# 1. 安装二进制
+cargo install intent-engine
+# 或: brew install wayfind/tap/intent-engine
+# 或: npm install -g intent-engine
+
+# 2. 添加系统提示词
 claude --append-system-prompt "Use ie plan instead of TodoWrite. Commands: ie status, echo '{...}'|ie plan, ie log, ie search"
 ```
 

@@ -68,27 +68,28 @@ When AI starts a session, it runs `ie status`. Everything comes back:
 
 ## Integration
 
-### Step 1: Install Binary
-
-```bash
-cargo install intent-engine
-# or: brew install wayfind/tap/intent-engine
-# or: npm install -g intent-engine
-```
-
-### Step 2: Enable for Claude Code
-
-**Option A: Plugin**
+### Claude Code (One-Click)
 
 ```bash
 /plugin install github:wayfind/intent-engine/claude-plugin
 ```
 
-Auto-runs `ie status` at session start.
+That's it. The plugin will:
+- Auto-install `ie` binary (via cargo/npm/brew) when needed
+- Run `ie status` at session start
+- Guide Claude to use `ie plan` instead of TodoWrite
 
-**Option B: System Prompt**
+### Manual Install
+
+If you prefer manual setup:
 
 ```bash
+# 1. Install binary
+cargo install intent-engine
+# or: brew install wayfind/tap/intent-engine
+# or: npm install -g intent-engine
+
+# 2. Add system prompt
 claude --append-system-prompt "Use ie plan instead of TodoWrite. Commands: ie status, echo '{...}'|ie plan, ie log, ie search"
 ```
 
