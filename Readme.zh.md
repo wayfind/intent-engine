@@ -74,10 +74,9 @@ AI 开始会话时运行 `ie status`，一切都回来了：
 /plugin install github:wayfind/intent-engine/claude-plugin
 ```
 
-搞定。插件会：
-- 自动安装 `ie` 二进制（通过 cargo/npm/brew）
-- 会话启动时运行 `ie status`
-- 引导 Claude 用 `ie plan` 替代 TodoWrite
+搞定。插件包含：
+- **Hook**：自动初始化项目，会话启动时运行 `ie status`
+- **Skill**：引导 Claude 用 `ie plan` 替代 TodoWrite
 
 ### 手动安装
 

@@ -74,10 +74,9 @@ When AI starts a session, it runs `ie status`. Everything comes back:
 /plugin install github:wayfind/intent-engine/claude-plugin
 ```
 
-That's it. The plugin will:
-- Auto-install `ie` binary (via cargo/npm/brew) when needed
-- Run `ie status` at session start
-- Guide Claude to use `ie plan` instead of TodoWrite
+That's it. The plugin includes:
+- **Hook**: Auto-init project, run `ie status` at session start
+- **Skill**: Guide Claude to use `ie plan` instead of TodoWrite
 
 ### Manual Install
 
