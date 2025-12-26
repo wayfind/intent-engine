@@ -29,7 +29,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'  # Required for npm OIDC (npm >= 11.5)
           registry-url: 'https://registry.npmjs.org'
 
       - name: Get version
@@ -110,10 +110,9 @@ jobs:
           echo "Updated all package versions to $VERSION"
 
       - name: Publish platform packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # Publish platform packages first (order doesn't matter)
+          # Uses OIDC trusted publishing - no token needed
           for pkg in intent-engine-linux-x64 intent-engine-linux-arm64 \
                      intent-engine-darwin-x64 intent-engine-darwin-arm64 intent-engine-win32-x64; do
             echo "Publishing $pkg..."
@@ -123,9 +122,8 @@ jobs:
           done
 
       - name: Publish main package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          # Uses OIDC trusted publishing - no token needed
           echo "Publishing intent-engine..."
           cd npm/intent-engine
           npm publish --provenance --access public
