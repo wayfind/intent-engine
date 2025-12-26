@@ -8,6 +8,18 @@ if [ -n "$CLAUDE_ENV_FILE" ] && [ -n "$session_id" ]; then
     echo "export IE_SESSION_ID=\"$session_id\"" >> "$CLAUDE_ENV_FILE"
 fi
 
+# Auto-install ie if not found
+if ! command -v ie &> /dev/null; then
+    if command -v cargo &> /dev/null; then
+        cargo install intent-engine 2>/dev/null
+    elif command -v npm &> /dev/null; then
+        npm install -g intent-engine 2>/dev/null
+    elif command -v brew &> /dev/null; then
+        brew install wayfind/tap/intent-engine 2>/dev/null
+    fi
+fi
+
+# Check again after install attempt
 if ! command -v ie &> /dev/null; then
     cat << 'EOF'
 <system-reminder>
