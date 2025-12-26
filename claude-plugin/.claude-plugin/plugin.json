@@ -1,0 +1,11 @@
+{
+  "name": "intent-engine",
+  "version": "0.10.0",
+  "description": "AI Long-Term Task Memory - Session start hook for ie status",
+  "author": {
+    "name": "David"
+  },
+  "repository": "https://github.com/anthropics/intent-engine",
+  "license": "MIT",
+  "keywords": ["task", "memory", "session", "hook"]
+}
