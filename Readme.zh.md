@@ -68,13 +68,23 @@ AI 开始会话时运行 `ie status`，一切都回来了：
 
 ## 集成
 
-### Claude Code（零配置）
+### Claude Code
 
-用 Claude Code 的话，开箱即用：
+**方式 A：插件（推荐）**
+
+```bash
+# 1. 安装 ie
+cargo install intent-engine
+
+# 2. 安装插件（自动启用会话 hook）
+/plugin install github:wayfind/intent-engine/claude-plugin
+```
+
+**方式 B：手动**
 
 1. 安装：`cargo install intent-engine`
-2. 在项目里启动 Claude Code
-3. 完成。Claude 会自然地使用 `ie` 命令。
+2. 把 [CLAUDE.md](CLAUDE.md) 加到项目里
+3. 启动 Claude Code — 它会自动读取 CLAUDE.md
 
 ### 任何有 CLI 权限的 AI
 

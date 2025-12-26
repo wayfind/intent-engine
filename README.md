@@ -68,13 +68,23 @@ When AI starts a session, it runs `ie status`. Everything comes back:
 
 ## Integration
 
-### Claude Code (Zero Config)
+### Claude Code
 
-If you use Claude Code, it works automatically:
+**Option A: Plugin (Recommended)**
+
+```bash
+# 1. Install ie
+cargo install intent-engine
+
+# 2. Install plugin (auto-enables session hook)
+/plugin install github:wayfind/intent-engine/claude-plugin
+```
+
+**Option B: Manual**
 
 1. Install: `cargo install intent-engine`
-2. Start Claude Code in your project
-3. Done. Claude will use `ie` commands naturally.
+2. Add [CLAUDE.md](CLAUDE.md) to your project
+3. Start Claude Code — it reads CLAUDE.md automatically
 
 ### Any AI with CLI Access
 
