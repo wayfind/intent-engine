@@ -110,6 +110,8 @@ jobs:
           echo "Updated all package versions to $VERSION"
 
       - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # Publish platform packages first (order doesn't matter)
           for pkg in intent-engine-linux-x64 intent-engine-linux-arm64 \
@@ -121,6 +123,8 @@ jobs:
           done
 
       - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           echo "Publishing intent-engine..."
           cd npm/intent-engine
