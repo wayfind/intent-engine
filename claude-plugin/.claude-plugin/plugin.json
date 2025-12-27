@@ -8,5 +8,5 @@
   "repository": "https://github.com/wayfind/intent-engine",
   "license": "MIT OR Apache-2.0",
   "keywords": ["task", "memory", "session", "hook", "ai", "productivity"],
-  "skills": ["skills/intent-engine"]
+  "skills": ["./skills/intent-engine"]
 }
