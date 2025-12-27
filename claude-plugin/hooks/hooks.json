@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh 2>/dev/null || powershell -NoProfile -ExecutionPolicy Bypass -File ${CLAUDE_PLUGIN_ROOT}/scripts/session-start.ps1",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/session-start.js",
             "timeout": 30
           }
         ]
