@@ -1,11 +1,12 @@
 {
   "name": "intent-engine",
-  "version": "0.10.0",
+  "version": "0.10.2",
   "description": "AI Long-Term Task Memory - Session start hook for ie status",
   "author": {
-    "name": "David"
+    "name": "wayfind"
   },
-  "repository": "https://github.com/anthropics/intent-engine",
-  "license": "MIT",
-  "keywords": ["task", "memory", "session", "hook"]
+  "repository": "https://github.com/wayfind/intent-engine",
+  "license": "MIT OR Apache-2.0",
+  "keywords": ["task", "memory", "session", "hook", "ai", "productivity"],
+  "platforms": ["windows", "linux", "darwin"]
 }

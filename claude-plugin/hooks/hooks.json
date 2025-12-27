@@ -2,6 +2,24 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "platform:windows",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -ExecutionPolicy Bypass -NoProfile -File \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.ps1\""
+          }
+        ]
+      },
+      {
+        "matcher": "platform:linux,darwin",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh"
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "type": "command",
