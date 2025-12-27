@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.4] - 2025-12-27
+
+### Bug Fixes
+
+- Remove invalid 'platforms' field from plugin.json
+- Skills path must start with ./
+
+### Documentation
+
+- Update CHANGELOG for v0.10.3
+- Add Claude Code plugin installation instructions
+- Fix Claude Code plugin installation commands in README
+- Fix Claude Code plugin installation in Chinese README
+
+### Features
+
+- Add PowerShell fallback for Windows without Git Bash
+- Add auto-install via npm in session-start hook
+- Improve installation UX with progress feedback
+
+### Miscellaneous Tasks
+
+- Increase hook timeout to 120s for npm install
+- Remove claude-plugin directory
+- Update Cargo.lock
+
+### Refactor
+
+- Simplify plugin architecture for Claude Code compatibility
+- Switch to Node.js for cross-platform hook
+- Improve session-start.js robustness
+
 ## [0.10.3] - 2025-12-27
 
 ### Bug Fixes
