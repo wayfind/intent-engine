@@ -1,11 +1,12 @@
 {
   "name": "intent-engine",
-  "version": "0.10.3",
-  "description": "AI Long-Term Task Memory - Session start hook for ie status",
+  "version": "0.10.4",
+  "description": "AI Long-Term Task Memory - Cross-session task tracking for Claude Code",
   "author": {
     "name": "wayfind"
   },
   "repository": "https://github.com/wayfind/intent-engine",
   "license": "MIT OR Apache-2.0",
-  "keywords": ["task", "memory", "session", "hook", "ai", "productivity"]
+  "keywords": ["task", "memory", "session", "hook", "ai", "productivity"],
+  "skills": ["skills/intent-engine"]
 }

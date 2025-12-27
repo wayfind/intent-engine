@@ -1,29 +1,14 @@
 {
+  "description": "Intent-Engine session initialization - runs ie status on session start",
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "platform:windows",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -ExecutionPolicy Bypass -NoProfile -File \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.ps1\""
-          }
-        ]
-      },
-      {
-        "matcher": "platform:linux,darwin",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh"
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh",
+            "timeout": 30
           }
         ]
       }

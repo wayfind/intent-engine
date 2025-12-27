@@ -1,135 +1,65 @@
 #!/usr/bin/env bash
 # Intent-Engine Session Start Hook
-# Compatible with: Linux, macOS, WSL, Git Bash on Windows
+# Simplified cross-platform script (works on Linux, macOS, WSL, Git Bash)
 set -euo pipefail
 
 # === Helper Functions ===
-
-# Safe JSON parsing without jq dependency
-parse_session_id() {
-    local input="$1"
-    # Try jq first (fastest and most reliable)
-    if command -v jq &>/dev/null; then
-        echo "$input" | jq -r '.session_id // empty' 2>/dev/null && return
-    fi
-    # Fallback: Python (usually available)
-    if command -v python3 &>/dev/null; then
-        echo "$input" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('session_id',''))" 2>/dev/null && return
-    fi
-    if command -v python &>/dev/null; then
-        echo "$input" | python -c "import sys,json; d=json.load(sys.stdin); print(d.get('session_id',''))" 2>/dev/null && return
-    fi
-    # Fallback: grep/sed (basic, may fail on edge cases)
-    echo "$input" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*:.*"\([^"]*\)".*/\1/' 2>/dev/null || echo ""
-}
 
 log_debug() {
     # Uncomment for debugging: echo "[ie-hook] $*" >&2
     :
 }
 
-# === Main Logic ===
+# === Parse stdin (session_id) ===
+
+input=""
+session_id=""
 
 # Read stdin with timeout (avoid blocking)
-input=""
-if [ -t 0 ]; then
-    log_debug "No stdin (terminal mode)"
-else
-    # Read stdin, timeout after 1 second
+if [ ! -t 0 ]; then
     if command -v timeout &>/dev/null; then
-        input=$(timeout 1 cat 2>/dev/null) || true
+        input=$(timeout 2 cat 2>/dev/null) || true
     elif command -v gtimeout &>/dev/null; then
-        # macOS with coreutils
-        input=$(gtimeout 1 cat 2>/dev/null) || true
+        input=$(gtimeout 2 cat 2>/dev/null) || true
     else
-        # Fallback: just read (may block if no input)
-        read -t 1 -r input 2>/dev/null || true
+        read -t 2 -r input 2>/dev/null || true
     fi
 fi
 
-# Parse session_id
-session_id=""
+# Parse session_id from JSON (jq preferred, fallback to python/grep)
 if [ -n "$input" ]; then
-    session_id=$(parse_session_id "$input")
+    if command -v jq &>/dev/null; then
+        session_id=$(echo "$input" | jq -r '.session_id // empty' 2>/dev/null) || true
+    elif command -v python3 &>/dev/null; then
+        session_id=$(echo "$input" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('session_id',''))" 2>/dev/null) || true
+    elif command -v python &>/dev/null; then
+        session_id=$(echo "$input" | python -c "import sys,json; d=json.load(sys.stdin); print(d.get('session_id',''))" 2>/dev/null) || true
+    else
+        session_id=$(echo "$input" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*:.*"\([^"]*\)".*/\1/' 2>/dev/null) || true
+    fi
     log_debug "Parsed session_id: $session_id"
 fi
 
-# Set session environment variable
+# === Set environment variable ===
+
 if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "$session_id" ]; then
     # Validate session_id (alphanumeric, dash, underscore only)
     if [[ "$session_id" =~ ^[a-zA-Z0-9_-]+$ ]]; then
         echo "export IE_SESSION_ID=\"$session_id\"" >> "$CLAUDE_ENV_FILE"
         log_debug "Wrote session_id to CLAUDE_ENV_FILE"
-    else
-        log_debug "Invalid session_id format, skipping"
     fi
 fi
 
-# === Auto-install ie if not found ===
+export IE_SESSION_ID="${session_id:-}"
 
-# Cache file to avoid repeated install attempts
-INSTALL_ATTEMPTED_FILE="${HOME}/.intent-engine/.install-attempted"
+# === Check if ie is installed ===
 
-install_ie() {
-    echo "🔧 Installing intent-engine..." >&2
-
-    # Try npm first (fastest, no compiler needed)
-    if command -v npm &>/dev/null; then
-        echo "   → Using npm..." >&2
-        if npm install -g @m3task/intent-engine 2>&1; then
-            echo "   ✓ Installed via npm" >&2
-            return 0
-        fi
-    fi
-
-    # Try cargo (for Rust developers)
-    if command -v cargo &>/dev/null; then
-        echo "   → Using cargo (this may take a few minutes)..." >&2
-        if cargo install intent-engine 2>&1; then
-            echo "   ✓ Installed via cargo" >&2
-            return 0
-        fi
-    fi
-
-    # Try brew (macOS/Linux)
-    if command -v brew &>/dev/null; then
-        echo "   → Using brew..." >&2
-        if brew install wayfind/tap/intent-engine 2>&1; then
-            echo "   ✓ Installed via brew" >&2
-            return 0
-        fi
-    fi
-
-    echo "   ✗ Installation failed" >&2
-    return 1
-}
-
-if ! command -v ie &>/dev/null; then
-    # Check if we already tried to install (and failed) recently
-    if [ -f "$INSTALL_ATTEMPTED_FILE" ]; then
-        # Check if file is older than 1 hour (3600 seconds)
-        if [ "$(find "$INSTALL_ATTEMPTED_FILE" -mmin +60 2>/dev/null)" ]; then
-            rm -f "$INSTALL_ATTEMPTED_FILE"
-        fi
-    fi
-
-    if [ ! -f "$INSTALL_ATTEMPTED_FILE" ]; then
-        mkdir -p "$(dirname "$INSTALL_ATTEMPTED_FILE")" 2>/dev/null
-        if install_ie; then
-            rm -f "$INSTALL_ATTEMPTED_FILE" 2>/dev/null
-        else
-            touch "$INSTALL_ATTEMPTED_FILE" 2>/dev/null
-        fi
-    fi
-fi
-
-# Check if ie is available now
 if ! command -v ie &>/dev/null; then
     cat << 'EOF'
 <system-reminder>
 intent-engine (ie) not installed. Install via one of:
-  cargo install intent-engine
   npm install -g @m3task/intent-engine
+  cargo install intent-engine
   brew install wayfind/tap/intent-engine
 </system-reminder>
 EOF
@@ -151,10 +81,6 @@ if [ -d "$project_dir" ]; then
     cd "$project_dir" || true
 fi
 
-# Export session_id for ie command
-export IE_SESSION_ID="${session_id:-}"
-
-# Run status, capture output
 status_output=$(ie status 2>&1) || true
 
 if [ -n "$status_output" ]; then
