@@ -71,13 +71,14 @@ AI 开始会话时运行 `ie status`，一切都回来了：
 ### Claude Code（一键安装）
 
 ```bash
-/plugin marketplace add wayfind/intent-engine
-/plugin install intent-engine@intent-engine
+claude plugin marketplace add wayfind/origin-task
+claude plugin install intent-engine
 ```
 
-搞定。插件包含：
-- **Hook**：自动安装 ie、初始化项目、会话启动时运行 `ie status`
-- **Skill**：引导 Claude 用 `ie plan` 替代 TodoWrite
+搞定。插件会自动：
+- 每次会话启动时运行 `ie status`
+- 如果未安装，自动通过 npm 安装 `ie` CLI
+- 引导 Claude 用 `ie plan` 替代 TodoWrite
 
 ### 手动安装
 
