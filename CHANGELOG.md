@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2025-12-27
+
+### Bug Fixes
+
+- Clippy warnings for cmp_owned and too_many_arguments
+- Use git directly instead of third-party action for homebrew update
+- Use ubuntu-22.04 for Linux builds for better GLIBC compatibility
+- Add explicit type annotations to sqlx queries for older Rust toolchains
+- Add NODE_AUTH_TOKEN for npm publish
+- Use CLAUDE_PROJECT_DIR for correct project root
+- Auto-init project in hook using CLAUDE_PROJECT_DIR
+
+### Documentation
+
+- Update CHANGELOG for v0.10.1
+- Fix rustdoc HTML tag warning in models.rs
+- Add Claude Code plugin installation to README
+- Restructure Integration as two-step install
+- Update README with one-click plugin install
+- Clarify plugin includes hook and skill
+- Update plugin installation syntax in README
+
+### Features
+
+- Add npm package distribution
+- Add Claude Code plugin for session start hook
+- Add skill for auto-install and usage guidance
+- Auto-install ie binary in session hook
+- Add marketplace.json for plugin discovery
+- Use scoped npm packages @m3task/intent-engine
+
+### Miscellaneous Tasks
+
+- Remove MCP test from coverage workflow
+- Remove obsolete CLI tests from CI and coverage
+- Add Homebrew tap automation
+- Fix build workflow checkout ref and cache busting
+- Bump version to 0.10.2
+
+### Refactor
+
+- Clean up logging system and add tracing instrumentation
+- Use npm OIDC trusted publishing instead of token
+- Use pure OIDC trusted publishing for npm
+
 ## [0.10.1] - 2025-12-25
 
 ### Bug Fixes
