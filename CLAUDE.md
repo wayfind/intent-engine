@@ -5,6 +5,33 @@
 
 ---
 
+## Claude Code Plugin Installation
+
+Install the plugin for automatic session integration:
+
+```bash
+# 1. Add marketplace
+claude plugin marketplace add wayfind/origin-task
+
+# 2. Install plugin
+claude plugin install intent-engine
+```
+
+After installation, the plugin automatically:
+- Runs `ie status` at every session start
+- Shows your current focused task and progress
+- Auto-installs `ie` CLI via npm if not found
+
+**Manual CLI Installation** (if needed):
+
+```bash
+npm install -g @m3task/intent-engine
+# or: cargo install intent-engine
+# or: brew install wayfind/tap/intent-engine
+```
+
+---
+
 ## Quick Decision: TodoWrite vs ie
 
 **You already have TodoWrite** (built into Claude Code). When to use ie?
