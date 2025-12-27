@@ -113,7 +113,13 @@ function installIe() {
     return false;
   }
 
-  console.log('Installing intent-engine via npm...');
+  console.log('');
+  console.log('========================================');
+  console.log('  Installing intent-engine...');
+  console.log('  This may take a few seconds.');
+  console.log('========================================');
+  console.log('');
+
   try {
     const result = spawnSync('npm', ['install', '-g', '@m3task/intent-engine'], {
       encoding: 'utf8',
@@ -123,7 +129,11 @@ function installIe() {
     });
 
     if (result.status === 0) {
-      console.log('intent-engine installed successfully.');
+      console.log('');
+      console.log('========================================');
+      console.log('  intent-engine installed successfully!');
+      console.log('========================================');
+      console.log('');
       return true;
     } else {
       const errorMsg = (result.stderr || result.stdout || 'Unknown error').slice(0, 300);
@@ -140,13 +150,16 @@ function installIe() {
 
 // Find ie binary, install if needed
 let iePath = findIeBinary();
+let justInstalled = false;
 
 if (!iePath) {
   // Try to install
   const installed = installIe();
   if (installed) {
     iePath = findIeBinary();
-    if (!iePath) {
+    if (iePath) {
+      justInstalled = true;
+    } else {
       console.log('Installation succeeded but ie binary not found or not working.');
     }
   }
@@ -164,6 +177,24 @@ Please install manually:
   brew install wayfind/tap/intent-engine
 </system-reminder>`);
   process.exit(0);
+}
+
+// If just installed, output system reminder first so Claude can use ie immediately
+if (justInstalled) {
+  console.log(`
+<system-reminder>
+# intent-engine is now ready to use!
+
+Use \`ie plan\` instead of TodoWrite for cross-session task tracking:
+
+  - Create task: echo '{"tasks":[{"name":"Task","status":"doing"}]}' | ie plan
+  - View status: ie status
+  - Record decision: ie log decision "..."
+  - Full help: ie --help
+
+Note: This session uses the full binary path. Future sessions will use 'ie' directly.
+</system-reminder>
+`);
 }
 
 // === Initialize project if needed ===
