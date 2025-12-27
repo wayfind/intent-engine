@@ -71,13 +71,14 @@ When AI starts a session, it runs `ie status`. Everything comes back:
 ### Claude Code (One-Click)
 
 ```bash
-/plugin marketplace add wayfind/intent-engine
-/plugin install intent-engine@intent-engine
+claude plugin marketplace add wayfind/origin-task
+claude plugin install intent-engine
 ```
 
-That's it. The plugin includes:
-- **Hook**: Auto-install ie, init project, run `ie status` at session start
-- **Skill**: Guide Claude to use `ie plan` instead of TodoWrite
+That's it. The plugin automatically:
+- Runs `ie status` at every session start
+- Auto-installs `ie` CLI via npm if not found
+- Guides Claude to use `ie plan` instead of TodoWrite
 
 ### Manual Install
 
