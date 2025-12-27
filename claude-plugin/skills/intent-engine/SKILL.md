@@ -7,7 +7,7 @@ When user mentions: tasks, planning, todo, decisions, "ie", cross-session work, 
 If ie not installed, install first:
 ```bash
 cargo install intent-engine
-# or: npm install -g intent-engine
+# or: npm install -g @m3task/intent-engine
 # or: brew install wayfind/tap/intent-engine
 ```
 

@@ -1,5 +1,5 @@
 {
-  "name": "intent-engine-win32-x64",
+  "name": "@m3task/intent-engine-win32-x64",
   "version": "0.10.1",
   "description": "intent-engine binary for Windows x64",
   "repository": {

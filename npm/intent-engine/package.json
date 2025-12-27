@@ -1,5 +1,5 @@
 {
-  "name": "intent-engine",
+  "name": "@m3task/intent-engine",
   "version": "0.10.1",
   "description": "AI long-term task memory system - cross-session persistence, hierarchical tasks, decision records",
   "keywords": [
@@ -28,11 +28,11 @@
     "lib"
   ],
   "optionalDependencies": {
-    "intent-engine-darwin-arm64": "0.10.1",
-    "intent-engine-darwin-x64": "0.10.1",
-    "intent-engine-linux-arm64": "0.10.1",
-    "intent-engine-linux-x64": "0.10.1",
-    "intent-engine-win32-x64": "0.10.1"
+    "@m3task/intent-engine-darwin-arm64": "0.10.1",
+    "@m3task/intent-engine-darwin-x64": "0.10.1",
+    "@m3task/intent-engine-linux-arm64": "0.10.1",
+    "@m3task/intent-engine-linux-x64": "0.10.1",
+    "@m3task/intent-engine-win32-x64": "0.10.1"
   },
   "engines": {
     "node": ">=14"

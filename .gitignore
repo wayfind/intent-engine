@@ -45,3 +45,7 @@ Thumbs.db
 
 # Intent-Engine local database and state
 .intent-engine/
+
+# npm platform package binaries (downloaded during CI)
+npm/intent-engine-*/bin/ie
+npm/intent-engine-*/bin/ie.exe

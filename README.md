@@ -87,7 +87,7 @@ If you prefer manual setup:
 # 1. Install binary
 cargo install intent-engine
 # or: brew install wayfind/tap/intent-engine
-# or: npm install -g intent-engine
+# or: npm install -g @m3task/intent-engine
 
 # 2. Add system prompt
 claude --append-system-prompt "Use ie plan instead of TodoWrite. Commands: ie status, echo '{...}'|ie plan, ie log, ie search"
@@ -130,7 +130,7 @@ Code changes. Intent persists.
 # Install
 cargo install intent-engine
 # or: brew install wayfind/tap/intent-engine
-# or: npm install -g intent-engine
+# or: npm install -g @m3task/intent-engine
 
 # Core commands
 ie status                    # Current context

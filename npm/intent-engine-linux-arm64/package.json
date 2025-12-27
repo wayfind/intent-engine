@@ -1,5 +1,5 @@
 {
-  "name": "intent-engine-linux-arm64",
+  "name": "@m3task/intent-engine-linux-arm64",
   "version": "0.10.1",
   "description": "intent-engine binary for Linux ARM64",
   "repository": {

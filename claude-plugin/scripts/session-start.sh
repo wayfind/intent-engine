@@ -13,7 +13,7 @@ if ! command -v ie &> /dev/null; then
     if command -v cargo &> /dev/null; then
         cargo install intent-engine 2>/dev/null
     elif command -v npm &> /dev/null; then
-        npm install -g intent-engine 2>/dev/null
+        npm install -g @m3task/intent-engine 2>/dev/null
     elif command -v brew &> /dev/null; then
         brew install wayfind/tap/intent-engine 2>/dev/null
     fi

@@ -1,5 +1,5 @@
 {
-  "name": "intent-engine-darwin-x64",
+  "name": "@m3task/intent-engine-darwin-x64",
   "version": "0.10.1",
   "description": "intent-engine binary for macOS x64",
   "repository": {
