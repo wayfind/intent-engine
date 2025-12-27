@@ -67,38 +67,60 @@ fi
 
 # === Auto-install ie if not found ===
 
-install_ie() {
-    log_debug "Attempting to install intent-engine..."
+# Cache file to avoid repeated install attempts
+INSTALL_ATTEMPTED_FILE="${HOME}/.intent-engine/.install-attempted"
 
-    # Try cargo (preferred for Rust users)
-    if command -v cargo &>/dev/null; then
-        log_debug "Installing via cargo..."
-        if cargo install intent-engine 2>&1 | tail -1; then
+install_ie() {
+    echo "🔧 Installing intent-engine..." >&2
+
+    # Try npm first (fastest, no compiler needed)
+    if command -v npm &>/dev/null; then
+        echo "   → Using npm..." >&2
+        if npm install -g @m3task/intent-engine 2>&1; then
+            echo "   ✓ Installed via npm" >&2
             return 0
         fi
     fi
 
-    # Try npm (cross-platform, no compiler needed)
-    if command -v npm &>/dev/null; then
-        log_debug "Installing via npm..."
-        if npm install -g @m3task/intent-engine 2>&1 | tail -1; then
+    # Try cargo (for Rust developers)
+    if command -v cargo &>/dev/null; then
+        echo "   → Using cargo (this may take a few minutes)..." >&2
+        if cargo install intent-engine 2>&1; then
+            echo "   ✓ Installed via cargo" >&2
             return 0
         fi
     fi
 
     # Try brew (macOS/Linux)
     if command -v brew &>/dev/null; then
-        log_debug "Installing via brew..."
-        if brew install wayfind/tap/intent-engine 2>&1 | tail -1; then
+        echo "   → Using brew..." >&2
+        if brew install wayfind/tap/intent-engine 2>&1; then
+            echo "   ✓ Installed via brew" >&2
             return 0
         fi
     fi
 
+    echo "   ✗ Installation failed" >&2
     return 1
 }
 
 if ! command -v ie &>/dev/null; then
-    install_ie || true
+    # Check if we already tried to install (and failed) recently
+    if [ -f "$INSTALL_ATTEMPTED_FILE" ]; then
+        # Check if file is older than 1 hour (3600 seconds)
+        if [ "$(find "$INSTALL_ATTEMPTED_FILE" -mmin +60 2>/dev/null)" ]; then
+            rm -f "$INSTALL_ATTEMPTED_FILE"
+        fi
+    fi
+
+    if [ ! -f "$INSTALL_ATTEMPTED_FILE" ]; then
+        mkdir -p "$(dirname "$INSTALL_ATTEMPTED_FILE")" 2>/dev/null
+        if install_ie; then
+            rm -f "$INSTALL_ATTEMPTED_FILE" 2>/dev/null
+        else
+            touch "$INSTALL_ATTEMPTED_FILE" 2>/dev/null
+        fi
+    fi
 fi
 
 # Check if ie is available now

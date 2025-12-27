@@ -72,14 +72,18 @@ if ($env:CLAUDE_ENV_FILE -and $sessionId) {
 
 # === Auto-install ie if not found ===
 
-function Install-IntentEngine {
-    Write-DebugLog "Attempting to install intent-engine..."
+# Cache file to avoid repeated install attempts
+$InstallAttemptedFile = Join-Path $env:USERPROFILE ".intent-engine\.install-attempted"
 
-    # Try npm first (most reliable on Windows)
+function Install-IntentEngine {
+    Write-Host "🔧 Installing intent-engine..." -ForegroundColor Cyan
+
+    # Try npm first (fastest, no compiler needed)
     if (Test-Command "npm") {
-        Write-DebugLog "Installing via npm..."
+        Write-Host "   → Using npm..." -ForegroundColor Gray
         $result = npm install -g "@m3task/intent-engine" 2>&1
         if ($LASTEXITCODE -eq 0) {
+            Write-Host "   ✓ Installed via npm" -ForegroundColor Green
             # Refresh PATH to find newly installed command
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
                         [System.Environment]::GetEnvironmentVariable("Path", "User")
@@ -87,34 +91,46 @@ function Install-IntentEngine {
         }
     }
 
-    # Try cargo
+    # Try cargo (for Rust developers)
     if (Test-Command "cargo") {
-        Write-DebugLog "Installing via cargo..."
+        Write-Host "   → Using cargo (this may take a few minutes)..." -ForegroundColor Gray
         $result = cargo install intent-engine 2>&1
         if ($LASTEXITCODE -eq 0) {
+            Write-Host "   ✓ Installed via cargo" -ForegroundColor Green
             return $true
         }
     }
 
-    # Try scoop (Windows package manager)
-    if (Test-Command "scoop") {
-        Write-DebugLog "Installing via scoop..."
-        # Note: Would need to add scoop bucket first
-        # scoop bucket add wayfind https://github.com/wayfind/scoop-bucket
-        # scoop install intent-engine
-    }
-
-    # Try winget
-    if (Test-Command "winget") {
-        Write-DebugLog "Checking winget..."
-        # winget install wayfind.intent-engine (if published)
-    }
-
+    Write-Host "   ✗ Installation failed" -ForegroundColor Red
     return $false
 }
 
 if (-not (Test-Command "ie")) {
-    $installed = Install-IntentEngine
+    $shouldInstall = $true
+
+    # Check if we already tried to install (and failed) recently
+    if (Test-Path $InstallAttemptedFile) {
+        $fileAge = (Get-Date) - (Get-Item $InstallAttemptedFile).LastWriteTime
+        if ($fileAge.TotalHours -lt 1) {
+            $shouldInstall = $false
+            Write-DebugLog "Skipping install - attempted recently"
+        } else {
+            Remove-Item $InstallAttemptedFile -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($shouldInstall) {
+        $parentDir = Split-Path $InstallAttemptedFile -Parent
+        if (-not (Test-Path $parentDir)) {
+            New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+        }
+
+        if (Install-IntentEngine) {
+            Remove-Item $InstallAttemptedFile -Force -ErrorAction SilentlyContinue
+        } else {
+            New-Item -ItemType File -Path $InstallAttemptedFile -Force | Out-Null
+        }
+    }
 }
 
 # Check if ie is available now
