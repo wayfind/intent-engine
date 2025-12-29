@@ -194,18 +194,58 @@ fn parse_status_keywords(query: &str) -> Option<Vec<String>> {
     Some(statuses)
 }
 
+/// Parse a date filter string (duration like "7d" or date like "2025-01-01")
+fn parse_date_filter(input: &str) -> std::result::Result<chrono::DateTime<chrono::Utc>, String> {
+    use crate::time_utils::parse_duration;
+    use chrono::{NaiveDate, TimeZone, Utc};
+
+    let input = input.trim();
+
+    // Try duration format first (e.g., "7d", "1w")
+    if let Ok(dt) = parse_duration(input) {
+        return Ok(dt);
+    }
+
+    // Try date format (YYYY-MM-DD)
+    if let Ok(date) = NaiveDate::parse_from_str(input, "%Y-%m-%d") {
+        let dt = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
+        return Ok(dt);
+    }
+
+    Err(format!(
+        "Invalid date format '{}'. Use duration (7d, 1w) or date (2025-01-01)",
+        input
+    ))
+}
+
 pub async fn handle_search_command(
     query: &str,
     include_tasks: bool,
     include_events: bool,
     limit: Option<i64>,
     offset: Option<i64>,
+    since: Option<String>,
+    until: Option<String>,
     format: &str,
 ) -> Result<()> {
     use crate::search::SearchManager;
     use crate::tasks::TaskManager;
+    use chrono::{DateTime, Utc};
 
     let ctx = ProjectContext::load_or_init().await?;
+
+    // Parse date filters
+    let since_dt: Option<DateTime<Utc>> = if let Some(ref s) = since {
+        Some(parse_date_filter(s).map_err(|e| IntentError::InvalidInput(e))?)
+    } else {
+        None
+    };
+
+    let until_dt: Option<DateTime<Utc>> = if let Some(ref u) = until {
+        Some(parse_date_filter(u).map_err(|e| IntentError::InvalidInput(e))?)
+    } else {
+        None
+    };
 
     // Check if query is a status keyword combination
     if let Some(statuses) = parse_status_keywords(query) {
@@ -213,12 +253,53 @@ pub async fn handle_search_command(
         let task_mgr = TaskManager::new(&ctx.pool);
 
         // Collect tasks for each status
+        // When date filters are used, fetch more tasks initially
+        // (we'll apply limit after filtering)
+        let fetch_limit = if since_dt.is_some() || until_dt.is_some() {
+            Some(10000) // Large limit to fetch all relevant tasks
+        } else {
+            limit
+        };
+
         let mut all_tasks = Vec::new();
         for status in &statuses {
             let result = task_mgr
-                .find_tasks(Some(status), None, None, limit, offset)
+                .find_tasks(Some(status), None, None, fetch_limit, offset)
                 .await?;
             all_tasks.extend(result.tasks);
+        }
+
+        // Apply date filters based on status
+        if since_dt.is_some() || until_dt.is_some() {
+            all_tasks.retain(|task| {
+                // Determine which timestamp to use based on task status
+                let timestamp = match task.status.as_str() {
+                    "done" => task.first_done_at,
+                    "doing" => task.first_doing_at,
+                    _ => task.first_todo_at, // todo or unknown
+                };
+
+                // If no timestamp, exclude from date-filtered results
+                let Some(ts) = timestamp else {
+                    return false;
+                };
+
+                // Check since filter
+                if let Some(ref since) = since_dt {
+                    if ts < *since {
+                        return false;
+                    }
+                }
+
+                // Check until filter
+                if let Some(ref until) = until_dt {
+                    if ts > *until {
+                        return false;
+                    }
+                }
+
+                true
+            });
         }
 
         // Sort by priority, then by id
@@ -239,9 +320,16 @@ pub async fn handle_search_command(
         } else {
             // Text format: status filter results
             let status_str = statuses.join(", ");
+            let date_filter_str = match (&since, &until) {
+                (Some(s), Some(u)) => format!(" (from {} to {})", s, u),
+                (Some(s), None) => format!(" (since {})", s),
+                (None, Some(u)) => format!(" (until {})", u),
+                (None, None) => String::new(),
+            };
             println!(
-                "Tasks with status [{}]: {} found",
+                "Tasks with status [{}]{}: {} found",
                 status_str,
+                date_filter_str,
                 all_tasks.len()
             );
             println!();

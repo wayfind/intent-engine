@@ -125,6 +125,14 @@ pub enum Commands {
         #[arg(long)]
         offset: Option<i64>,
 
+        /// Filter by start time (e.g., "7d", "1w", "2025-01-01")
+        #[arg(long)]
+        since: Option<String>,
+
+        /// Filter by end time (e.g., "1d", "2025-12-31")
+        #[arg(long)]
+        until: Option<String>,
+
         /// Output format (text or json)
         #[arg(long, default_value = "text")]
         format: String,

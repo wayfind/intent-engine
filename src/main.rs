@@ -254,8 +254,13 @@ async fn run(cli: &Cli) -> Result<()> {
             events,
             limit,
             offset,
+            since,
+            until,
             format,
-        } => handle_search_command(&query, tasks, events, limit, offset, &format).await?,
+        } => {
+            handle_search_command(&query, tasks, events, limit, offset, since, until, &format)
+                .await?
+        },
 
         Commands::Init { at, force } => handle_init_command(at, force).await?,
 
