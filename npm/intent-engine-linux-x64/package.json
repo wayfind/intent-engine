@@ -1,6 +1,6 @@
 {
   "name": "@origintask/intent-engine-linux-x64",
-  "version": "0.10.6",
+  "version": "0.10.7",
   "description": "intent-engine binary for Linux x64",
   "repository": {
     "type": "git",

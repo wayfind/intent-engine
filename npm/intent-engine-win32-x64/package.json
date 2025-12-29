@@ -1,6 +1,6 @@
 {
   "name": "@origintask/intent-engine-win32-x64",
-  "version": "0.10.6",
+  "version": "0.10.7",
   "description": "intent-engine binary for Windows x64",
   "repository": {
     "type": "git",
