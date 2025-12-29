@@ -8,11 +8,9 @@ Intent-Engine can be integrated into various AI tools and workflows. This guide 
 
 | Integration Method | Applicable Tools | Complexity | Feature Completeness | Recommended Scenario |
 |-------------------|------------------|------------|---------------------|---------------------|
-| [System Prompt](claude-code-system-prompt.md) | Claude Code | ⭐ | ⭐⭐⭐⭐⭐ | **Recommended** - Zero configuration, best Claude integration |
-| [Claude Skill](.claude-code/intent-engine.skill.md) | Claude Code | ⭐ | ⭐⭐⭐ | Alternative, lightweight integration |
-| [Direct CLI Call](generic-llm.md) | Any AI Tool | ⭐ | ⭐⭐⭐⭐⭐ | Universal solution, adapt to any AI tool |
-| [Gemini CLI](gemini-cli.md) | Google Gemini | ⭐⭐ | ⭐⭐⭐⭐ | Coming soon |
-| [Cursor](cursor-integration.md) | Cursor Editor | ⭐⭐ | ⭐⭐⭐ | Coming soon |
+| [Claude Code Plugin](claude-code-system-prompt.md) | Claude Code | Minimal | Full | **Recommended** - One-click install |
+| [System Prompt](claude-code-system-prompt.md) | Claude Code | Low | Full | Manual setup alternative |
+| [Direct CLI Call](generic-llm.md) | Any AI Tool | Low | Full | Universal solution, adapt to any AI tool |
 
 ---
 
@@ -20,15 +18,21 @@ Intent-Engine can be integrated into various AI tools and workflows. This guide 
 
 ### Using Claude Code?
 
-**Quick Trial (5 minutes):**
-1. Install Intent-Engine: `cargo install intent-engine`
-2. Claude Code will automatically recognize `.claude-code/intent-engine.skill.md`
-3. Ask Claude to use Intent-Engine in conversation
+**One-Click Install (Recommended):**
+```bash
+claude plugin marketplace add wayfind/origin-task
+claude plugin install intent-engine
+```
 
-**Production Integration (5 minutes):**
-1. Follow [System Prompt Guide](claude-code-system-prompt.md) to setup
-2. Add system prompt to Claude Code configuration
-3. Enjoy zero-configuration experience (no MCP server needed)
+The plugin automatically:
+- Runs `ie status` at every session start
+- Auto-installs `ie` CLI via npm if not found
+- Guides Claude to use `ie plan` instead of TodoWrite
+
+**Manual Setup:**
+1. Install Intent-Engine: `cargo install intent-engine`
+2. Follow [System Prompt Guide](claude-code-system-prompt.md) to setup
+3. Add system prompt to Claude Code configuration
 
 ### Using Other AI Tools?
 
@@ -36,12 +40,8 @@ Refer to [Generic Integration Guide](generic-llm.md) to have AI call Intent-Engi
 
 **Core Approach:**
 1. Add [AI Quick Guide](../guide/ai-quick-guide.md) to System Prompt
-2. Have AI call `intent-engine` commands via `Bash` tool
-3. AI parses JSON output and continues working
-
-### Your Team Uses CI/CD?
-
-Refer to [CI/CD Integration Guide](ci-cd.md) (coming soon) to use Intent-Engine in GitHub Actions/GitLab CI.
+2. Have AI call `ie` commands via `Bash` tool
+3. AI parses output and continues working
 
 ---
 
@@ -55,14 +55,14 @@ Refer to [CI/CD Integration Guide](ci-cd.md) (coming soon) to use Intent-Engine 
 └────────┬──────────────┬──────────┬──────────────────────┘
          │              │          │
       ┌──▼──┐       ┌──▼──┐   ┌───▼────┐
-      │ MCP │       │Skill│   │Bash CLI│
-      │Server│      │     │   │        │
+      │Plugin│      │System│  │Bash CLI│
+      │     │       │Prompt│  │        │
       └──┬──┘       └──┬──┘   └───┬────┘
          └─────────────┴──────────┘
                      │
          ┌───────────▼───────────┐
          │  Intent-Engine CLI    │
-         │  (JSON I/O)           │
+         │  (ie status/plan/log) │
          └───────────┬───────────┘
                      │
          ┌───────────▼───────────┐
@@ -76,13 +76,13 @@ Refer to [CI/CD Integration Guide](ci-cd.md) (coming soon) to use Intent-Engine 
 
 ## Integration Feature Matrix
 
-| Feature | System Prompt | Claude Skill | Generic CLI |
-|---------|--------------|-------------|-------------|
+| Feature | Plugin | System Prompt | Generic CLI |
+|---------|--------|---------------|-------------|
 | Task Management | ✅ | ✅ | ✅ |
 | Event Recording | ✅ | ✅ | ✅ |
-| Work Reports | ✅ | ✅ | ✅ |
-| Zero Configuration | ✅ | ✅ | ❌ |
-| Embedded Documentation | ✅ | ❌ | ❌ |
+| Search History | ✅ | ✅ | ✅ |
+| Auto Session Start | ✅ | ❌ | ❌ |
+| Zero Configuration | ✅ | ❌ | ❌ |
 | Cross-Platform | ✅ | ✅ | ✅ |
 | Setup Cost | Minimal | Low | Low |
 | Maintenance Cost | None | Low | Medium |
@@ -95,15 +95,13 @@ Refer to [CI/CD Integration Guide](ci-cd.md) (coming soon) to use Intent-Engine 
 Start
   │
   ├─ Using Claude Code?
-  │   ├─ Yes → [System Prompt](claude-code-system-prompt.md)
-  │   │        (Recommended, zero configuration)
+  │   ├─ Yes → Plugin install (Recommended)
+  │   │        claude plugin install intent-engine
   │   └─ No ↓
   │
-  ├─ Using Gemini CLI?
-  │   └─ Yes → Gemini CLI integration (coming soon)
-  │
-  ├─ Using Cursor?
-  │   └─ Yes → Cursor integration (coming soon)
+  ├─ AI tool has CLI/Bash access?
+  │   ├─ Yes → Generic CLI integration
+  │   └─ No → Not supported
   │
   └─ Other tools → Generic CLI integration
 ```
@@ -120,8 +118,11 @@ All integration methods require Intent-Engine to be installed first:
 # Recommended method
 cargo install intent-engine
 
-# Or download pre-compiled binary
-# https://github.com/wayfind/intent-engine/releases
+# Or using Homebrew
+brew install wayfind/tap/intent-engine
+
+# Or using npm
+npm install -g @m3task/intent-engine
 
 # Verify installation
 ie --version
@@ -133,8 +134,8 @@ For detailed installation instructions, see [Installation Guide](../guide/instal
 
 Select the integration method that suits you based on the comparison table above, then refer to the corresponding detailed guide:
 
+- **Claude Code (Plugin)**: `claude plugin install intent-engine`
 - **Claude Code (System Prompt)**: [claude-code-system-prompt.md](claude-code-system-prompt.md)
-- **Claude Code (Skill)**: [.claude-code/intent-engine.skill.md](../../../.claude-code/intent-engine.skill.md)
 - **Generic Integration**: [generic-llm.md](generic-llm.md)
 
 ### 3. Verify Integration
@@ -142,9 +143,15 @@ Select the integration method that suits you based on the comparison table above
 After completing integration, verify with:
 
 ```bash
-# Create test task
-echo "Test Intent-Engine integration" | \
-  ie task add --name "Integration Test" --spec-stdin
+# Create test task via CLI
+echo '{"tasks":[{
+  "name": "Integration Test",
+  "status": "doing",
+  "spec": "Test Intent-Engine integration"
+}]}' | ie plan
+
+# Check status
+ie status
 
 # Ask AI tool to view tasks
 # For example in Claude Code:
@@ -155,11 +162,11 @@ echo "Test Intent-Engine integration" | \
 
 ## Common Integration Questions
 
-### Q: MCP Server vs Claude Skill, which should I choose?
+### Q: Plugin vs System Prompt, which should I choose?
 
 **A**:
-- **Trial phase**: Claude Skill (5-minute setup)
-- **Production use**: MCP Server (more features, better experience)
+- **Plugin**: One-click install, auto session start, recommended for most users
+- **System Prompt**: Manual setup, more control, for advanced users
 
 ### Q: Can I use multiple integration methods simultaneously?
 
@@ -171,22 +178,16 @@ echo "Test Intent-Engine integration" | \
 
 ### Q: Will AI automatically use Intent-Engine after integration?
 
-**A**: You need to guide AI to use it in conversation. Recommend adding to System Prompt:
-
-```
-When working on complex, multi-session tasks, use Intent-Engine to track
-strategic intent and decision history. See docs/en/guide/ai-quick-guide.md
-for usage patterns.
-```
+**A**: With the plugin, yes - it runs `ie status` automatically at session start. With system prompt, you need to guide AI to use it in conversation.
 
 ---
 
 ## Next Steps
 
-1. 📖 Read [The Intent-Engine Way](../guide/the-intent-engine-way.md) to understand design philosophy
-2. 🚀 Complete [Quick Start](../../../QUICKSTART.en.md) to experience core features
-3. 🔧 Choose integration method and start configuring
-4. 💡 Refer to [AI Quick Guide](../guide/ai-quick-guide.md) to optimize AI usage
+1. Read [The Intent-Engine Way](../guide/the-intent-engine-way.md) to understand design philosophy
+2. Complete [Quick Start](../guide/quickstart.md) to experience core features
+3. Choose integration method and start configuring
+4. Refer to [AI Quick Guide](../guide/ai-quick-guide.md) to optimize AI usage
 
 ---
 

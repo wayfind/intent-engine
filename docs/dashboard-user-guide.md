@@ -1,22 +1,22 @@
 # Intent-Engine Dashboard User Guide
 
-**Version**: 0.5.0 (Phase 1 MVP)
+**Version**: 0.10.x
 
 ---
 
 ## Overview
 
-The Intent-Engine Dashboard is a web-based interface for visualizing and managing your tasks and events. It complements the CLI and MCP tools, providing a rich visual experience with Markdown rendering, real-time search, and intuitive task management.
+The Intent-Engine Dashboard is a web-based interface for visualizing and managing your tasks and events. It complements the CLI, providing a rich visual experience with Markdown rendering, real-time search, and intuitive task management.
 
 ### Key Features
 
-- ✅ **Task Management**: Create, update, delete, and organize tasks
-- ✅ **Markdown Support**: Rich text rendering with code highlighting
-- ✅ **Hierarchical Tasks**: Parent-child relationships with subtasks
-- ✅ **Event Tracking**: Record decisions, blockers, milestones, and notes
-- ✅ **Smart Search**: Unified search across tasks and events
-- ✅ **Focus-Driven Workflow**: Start, switch, and complete tasks
-- ✅ **Multi-Project Support**: Manage multiple projects simultaneously
+- **Task Management**: Create, update, delete, and organize tasks
+- **Markdown Support**: Rich text rendering with code highlighting
+- **Hierarchical Tasks**: Parent-child relationships with subtasks
+- **Event Tracking**: Record decisions, blockers, milestones, and notes
+- **Smart Search**: Unified search across tasks and events
+- **Focus-Driven Workflow**: Start, switch, and complete tasks
+- **Multi-Project Support**: Manage multiple projects simultaneously
 
 ---
 
@@ -32,8 +32,7 @@ ie dashboard start
 ```
 
 The dashboard will automatically:
-- Detect the project database (`.intent-engine/intents.db`)
-- Start WebSocket server for MCP client connections
+- Detect the project database (`.intent-engine/project.db`)
 - Use the fixed port 11391
 - Display the URL to access
 
@@ -44,11 +43,11 @@ Dashboard starting for project: my-project
   URL: http://localhost:11391
   Mode: background
 
-✅ Dashboard server started successfully
+Dashboard server started successfully
    PID: 12345
    URL: http://localhost:11391
 
-⚠️  Dashboard is accessible from external IPs. Access via:
+Dashboard is accessible from external IPs. Access via:
     - http://localhost:11391 (local)
     - http://<your-ip>:11391 (from other devices)
 
@@ -64,7 +63,7 @@ Open your web browser and navigate to the URL shown (e.g., `http://localhost:113
 - Local access: `http://localhost:11391`
 - From other devices: `http://<your-machine-ip>:11391` (e.g., from Windows host when running in WSL)
 
-⚠️ **Security Notice**: The Dashboard is accessible from your local network. There is no authentication in Phase 1. Only run the Dashboard on trusted networks.
+**Security Notice**: The Dashboard is accessible from your local network. There is no authentication currently. Only run the Dashboard on trusted networks.
 
 You'll see the Dashboard interface with:
 - **Left Sidebar**: Task list with filters
@@ -130,16 +129,16 @@ When you select a task, the main panel shows:
 #### Action Buttons
 
 **For Todo Tasks**:
-- **▶ Start Task**: Begin working on this task (sets focus)
+- **Start Task**: Begin working on this task (sets focus)
 
 **For Doing Tasks**:
-- **✓ Complete Task**: Mark task as done (focus-driven, no ID needed)
-- **+ Spawn Subtask**: Create a child task and switch to it
+- **Complete Task**: Mark task as done (focus-driven, no ID needed)
+- **Spawn Subtask**: Create a child task and switch to it
 
 **For All Tasks**:
-- **⇄ Switch to This**: Change focus to this task
-- **📝 Add Event**: Record a decision, blocker, milestone, or note
-- **🗑 Delete**: Remove the task (only if no subtasks)
+- **Switch to This**: Change focus to this task
+- **Add Event**: Record a decision, blocker, milestone, or note
+- **Delete**: Remove the task (only if no subtasks)
 
 #### Specification Section
 - Rendered Markdown with:
@@ -159,10 +158,10 @@ Displays timestamps:
 Shows events related to the current task:
 
 #### Event Types
-- **💡 Decision**: Important decisions and their rationale
-- **🚫 Blocker**: Problems preventing progress
-- **🎯 Milestone**: Significant achievements
-- **📝 Note**: General observations and comments
+- **Decision**: Important decisions and their rationale
+- **Blocker**: Problems preventing progress
+- **Milestone**: Significant achievements
+- **Note**: General observations and comments
 
 Each event card shows:
 - **Type Badge**: Color-coded by type
@@ -175,6 +174,7 @@ Each event card shows:
 
 ### Create a New Task
 
+**Via Dashboard:**
 1. Click **+ New Task** in the header
 2. Fill in the form:
    - **Name** (required): Brief task description
@@ -183,6 +183,15 @@ Each event card shows:
    - **Parent Task ID** (optional): ID of parent task
 3. Click **Create Task**
 
+**Via CLI:**
+```bash
+echo '{"tasks":[{
+  "name": "Implement feature X",
+  "status": "doing",
+  "spec": "## Goal\nImplement feature X\n\n## Approach\n- Step 1\n- Step 2"
+}]}' | ie plan
+```
+
 The new task appears in the task list and opens automatically.
 
 ### Work on a Task
@@ -190,14 +199,14 @@ The new task appears in the task list and opens automatically.
 #### Start a Task
 1. Find the task in the list
 2. Click to open details
-3. Click **▶ Start Task**
+3. Click **Start Task**
 
 The task status changes to "doing" and becomes the current focus.
 
 #### Add Events During Work
 While working on a task, record important information:
 
-1. Click **📝 Add Event**
+1. Click **Add Event**
 2. Select event type:
    - **Decision**: "Chose JWT over sessions because..."
    - **Blocker**: "Blocked by missing API keys"
@@ -206,11 +215,24 @@ While working on a task, record important information:
 3. Write content in Markdown
 4. Click **Add Event**
 
+**Via CLI:**
+```bash
+ie log decision "Chose JWT over sessions for stateless API"
+ie log blocker "Waiting for API credentials"
+ie log milestone "Authentication module complete"
+ie log note "Consider adding rate limiting"
+```
+
 Events appear in the right sidebar chronologically.
 
 #### Complete the Task
 1. Ensure the task is your current focus
-2. Click **✓ Complete Task**
+2. Click **Complete Task**
+
+**Via CLI:**
+```bash
+echo '{"tasks":[{"name": "Task name", "status": "done"}]}' | ie plan
+```
 
 The task status changes to "done" and focus is cleared.
 
@@ -220,12 +242,22 @@ The task status changes to "done" and focus is cleared.
 
 For complex tasks, create subtasks:
 
+**Via Dashboard:**
 1. Start the parent task (must be focused)
-2. Click **+ Spawn Subtask**
+2. Click **Spawn Subtask**
 3. Enter:
    - **Subtask Name**: Specific sub-goal
    - **Specification** (optional): Details
 4. Submit
+
+**Via CLI:**
+```bash
+# Subtasks auto-parent to the currently focused task
+echo '{"tasks":[
+  {"name": "Subtask 1", "status": "todo"},
+  {"name": "Subtask 2", "status": "todo"}
+]}' | ie plan
+```
 
 The subtask is created and **automatically becomes the new focus**.
 
@@ -235,6 +267,12 @@ The subtask is created and **automatically becomes the new focus**.
 1. Type in the search bar (left sidebar)
 2. View results as you type
 3. Click a task to view details
+
+**Via CLI:**
+```bash
+ie search "todo doing"           # Find unfinished tasks
+ie search "JWT authentication"   # Full-text search
+```
 
 #### Advanced Search
 Use the API directly for advanced queries:
@@ -283,24 +321,7 @@ ie dashboard start --port 11393
 ### Check Running Dashboards
 
 ```bash
-ie dashboard list
-```
-
-Example output:
-```
-Active Dashboard Servers:
-
-  project-a
-    Path: /path/to/project-a
-    Port: 11391
-    URL:  http://127.0.0.1:11391
-    PID:  12345
-
-  project-b
-    Path: /path/to/project-b
-    Port: 11392
-    URL:  http://127.0.0.1:11392
-    PID:  12346
+ie dashboard status
 ```
 
 ### Stop a Specific Dashboard
@@ -314,12 +335,6 @@ ie dashboard stop
 ie dashboard stop --port 11391
 ```
 
-### Stop All Dashboards
-
-```bash
-ie dashboard stop-all
-```
-
 ---
 
 ## Tips and Best Practices
@@ -329,9 +344,7 @@ ie dashboard stop-all
 Use Markdown to make specs readable:
 
 ````markdown
-# Task: Implement User Authentication
-
-## Objective
+## Goal
 Add JWT-based authentication to the API.
 
 ## Requirements
@@ -382,19 +395,11 @@ Add JWT-based authentication to the API.
 **Milestone**: Authentication module complete
 
 **Achievement**:
-- ✅ Login/logout working
-- ✅ Token refresh implemented
-- ✅ All tests passing (12/12)
-- ✅ Documentation updated
+- Login/logout working
+- Token refresh implemented
+- All tests passing (12/12)
+- Documentation updated
 ```
-
-### Keyboard Shortcuts (Future)
-
-Phase 2+ will add keyboard shortcuts:
-- `n`: New task
-- `f`: Focus search
-- `/`: Quick search
-- `Escape`: Close modals
 
 ---
 
@@ -407,7 +412,7 @@ Phase 2+ will add keyboard shortcuts:
 **Solution**: Make sure you're in an Intent-Engine project directory:
 ```bash
 # Initialize project first
-ie setup
+ie init
 
 # Then start dashboard
 ie dashboard start
@@ -442,7 +447,7 @@ ie dashboard stop
 
 ### Task Not Appearing
 
-1. **Refresh the page**: No auto-reload in Phase 1
+1. **Refresh the page**: No auto-reload currently
 2. **Check filters**: Make sure you're not filtering it out
 3. **Search for it**: Use the search bar to find the task
 
@@ -452,49 +457,42 @@ ie dashboard stop
 
 **Solution**: Complete all subtasks first, then the parent:
 ```bash
-# Via CLI
-ie task list --parent 42  # Find subtasks
-ie task start 43           # Start subtask
+# Via CLI - find subtasks
+ie search "todo doing"
+
+# Start and complete subtasks
+echo '{"tasks":[{"name": "Subtask 1", "status": "doing", "spec": "..."}]}' | ie plan
 # ... work on it ...
-ie task done               # Complete subtask
-ie task start 42           # Back to parent
-ie task done               # Now you can complete parent
+echo '{"tasks":[{"name": "Subtask 1", "status": "done"}]}' | ie plan
+
+# Now complete parent
+echo '{"tasks":[{"name": "Parent task", "status": "done"}]}' | ie plan
 ```
 
 ### Performance Issues
 
 **Problem**: Slow page load with 500+ tasks
 
-**Solution** (Phase 2+):
-- Enable pagination
-- Use filters to reduce visible tasks
-- Archive completed tasks
-
-**Workaround** (Phase 1):
+**Workaround**:
 - Use filters (Todo/Doing) instead of "All"
 - Search for specific tasks instead of browsing
 - Clean up old completed tasks
 
 ---
 
-## Limitations (Phase 1)
-
-### Known Limitations
+## Known Limitations
 
 1. **No Real-Time Updates**
-   - Manual page refresh required
-   - Phase 2+ will add WebSocket support
+   - Manual page refresh required after CLI changes
 
 2. **No Authentication**
-   - ⚠️ **Security Warning**: Dashboard is accessible from your local network without authentication
+   - **Security Warning**: Dashboard is accessible from your local network without authentication
    - Binds to `0.0.0.0` (all network interfaces) for development convenience
    - **Not suitable for untrusted networks or multi-user setups**
    - **Recommendation**: Only run on trusted networks (e.g., home network, private VPN)
-   - Phase 2+ will add API keys and JWT authentication
 
 3. **Basic Error Handling**
    - Errors shown via browser alerts
-   - Phase 2+ will add toast notifications
 
 4. **No Undo/Redo**
    - Deletes are permanent
@@ -503,7 +501,6 @@ ie task done               # Now you can complete parent
 5. **Performance with Large Datasets**
    - No pagination (loads all tasks)
    - May slow down with 1000+ tasks
-   - Phase 2+ will add virtual scrolling
 
 ### Workarounds
 
@@ -517,10 +514,10 @@ ie task done               # Now you can complete parent
 
 ### Tested Browsers
 
-- ✅ Chrome 120+
-- ✅ Firefox 121+
-- ✅ Safari 17+
-- ✅ Edge 120+
+- Chrome 120+
+- Firefox 121+
+- Safari 17+
+- Edge 120+
 
 ### Required Features
 
@@ -531,18 +528,18 @@ ie task done               # Now you can complete parent
 
 ---
 
-## Integration with CLI and MCP
+## Integration with CLI
 
 ### Data Sync
 
-All three interfaces (Dashboard, CLI, MCP) share the same database:
+Both interfaces (Dashboard and CLI) share the same database:
 
 ```
-.intent-engine/intents.db
-         ↓
-    ┌────┴────┬─────┬────────┐
-    ↓         ↓     ↓        ↓
-Dashboard    CLI   MCP    External
+.intent-engine/project.db
+         |
+    +----+----+
+    |         |
+Dashboard    CLI
 ```
 
 Changes made in one interface are immediately visible in others (after refresh for Dashboard).
@@ -551,21 +548,21 @@ Changes made in one interface are immediately visible in others (after refresh f
 
 ```bash
 # Create task via CLI
-ie task add "Implement feature X"
+echo '{"tasks":[{"name": "Implement feature X", "status": "doing", "spec": "..."}]}' | ie plan
 
-# Refresh Dashboard → Task appears
+# Refresh Dashboard -> Task appears
 
 # Start task via Dashboard (click button)
 
-# Add event via MCP (from Claude)
-ie event add --type decision "Using approach A"
+# Add event via CLI
+ie log decision "Using approach A"
 
-# Refresh Dashboard → Event appears
+# Refresh Dashboard -> Event appears
 
 # Complete via CLI
-ie task done
+echo '{"tasks":[{"name": "Implement feature X", "status": "done"}]}' | ie plan
 
-# Refresh Dashboard → Task marked done
+# Refresh Dashboard -> Task marked done
 ```
 
 ---
@@ -575,13 +572,12 @@ ie task done
 ### Documentation
 
 - **API Reference**: `docs/dashboard-api-reference.md`
-- **Architecture**: `docs/web-dashboard-spec.md`
-- **CLI Guide**: `docs/*/guide/command-reference-full.md`
+- **Architecture**: `docs/archive/web-dashboard-spec.md`
+- **CLI Guide**: `docs/en/guide/command-reference-full.md`
 
 ### Support
 
 - **Issues**: https://github.com/wayfind/intent-engine/issues
-- **Discussions**: GitHub Discussions
 
 ---
 
@@ -589,26 +585,25 @@ ie task done
 
 ### Main Dashboard View
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│ Intent-Engine Dashboard          [+] New  [Focus]  [Pick Next]  │
-├──────────────────────────────────────────────────────────────────┤
-│  Search...         │                                             │
-│ ┌────────────────┐ │  Task #42: Implement Authentication        │
-│ │All│Todo│Doing│ │ │  Status: doing    Priority: high           │
-│ └────────────────┘ │                                             │
-│                    │  [✓ Complete] [+ Spawn] [📝 Event]          │
-│ #42 Implement A... │                                             │
-│ doing | high       │  ## Specification                           │
-│                    │  Add JWT-based authentication...            │
-│ #43 Setup DB       │                                             │
-│ todo               │  ## Metadata                                │
-│                    │  Created: 2025-11-16 12:00                  │
-│ #44 Write Tests    │  Started: 2025-11-16 13:00                  │
-│ todo               │                                             │
-└────────────────────┴─────────────────────────────────────────────┘
++------------------------------------------------------------------+
+| Intent-Engine Dashboard          [+] New  [Focus]  [Pick Next]   |
++------------------------------------------------------------------+
+|  Search...         |                                              |
+| +----------------+ |  Task #42: Implement Authentication         |
+| |All|Todo|Doing| | |  Status: doing    Priority: high            |
+| +----------------+ |                                              |
+|                    |  [Complete] [+ Spawn] [Add Event]            |
+| #42 Implement A... |                                              |
+| doing | high       |  ## Specification                            |
+|                    |  Add JWT-based authentication...             |
+| #43 Setup DB       |                                              |
+| todo               |  ## Metadata                                 |
+|                    |  Created: 2025-11-16 12:00                   |
+| #44 Write Tests    |  Started: 2025-11-16 13:00                   |
+| todo               |                                              |
++--------------------+----------------------------------------------+
 ```
 
 ---
 
-**Last Updated**: 2025-11-16
-**Version**: 0.5.0
+**Last Updated**: 2025-12-29

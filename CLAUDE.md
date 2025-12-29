@@ -1,49 +1,68 @@
-# Intent-Engine: AI Intent Continuity Infrastructure
+# Intent-Engine: AI Long-Term Memory System
 
-> **ie is not a task manager. It's the infrastructure that makes AI reliable.**
-
----
-
-## Why AI Fails at Tasks
-
-AI has fundamental deficits that humans don't:
-
-| AI Deficit | Human Capability | What's Needed |
-|------------|------------------|---------------|
-| **Stateless** - each conversation starts fresh | Persistent intent - "keeps it in mind" | Intent anchoring |
-| **No memory** - limited context window | Working memory + external notes | External memory |
-| **Probabilistic** - may drift, hallucinate | Self-awareness - knows what it's doing | Focus discipline |
-| **No self-reflection** - doesn't know what it doesn't know | Adaptability - adjusts when blocked | Decision transparency |
-
-**Core Problem: AI lacks intent continuity.**
-
-User tasks span sessions, but AI is reborn each time.
+> **Give your AI the memory it deserves.**
 
 ---
 
-## 6 Elements of Reliable AI Task Execution
+## The Challenge
+
+AI assistants are incredibly capable within a single conversation. But when sessions end:
+
+```
+Day 1: "Let's build authentication"
+       AI works brilliantly, makes smart decisions...
+       [session ends]
+
+Day 2: "Continue authentication"
+       AI: "What authentication? I have no memory of this."
+```
+
+**The challenge isn't capability—it's continuity.**
+
+User tasks span days, weeks, months. AI conversations are ephemeral.
+
+---
+
+## The Solution: External Memory
+
+Intent-Engine gives AI persistent memory across sessions:
+
+| Challenge | Solution | How ie Helps |
+|-----------|----------|--------------|
+| Sessions are ephemeral | Persistent task state | `ie status` restores full context |
+| Decisions get lost | Decision history | `ie log` records the "why" |
+| Context needs repeating | External memory | `ie search` retrieves past work |
+| Complex work needs structure | Hierarchical tasks | `ie plan` organizes intent |
+
+**One command restores everything:**
+
+```bash
+ie status
+# Returns: current task, goal, approach, decision history, subtasks
+```
+
+---
+
+## 6 Principles of Effective AI Collaboration
 
 ### 1. Intent Anchoring
 
-> Task must be explicitly stated and persisted. AI must always be able to "look back" at what it's doing.
+> Clear goals lead to better outcomes.
 
 ```
-Without anchoring:              With anchoring:
+Vague:                          Clear:
 "I'm helping you code..."       "I'm on #42: Implement JWT auth"
-(What code? Why? Goal?)         "Goal: Users access protected resources via token"
+(What code? Why? Goal?)         "Goal: Users access protected resources"
                                 "Current: Implementing validation middleware"
 ```
 
-**This is the core mechanism against statelessness.**
+**When AI knows exactly what it's working on, it stays focused.**
 
 ### 2. Decomposition = Understanding
 
-> Correct decomposition proves genuine understanding.
+> Breaking down problems reveals their structure.
 
 ```
-Decomposition is NOT: Cutting big tasks into small pieces
-Decomposition IS:     Revealing the problem's internal structure
-
 Good decomposition reveals:
 ├─ Dependencies between components
 ├─ Where key decisions lie
@@ -51,71 +70,69 @@ Good decomposition reveals:
 └─ True work distribution
 ```
 
-**Cannot decompose correctly = Don't truly understand.**
+**If you can decompose it well, you understand it well.**
 
 ### 3. Decision Transparency
 
-> Every non-trivial choice needs a recorded "why".
+> Record the "why" behind every choice.
 
 ```
 Two weeks later, user asks: "Why HS256?"
 
 Without record:
-  AI: "...I don't remember"
+  AI: "...I don't know"
 
 With record:
   AI: checks history → "Single-app scenario, asymmetric encryption adds unnecessary complexity"
 ```
 
-**Decision logs are messages to future AI (including amnesiac self).**
+**Decision logs are messages to your future self.**
 
 ### 4. Focus Discipline
 
 > One thing at a time. Finish before moving on.
 
 ```
-Without discipline:              With discipline:
-"Working on" 5 things            Current focus: #42
-Each half-done                   Depth-first: complete subtasks first
-Easy to get lost                 Report blocks: log when stuck
+Scattered:                      Focused:
+"Working on" 5 things           Current focus: #42
+Each half-done                  Depth-first: complete subtasks first
+Easy to get lost                Report blocks: log when stuck
 ```
 
 **Focus isn't "I'm looking at" - it's "I commit to complete".**
 
 ### 5. Verifiable Completion
 
-> Completion criteria must be clear. Completion claims must be verifiable.
+> Know what "done" looks like before you start.
 
 ```
-Unverifiable:                    Verifiable:
-"Implement user auth"            Completion criteria:
- ↓                               1. POST /auth/login returns JWT
-"I implemented it" (really?)     2. Protected routes validate token
-                                 3. Expired token returns 401
-                                 4. All tests pass
+Vague:                          Clear:
+"Implement user auth"           Completion criteria:
+ ↓                              1. POST /auth/login returns JWT
+"I implemented it" (really?)    2. Protected routes validate token
+                                3. Expired token returns 401
+                                4. All tests pass
 ```
 
-**This is the key against AI self-deception.**
+**Clear criteria prevent premature completion claims.**
 
-### 6. Amnesia Recovery
+### 6. Context Recovery
 
-> Assume you could lose memory anytime. All necessary info must be externalized.
+> Externalize everything needed to continue later.
 
 ```
-Amnesia test:
-  If session ends now, can a fresh AI instance:
+Session recovery test:
+  If this session ends now, can I:
   1. Know what we were doing?
   2. Find relevant decisions?
   3. Continue without user repeating everything?
 ```
 
-**This is the fundamental strategy against no-memory.**
+**If yes, the context is properly externalized.**
 
 ---
 
-## ie: Intent Continuity Infrastructure
-
-### What ie Really Is
+## What ie Really Is
 
 ```
 TodoWrite = Sticky notes     ie = External brain
@@ -125,28 +142,14 @@ No structure                 Hierarchical
 No history                   Traceable
 ```
 
-### True Meaning of Each Command
+### Command Meanings
 
-| Command | Surface Function | Deep Meaning |
-|---------|------------------|--------------|
-| `ie status` | View status | **Amnesia recovery entry** - gain intent continuity |
-| `ie plan` | Create tasks | **Decomposition persistence** - proof of understanding |
-| `ie log` | Record events | **Decision transparency** - message to future AI |
-| `ie search` | Search | **Memory retrieval** - access external brain |
-
-### Core Belief for AI
-
-```
-You are stateless, but user tasks span sessions.
-Each session, you are a newborn AI.
-But through ie, you inherit your "past life's" intent.
-
-Every decision you make, record it.
-Because the next "you" needs to know why.
-
-Every task you commit to, track to completion.
-Because the user trusts you will finish.
-```
+| Command | Function | Purpose |
+|---------|----------|---------|
+| `ie status` | View current state | **Context recovery** - restore working memory |
+| `ie plan` | Create/update tasks | **Intent persistence** - externalize goals |
+| `ie log` | Record events | **Decision history** - capture the "why" |
+| `ie search` | Find history | **Memory retrieval** - access past context |
 
 ---
 
@@ -166,7 +169,7 @@ Because the user trusts you will finish.
 
 ---
 
-## Reliable Task Execution Framework
+## Task Execution Framework
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -181,7 +184,7 @@ Because the user trusts you will finish.
 └──────────────────────────┬──────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  2. Decompose                    ◄── Core of Plan            │
+│  2. Decompose                                                │
 │     Ask: What's the structure of this problem?               │
 │     Output: Task tree (hierarchical intent decomposition)    │
 │     Verify: Does decomposition reveal dependencies?          │
@@ -229,7 +232,7 @@ Because the user trusts you will finish.
 - Approach: How will you achieve it?
 - Boundary: What's NOT included?
 
-Before starting, you must think through these. This forces genuine understanding.
+Before starting, think through these. This ensures clarity before action.
 
 ---
 
@@ -246,7 +249,7 @@ echo '{"tasks":[{
   "spec":"## Goal\n...\n## Approach\n..."
 }]}' | ie plan
 
-# Record decisions (message to future AI)
+# Record decisions (message to future self)
 ie log decision "Chose X because Y"
 ie log blocker "Waiting for Z"
 
@@ -266,13 +269,13 @@ ie search "keyword"       # Full-text search
 
 ---
 
-## Habits to Build
+## Best Practices
 
 ### 1. Session Start Ritual
 ```bash
 ie status    # ALWAYS first action
 ```
-Without this, you're an amnesiac continuing someone else's work.
+This restores your working context from the previous session.
 
 ### 2. Think Before Starting
 ```
@@ -298,10 +301,10 @@ Complete subtasks before siblings.
 If blocked, log it: ie log blocker "..."
 ```
 
-### 5. Amnesia Test
+### 5. Context Recovery Test
 ```
-Before recording, ask:
-"If I lost memory now, is this enough to continue?"
+Before ending a session, ask:
+"Is everything needed to continue recorded?"
 ```
 
 ---
@@ -310,16 +313,13 @@ Before recording, ask:
 
 > ie transforms AI from "single-conversation assistant" to "continuous collaboration partner".
 
-The mission is not task management - it's **intent continuity**.
-
-Making AI reliable = Compensating for AI's fundamental deficits:
+The mission is **intent continuity** - giving AI the memory infrastructure to work reliably across sessions.
 
 ```
-Stateless      → Intent anchoring (ie status)
-No memory      → External memory (ie plan + log)
-Probabilistic  → Focus discipline (focus)
-Self-deception → Verifiable completion (spec criteria)
-Inexplicable   → Decision transparency (ie log decision)
+Ephemeral sessions  → Persistent context (ie status)
+Lost decisions      → Decision history (ie log)
+Repeated context    → Searchable memory (ie search)
+Vague goals         → Structured intent (ie plan)
 ```
 
 ---

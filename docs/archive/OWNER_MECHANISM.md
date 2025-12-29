@@ -100,11 +100,11 @@ pub async fn done_task(&self, is_ai_caller: bool) -> Result<DoneTaskResponse> {
 
 ```bash
 # AI 通过 CLI 创建任务
-ie add "Implement feature X"
+echo '{"tasks":[{"name": "Implement feature X", "status": "doing", "spec": "..."}]}' | ie plan
 # -> owner='ai'
 
 # AI 可以完成自己创建的任务
-ie done
+echo '{"tasks":[{"name": "Implement feature X", "status": "done"}]}' | ie plan
 # -> ✅ 成功
 ```
 
@@ -115,8 +115,8 @@ ie done
 POST /api/tasks { "name": "Review PR #123" }
 # -> owner='human'
 
-# AI 尝试完成
-ie done
+# AI 尝试完成（通过 CLI）
+echo '{"tasks":[{"name": "Review PR #123", "status": "done"}]}' | ie plan
 # -> ❌ 错误: "AI cannot complete human-created task"
 ```
 

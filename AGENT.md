@@ -340,7 +340,7 @@ ie plan < project_v2.json
 - ❌ Duplicate task names in request rejected
 - ✅ All operations atomic (all-or-nothing)
 
-**See**: [docs/PLAN_INTERFACE_GUIDE.md](docs/PLAN_INTERFACE_GUIDE.md) for comprehensive guide and migration examples.
+**See**: [docs/archive/PLAN_INTERFACE_GUIDE.md](docs/archive/PLAN_INTERFACE_GUIDE.md) for comprehensive guide and migration examples.
 
 ---
 

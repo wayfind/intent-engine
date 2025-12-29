@@ -1,81 +1,81 @@
 # AI Feedback Collection
 
-本目录收集 AI 助手在实际使用 intent-engine 过程中的反馈、体验和建议。
+This directory collects feedback, experiences, and suggestions from AI assistants using intent-engine in practice.
 
-## 目的
+## Purpose
 
-1. **真实用户视角**: AI 助手是 intent-engine 的主要用户，它们的反馈最有价值
-2. **持续改进**: 定期收集使用体验，发现可用性问题和改进机会
-3. **文档改进**: 基于实际使用痛点优化文档和教程
-4. **功能优先级**: 根据真实需求排列功能开发优先级
+1. **Real User Perspective**: AI assistants are primary users of intent-engine, their feedback is most valuable
+2. **Continuous Improvement**: Regularly collect usage experience, discover usability issues and improvement opportunities
+3. **Documentation Improvement**: Optimize documentation and tutorials based on actual pain points
+4. **Feature Prioritization**: Prioritize feature development based on real needs
 
-## 文件命名规范
+## File Naming Convention
 
 ```
 YYYY-MM-DD-<ai-model>-<topic>.md
 ```
 
-示例：
+Examples:
 - `2025-11-14-claude-long-term-usage-experience.md`
 - `2025-11-15-gpt4-onboarding-challenges.md`
 
-## 反馈内容建议
+## Feedback Content Suggestions
 
-每次反馈建议包含：
-- **上下文**: 使用场景、任务类型
-- **优点**: 哪些功能很好用
-- **痛点**: 遇到的困难和困惑
-- **建议**: 改进想法
-- **学习曲线**: 从不懂到熟练的过程
-- **工作流变化**: intent-engine 如何改变了工作方式
+Each feedback should include:
+- **Context**: Usage scenario, task type
+- **Positives**: Which features work well
+- **Pain Points**: Difficulties and confusions encountered
+- **Suggestions**: Improvement ideas
+- **Learning Curve**: Process from novice to proficient
+- **Workflow Changes**: How intent-engine changed work methods
 
-## 使用方式
+## Usage
 
-### 添加新反馈
+### Add New Feedback
 
 ```bash
-# AI 助手直接写入
+# AI assistant writes directly
 cat > docs/ai_feedback/$(date +%Y-%m-%d)-<model>-<topic>.md <<'EOF'
 ... feedback content ...
 EOF
 ```
 
-### 查看历史反馈
+### View Historical Feedback
 
 ```bash
-ls -lt docs/ai_feedback/  # 按时间排序
+ls -lt docs/ai_feedback/  # Sort by time
 cat docs/ai_feedback/2025-11-14-claude-long-term-usage-experience.md
 ```
 
-### 分析反馈趋势
+### Analyze Feedback Trends
 
 ```bash
-# 统计高频痛点
-grep -r "痛点\|困惑\|问题" docs/ai_feedback/
+# Count common pain points
+grep -r "pain\|confusion\|issue" docs/ai_feedback/
 
-# 查找改进建议
-grep -r "建议\|改进\|应该" docs/ai_feedback/
+# Find improvement suggestions
+grep -r "suggest\|improve\|should" docs/ai_feedback/
 ```
 
-## 当前反馈列表
+## Current Feedback List
 
-- [2025-11-14 Claude 长期使用体验](2025-11-14-claude-long-term-usage-experience.md) - 首次深度使用总结
+- [2025-11-14 Claude Long-term Usage Experience](2025-11-14-claude-long-term-usage-experience.md) - First deep usage summary
 
-## 待改进项目（基于反馈提取）
+## Improvement Items (Extracted from Feedback)
 
-### 文档
-- [ ] 在文档中强调 "ie event + heredoc" 模式
-- [ ] 添加 FTS5 搜索语法速查表
-- [ ] 明确说明 list vs search 的区别
+### Documentation
+- [ ] Emphasize `ie log` + heredoc pattern in documentation
+- [ ] Add FTS5 search syntax quick reference
+- [ ] Clarify the difference between status filter and full-text search
 
-### 功能
-- [ ] 考虑添加任务粒度判断指南
-- [ ] 提供 event 分类最佳实践示例
+### Features
+- [ ] Consider adding task granularity guide
+- [ ] Provide event categorization best practices examples
 
-### 开发体验
-- [ ] MCP 工具的错误提示更友好
-- [ ] 考虑 `task_add` 时自动提示是否 spawn subtask
+### Developer Experience
+- [ ] Improve CLI error messages
+- [ ] Consider auto-suggesting subtask creation
 
 ---
 
-**维护者注**: 定期（每月/每季度）review 这些反馈，提取共性问题和改进方向。
+**Maintainer Note**: Review these feedbacks regularly (monthly/quarterly) to extract common issues and improvement directions.
