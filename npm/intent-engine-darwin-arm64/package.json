@@ -1,10 +1,10 @@
 {
   "name": "@origintask/intent-engine-darwin-arm64",
-  "version": "0.10.9",
+  "version": "0.10.10",
   "description": "intent-engine binary for macOS ARM64",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anthropic-ai/intent-engine.git"
+    "url": "git+https://github.com/wayfind/intent-engine.git"
   },
   "license": "MIT OR Apache-2.0",
   "os": ["darwin"],
