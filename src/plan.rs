@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Request for creating/updating task structure declaratively
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -165,6 +166,14 @@ impl PriorityValue {
     }
 }
 
+/// Information about an existing task for validation
+#[derive(Debug, Clone)]
+pub struct ExistingTaskInfo {
+    pub id: i64,
+    pub status: String,
+    pub spec: Option<String>,
+}
+
 /// Result of plan execution
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PlanResult {
@@ -191,6 +200,10 @@ pub struct PlanResult {
     /// Optional error message if success = false
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+
+    /// Warning messages (non-fatal hints)
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub warnings: Vec<String>,
 }
 
 impl PlanResult {
@@ -210,6 +223,28 @@ impl PlanResult {
             dependency_count,
             focused_task,
             error: None,
+            warnings: Vec::new(),
+        }
+    }
+
+    /// Create a successful result with warnings
+    pub fn success_with_warnings(
+        task_id_map: HashMap<String, i64>,
+        created_count: usize,
+        updated_count: usize,
+        dependency_count: usize,
+        focused_task: Option<crate::db::models::TaskWithEvents>,
+        warnings: Vec<String>,
+    ) -> Self {
+        Self {
+            success: true,
+            task_id_map,
+            created_count,
+            updated_count,
+            dependency_count,
+            focused_task,
+            error: None,
+            warnings,
         }
     }
 
@@ -223,6 +258,7 @@ impl PlanResult {
             dependency_count: 0,
             focused_task: None,
             error: Some(message.into()),
+            warnings: Vec::new(),
         }
     }
 }
@@ -457,26 +493,97 @@ impl<'a> PlanExecutor<'a> {
         let mut task_id_map = HashMap::new();
         let mut created_count = 0;
         let mut updated_count = 0;
+        let mut warnings: Vec<String> = Vec::new();
         let mut newly_created_names: std::collections::HashSet<String> =
             std::collections::HashSet::new();
 
         for task in &flat_tasks {
-            if let Some(&existing_id) = existing.get(&task.name) {
-                // Task exists -> UPDATE via TaskManager
+            // Check if task is transitioning to 'doing' status and validate spec
+            let is_becoming_doing = task.status.as_ref() == Some(&TaskStatus::Doing);
+            let has_spec = task
+                .spec
+                .as_ref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+
+            if let Some(existing_info) = existing.get(&task.name) {
+                // Task exists -> UPDATE
+
+                // Validation: if transitioning to 'doing' and no spec provided,
+                // check if existing spec is also empty
+                if is_becoming_doing && !has_spec {
+                    let existing_is_doing = existing_info.status == "doing";
+                    let existing_has_spec = existing_info
+                        .spec
+                        .as_ref()
+                        .map(|s| !s.trim().is_empty())
+                        .unwrap_or(false);
+
+                    // Only error if: transitioning TO doing (wasn't doing before) AND no spec anywhere
+                    if !existing_is_doing && !existing_has_spec {
+                        return Ok(PlanResult::error(format!(
+                            "Task '{}': spec (description) is required when starting a task (status: doing).\n\n\
+                            Before starting a task, please describe:\n  \
+                            • What is the goal of this task\n  \
+                            • How do you plan to approach it\n\n\
+                            Tip: Use @file(path) to include content from a file",
+                            task.name
+                        )));
+                    }
+                }
+
+                // Check if transitioning to 'done'
+                let is_becoming_done = task.status.as_ref() == Some(&TaskStatus::Done);
+
+                // Update non-status fields first
                 task_mgr
                     .update_task_in_tx(
                         &mut tx,
-                        existing_id,
+                        existing_info.id,
                         task.spec.as_deref(),
                         task.priority.as_ref().map(|p| p.to_int()),
-                        task.status.as_ref().map(|s| s.as_db_str()),
+                        // If becoming done, let complete_task_in_tx handle status
+                        if is_becoming_done {
+                            None
+                        } else {
+                            task.status.as_ref().map(|s| s.as_db_str())
+                        },
                         task.active_form.as_deref(),
                     )
                     .await?;
-                task_id_map.insert(task.name.clone(), existing_id);
+
+                // If becoming done, use complete_task_in_tx for business logic
+                if is_becoming_done {
+                    if let Err(e) = task_mgr
+                        .complete_task_in_tx(&mut tx, existing_info.id)
+                        .await
+                    {
+                        // Convert IntentError to user-friendly message
+                        return Ok(PlanResult::error(format!(
+                            "Cannot complete task '{}': {}\n\n\
+                            Please complete all subtasks before marking the parent as done.",
+                            task.name, e
+                        )));
+                    }
+                }
+
+                task_id_map.insert(task.name.clone(), existing_info.id);
                 updated_count += 1;
             } else {
-                // Task doesn't exist -> CREATE via TaskManager
+                // Task doesn't exist -> CREATE
+
+                // Validation: new task with status=doing must have spec
+                if is_becoming_doing && !has_spec {
+                    return Ok(PlanResult::error(format!(
+                        "Task '{}': spec (description) is required when starting a task (status: doing).\n\n\
+                        Before starting a task, please describe:\n  \
+                        • What is the goal of this task\n  \
+                        • How do you plan to approach it\n\n\
+                        Tip: Use @file(path) to include content from a file",
+                        task.name
+                    )));
+                }
+
                 let id = task_mgr
                     .create_task_in_tx(
                         &mut tx,
@@ -491,6 +598,14 @@ impl<'a> PlanExecutor<'a> {
                 task_id_map.insert(task.name.clone(), id);
                 newly_created_names.insert(task.name.clone());
                 created_count += 1;
+
+                // Warning: new task without spec (non-doing tasks only, doing already validated)
+                if !has_spec && !is_becoming_doing {
+                    warnings.push(format!(
+                        "Task '{}' has no description. Consider adding one for better context.",
+                        task.name
+                    ));
+                }
             }
         }
 
@@ -589,18 +704,22 @@ impl<'a> PlanExecutor<'a> {
             None
         };
 
-        // 16. Return success result with focused task
-        Ok(PlanResult::success(
+        // 16. Return success result with focused task and warnings
+        Ok(PlanResult::success_with_warnings(
             task_id_map,
             created_count,
             updated_count,
             dep_count,
             focused_task_response,
+            warnings,
         ))
     }
 
-    /// Find tasks by names
-    async fn find_tasks_by_names(&self, names: &[String]) -> Result<HashMap<String, i64>> {
+    /// Find tasks by names (returns full info for validation)
+    async fn find_tasks_by_names(
+        &self,
+        names: &[String],
+    ) -> Result<HashMap<String, ExistingTaskInfo>> {
         if names.is_empty() {
             return Ok(HashMap::new());
         }
@@ -611,7 +730,7 @@ impl<'a> PlanExecutor<'a> {
         // Build placeholders: ?, ?, ?...
         let placeholders = names.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let query = format!(
-            "SELECT id, name FROM tasks WHERE name IN ({})",
+            "SELECT id, name, status, spec FROM tasks WHERE name IN ({})",
             placeholders
         );
 
@@ -625,7 +744,9 @@ impl<'a> PlanExecutor<'a> {
         for row in rows {
             let id: i64 = row.get("id");
             let name: String = row.get("name");
-            map.insert(name, id);
+            let status: String = row.get("status");
+            let spec: Option<String> = row.get("spec");
+            map.insert(name, ExistingTaskInfo { id, status, spec });
         }
 
         Ok(map)
@@ -839,6 +960,112 @@ impl<'a> PlanExecutor<'a> {
         }
 
         sccs
+    }
+}
+
+/// Result of processing @file directives in a PlanRequest
+#[derive(Debug, Default)]
+pub struct FileIncludeResult {
+    /// Files to delete after successful plan execution
+    pub files_to_delete: Vec<PathBuf>,
+}
+
+/// Parse @file directive from a string value
+///
+/// Syntax: `@file(path)` or `@file(path, keep)`
+///
+/// Returns: (file_path, should_delete)
+fn parse_file_directive(value: &str) -> Option<(PathBuf, bool)> {
+    let trimmed = value.trim();
+
+    // Must start with @file( and end with )
+    if !trimmed.starts_with("@file(") || !trimmed.ends_with(')') {
+        return None;
+    }
+
+    // Extract content between @file( and )
+    let inner = &trimmed[6..trimmed.len() - 1];
+
+    // Check for ", keep" suffix
+    if let Some(path_str) = inner.strip_suffix(", keep") {
+        Some((PathBuf::from(path_str.trim()), false)) // keep = don't delete
+    } else if let Some(path_str) = inner.strip_suffix(",keep") {
+        Some((PathBuf::from(path_str.trim()), false))
+    } else {
+        Some((PathBuf::from(inner.trim()), true)) // default = delete
+    }
+}
+
+/// Process @file directives in a TaskTree recursively
+fn process_task_tree_includes(
+    task: &mut TaskTree,
+    files_to_delete: &mut Vec<PathBuf>,
+) -> std::result::Result<(), String> {
+    // Process spec field
+    if let Some(ref spec_value) = task.spec {
+        if let Some((file_path, should_delete)) = parse_file_directive(spec_value) {
+            // Read file content
+            let content = std::fs::read_to_string(&file_path)
+                .map_err(|e| format!("Failed to read @file({}): {}", file_path.display(), e))?;
+
+            task.spec = Some(content);
+
+            if should_delete {
+                files_to_delete.push(file_path);
+            }
+        }
+    }
+
+    // Process children recursively
+    if let Some(ref mut children) = task.children {
+        for child in children.iter_mut() {
+            process_task_tree_includes(child, files_to_delete)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Process @file directives in a PlanRequest
+///
+/// This function scans all task specs for @file(path) syntax and replaces
+/// them with the file contents. Files are tracked for deletion after
+/// successful plan execution.
+///
+/// # Syntax
+///
+/// - `@file(/path/to/file.md)` - Include file content, delete after success
+/// - `@file(/path/to/file.md, keep)` - Include file content, keep the file
+///
+/// # Example
+///
+/// ```json
+/// {
+///   "tasks": [{
+///     "name": "My Task",
+///     "spec": "@file(/tmp/task-description.md)"
+///   }]
+/// }
+/// ```
+pub fn process_file_includes(
+    request: &mut PlanRequest,
+) -> std::result::Result<FileIncludeResult, String> {
+    let mut result = FileIncludeResult::default();
+
+    for task in request.tasks.iter_mut() {
+        process_task_tree_includes(task, &mut result.files_to_delete)?;
+    }
+
+    Ok(result)
+}
+
+/// Clean up files that were included via @file directive
+pub fn cleanup_included_files(files: &[PathBuf]) {
+    for file in files {
+        if let Err(e) = std::fs::remove_file(file) {
+            // Log warning but don't fail - the plan already succeeded
+            tracing::warn!("Failed to delete included file {}: {}", file.display(), e);
+        }
     }
 }
 
@@ -2659,7 +2886,7 @@ mod parent_id_tests {
         let request = PlanRequest {
             tasks: vec![TaskTree {
                 name: "Parent via Nesting".to_string(),
-                spec: None,
+                spec: Some("Test parent spec".to_string()),
                 priority: None,
                 children: Some(vec![TaskTree {
                     name: "Child via Nesting".to_string(),
@@ -2710,7 +2937,7 @@ mod parent_id_tests {
             tasks: vec![
                 TaskTree {
                     name: "Task A".to_string(),
-                    spec: None,
+                    spec: Some("Task A spec".to_string()),
                     priority: None,
                     children: None,
                     depends_on: None,
@@ -2776,5 +3003,136 @@ mod parent_id_tests {
             Some(task_a_id),
             "Task B should now be child of Task A"
         );
+    }
+
+    #[tokio::test]
+    async fn test_plan_done_with_incomplete_children_fails() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Create parent with incomplete child
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Parent Task".to_string(),
+                spec: Some("Parent spec".to_string()),
+                priority: None,
+                children: Some(vec![TaskTree {
+                    name: "Child Task".to_string(),
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    task_id: None,
+                    status: Some(TaskStatus::Todo), // Child is not done
+                    active_form: None,
+                    parent_id: None,
+                }]),
+                depends_on: None,
+                task_id: None,
+                status: Some(TaskStatus::Doing),
+                active_form: None,
+                parent_id: None,
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+
+        // Try to complete parent while child is incomplete
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Parent Task".to_string(),
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                task_id: None,
+                status: Some(TaskStatus::Done), // Try to set done
+                active_form: None,
+                parent_id: None,
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+        assert!(!result2.success, "Should fail when child is incomplete");
+        assert!(
+            result2
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("Uncompleted children"),
+            "Error should mention uncompleted children: {:?}",
+            result2.error
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plan_done_with_completed_children_succeeds() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Create parent with child
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Parent Task".to_string(),
+                spec: Some("Parent spec".to_string()),
+                priority: None,
+                children: Some(vec![TaskTree {
+                    name: "Child Task".to_string(),
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    task_id: None,
+                    status: Some(TaskStatus::Todo),
+                    active_form: None,
+                    parent_id: None,
+                }]),
+                depends_on: None,
+                task_id: None,
+                status: Some(TaskStatus::Doing),
+                active_form: None,
+                parent_id: None,
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+
+        // Complete child first
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Child Task".to_string(),
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                task_id: None,
+                status: Some(TaskStatus::Done),
+                active_form: None,
+                parent_id: None,
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+        assert!(result2.success);
+
+        // Now parent can be completed
+        let request3 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: "Parent Task".to_string(),
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                task_id: None,
+                status: Some(TaskStatus::Done),
+                active_form: None,
+                parent_id: None,
+            }],
+        };
+
+        let result3 = executor.execute(&request3).await.unwrap();
+        assert!(result3.success, "Should succeed when child is complete");
     }
 }

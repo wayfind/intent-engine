@@ -199,6 +199,73 @@ echo '{"tasks":[{
 }]}' | ie plan
 ```
 
+### @file Syntax - Including File Content
+
+Use `@file(path)` to include content from a file into task description (spec):
+
+```bash
+# Write detailed description to a temp file
+cat > /tmp/task-desc.md << 'EOF'
+## Goal
+Implement user authentication with JWT
+
+## Approach
+- Use HS256 algorithm
+- Token expiry: 24h
+- Refresh token: 7d
+EOF
+
+# Create task with description from file
+echo '{"tasks":[{
+  "name":"Implement auth",
+  "status":"doing",
+  "spec":"@file(/tmp/task-desc.md)"
+}]}' | ie plan
+# File is automatically deleted after successful plan execution
+
+# Keep the file (don't delete)
+echo '{"tasks":[{"name":"Task","spec":"@file(/tmp/desc.md, keep)"}]}' | ie plan
+```
+
+### Description Requirement
+
+**Tasks must have a description (spec) when starting (status: doing):**
+
+```bash
+# ❌ This will fail - no spec when starting
+echo '{"tasks":[{"name":"My Task","status":"doing"}]}' | ie plan
+
+# ✅ This works - spec provided
+echo '{"tasks":[{"name":"My Task","status":"doing","spec":"Goal: ..."}]}' | ie plan
+
+# ✅ Creating todo tasks without spec is OK (will show warning)
+echo '{"tasks":[{"name":"My Task","status":"todo"}]}' | ie plan
+```
+
+**Rationale:** Before starting a task, you should know:
+- What is the goal
+- How you plan to approach it
+
+**Status indicators in `ie status`:**
+- Tasks without description show ⚠️ marker
+- This helps track which tasks need more context
+
+### Completion Requirement
+
+**Parent tasks cannot be completed until all children are done:**
+
+```bash
+# ❌ This will fail - child is not complete
+echo '{"tasks":[{"name":"Parent Task","status":"done"}]}' | ie plan
+# Error: Cannot complete task 'Parent Task': has incomplete subtasks
+
+# ✅ Complete children first, then parent
+echo '{"tasks":[{"name":"Child Task","status":"done"}]}' | ie plan
+echo '{"tasks":[{"name":"Parent Task","status":"done"}]}' | ie plan
+```
+
+**Rationale:** A task is not truly complete until all its subtasks are done.
+
 ### Explicit Parent Assignment (parent_id)
 
 Control task hierarchy explicitly using `parent_id`:
@@ -368,6 +435,18 @@ You:
 
 ✅ Use parent_id: null for independent root tasks:
    echo '{"tasks":[{"name":"Independent","parent_id":null}]}' | ie plan
+```
+
+### Mistake 5: Completing parent before children
+```
+❌ Try to complete parent with incomplete children
+   echo '{"tasks":[{"name":"Parent","status":"done"}]}' | ie plan
+   # Error: has incomplete subtasks
+
+✅ Complete all children first, then parent:
+   echo '{"tasks":[{"name":"Child 1","status":"done"}]}' | ie plan
+   echo '{"tasks":[{"name":"Child 2","status":"done"}]}' | ie plan
+   echo '{"tasks":[{"name":"Parent","status":"done"}]}' | ie plan
 ```
 
 ---

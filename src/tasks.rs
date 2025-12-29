@@ -313,6 +313,59 @@ impl<'a> TaskManager<'a> {
         Ok(())
     }
 
+    /// Count incomplete children of a task within a transaction
+    ///
+    /// Returns the number of child tasks that are not in 'done' status.
+    /// Used to validate that all children are complete before marking parent as done.
+    pub async fn count_incomplete_children_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        task_id: i64,
+    ) -> Result<i64> {
+        let count: (i64,) = sqlx::query_as(crate::sql_constants::COUNT_INCOMPLETE_CHILDREN)
+            .bind(task_id)
+            .fetch_one(&mut **tx)
+            .await?;
+
+        Ok(count.0)
+    }
+
+    /// Complete a task within a transaction (core business logic)
+    ///
+    /// This is the single source of truth for task completion logic:
+    /// - Validates all children are complete
+    /// - Updates status to 'done'
+    /// - Sets first_done_at timestamp
+    ///
+    /// Called by both `done_task()` and `PlanExecutor`.
+    pub async fn complete_task_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        task_id: i64,
+    ) -> Result<()> {
+        // Check if all children are done
+        let incomplete_count = self.count_incomplete_children_in_tx(tx, task_id).await?;
+        if incomplete_count > 0 {
+            return Err(IntentError::UncompletedChildren);
+        }
+
+        // Update task status to done
+        let now = chrono::Utc::now();
+        sqlx::query(
+            r#"
+            UPDATE tasks
+            SET status = 'done', first_done_at = COALESCE(first_done_at, ?)
+            WHERE id = ?
+            "#,
+        )
+        .bind(now)
+        .bind(task_id)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
     /// Notify Dashboard about a batch operation
     ///
     /// Call this after committing a transaction that created/updated multiple tasks.
@@ -1001,32 +1054,8 @@ impl<'a> TaskManager<'a> {
             });
         }
 
-        // Check if all children are done
-        let uncompleted_children: i64 = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done'",
-        )
-        .bind(id)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        if uncompleted_children > 0 {
-            return Err(IntentError::UncompletedChildren);
-        }
-
-        let now = Utc::now();
-
-        // Update task status to done
-        sqlx::query(
-            r#"
-            UPDATE tasks
-            SET status = 'done', first_done_at = COALESCE(first_done_at, ?)
-            WHERE id = ?
-            "#,
-        )
-        .bind(now)
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
+        // Complete the task (validates children + updates status)
+        self.complete_task_in_tx(&mut tx, id).await?;
 
         // Clear the current task in sessions table for this session
         sqlx::query("UPDATE sessions SET current_task_id = NULL, last_active_at = datetime('now') WHERE session_id = ?")

@@ -18,6 +18,16 @@ AI Workflow:
   ie plan     ← Declarative task management (create/update/complete)
   ie log      ← Record decisions, blockers, milestones
   ie search   ← Search tasks and event history
+
+Key Rules:
+  • status:doing requires spec (description)
+  • status:done requires all children complete first
+  • parent_id:null creates independent root task
+
+Documentation:
+  • User Guide: docs/help/user-guide.md
+  • System Prompt: docs/system_prompt.md
+  • Interface Spec: docs/spec-03-interface-current.md
 "#;
 
 #[derive(Parser, Clone)]

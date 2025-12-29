@@ -7,7 +7,9 @@ use intent_engine::cli_handlers::{
 use intent_engine::error::{IntentError, Result};
 use intent_engine::events::EventManager;
 use intent_engine::logging::LoggingConfig;
-use intent_engine::plan::{PlanExecutor, PlanRequest};
+use intent_engine::plan::{
+    cleanup_included_files, process_file_includes, PlanExecutor, PlanRequest,
+};
 use intent_engine::project::ProjectContext;
 use intent_engine::workspace::WorkspaceManager;
 use std::io::IsTerminal;
@@ -89,8 +91,12 @@ async fn run(cli: &Cli) -> Result<()> {
             let json_input = read_stdin()?;
 
             // Parse JSON into PlanRequest
-            let request: PlanRequest = serde_json::from_str(&json_input)
+            let mut request: PlanRequest = serde_json::from_str(&json_input)
                 .map_err(|e| IntentError::InvalidInput(format!("Invalid JSON: {}", e)))?;
+
+            // Process @file directives - replace @file(path) with file contents
+            let file_include_result =
+                process_file_includes(&mut request).map_err(|e| IntentError::InvalidInput(e))?;
 
             // Execute the plan
             let ctx = ProjectContext::load_or_init().await?;
@@ -108,6 +114,11 @@ async fn run(cli: &Cli) -> Result<()> {
             }
 
             let result = executor.execute(&request).await?;
+
+            // Clean up included files after successful execution
+            if result.success && !file_include_result.files_to_delete.is_empty() {
+                cleanup_included_files(&file_include_result.files_to_delete);
+            }
 
             // Format output
             if format == "json" {
@@ -169,6 +180,14 @@ async fn run(cli: &Cli) -> Result<()> {
                                     );
                                 }
                             }
+                        }
+                    }
+
+                    // Display warnings if any
+                    if !result.warnings.is_empty() {
+                        println!();
+                        for warning in &result.warnings {
+                            println!("💡 {}", warning);
                         }
                     }
                 } else {
@@ -346,9 +365,14 @@ async fn run(cli: &Cli) -> Result<()> {
                                     .parent_id
                                     .map(|p| format!(" (parent: #{})", p))
                                     .unwrap_or_default();
+                                let spec_indicator = if sibling.has_spec { "" } else { " ⚠️" };
                                 println!(
-                                    "   #{}: {} [{}]{}",
-                                    sibling.id, sibling.name, sibling.status, parent_info
+                                    "   #{}: {} [{}]{}{}",
+                                    sibling.id,
+                                    sibling.name,
+                                    sibling.status,
+                                    parent_info,
+                                    spec_indicator
                                 );
                             }
                         }
@@ -360,9 +384,10 @@ async fn run(cli: &Cli) -> Result<()> {
                                     .parent_id
                                     .map(|p| format!(" (parent: #{})", p))
                                     .unwrap_or_default();
+                                let spec_indicator = if desc.has_spec { "" } else { " ⚠️" };
                                 println!(
-                                    "   #{}: {} [{}]{}",
-                                    desc.id, desc.name, desc.status, parent_info
+                                    "   #{}: {} [{}]{}{}",
+                                    desc.id, desc.name, desc.status, parent_info, spec_indicator
                                 );
                             }
                         }
@@ -401,7 +426,11 @@ async fn run(cli: &Cli) -> Result<()> {
                         if !response.root_tasks.is_empty() {
                             println!("\n📋 Root tasks:");
                             for task in &response.root_tasks {
-                                println!("   #{}: {} [{}]", task.id, task.name, task.status);
+                                let spec_indicator = if task.has_spec { "" } else { " ⚠️" };
+                                println!(
+                                    "   #{}: {} [{}]{}",
+                                    task.id, task.name, task.status, spec_indicator
+                                );
                             }
                         }
                     }

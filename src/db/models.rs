@@ -487,6 +487,9 @@ pub struct TaskBrief {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<i64>,
+    /// Whether the task has a non-empty spec/description
+    #[serde(default)]
+    pub has_spec: bool,
 }
 
 impl From<&Task> for TaskBrief {
@@ -496,6 +499,11 @@ impl From<&Task> for TaskBrief {
             name: task.name.clone(),
             status: task.status.clone(),
             parent_id: task.parent_id,
+            has_spec: task
+                .spec
+                .as_ref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false),
         }
     }
 }
