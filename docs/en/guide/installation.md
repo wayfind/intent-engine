@@ -191,7 +191,7 @@ ie --help
 
 ### Cargo
 ```bash
-cargo install ie --force
+cargo install intent-engine --force
 ```
 
 ### Homebrew
@@ -201,7 +201,7 @@ brew upgrade intent-engine
 
 ### cargo-binstall
 ```bash
-cargo binstall ie --force
+cargo binstall intent-engine --force
 ```
 
 ### Manual
@@ -213,7 +213,7 @@ Re-download the latest pre-compiled binary
 
 ### Command Not Found
 
-If you get `command not found: intent-engine` after installation, add the binary directory to PATH:
+If you get `command not found: ie` after installation, add the binary directory to PATH:
 
 ```bash
 # Default location for Cargo install

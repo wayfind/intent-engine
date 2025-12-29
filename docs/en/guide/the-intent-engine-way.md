@@ -10,7 +10,20 @@ This guide explains the standard workflow of using Intent-Engine, when to use it
 
 ---
 
-## Step 1: Capture Intent (When & How to `task add`)
+## Core Commands (v0.10.0)
+
+Intent-Engine has 4 core commands:
+
+| Command | Purpose | Philosophy |
+|---------|---------|------------|
+| `ie status` | Restore context | Amnesia recovery |
+| `ie plan` | Task operations | Decomposition persistence |
+| `ie log` | Record events | Decision transparency |
+| `ie search` | Find history | Memory retrieval |
+
+---
+
+## Step 1: Capture Intent (When & How to Create Tasks)
 
 ### When
 
@@ -21,194 +34,130 @@ When an idea or requirement becomes "complex enough," it should be captured as a
 - **Long-cycle work**: When the task cannot be completed in a single interaction or session and needs to be interrupted and resumed
 - **Collaboration node**: When task completion requires multiple rounds of Q&A, feedback, and intervention between humans and AI
 
-A smart AI Agent should be trained to recognize these signals and proactively suggest to humans:
+A smart AI Agent should be trained to recognize these signals and proactively suggest:
 
 > "This seems like a complex task. I recommend creating an Intent-Engine task to track it. Do you agree?"
 
 ### How
 
-Use `ie task add`. The key is the quality of the `spec`.
+Use `ie plan` with JSON. The key is the quality of the `spec`.
 
 ```bash
-# Pass detailed, structured requirements via pipe to --spec-stdin
-echo "# Goal: Implement OAuth2 login
-
-## Requirements:
-- Support Google and GitHub
-- Keep password login as fallback
-- Token validity: 7 days, support refresh
-
-## Technical Constraints:
-- Use OAuth2 PKCE flow
-- Frontend-backend separation architecture" | ie task add --name "Implement OAuth2 login" --spec-stdin
+echo '{"tasks":[{
+  "name": "Implement OAuth2 login",
+  "status": "doing",
+  "spec": "## Goal\nImplement OAuth2 login\n\n## Requirements\n- Support Google and GitHub\n- Keep password login as fallback\n- Token validity: 7 days, support refresh\n\n## Technical Constraints\n- Use OAuth2 PKCE flow\n- Frontend-backend separation architecture"
+}]}' | ie plan
 ```
 
 ### Why
 
 This is the starting point of the entire process. A clear, structured spec sets a clear "axiom" for AI. This fundamentally reduces errors and rework caused by unclear requirement understanding. We transform vague conversations into clear, executable intent.
 
+**Key rule**: `status: doing` requires a `spec`. You must know your goal before starting work.
+
 ---
 
-## Step 2: Activate Intent (When & How to `task start`)
+## Step 2: Restore Context (Always First)
 
 ### When
 
-When you or AI decide to officially begin working on a captured intent. This is a clear "work start" signal.
+At the **start of every session**. AI is stateless - it needs to know what it was working on.
 
 ### How
 
-Always use `ie task start <ID> --with-events`.
+Always run `ie status` first.
 
 ```bash
-# AI decides to start task #42
-ie task start 42 --with-events
+ie status
+# Or for a specific task:
+ie status 42
 ```
 
 ### Why
 
-This isn't just changing status to `doing`. The `start` command is a carefully designed atomic operation that does at least three critical things:
+This is "amnesia recovery". The `status` command returns:
 
-1. **Declare ownership**: Updates task status to `doing`, informing all collaborators (including other AIs or humans) "I'm working on this task"
-2. **Focus attention**: Automatically points the system's workspace focus (`current_task_id`) to this task, providing a baseline for all subsequent operations
-3. **Load context**: Returns complete task `spec` and `events_summary` in one call. This allows AI to get all target information and historical background needed to start work in a single call, extremely efficient
+1. **Current focused task** with full specification
+2. **Ancestor chain** - the bigger picture
+3. **Sibling tasks** - related work
+4. **Descendant tasks** - what's been broken down
 
----
-
-## Step 2.5: Smart Planning (When & How to `pick-next`) 🆕
-
-### When
-
-When AI discovers multiple problems that need handling, and these problems:
-
-- **Already evaluated**: Each problem's complexity and priority are clear
-- **Need sorting**: Need to automatically decide processing order, not by creation order
-- **Capacity management**: Need to control number of simultaneous tasks (WIP limit)
-
-### How
-
-First create tasks and evaluate them, then use `pick-next` for smart selection:
-
-```bash
-# 1. AI discovers 5 issues in code review
-ie task add --name "Fix null pointer exception"
-ie task add --name "Optimize database query"
-ie task add --name "Fix memory leak"
-ie task add --name "Update outdated dependencies"
-ie task add --name "Add error logging"
-
-# 2. AI evaluates complexity (1-10) and priority for each task
-ie task update 1 --complexity 3 --priority 10  # Null pointer: simple but urgent
-ie task update 2 --complexity 7 --priority 8   # Database: complex and important
-ie task update 3 --complexity 9 --priority 10  # Memory: complex but urgent
-ie task update 4 --complexity 5 --priority 5   # Dependencies: medium
-ie task update 5 --complexity 2 --priority 3   # Logging: simple not urgent
-
-# 3. Smart select top 3 tasks (by priority DESC, complexity ASC)
-ie task pick-next --max-count 3 --capacity 5
-# Result: Will select task 1 (P10/C3), 3 (P10/C9), 2 (P8/C7)
-```
-
-### Why
-
-This embodies the philosophy "let AI focus on thinking, let system handle scheduling":
-
-- **Token saving**: One call completes "query todo → evaluate capacity → sort → batch update", saves 60-70% API calls
-- **Decision consistency**: Uses unified algorithm (priority DESC, complexity ASC) ensuring predictable decision logic
-- **Capacity protection**: Automatically enforces WIP limits, prevents efficiency drop from opening too many tasks simultaneously
+This single command reconstructs the complete working context.
 
 ---
 
-## Step 3: Execute and Record (The Execution Loop & `event add`)
+## Step 3: Execute and Record (The Execution Loop)
 
 This is the core of the Intent-Engine pattern. When AI executes tasks, it enters a "perceive-think-act-record" loop.
 
-### When (When to record events)
+### When to Record Events
 
-At every key node in the execution loop, you must use `ie event add` to record. Key nodes include:
+At every key node in the execution loop, use `ie log` to record. Key nodes include:
 
-- **Making important decisions** (`--type decision`): "I chose library A over library B because..."
-- **Encountering obstacles** (`--type blocker`): "I need API key, cannot continue"
-- **Receiving human feedback** (`--type discussion`): "Human confirmed dependency installation complete"
-- **Completing a milestone** (`--type milestone`): "Database migration script written, awaiting tests"
-- **After an attempt fails** (`--type note`): "Executing Action A failed, error is..., next will try Action B"
+| Event Type | When to Use | Example |
+|-----------|-------------|---------|
+| `decision` | Making key technical decisions | "Chose library A over B because..." |
+| `blocker` | Encountering obstacles | "Need API key, cannot continue" |
+| `milestone` | Completing significant phases | "Database migration complete" |
+| `note` | General observations | "Discovered performance issue" |
 
 ### How
 
-Alternate between using various tools in the "toolbox" and writing key thinking process back to Intent-Engine.
-
 ```bash
-# 1. AI perceives environment (using underlying tools)
-git status
-ls -R
+# Record a decision
+ie log decision "Chose Passport.js for OAuth - mature library, supports multiple strategies"
 
-# 2. AI makes decision and acts (e.g., modify files)
-# ... a series of file edits ...
+# Record a blocker
+ie log blocker "Waiting for API credentials from admin"
 
-# 3. AI records its key decisions (using Intent-Engine)
-echo "Refactored token validation logic.
-
-Reason: Original logic did not properly handle expired tokens.
-
-Improvements:
-- Added token expiration time check
-- Implemented auto-refresh mechanism
-- Increased unit test coverage" | ie event add --task-id 42 --type decision --data-stdin
+# Record a milestone
+ie log milestone "Core authentication logic complete, tests passing"
 ```
 
 ### Why
 
-Intent-Engine is AI's **external long-term memory**. AI's context window is limited, it will "forget". The `events` table transforms AI's transient thinking process into permanent, queryable project knowledge. This enables:
+Intent-Engine is AI's **external long-term memory**. AI's context window is limited, it will "forget". The events table transforms AI's transient thinking process into permanent, queryable project knowledge. This enables:
 
 - **Prevent repeating mistakes**: AI can review history, know which paths don't work
 - **Support interrupt and resume**: Any collaborator can seamlessly take over work by reading event history
-- **Enable human-AI collaboration**: Event is the only channel for AI to "request help" from humans and receive "external guidance"
-- **Provide audit trail**: Provides precise record of "what actually happened" for post-mortem reviews
+- **Enable human-AI collaboration**: Events are the channel for AI to "request help" and receive guidance
+- **Provide audit trail**: Provides precise record of "what actually happened"
 
 ---
 
-## Step 3.5: Handle Sub-problems (When & How to `spawn-subtask`) 🆕
+## Step 4: Decompose Work (Hierarchical Tasks)
 
 ### When
 
-During execution, when AI discovers:
+When a task is too complex to complete as a single unit:
 
 - **Prerequisite dependency**: Current task depends on solving a sub-problem
-- **Problem decomposition**: Discovers task is too complex, needs decomposition into smaller units
-- **Recursive discovery**: Discovers even finer sub-problems while handling subtasks
+- **Problem decomposition**: Task is too complex, needs smaller units
+- **Recursive discovery**: Find even finer sub-problems while handling subtasks
 
 ### How
 
-Use `spawn-subtask` to create and switch to a subtask under current task:
+Use `children` in JSON or add subtasks to the focused task:
 
 ```bash
-# AI is working on task #42: Implement OAuth2 login
-ie task start 42 --with-events
+# Create with children
+echo '{"tasks":[{
+  "name": "Implement OAuth2",
+  "status": "doing",
+  "spec": "Complete OAuth2 integration",
+  "children": [
+    {"name": "Configure Google OAuth", "status": "todo"},
+    {"name": "Configure GitHub OAuth", "status": "todo"},
+    {"name": "Implement token refresh", "status": "todo"}
+  ]
+}]}' | ie plan
 
-# During implementation, discovers need to configure OAuth app first
-ie task spawn-subtask --name "Configure OAuth app on Google and GitHub"
-
-# This automatically:
-# 1. Creates subtask (parent_id = 42)
-# 2. Sets subtask status to doing
-# 3. Switches current task to subtask
-# 4. Returns subtask details
-
-# While configuring OAuth app, discovers need to apply for domain verification first
-echo "Need to complete domain ownership verification before creating OAuth app" | \
-  ie event add --task-id <child-task-id> --type blocker --data-stdin
-
-ie task spawn-subtask --name "Complete domain ownership verification"
-
-# Complete deepest subtask (it's now focused after spawn-subtask)
-ie task done
-
-# Switch back to parent task and continue
-ie task switch <child-task-id>
-ie task done
-
-# Finally complete root task
-ie task switch 42
-ie task done
+# Or add subtasks later (auto-parented to focused task)
+echo '{"tasks":[
+  {"name": "Configure Google OAuth", "status": "todo"},
+  {"name": "Configure GitHub OAuth", "status": "todo"}
+]}' | ie plan
 ```
 
 ### Why
@@ -216,55 +165,12 @@ ie task done
 This enforces the business rule "must complete subtasks before completing parent task":
 
 - **Keep hierarchy clear**: Avoid flattening many tasks, making dependencies hard to understand
-- **Atomic switch**: Completes create, start, set as current task in one step, saves tokens
 - **Enforce completeness**: System checks if all subtasks are complete, prevents omissions
+- **Natural workflow**: Break down as you discover complexity, not upfront
 
 ---
 
-## Step 3.6: Task Switching (When & How to `switch`) 🆕
-
-### When
-
-When you need to switch between multiple ongoing tasks:
-
-- **Pause current task**: Handle more urgent tasks
-- **Parallel work**: Switch to other tasks while waiting for external feedback
-- **Task tree navigation**: Navigate back and forth between parent and subtasks
-
-### How
-
-Use `switch` to quickly switch between tasks and get complete context:
-
-```bash
-# Currently working on frontend task #5
-ie task switch 5
-
-# Suddenly discover backend API has issue, need to fix first
-ie task switch 12  # Switch to backend task
-
-# switch will automatically:
-# 1. Update task #12 status to doing (if not already)
-# 2. Set #12 as current task
-# 3. Return task details and event summary
-
-# View context after switch
-# Output includes events_summary, helps AI quickly recover memory
-
-# Fix complete, switch back to frontend task
-ie task switch 5
-```
-
-### Why
-
-This is effective management of AI's working memory:
-
-- **Atomic operation**: Merges "get task → update status → set as current → get events" into one call
-- **Context recovery**: Automatically returns events_summary, helps AI quickly recall "where did I leave off on this task"
-- **State consistency**: Ensures each switch correctly updates task status and workspace focus
-
----
-
-## Step 4: Complete Intent (When & How to `task done`)
+## Step 5: Complete Intent (The Done State)
 
 ### When
 
@@ -272,142 +178,111 @@ When all goals defined in `spec` have been achieved, and all subtasks (if any) a
 
 ### How
 
-Always use `ie task done`.
-
 ```bash
-ie task done
+echo '{"tasks":[{"name": "Task name", "status": "done"}]}' | ie plan
 ```
 
 If the task still has incomplete subtasks, system will return error:
 
-```json
-{
-  "error": "Cannot complete task 42: it has 2 incomplete subtasks"
-}
+```
+Cannot mark 'Parent Task' as done: has incomplete children
 ```
 
 ### Why
 
-Like `start`, `done` is also an atomic operation with built-in safety checks. It enforces the core business rule "must complete all subtasks first", ensuring logical consistency of the task tree in Intent-Engine.
+The `done` state isn't a simple status change. It enforces the core business rule "must complete all subtasks first", ensuring logical consistency of the task tree.
 
-It's not a simple status change, but final confirmation that "this intent along with all its sub-intents have been fully achieved."
+It's final confirmation that "this intent along with all its sub-intents have been fully achieved."
 
 ---
 
-## Step 5: Review and Insight (When & How to `report`)
+## Step 6: Search and Review
 
 ### When
 
-When you need to generate periodic reports (e.g., weekly reports), conduct project retrospectives, or analyze efficiency for specific types of work (e.g., bug fixes).
+When you need to:
+- Find unfinished work
+- Review past decisions
+- Search for specific tasks or events
 
 ### How
 
-Use `ie report`, and **prefer `--summary-only`**.
-
 ```bash
-# AI needs to generate summary for weekly report
-ie report --since 7d --status done --summary-only
+# Find unfinished tasks
+ie search "todo doing"
 
-# Example output (compact JSON summary):
-# {
-#   "summary": {
-#     "total_count": 23,
-#     "todo_count": 5,
-#     "doing_count": 3,
-#     "done_count": 15
-#   }
-# }
+# Search by content
+ie search "OAuth authentication"
 
-# AI receives this compact JSON summary, then expands it into a complete report in natural language
-```
+# Find decisions
+ie search "decision"
 
-More query examples:
-
-```bash
-# View all tasks from last 1 day (with details)
-ie report --since 1d
-
-# View all in-progress tasks
-ie report --status doing --summary-only
-
-# Search completed tasks related to "authentication"
-ie report --filter-name "authentication" --status done --summary-only
-
-# Combined query: database optimization work completed in last 30 days
-ie report --since 30d --status done --filter-spec "database" --summary-only
+# Find blockers
+ie search "blocker"
 ```
 
 ### Why
 
-This embodies the best practice of **"leave computation at data source"**. AI's strength is language and reasoning, not data aggregation.
-
-Letting Intent-Engine efficiently complete all statistical calculations internally, only returning final, high-value "insight" results to AI:
-
-- **Greatly saves token consumption**: `--summary-only` only returns statistics, not all task details
-- **Reduces cost**: Fewer tokens means lower API costs
-- **Improves quality**: AI uses its precious context space for higher quality thinking and creation, not data processing
+This is "memory retrieval" - accessing the external brain. Unlike scrolling through chat history, search provides structured, relevant results.
 
 ---
 
 ## Complete Workflow Example
 
-### Scenario: AI Discovers Multiple Issues in Code Review
+### Scenario: AI Implements Feature with Subtasks
 
 ```bash
-# 1. Capture intent - AI discovers 5 issues
-ie task add --name "Fix null pointer exception in UserService"
-ie task add --name "Optimize database query performance"
-ie task add --name "Fix memory leak issue"
-ie task add --name "Update outdated dependency packages"
-ie task add --name "Add error logging"
+# 1. Capture intent with hierarchical structure
+echo '{"tasks":[{
+  "name": "Implement OAuth2 login",
+  "status": "doing",
+  "spec": "## Goal\nUsers can login via Google/GitHub\n\n## Approach\n- Use Passport.js\n- Store tokens securely\n- Implement refresh mechanism",
+  "children": [
+    {"name": "Configure Google OAuth", "status": "todo"},
+    {"name": "Configure GitHub OAuth", "status": "todo"},
+    {"name": "Implement token refresh", "status": "todo"}
+  ]
+}]}' | ie plan
 
-# 2. Evaluate - AI analyzes complexity and priority for each issue
-ie task update 1 --complexity 3 --priority 10
-ie task update 2 --complexity 7 --priority 8
-ie task update 3 --complexity 9 --priority 10
-ie task update 4 --complexity 5 --priority 5
-ie task update 5 --complexity 2 --priority 3
+# 2. Check context
+ie status
 
-# 3. Smart planning - automatically select optimal task order
-ie task pick-next --max-count 3 --capacity 5
-# System selects: task 1(P10/C3), 3(P10/C9), 2(P8/C7)
+# 3. Record key decision
+ie log decision "Chose Passport.js - mature library, good docs, supports multiple strategies"
 
-# 4. Execute first task
-ie task switch 1
+# 4. Start first subtask
+echo '{"tasks":[{
+  "name": "Configure Google OAuth",
+  "status": "doing",
+  "spec": "Set up Google Cloud Console, get credentials, configure callback"
+}]}' | ie plan
 
-# 4.1 Record decision
-echo "Problem cause: UserService.getUser() did not check if return value is null
-Fix solution: Add Optional wrapping and null check
-Impact scope: 3 call sites" | \
-  ie event add --task-id 1 --type decision --data-stdin
+# 5. Hit a blocker
+ie log blocker "Need domain verification before creating OAuth app"
 
-# 4.2 Execute fix
-# ... modify code ...
+# 6. Complete subtask after resolving
+echo '{"tasks":[{"name": "Configure Google OAuth", "status": "done"}]}' | ie plan
 
-# 4.3 Complete task
-ie task done
+# 7. Continue with other subtasks...
+echo '{"tasks":[{
+  "name": "Configure GitHub OAuth",
+  "status": "doing",
+  "spec": "Set up GitHub OAuth app"
+}]}' | ie plan
 
-# 5. Handle second task (includes subtask)
-ie task switch 3
+echo '{"tasks":[{"name": "Configure GitHub OAuth", "status": "done"}]}' | ie plan
 
-# 5.1 Discover need to diagnose problem first
-echo "Need to use profiler to locate memory leak source" | \
-  ie event add --task-id 3 --type blocker --data-stdin
+echo '{"tasks":[{
+  "name": "Implement token refresh",
+  "status": "doing",
+  "spec": "Handle token expiration and refresh"
+}]}' | ie plan
 
-ie task spawn-subtask --name "Analyze memory usage with Valgrind"
+echo '{"tasks":[{"name": "Implement token refresh", "status": "done"}]}' | ie plan
 
-# 5.2 Complete diagnosis (subtask is now focused, complete it)
-echo "Problem found: WebSocket connections not properly closed" | \
-  ie event add --task-id <subtask-id> --type milestone --data-stdin
-ie task done
-
-# 5.3 Switch back and complete main task
-ie task switch 3
-# ... fix code ...
-ie task done
-
-# 6. Generate work report
-ie report --since 1d --summary-only
+# 8. Complete parent (only works after all children done)
+ie log milestone "All OAuth providers configured and tested"
+echo '{"tasks":[{"name": "Implement OAuth2 login", "status": "done"}]}' | ie plan
 ```
 
 ---
@@ -415,90 +290,83 @@ ie report --since 1d --summary-only
 ## Core Principles Summary
 
 ### 1. Intent-First
-Don't let AI execute aimlessly. Clarify intent (task) first, then start action.
+Don't let AI execute aimlessly. Clarify intent (task with spec) first, then start action.
 
 ### 2. Record Everything Critical
-AI's memory will fade, but Intent-Engine won't. Every important decision should be recorded.
+AI's memory will fade, but Intent-Engine won't. Every important decision should be recorded with `ie log`.
 
-### 3. Prefer Atomic Operations
-Prefer using composite commands like `start`, `pick-next`, `spawn-subtask`, `switch`, `done` instead of manually combining multiple low-level operations.
+### 3. Status First, Always
+Run `ie status` at the start of every session. This is amnesia recovery.
 
-### 4. Clear Hierarchy
-Use parent-child tasks to keep work structure clear. Big tasks decompose into small tasks, small tasks must complete before big tasks can complete.
+### 4. Spec Required for Doing
+You must know your goal before starting work. `status: doing` requires a description.
 
-### 5. Context is King
-Always use `--with-events` to get complete context. AI needs to know "why" and "how", not just "what".
+### 5. Clear Hierarchy
+Use parent-child tasks to keep work structure clear. Complete children before parents.
 
-### 6. Token Efficiency
-Use `--summary-only`, atomic operations, smart selection, and other mechanisms to maximize the value of each token.
+### 6. Idempotent Operations
+Same task name = update, not duplicate. `ie plan` is safe to run multiple times.
 
 ---
 
 ## Anti-Pattern Warnings
 
-### ❌ Don't: Directly manipulate status
+### Forgetting to Restore Context
+
 ```bash
-# Wrong: Manually combine multiple operations
-ie task update 42 --status doing
-ie current --set 42
-ie task get 42 --with-events
+# Wrong: Jump straight into work
+echo '{"tasks":[...]}' | ie plan
+
+# Correct: Always check status first
+ie status
+echo '{"tasks":[...]}' | ie plan
 ```
 
-### ✅ Should: Use atomic operations
+### Starting Without Spec
+
 ```bash
-# Correct: One step
-ie task start 42 --with-events
+# Wrong: No goal defined
+echo '{"tasks":[{"name": "Implement feature", "status": "doing"}]}' | ie plan
+
+# Correct: Clear goal and approach
+echo '{"tasks":[{
+  "name": "Implement feature",
+  "status": "doing",
+  "spec": "## Goal\n...\n\n## Approach\n..."
+}]}' | ie plan
 ```
 
----
+### Forgetting to Record Decisions
 
-### ❌ Don't: Flatten all tasks
 ```bash
-# Wrong: All sub-problems created as independent root tasks
-ie task add --name "Implement OAuth2"
-ie task add --name "Configure Google OAuth"
-ie task add --name "Configure GitHub OAuth"
-ie task add --name "Implement token refresh"
-```
-
-### ✅ Should: Use hierarchical structure
-```bash
-# Correct: Use parent-child relationship
-ie task add --name "Implement OAuth2"
-ie task start 1
-ie task spawn-subtask --name "Configure Google OAuth"
-ie task done
-ie task spawn-subtask --name "Configure GitHub OAuth"
-ie task done
-ie task spawn-subtask --name "Implement token refresh"
-ie task done
-ie task switch 1
-ie task done
-```
-
----
-
-### ❌ Don't: Forget to record key decisions
-```bash
-# Wrong: AI made important decision but didn't record
+# Wrong: Made decision but didn't record
 # ... chose library A ...
-# ... directly continue next step ...
+# ... continue working ...
+
+# Correct: Record decision immediately
+ie log decision "Chose library A because..."
 ```
 
-### ✅ Should: Record all key nodes
+### Flat Task Structure
+
 ```bash
-# Correct: Record decision process
-echo "Chose to use Passport.js instead of writing OAuth logic from scratch
+# Wrong: All tasks at root level
+echo '{"tasks":[
+  {"name": "Main feature", "status": "doing"},
+  {"name": "Subtask 1", "status": "todo"},
+  {"name": "Subtask 2", "status": "todo"}
+]}' | ie plan
 
-Reasons:
-- Mature and stable, good community support
-- Supports multiple strategies
-- Reduces maintenance burden
-
-Trade-offs:
-- Increases dependencies
-- Need to learn its API" | \
-  ie event add --task-id 1 --type decision --data-stdin
+# Correct: Use hierarchy
+echo '{"tasks":[{
+  "name": "Main feature",
+  "status": "doing",
+  "spec": "...",
+  "children": [
+    {"name": "Subtask 1", "status": "todo"},
+    {"name": "Subtask 2", "status": "todo"}
+  ]
+}]}' | ie plan
 ```
 
 ---
@@ -513,4 +381,7 @@ Mastering "The Intent-Engine Way" is mastering the art of collaborating with AI.
 
 ---
 
-**Next Steps**: Read the complete command reference ([README.en.md](../../../README.en.md)) and technical analysis ([task-workflow-analysis.md](../../technical/task-workflow-analysis.md)).
+**Next Steps**:
+- Read [CLAUDE.md](../../../CLAUDE.md) for the core philosophy
+- Try [Quick Start](quickstart.md) to experience the workflow
+- See [AI Quick Guide](ai-quick-guide.md) for command reference

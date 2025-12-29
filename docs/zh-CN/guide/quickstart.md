@@ -1,281 +1,200 @@
 # Intent-Engine 快速上手指南
 
-**中文 | [English](QUICKSTART.en.md)**
+**中文 | [English](../../en/guide/quickstart.md)**
 
-**5 分钟从零开始体验 Intent-Engine 的核心功能。**
+**5 分钟体验 Intent-Engine 的核心功能。**
 
 ---
 
 ## 前提条件
 
-需要安装：
 - Rust 和 Cargo（[安装指南](https://rustup.rs/)）
-- 或者已经下载了预编译二进制文件
+- 或从 [releases](https://github.com/wayfind/intent-engine/releases) 下载预编译二进制
 
 ---
 
 ## 第 1 步：安装（1 分钟）
 
 ```bash
-# 方式 1: 使用 Cargo 安装（推荐）
+# 方式 1：使用 Cargo（推荐）
 cargo install intent-engine
 
-# 方式 2: 下载预编译二进制
-# 访问 https://github.com/wayfind/intent-engine/releases
-# 下载适合你平台的版本
+# 方式 2：使用 Homebrew（macOS/Linux）
+brew install wayfind/tap/intent-engine
+
+# 方式 3：使用 npm
+npm install -g @m3task/intent-engine
 
 # 验证安装
 ie --version
 ```
-
-> 💡 **提示**: 详细安装选项请参见 [INSTALLATION.md](docs/zh-CN/guide/installation.md)
 
 ---
 
 ## 第 2 步：创建第一个任务（1 分钟）
 
 ```bash
-# 添加一个战略任务（包含规格说明）
-echo "实现 JWT 认证功能
-- 支持 token 生成和验证
-- token 有效期 7 天
-- 支持刷新 token
-- 使用 HS256 算法" | \
-  ie task add --name "实现用户认证" --spec-stdin
+# 创建带描述（spec）的任务
+echo '{"tasks":[{
+  "name": "实现用户认证",
+  "status": "doing",
+  "spec": "## 目标\n用户可通过 JWT 令牌认证\n\n## 方案\n- 使用 HS256 算法\n- 令牌有效期 7 天\n- 支持刷新令牌"
+}]}' | ie plan
 
-# 输出示例：
-# {
-#   "id": 1,
-#   "name": "实现用户认证",
-#   "status": "todo",
-#   ...
-# }
+# 输出：
+# ✓ Plan executed successfully
+# Created: 1 tasks
+# Task ID mapping:
+#   实现用户认证 → #1
 ```
 
 **发生了什么？**
-- ✅ Intent-Engine 自动检测了项目根目录（通过查找 `.git`、`Cargo.toml`、`package.json` 等标记）
-- ✅ 在项目根目录创建了 `.intent-engine/project.db`（而不仅仅是当前目录）
-- ✅ 任务被保存到 SQLite 数据库
-- ✅ 规格说明（spec）被完整记录
+- Intent-Engine 在当前目录自动初始化
+- 创建了 `.intent-engine/project.db`（SQLite 数据库）
+- 任务已保存，包含完整规格说明
+- 任务被设为当前焦点（status: doing）
 
-> 💡 **智能初始化**: Intent-Engine 会智能地查找项目根目录，通过检测常见的项目标记如 `.git`、`Cargo.toml`、`package.json` 等。这意味着你可以从任何子目录运行命令，数据库总是会被创建在项目根目录。无需手动初始化！
+> **注意**：`status: doing` 的任务必须有 `spec`（描述）。这确保你在开始工作前知道目标。
 
 ---
 
-## 第 3 步：开始任务并查看上下文（30 秒）
+## 第 3 步：查看当前状态（30 秒）
 
 ```bash
-# 开始任务并获取完整上下文
-ie task start 1 --with-events
+ie status
 
-# 输出示例：
-# {
-#   "id": 1,
-#   "name": "实现用户认证",
-#   "spec": "实现 JWT 认证功能\n- 支持 token 生成和验证\n...",
-#   "status": "doing",  # 状态已更新为 doing
-#   ...
-# }
+# 输出显示：
+# - 当前聚焦的任务
+# - 任务规格说明
+# - 父子关系（如果有）
+# - 事件历史
+```
+
+**这是"失忆恢复"命令** - 每次会话开始时运行。
+
+---
+
+## 第 4 步：分解为子任务（1 分钟）
+
+```bash
+# 给当前任务添加子任务
+echo '{"tasks":[
+  {"name": "设计 JWT 令牌结构", "status": "todo"},
+  {"name": "实现令牌验证", "status": "todo"},
+  {"name": "添加刷新机制", "status": "todo"}
+]}' | ie plan
+
+# 子任务自动添加到聚焦的父任务下
 ```
 
 **发生了什么？**
-- ✅ 任务状态从 `todo` 变为 `doing`
-- ✅ 任务被设置为"当前任务"
-- ✅ 返回完整的规格说明和事件历史（如果有）
+- 在父任务（#1）下创建了 3 个子任务
+- 自动归属：新任务成为聚焦任务的子任务
+- 使用 `"parent_id": null` 创建独立的根任务
 
 ---
 
-## 第 4 步：在工作中发现子问题（1 分钟）
+## 第 5 步：记录决策（30 秒）
 
 ```bash
-# 在实现过程中发现需要先配置 JWT 密钥
-ie task spawn-subtask --name "配置 JWT 密钥存储"
+# 记录你做选择的原因
+ie log decision "选择 HS256 而非 RS256 - 单应用场景，不需要非对称加密"
 
-# 输出示例：
-# {
-#   "id": 2,
-#   "parent_id": 1,  # 自动设置父任务
-#   "name": "配置 JWT 密钥存储",
-#   "status": "doing",  # 自动开始
-#   ...
-# }
+# 输出：
+# ✓ Event recorded
+#   Type: decision
+#   Task: #1
 ```
 
-**发生了什么？**
-- ✅ 创建了子任务（parent_id = 1）
-- ✅ 子任务自动进入 `doing` 状态
-- ✅ 当前任务自动切换到子任务
+**决策日志是给未来 AI 的消息**（包括失忆的未来自己）。
+
+其他事件类型：`blocker`、`milestone`、`note`
 
 ---
 
-## 第 5 步：记录关键决策（30 秒）
+## 第 6 步：完成子任务（30 秒）
 
 ```bash
-# 记录你的决策过程（记录到当前任务）
-echo "决定将 JWT 密钥存储在环境变量中
-原因：
-1. 避免密钥硬编码到代码中
-2. 便于不同环境使用不同密钥
-3. 符合 12-Factor App 原则" | \
-  ie event add --type decision --data-stdin
+# 开始处理子任务
+echo '{"tasks":[{"name": "设计 JWT 令牌结构", "status": "doing", "spec": "定义令牌结构和声明"}]}' | ie plan
 
-# 输出示例：
-# {
-#   "id": 1,
-#   "task_id": 2,
-#   "log_type": "decision",
-#   "discussion_data": "决定将 JWT 密钥存储在环境变量中\n...",
-#   "timestamp": "2025-11-08T..."
-# }
+# ... 执行工作 ...
+
+# 标记完成
+echo '{"tasks":[{"name": "设计 JWT 令牌结构", "status": "done"}]}' | ie plan
 ```
 
-**发生了什么？**
-- ✅ 决策被记录到事件流
-- ✅ 未来可以追溯"为什么做这个决定"
-- ✅ AI 可以通过 `--with-events` 恢复完整上下文
+**关键规则**：父任务必须等所有子任务完成后才能标记为 `done`。
 
 ---
 
-## 第 6 步：完成子任务并切回父任务（30 秒）
+## 第 7 步：搜索历史（30 秒）
 
 ```bash
-# 完成子任务
-ie task done
+# 查找未完成的任务
+ie search "todo doing"
 
-# 切换回父任务
-ie task switch 1
+# 按内容搜索
+ie search "JWT 认证"
 
-# 输出包含父任务的完整上下文
+# 查找最近的决策
+ie search "decision"
 ```
 
 ---
 
-## 第 7 步：完成父任务（30 秒）
+## 恭喜！
 
-```bash
-# 完成父任务
-ie task done
+你已经学会了 Intent-Engine 的核心工作流：
 
-# 如果还有未完成的子任务，系统会报错：
-# Error: Cannot complete task 1: it has incomplete subtasks
-
-# 全部子任务完成后，可以成功完成父任务
-```
+1. **ie status** - 恢复上下文（总是第一步）
+2. **ie plan** - 创建、更新、完成任务（JSON 标准输入）
+3. **ie log** - 记录决策和事件
+4. **ie search** - 搜索任务和历史
 
 ---
 
-## 第 8 步：生成工作报告（30 秒）
+## 命令速查
 
-```bash
-# 生成简洁的工作摘要（推荐，节省 Token）
-ie report --since 1d --summary-only
-
-# 输出示例：
-# {
-#   "summary": {
-#     "total_count": 2,
-#     "todo_count": 0,
-#     "doing_count": 0,
-#     "done_count": 2
-#   }
-# }
-
-# 生成详细报告
-ie report --since 1d
-```
-
----
-
-## 🎉 恭喜！
-
-你已经完成了 Intent-Engine 的核心工作流：
-
-1. ✅ 创建战略任务（包含规格说明）
-2. ✅ 开始任务并获取上下文
-3. ✅ 发现子问题并创建子任务
-4. ✅ 记录关键决策
-5. ✅ 完成任务（强制子任务完成检查）
-6. ✅ 生成工作报告
+| 命令 | 用途 | 示例 |
+|------|------|------|
+| `ie status` | 查看当前上下文 | `ie status` 或 `ie status 42` |
+| `ie plan` | 任务操作 | `echo '{"tasks":[...]}' \| ie plan` |
+| `ie log <类型> <消息>` | 记录事件 | `ie log decision "选择了 X"` |
+| `ie search <查询>` | 搜索 | `ie search "todo doing"` |
 
 ---
 
 ## 下一步
 
-### 🚀 进阶功能
+### 进阶功能
 
-1. **智能任务选择**：批量处理多个任务
-   ```bash
-   # 创建多个任务
-   ie task add --name "任务 A"
-   ie task add --name "任务 B"
-   ie task add --name "任务 C"
+1. **层级任务**：在 JSON 中使用 `children` 创建嵌套结构
+2. **优先级**：添加 `"priority": "high"`（critical/high/medium/low）
+3. **仪表盘**：运行 `ie dashboard start` 在 `localhost:11391` 查看可视化界面
 
-   # 设置优先级和复杂度
-   ie task update 1 --priority 10 --complexity 3
-   ie task update 2 --priority 8 --complexity 7
-   ie task update 3 --priority 5 --complexity 2
+### 文档
 
-   # 智能选择（按优先级降序、复杂度升序）
-   ie task pick-next --max-count 3
-   ```
-
-2. **全文搜索**：快速查找任务
-   ```bash
-   ie report --filter-name "认证" --summary-only
-   ie report --filter-spec "JWT" --summary-only
-   ```
-
-3. **事件类型**：记录不同类型的事件
-   - `decision` - 关键决策
-   - `blocker` - 遇到的障碍
-   - `milestone` - 里程碑
-   - `discussion` - 讨论记录
-   - `note` - 一般备注
-
-### 📚 深入学习
-
-- [**The Intent-Engine Way**](docs/zh-CN/guide/the-intent-engine-way.md) - 理解设计哲学和最佳实践
-- [**AI Quick Guide**](docs/zh-CN/guide/ai-quick-guide.md) - AI 客户端速查手册
-- [**完整命令参考**](docs/zh-CN/guide/command-reference-full.md) - 所有命令的详细文档
-
-### 🔧 集成到 AI 工具
-
-- [**System Prompt**](docs/zh-CN/integration/claude-code-system-prompt.md) - Claude Code 零配置集成 (v0.10.0+)
-- [**Claude Skill**](.claude-code/intent-engine.skill.md) - 轻量级替代集成方式
-- [**通用 CLI**](docs/zh-CN/integration/generic-llm.md) - 集成到任意 AI 工具
-
-### 💻 贡献代码前的准备
-
-如果你想为 Intent-Engine 贡献代码，请先安装 git hooks：
-
-```bash
-./scripts/setup-git-hooks.sh
-```
-
-这会在每次提交前自动格式化代码，避免 CI 检查失败。更多开发工具命令请查看 [scripts/README.md](scripts/README.md)。
+- [CLAUDE.md](../../../CLAUDE.md) - 给 AI 助手（理解"为什么"）
+- [命令参考](command-reference-full.md) - 所有命令详解
+- [系统提示词指南](../integration/claude-code-system-prompt.md) - Claude Code 集成
 
 ---
 
 ## 常见问题
 
-**Q: Intent-Engine 和普通待办事项工具有什么区别？**
+**Q：和普通待办应用有什么区别？**
 
-A: Intent-Engine 关注**战略意图层**（What + Why），而不仅仅是战术执行层（What）。每个任务包含完整的规格说明、决策历史和层级关系，是 AI 的外部长时记忆。
+A：Intent-Engine 追踪**战略意图**（What + Why），而不仅仅是任务。每个任务都有规格说明、决策历史和层级关系 - 这是 AI 的外部长期记忆。
 
-**Q: 为什么需要 `--with-events`？**
+**Q：数据存储在哪里？**
 
-A: 这会返回任务的事件历史，帮助 AI（或人类）快速恢复上下文，了解"之前做了什么决策"。
+A：`.intent-engine/project.db`（SQLite），位于你首次运行命令的目录。
 
-**Q: 什么时候使用 `spawn-subtask` vs `task add --parent`？**
+**Q：为什么 `doing` 任务必须有 spec？**
 
-A:
-- `spawn-subtask`: 当你**正在处理一个任务**时发现子问题，一步完成"创建 + 开始 + 切换"
-- `task add --parent`: 提前规划子任务，但不立即开始
-
-**Q: 数据存储在哪里？**
-
-A: `.intent-engine/project.db`（SQLite 数据库），位于项目根目录。
+A：开始工作前应该知道目标和方法。这防止"在做某事"却不清楚在做什么。
 
 ---
 
-**现在开始使用 Intent-Engine，让 AI 成为你的战略执行伙伴！** 🚀
+**开始使用 Intent-Engine - 给你的 AI 它应得的记忆！**

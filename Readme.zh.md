@@ -145,7 +145,7 @@ ie dashboard open            # 可视化 UI
 
 ## 文档
 
-- [快速开始](QUICKSTART.md) — 5 分钟上手
+- [快速开始](docs/zh-CN/guide/quickstart.md) — 5 分钟上手
 - [CLAUDE.md](CLAUDE.md) — 给 AI 助手
 - [命令参考](docs/zh-CN/guide/command-reference-full.md) — 所有命令
 

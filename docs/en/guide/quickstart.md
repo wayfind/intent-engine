@@ -1,281 +1,200 @@
 # Intent-Engine Quick Start Guide
 
-**[中文](QUICKSTART.md) | English**
+**[中文](../../zh-CN/guide/quickstart.md) | English**
 
-**Experience Intent-Engine's core features from scratch in 5 minutes.**
+**5 minutes to experience Intent-Engine's core features.**
 
 ---
 
 ## Prerequisites
 
-Required:
 - Rust and Cargo ([Installation Guide](https://rustup.rs/))
-- Or pre-compiled binary downloaded
+- Or pre-compiled binary from [releases](https://github.com/wayfind/intent-engine/releases)
 
 ---
 
 ## Step 1: Installation (1 minute)
 
 ```bash
-# Method 1: Install using Cargo (Recommended)
+# Method 1: Using Cargo (Recommended)
 cargo install intent-engine
 
-# Method 2: Download pre-compiled binary
-# Visit https://github.com/wayfind/intent-engine/releases
-# Download the version for your platform
+# Method 2: Using Homebrew (macOS/Linux)
+brew install wayfind/tap/intent-engine
+
+# Method 3: Using npm
+npm install -g @m3task/intent-engine
 
 # Verify installation
 ie --version
 ```
-
-> 💡 **Tip**: For detailed installation options, see [INSTALLATION.md](docs/en/guide/installation.md)
 
 ---
 
 ## Step 2: Create Your First Task (1 minute)
 
 ```bash
-# Add a strategic task (with specifications)
-echo "Implement JWT authentication
-- Support token generation and validation
-- Token validity: 7 days
-- Support token refresh
-- Use HS256 algorithm" | \
-  ie task add --name "Implement user authentication" --spec-stdin
+# Create a task with description (spec)
+echo '{"tasks":[{
+  "name": "Implement user authentication",
+  "status": "doing",
+  "spec": "## Goal\nUsers can authenticate via JWT tokens\n\n## Approach\n- Use HS256 algorithm\n- Token validity: 7 days\n- Support refresh tokens"
+}]}' | ie plan
 
-# Example output:
-# {
-#   "id": 1,
-#   "name": "Implement user authentication",
-#   "status": "todo",
-#   ...
-# }
+# Output:
+# ✓ Plan executed successfully
+# Created: 1 tasks
+# Task ID mapping:
+#   Implement user authentication → #1
 ```
 
 **What happened?**
-- ✅ Intent-Engine automatically initialized in the current directory
-- ✅ Created `.intent-engine/project.db` in the current directory
-- ✅ Task saved to SQLite database
-- ✅ Specification (spec) fully recorded
+- Intent-Engine auto-initialized in the current directory
+- Created `.intent-engine/project.db` (SQLite database)
+- Task saved with full specification
+- Task set as current focus (status: doing)
 
-> 💡 **Lazy Initialization**: Intent-Engine automatically creates `.intent-engine/` in the current directory when you run your first command. Use `ie init` to explicitly initialize a directory, or `cd` to your project root before running commands.
+> **Note**: Tasks with `status: doing` require a `spec` (description). This ensures you know the goal before starting work.
 
 ---
 
-## Step 3: Start Task and View Context (30 seconds)
+## Step 3: Check Current Status (30 seconds)
 
 ```bash
-# Start task and get complete context
-ie task start 1 --with-events
+ie status
 
-# Example output:
-# {
-#   "id": 1,
-#   "name": "Implement user authentication",
-#   "spec": "Implement JWT authentication\n- Support token generation and validation\n...",
-#   "status": "doing",  # Status updated to doing
-#   ...
-# }
+# Output shows:
+# - Current focused task
+# - Task specification
+# - Parent/child relationships (if any)
+# - Event history
+```
+
+**This is the "amnesia recovery" command** - run it at the start of every session.
+
+---
+
+## Step 4: Break Down Into Subtasks (1 minute)
+
+```bash
+# Add subtasks to the current task
+echo '{"tasks":[
+  {"name": "Design JWT token schema", "status": "todo"},
+  {"name": "Implement token validation", "status": "todo"},
+  {"name": "Add refresh mechanism", "status": "todo"}
+]}' | ie plan
+
+# Subtasks are automatically added under the focused parent
 ```
 
 **What happened?**
-- ✅ Task status changed from `todo` to `doing`
-- ✅ Task set as "current task"
-- ✅ Returns complete specification and event history (if any)
+- 3 subtasks created under the parent task (#1)
+- Auto-parenting: new tasks become children of the focused task
+- Use `"parent_id": null` to create independent root tasks
 
 ---
 
-## Step 4: Discover Sub-problem During Work (1 minute)
+## Step 5: Record a Decision (30 seconds)
 
 ```bash
-# During implementation, discover need to configure JWT secret first
-ie task spawn-subtask --name "Configure JWT secret storage"
+# Record why you made a choice
+ie log decision "Chose HS256 over RS256 - single app, no need for asymmetric keys"
 
-# Example output:
-# {
-#   "id": 2,
-#   "parent_id": 1,  # Parent task auto-set
-#   "name": "Configure JWT secret storage",
-#   "status": "doing",  # Auto-started
-#   ...
-# }
+# Output:
+# ✓ Event recorded
+#   Type: decision
+#   Task: #1
 ```
 
-**What happened?**
-- ✅ Created subtask (parent_id = 1)
-- ✅ Subtask automatically entered `doing` status
-- ✅ Current task automatically switched to subtask
+**Decision logs are messages to future AI** (including your amnesiac future self).
+
+Other event types: `blocker`, `milestone`, `note`
 
 ---
 
-## Step 5: Record Key Decisions (30 seconds)
+## Step 6: Complete a Subtask (30 seconds)
 
 ```bash
-# Record your decision process (to current task)
-echo "Decided to store JWT secret in environment variables
-Reasons:
-1. Avoid hardcoding secrets in code
-2. Easy to use different secrets in different environments
-3. Complies with 12-Factor App principles" | \
-  ie event add --type decision --data-stdin
+# Start working on a subtask
+echo '{"tasks":[{"name": "Design JWT token schema", "status": "doing", "spec": "Define token structure and claims"}]}' | ie plan
 
-# Example output:
-# {
-#   "id": 1,
-#   "task_id": 2,
-#   "log_type": "decision",
-#   "discussion_data": "Decided to store JWT secret in environment variables\n...",
-#   "timestamp": "2025-11-08T..."
-# }
+# ... do the work ...
+
+# Mark it complete
+echo '{"tasks":[{"name": "Design JWT token schema", "status": "done"}]}' | ie plan
 ```
 
-**What happened?**
-- ✅ Decision recorded to event stream
-- ✅ Can trace "why this decision was made" in the future
-- ✅ AI can recover complete context via `--with-events`
+**Key rule**: Parent tasks cannot be marked `done` until all children are complete.
 
 ---
 
-## Step 6: Complete Subtask and Switch Back to Parent (30 seconds)
+## Step 7: Search Your History (30 seconds)
 
 ```bash
-# Complete subtask
-ie task done
+# Find unfinished tasks
+ie search "todo doing"
 
-# Switch back to parent task
-ie task switch 1
+# Search by content
+ie search "JWT authentication"
 
-# Output includes complete context of parent task
+# Find recent decisions
+ie search "decision"
 ```
 
 ---
 
-## Step 7: Complete Parent Task (30 seconds)
+## Congratulations!
 
-```bash
-# Complete parent task
-ie task done
+You've learned Intent-Engine's core workflow:
 
-# If there are incomplete subtasks, system will error:
-# Error: Cannot complete task 1: it has incomplete subtasks
-
-# After all subtasks complete, can successfully complete parent task
-```
+1. **ie status** - Restore context (always first)
+2. **ie plan** - Create, update, complete tasks (JSON stdin)
+3. **ie log** - Record decisions and events
+4. **ie search** - Find tasks and history
 
 ---
 
-## Step 8: Generate Work Report (30 seconds)
+## Command Summary
 
-```bash
-# Generate concise work summary (recommended, saves tokens)
-ie report --since 1d --summary-only
-
-# Example output:
-# {
-#   "summary": {
-#     "total_count": 2,
-#     "todo_count": 0,
-#     "doing_count": 0,
-#     "done_count": 2
-#   }
-# }
-
-# Generate detailed report
-ie report --since 1d
-```
-
----
-
-## 🎉 Congratulations!
-
-You've completed Intent-Engine's core workflow:
-
-1. ✅ Create strategic task (with specifications)
-2. ✅ Start task and get context
-3. ✅ Discover sub-problem and create subtask
-4. ✅ Record key decisions
-5. ✅ Complete tasks (enforced subtask completion check)
-6. ✅ Generate work report
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `ie status` | View current context | `ie status` or `ie status 42` |
+| `ie plan` | Task operations | `echo '{"tasks":[...]}' \| ie plan` |
+| `ie log <type> <msg>` | Record events | `ie log decision "chose X"` |
+| `ie search <query>` | Search | `ie search "todo doing"` |
 
 ---
 
 ## Next Steps
 
-### 🚀 Advanced Features
+### Advanced Features
 
-1. **Smart Task Selection**: Batch process multiple tasks
-   ```bash
-   # Create multiple tasks
-   ie task add --name "Task A"
-   ie task add --name "Task B"
-   ie task add --name "Task C"
+1. **Hierarchical Tasks**: Use `children` in JSON for nested structures
+2. **Priority**: Add `"priority": "high"` (critical/high/medium/low)
+3. **Dashboard**: Run `ie dashboard start` for visual UI at `localhost:11391`
 
-   # Set priority and complexity
-   ie task update 1 --priority 10 --complexity 3
-   ie task update 2 --priority 8 --complexity 7
-   ie task update 3 --priority 5 --complexity 2
+### Documentation
 
-   # Smart selection (by priority DESC, complexity ASC)
-   ie task pick-next --max-count 3
-   ```
-
-2. **Full-text Search**: Quickly find tasks
-   ```bash
-   ie report --filter-name "authentication" --summary-only
-   ie report --filter-spec "JWT" --summary-only
-   ```
-
-3. **Event Types**: Record different types of events
-   - `decision` - Key decisions
-   - `blocker` - Encountered obstacles
-   - `milestone` - Milestones
-   - `discussion` - Discussion records
-   - `note` - General notes
-
-### 📚 Deep Learning
-
-- [**The Intent-Engine Way**](docs/en/guide/the-intent-engine-way.md) - Understand design philosophy and best practices
-- [**AI Quick Guide**](docs/en/guide/ai-quick-guide.md) - AI client quick reference
-- [**Complete Command Reference**](docs/en/guide/command-reference-full.md) - Detailed documentation for all commands
-
-### 🔧 Integrate with AI Tools
-
-- [**System Prompt**](docs/en/integration/claude-code-system-prompt.md) - Zero-config Claude Code integration (v0.10.0+)
-- [**Claude Skill**](.claude-code/intent-engine.skill.md) - Lightweight alternative integration method
-- [**Generic CLI**](docs/en/integration/generic-llm.md) - Integrate with any AI tool
-
-### 💻 Pre-contribution Setup
-
-If you want to contribute code to Intent-Engine, please install git hooks first:
-
-```bash
-./scripts/setup-git-hooks.sh
-```
-
-This automatically formats code before each commit, preventing CI check failures. For more development tool commands, see [scripts/README.md](scripts/README.md).
+- [CLAUDE.md](../../../CLAUDE.md) - For AI assistants (the "why")
+- [Command Reference](command-reference-full.md) - All commands in detail
+- [System Prompt Guide](../integration/claude-code-system-prompt.md) - Claude Code integration
 
 ---
 
 ## FAQ
 
-**Q: What's the difference between Intent-Engine and regular todo tools?**
+**Q: What's the difference from todo apps?**
 
-A: Intent-Engine focuses on the **strategic intent layer** (What + Why), not just the tactical execution layer (What). Each task includes complete specifications, decision history, and hierarchical relationships—it's AI's external long-term memory.
-
-**Q: Why do we need `--with-events`?**
-
-A: This returns the task's event history, helping AI (or humans) quickly recover context and understand "what decisions were made before."
-
-**Q: When to use `spawn-subtask` vs `task add --parent`?**
-
-A:
-- `spawn-subtask`: When **working on a task** and discover a sub-problem, completes "create + start + switch" in one step
-- `task add --parent`: Plan subtasks in advance, but don't start immediately
+A: Intent-Engine tracks **strategic intent** (What + Why), not just tasks. Each task has specifications, decision history, and hierarchy - it's AI's external long-term memory.
 
 **Q: Where is data stored?**
 
-A: `.intent-engine/project.db` (SQLite database), located in the directory where you first ran the command (or where you ran `ie init`).
+A: `.intent-engine/project.db` (SQLite) in the directory where you first ran a command.
+
+**Q: Why must `doing` tasks have a spec?**
+
+A: You should know the goal and approach before starting work. This prevents "working on something" without clarity.
 
 ---
 
-**Start using Intent-Engine now and make AI your strategic execution partner!** 🚀
+**Start using Intent-Engine - give your AI the memory it deserves!**

@@ -1,223 +1,196 @@
-# Intent-Engine: AI Quick Reference
+# Intent-Engine: AI 速查手册
 
-**Purpose**: Strategic intent tracking for human-AI collaboration. Not a todo list—a shared memory layer for long-term, complex work.
+**用途**：人机协作的战略意图追踪。不是待办清单——是长期复杂工作的共享记忆层。
 
-## When to Use
+## 何时使用
 
-Create a task when work requires:
-- Multiple steps
-- Extensive context/spec
-- Session interruptions
-- Human-AI collaboration
+当工作需要以下情况时创建任务：
+- 多步骤或跨会话
+- 大量上下文/规格说明
+- 决策追踪（"为什么选择 X？"）
+- 人机协作
 
-## Core Commands (Atomic = Single Call)
+## 核心命令 (v0.10.0)
 
-### Start Work
+### 1. 恢复上下文（总是第一步）
 ```bash
-ie task start <ID> --with-events  # ATOMIC: status→doing + set current + get context
+ie status              # 我在做什么？完整上下文恢复
+ie status 42           # 查看特定任务上下文
 ```
 
-### Create & Switch to Subtask
+### 2. 创建/更新/完成任务
 ```bash
-ie task spawn-subtask --name "X"  # ATOMIC: create + status→doing + switch
+# 所有任务操作通过 `ie plan` + JSON 标准输入
+echo '{"tasks":[...]}' | ie plan
 ```
 
-### Switch Tasks
+### 3. 记录事件
 ```bash
-ie task switch <ID>  # ATOMIC: status→doing + set current + get events
+ie log decision "选择 X 而非 Y，因为..."
+ie log blocker "卡在 API 限流"
+ie log milestone "第一阶段完成"
+ie log note "之后考虑缓存"
 ```
 
-### Smart Batch Selection
+### 4. 搜索历史
 ```bash
-ie task pick-next --max-count 3  # ATOMIC: query + sort + batch transition
+ie search "todo doing"       # 查找未完成任务
+ie search "JWT 认证"         # 全文搜索
+ie search "decision"         # 查找决策
 ```
 
-### Record Critical Moments
-```bash
-# To current task (concise)
-echo "Decision/blocker/milestone..." | \
-  ie event add --type decision --data-stdin
-
-# To specific task (flexible)
-echo "Decision/blocker/milestone..." | \
-  ie event add --task-id <ID> --type decision --data-stdin
-```
-
-### Complete (Enforces Hierarchy)
-```bash
-ie task done  # Completes current focused task, fails if subtasks incomplete
-```
-
-### Get Summary (Token-Efficient)
-```bash
-ie report --since 7d --summary-only  # Returns stats only, not full tasks
-```
-
-## Workflow Pattern
+## 工作流模式
 
 ```bash
-# 1. Create task with rich spec
-echo "Multi-line markdown spec..." | \
-  ie task add --name "Implement OAuth2" --spec-stdin
+# 1. 创建带 spec 的任务（status:doing 必须有 spec）
+echo '{"tasks":[{
+  "name": "实现 OAuth2",
+  "status": "doing",
+  "spec": "## 目标\n用户通过 OAuth 认证\n\n## 方案\n使用 Passport.js"
+}]}' | ie plan
 
-# 2. Start & load context (returns spec + event history)
-ie task start 1 --with-events
+# 2. 检查当前上下文
+ie status
 
-# 3. Execute + record key decisions (to current task)
-echo "Chose Passport.js for OAuth strategies" | \
-  ie event add --type decision --data-stdin
+# 3. 记录关键决策
+ie log decision "选择 Passport.js - 成熟库，文档好"
 
-# 4. Hit sub-problem? Create & auto-switch
-ie task spawn-subtask --name "Configure Google OAuth app"
+# 4. 分解为子任务（自动归属到聚焦任务）
+echo '{"tasks":[
+  {"name": "配置 Google OAuth", "status": "todo"},
+  {"name": "配置 GitHub OAuth", "status": "todo"},
+  {"name": "实现回调处理器", "status": "todo"}
+]}' | ie plan
 
-# 5. Complete child (child is now focused after spawn-subtask), switch back to parent
-ie task done
-ie task switch 1
+# 5. 开始处理子任务
+echo '{"tasks":[{
+  "name": "配置 Google OAuth",
+  "status": "doing",
+  "spec": "设置 Google Cloud Console，获取凭证"
+}]}' | ie plan
 
-# 6. Complete parent
-ie task done
+# 6. 完成子任务
+echo '{"tasks":[{"name": "配置 Google OAuth", "status": "done"}]}' | ie plan
+
+# 7. 完成所有子任务后，再完成父任务
+echo '{"tasks":[{"name": "实现 OAuth2", "status": "done"}]}' | ie plan
 ```
 
-## Batch Problem Handling
+## JSON 任务格式
 
+```json
+{
+  "tasks": [
+    {
+      "name": "任务名称（必填，唯一标识）",
+      "status": "todo|doing|done",
+      "spec": "描述（doing 时必填）",
+      "priority": "critical|high|medium|low",
+      "parent_id": null,
+      "children": [...]
+    }
+  ]
+}
+```
+
+### 关键字段
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `name` | 是 | 唯一标识，用于更新 |
+| `status` | 否 | `todo`（默认）、`doing`、`done` |
+| `spec` | doing 时必填 | 目标 + 方案描述 |
+| `priority` | 否 | `critical`、`high`、`medium`、`low` |
+| `parent_id` | 否 | `null` = 根任务，省略 = 自动归属到聚焦任务 |
+| `children` | 否 | 嵌套子任务数组 |
+
+## 事件类型
+
+| 类型 | 使用场景 |
+|------|----------|
+| `decision` | 选择 X 而非 Y，因为... |
+| `blocker` | 卡住了，需要帮助或信息 |
+| `milestone` | 完成重要阶段 |
+| `note` | 一般观察 |
+
+## 关键规则
+
+1. **先 `ie status`** — 会话开始时必须运行（失忆恢复）
+2. **`doing` 必须有 spec** — 开始前必须有目标 + 方案
+3. **先完成子任务** — 父任务必须等所有子任务 `done` 后才能 `done`
+4. **同名 = 更新** — `ie plan` 是幂等的，不会创建重复
+5. **自动归属** — 新任务成为聚焦任务的子任务（用 `parent_id: null` 创建根任务）
+
+## 常用模式
+
+### 创建独立根任务
 ```bash
-# Discovered 5 bugs? Create all, then smartly select:
-for bug in A B C D E; do
-  ie task add --name "Fix bug $bug"
-done
-
-# Evaluate each
-ie task update 1 --complexity 3 --priority 10  # Simple+urgent
-ie task update 2 --complexity 8 --priority 10  # Complex+urgent
-ie task update 3 --complexity 2 --priority 5   # Simple+normal
-
-# Auto-select by: priority DESC, complexity ASC
-ie task pick-next --max-count 3
-# → Selects: #1 (P10/C3), #3 (P5/C2), #2 (P10/C8)
+echo '{"tasks":[{
+  "name": "不相关的 bug 修复",
+  "status": "todo",
+  "parent_id": null
+}]}' | ie plan
 ```
 
-## Event Types
-
-- `decision` - Chose X over Y because...
-- `blocker` - Stuck, need human help
-- `milestone` - Completed phase X
-- `discussion` - Captured conversation
-- `note` - General observation
-
-## 高级模式：替代中间文件
-
-AI 工作时常创建临时文件（scratchpad.md, plan.md 等）。Intent-Engine 提供了更优雅的替代方案。
-
-### 核心映射
-
-| 传统文件 | Intent-Engine 方式 | 优势 |
-|---------|-------------------|------|
-| `requirements.md` | Task Spec (`--spec-stdin`) | 与任务强绑定，start 时自动加载 |
-| `scratchpad.md` | Event (`type: note`) | 带时间戳，永远关联到具体任务 |
-| `plan.md` | Subtasks | 可追踪状态的动态计划 |
-| `error_log.txt` | Event (`type: blocker`) | 明确标记为障碍，方便复盘 |
-| `design_v2.md` | Task Spec (新任务) | 方案与执行合二为一 |
-
-### 实例：调试分析
-
+### 带子任务的层级任务
 ```bash
-# ❌ 旧方式：创建 debug_analysis.md
-cat > debug_analysis_task5.md <<EOF
-通过浏览器控制台发现：
-1. 按钮点击没有触发网络请求
-2. Console 报错: TypeError...
-EOF
-
-# ✅ 新方式：直接存入事件流
-echo "通过浏览器控制台发现：
-1. 按钮点击没有触发网络请求
-2. Console 报错: TypeError...
-3. 初步判断是事件绑定失效" | \
-  ie event add --type note --data-stdin  # 使用当前任务
+echo '{"tasks":[{
+  "name": "用户认证",
+  "status": "doing",
+  "spec": "完整认证系统",
+  "children": [
+    {"name": "JWT 令牌", "status": "todo"},
+    {"name": "会话管理", "status": "todo"},
+    {"name": "密码重置", "status": "todo"}
+  ]
+}]}' | ie plan
 ```
 
-### 实例：技术方案
-
+### 更新任务优先级
 ```bash
-# ❌ 旧方式：创建 design_v2.md 等待确认
-cat > design_v2.md <<EOF
-V2 重构方案：使用 React Hooks 替代 Class Components
-EOF
-
-# ✅ 新方式：创建子任务，方案即规格
-cat design_v2.md | \
-  ie task spawn-subtask --name "执行 V2 重构" --spec-stdin
-# 自动切换到新任务，方案已加载
+echo '{"tasks":[{
+  "name": "已有任务",
+  "priority": "critical"
+}]}' | ie plan
 ```
 
-### 质变收益
-
-1. **Token 效率**:
-   - 旧：读取整个 scratchpad.md（包含无关信息）
-   - 新：精准读取 `event list --task-id 5 --limit 10`
-
-2. **查询能力**:
-   - 旧："我上次怎么解决的？" → 手动翻文件
-   - 新：`task search "TypeError" --status done` → 瞬间定位
-
-3. **工作区整洁**:
-   - 旧：项目根目录被 `temp_xxx.md` 淹没
-   - 新：所有思维碎片收纳在 `.intent-engine/project.db`
-
-4. **自动关联**:
-   - 旧：文件名标记任务 ID（`bug_5_analysis.md`）
-   - 新：数据库外键自动关联，无需人工维护
-
-## Token Optimization
-
-| Old Way | Calls | Atomic | Calls | Saving |
-|---------|-------|--------|-------|--------|
-| query+update+set current | 3 | pick-next | 1 | 67% |
-| create+start+set current | 3 | spawn-subtask | 1 | 67% |
-| update+set+get events | 3 | switch | 1 | 67% |
-| query all+filter+format | many | report --summary-only | 1 | 90%+ |
-
-## Key Rules
-
-1. **Always use --with-events** when starting/switching tasks (loads context)
-2. **Always use --summary-only** for reports (unless debugging)
-3. **Record all key decisions** via `event add` (your external memory)
-4. **Use atomic commands** (start, switch, spawn-subtask, pick-next)
-5. **Respect hierarchy** (complete children before parents)
-
-## Status Flow
-
-```
-todo → (start/pick-next/spawn-subtask) → doing → (done) → done
-       ↑                                    ↓
-       └────────────── (switch) ────────────┘
-```
-
-## Quick Checks
-
+### 查找未完成工作
 ```bash
-ie current                          # What am I working on?
-ie task find --status doing         # All active tasks
-ie task search "keyword"            # Search tasks by content (FTS5)
-ie event list --task-id <ID> --limit 5  # Recent context
-ie report --since 1d --summary-only     # Today's summary
+ie search "todo doing"
 ```
 
-## Anti-Patterns
+## 反模式
 
-❌ Don't manually chain: `task update <ID> --status doing && current --set <ID>`
-✅ Do use atomic: `task start <ID> --with-events`
+| 不要 | 应该 |
+|------|------|
+| 没有 spec 就开始 `doing` | 总是包含目标 + 方案 |
+| 忘记记录决策 | 立即 `ie log decision "..."` |
+| 不检查焦点就创建任务 | 先 `ie status` |
+| 子任务未完成就标记父任务完成 | 先完成所有子任务 |
 
-❌ Don't forget to record decisions
-✅ Do log every key choice via `event add`
+## 会话工作流
 
-❌ Don't use `report` without `--summary-only` for routine checks
-✅ Do use `--summary-only` (saves 90% tokens)
+```
+会话开始：
+  ie status                    # 恢复上下文
 
-## Philosophy
+工作中：
+  ie plan (创建/更新)          # 任务操作
+  ie log decision "..."        # 记录选择
 
-Intent-Engine is AI's **strategic memory**. Context window = short-term. Events table = long-term. Tasks = goals. Commands = how we achieve them together.
+会话结束：
+  ie plan (status:done)        # 完成已完成的工作
+  ie status                    # 验证状态
+```
+
+## 理念
+
+Intent-Engine 是 AI 的**外部大脑**：
+- **ie status** = 失忆恢复
+- **ie plan** = 分解持久化
+- **ie log** = 决策透明
+- **ie search** = 记忆检索
 
 ---
 
-**Full docs**: [the-intent-engine-way.md](the-intent-engine-way.md), [README.md](../../../README.md)
+**完整文档**: [CLAUDE.md](../../../CLAUDE.md), [quickstart.md](quickstart.md)

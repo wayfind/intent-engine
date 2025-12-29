@@ -145,7 +145,7 @@ ie dashboard open            # Visual UI
 
 ## Documentation
 
-- [Quick Start](QUICKSTART.en.md) — 5 minutes to get going
+- [Quick Start](docs/en/guide/quickstart.md) — 5 minutes to get going
 - [CLAUDE.md](CLAUDE.md) — For AI assistants
 - [Command Reference](docs/en/guide/command-reference-full.md) — All commands
 
