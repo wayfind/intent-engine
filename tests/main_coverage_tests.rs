@@ -9,7 +9,6 @@
 mod common;
 
 use predicates::prelude::*;
-use serde_json::Value;
 use std::fs;
 
 // ============================================================================
