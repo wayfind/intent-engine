@@ -3,11 +3,21 @@
 "use strict";
 
 const { spawn } = require("child_process");
+const fs = require("fs");
 const { getBinaryPath } = require("../lib/main");
 
 try {
   const binaryPath = getBinaryPath();
   const args = process.argv.slice(2);
+
+  // Ensure binary has execute permission (fix for npm not preserving permissions)
+  if (process.platform !== "win32") {
+    try {
+      fs.chmodSync(binaryPath, 0o755);
+    } catch (e) {
+      // Ignore permission errors (e.g., if we don't own the file)
+    }
+  }
 
   const child = spawn(binaryPath, args, {
     stdio: "inherit",

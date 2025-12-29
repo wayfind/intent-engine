@@ -1,6 +1,6 @@
 {
   "name": "@origintask/intent-engine-linux-arm64",
-  "version": "0.10.8",
+  "version": "0.10.9",
   "description": "intent-engine binary for Linux ARM64",
   "repository": {
     "type": "git",

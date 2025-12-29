@@ -1,6 +1,6 @@
 {
   "name": "@origintask/intent-engine-darwin-x64",
-  "version": "0.10.8",
+  "version": "0.10.9",
   "description": "intent-engine binary for macOS x64",
   "repository": {
     "type": "git",
