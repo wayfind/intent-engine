@@ -16,13 +16,13 @@
 > - ❌ **Bug fixes only** → Do NOT update (keep 0.1)
 >
 > **THIS VERSION IS THE SOURCE OF TRUTH**
-> - All other files (CLAUDE.md, mcp-server.json) follow this version
-> - Cargo.toml may have additional patch version (e.g., 0.1.12)
+> - All other files (CLAUDE.md, etc.) follow this version
+> - Cargo.toml may have additional patch version (e.g., 0.10.6)
 > - When you update this version, you MUST update Cargo.toml's minor version
 >
 > **FOR AI ASSISTANTS:**
-> If you modify this file and change the interface (add/remove/modify CLI commands,
-> MCP tools, or data models), you MUST increment the version number above and
+> If you modify this file and change the interface (add/remove/modify CLI commands
+> or data models), you MUST increment the version number above and
 > remind the user to run the version sync workflow.
 
 ---
@@ -261,11 +261,10 @@
 
 ## Overview
 
-Intent-Engine provides three primary interfaces for task and intent management:
+Intent-Engine provides two primary interfaces for task and intent management:
 
-1. **CLI Interface** - Command-line tool for human operators
-2. **MCP Interface** - Model Context Protocol for AI assistants
-3. **Rust Library API** - Direct library integration
+1. **CLI Interface** - Command-line tool for human operators and AI assistants
+2. **Rust Library API** - Direct library integration
 
 This document serves as the **authoritative specification** for all public interfaces.
 
@@ -1084,76 +1083,9 @@ The installed hook (`session-start.sh`) will:
 
 ---
 
-## 3. MCP Interface
+## 3. Rust Library API
 
-### 3.1 Protocol
-
-**Protocol**: JSON-RPC 2.0 over stdio
-**Schema Version**: 0.1.9
-**Schema File**: `mcp-server.json`
-
-### 3.2 Available Tools
-
-| Tool Name | Purpose | Maps to CLI | Notes |
-|-----------|---------|-------------|-------|
-| `task_add` | Create task | `ie task add` | ✓ Full parity |
-| `task_add_dependency` | Add task dependency | `ie task depends-on` | ✓ Full parity |
-| `task_start` | Start task | `ie task start` | ✓ Full parity |
-| `task_pick_next` | Recommend tasks | `ie task pick-next` | ✓ Full parity |
-| `task_spawn_subtask` | Create subtask | `ie task spawn-subtask` | ✓ Full parity |
-| `task_switch` | Switch task | `ie task switch` | ✓ Full parity |
-| `task_done` | Complete task | `ie task done` | ✓ Full parity |
-| `task_update` | Update task | `ie task update` | ✓ Full parity |
-| `task_list` | List/filter tasks | `ie task list` | ✓ Full parity |
-| `plan` | Declarative batch task creation | `ie plan` | Added in v0.6 |
-| `search` | Unified search across tasks and events (FTS5) | `ie search` | Added in v0.4 |
-| `task_get` | Get task by ID | `ie task get` | ✓ Full parity |
-| `task_context` | Get task family tree | `ie task context` | Added in v0.4 |
-| `task_delete` | Delete task | `ie task delete` | ✓ Full parity |
-| `event_add` | Record event | `ie event add` | ✓ Full parity |
-| `event_list` | List events | `ie event list` | ✓ Full parity |
-| `current_task_get` | Get current task | `ie current` | Enhanced in v0.4 (added subcommands) |
-| `report_generate` | Generate report | `ie report` | ✓ Full parity |
-
-### 3.3 Tool Schema Reference
-
-All MCP tools follow the schema defined in `mcp-server.json`.
-
-**Example Tool Call**:
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "tools/call",
-  "params": {
-    "name": "task_add",
-    "arguments": {
-      "name": "Implement auth",
-      "spec": "Use JWT with 7-day expiry"
-    }
-  }
-}
-```
-
-**Response Format**:
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "content": [{
-      "type": "text",
-      "text": "{\"id\": 42, \"name\": \"Implement auth\", ...}"
-    }]
-  }
-}
-```
-
----
-
-## 4. Rust Library API
-
-### 4.1 Core Modules
+### 3.1 Core Modules
 
 ```rust
 use intent_engine::{
@@ -1165,7 +1097,7 @@ use intent_engine::{
 };
 ```
 
-### 4.2 Example Usage
+### 3.2 Example Usage
 
 ```rust
 use intent_engine::project::ProjectContext;
@@ -1197,15 +1129,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 4.3 API Documentation
+### 3.3 API Documentation
 
 Full API documentation available at: https://docs.rs/intent-engine
 
 ---
 
-## 5. Output Formats
+## 4. Output Formats
 
-### 5.1 JSON Output (Default)
+### 4.1 JSON Output (Default)
 
 All CLI commands output structured JSON by default.
 
@@ -1227,7 +1159,7 @@ All CLI commands output structured JSON by default.
 }
 ```
 
-### 5.2 Special Output Structures
+### 4.2 Special Output Structures
 
 #### UnifiedSearchResult (from `search`)
 ```json
@@ -1273,9 +1205,9 @@ All CLI commands output structured JSON by default.
 
 ---
 
-## 6. Interface Guarantees
+## 5. Interface Guarantees
 
-### 6.1 Semantic Versioning
+### 5.1 Semantic Versioning
 
 Intent-Engine follows [SemVer 2.0](https://semver.org/):
 
@@ -1283,21 +1215,21 @@ Intent-Engine follows [SemVer 2.0](https://semver.org/):
 - **MINOR** version: Backward-compatible additions
 - **PATCH** version: Backward-compatible bug fixes
 
-### 6.2 Stability Guarantees
+### 5.2 Stability Guarantees
 
-| Version | CLI Interface | MCP Interface | Rust API | Status |
-|---------|--------------|---------------|----------|--------|
-| 0.1.x   | Experimental | Experimental  | Experimental | Current |
-| 1.0.x   | Stable       | Stable        | Stable | Future |
+| Version | CLI Interface | Rust API | Status |
+|---------|--------------|----------|--------|
+| 0.10.x  | Experimental | Experimental | Current |
+| 1.0.x   | Stable       | Stable | Future |
 
-**Current Status (0.1.9)**: All interfaces are **experimental** and may change.
+**Current Status (0.10.x)**: All interfaces are **experimental** and may change.
 
 **Experimental means**:
 - Interface may change without major version bump
 - Breaking changes documented in CHANGELOG
 - No long-term compatibility guarantee
 
-### 6.3 Deprecation Policy (Post-1.0)
+### 5.3 Deprecation Policy (Post-1.0)
 
 For stable versions (≥1.0):
 1. Deprecated features marked in documentation
@@ -1314,72 +1246,62 @@ Example:
 
 ---
 
-## 7. Validation & Testing
+## 6. Validation & Testing
 
-### 7.1 Interface Consistency Tests
+### 6.1 Interface Consistency Tests
 
 ```bash
 # Verify CLI commands match spec
 cargo test --test cli_spec_test
 
-# Verify MCP tools match spec
-cargo test --test mcp_tools_sync_test
-
 # Verify interface spec is up-to-date
 cargo test --test interface_spec_test
 ```
 
-### 7.2 Automated Sync
+### 6.2 CI Enforcement
 
-- **Version sync**: `scripts/sync-mcp-tools.sh` ensures version consistency
-- **Tool list validation**: Tests verify JSON schema matches code implementation
+- **Version validation**: Tests verify CLI behavior matches spec
 - **CI enforcement**: All tests run on every PR
 
 ---
 
-## 8. Migration Guide
+## 7. Migration Guide
 
-### 8.1 Breaking Changes
+### 7.1 Breaking Changes
 
 All breaking changes documented in `CHANGELOG.md` with migration guide.
 
-### 8.2 Version Matrix
+### 7.2 Version Matrix
 
-| Intent-Engine | CLI Version | MCP Schema | Min Rust API |
-|--------------|-------------|------------|--------------|
-| 0.1.9        | 0.1.9       | 0.1.9      | 0.1.9        |
+| Intent-Engine | CLI Version | Min Rust API |
+|--------------|-------------|--------------|
+| 0.10.x       | 0.10.x      | 0.10.x       |
 
 ---
 
-## 9. Related Documents
+## 8. Related Documents
 
 - **API Reference**: `docs/*/guide/command-reference-full.md`
-- **MCP Schema**: `mcp-server.json`
 - **Rust API Docs**: https://docs.rs/intent-engine
 - **Changelog**: `CHANGELOG.md`
-- **MCP Sync System**: `docs/*/technical/mcp-tools-sync.md`
 
 ---
 
-## 10. Maintenance
+## 9. Maintenance
 
 This specification is maintained as the **single source of truth** for Intent-Engine interfaces.
 
 **Update Process**:
 1. **Spec First**: Update this document for any interface changes
 2. **Implementation**: Update code to match spec
-3. **MCP Sync**: Update `mcp-server.json` if tools changed
-4. **Auto-sync**: Run `./scripts/sync-mcp-tools.sh` for version
-5. **Validate**: Run tests (`cargo test --test mcp_tools_sync_test --test interface_spec_test`)
-6. **Document**: Update CHANGELOG.md
+3. **Validate**: Run tests (`cargo test --test interface_spec_test`)
+4. **Document**: Update CHANGELOG.md
 
-**Automated Sync**:
-- Version synced by `scripts/sync-mcp-tools.sh`
-- Tool list validated by `tests/mcp_tools_sync_test.rs`
+**Automated Validation**:
 - Spec consistency verified by `tests/interface_spec_test.rs`
 
 ---
 
-**Specification Version**: 0.1.9
+**Specification Version**: 0.10.0
 **Maintained by**: Intent-Engine Contributors
 **License**: MIT OR Apache-2.0
