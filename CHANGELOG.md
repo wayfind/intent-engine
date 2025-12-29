@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rewrite documentation with intent continuity paradigm
 - Update all user documentation to v0.10.0 CLI syntax
 - Improve user experience and document organization
+- Update CHANGELOG for v0.10.7
 
 ### Features
 
@@ -23,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deep cleanup of obsolete files and MCP references
 - Change npm organization from @m3task to @origintask
 - Bump version to 0.10.7
+
+### Refactor
+
+- Remove ie setup command - use plugin instead
 
 ## [0.10.6] - 2025-12-29
 
