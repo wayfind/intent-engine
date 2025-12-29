@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.7] - 2025-12-29
+
+### Documentation
+
+- Update CHANGELOG for v0.10.6
+- Rewrite documentation with intent continuity paradigm
+- Update all user documentation to v0.10.0 CLI syntax
+- Improve user experience and document organization
+
+### Features
+
+- Add --since and --until date filters to ie search
+
+### Miscellaneous Tasks
+
+- Deep cleanup of obsolete files and MCP references
+- Change npm organization from @m3task to @origintask
+- Bump version to 0.10.7
+
 ## [0.10.6] - 2025-12-29
 
 ### Documentation
