@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.8] - 2025-12-29
+
+### Bug Fixes
+
+- Resolve clippy warnings for redundant closures and too-many-arguments
+- Remove unused import in tests
+
+### Documentation
+
+- Update CHANGELOG for v0.10.7
+
+### Miscellaneous Tasks
+
+- Bump version to 0.10.8
+
 ## [0.10.7] - 2025-12-29
 
 ### Documentation
