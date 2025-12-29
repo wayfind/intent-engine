@@ -218,6 +218,7 @@ fn parse_date_filter(input: &str) -> std::result::Result<chrono::DateTime<chrono
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_search_command(
     query: &str,
     include_tasks: bool,
@@ -236,13 +237,13 @@ pub async fn handle_search_command(
 
     // Parse date filters
     let since_dt: Option<DateTime<Utc>> = if let Some(ref s) = since {
-        Some(parse_date_filter(s).map_err(|e| IntentError::InvalidInput(e))?)
+        Some(parse_date_filter(s).map_err(IntentError::InvalidInput)?)
     } else {
         None
     };
 
     let until_dt: Option<DateTime<Utc>> = if let Some(ref u) = until {
-        Some(parse_date_filter(u).map_err(|e| IntentError::InvalidInput(e))?)
+        Some(parse_date_filter(u).map_err(IntentError::InvalidInput)?)
     } else {
         None
     };

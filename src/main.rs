@@ -96,7 +96,7 @@ async fn run(cli: &Cli) -> Result<()> {
 
             // Process @file directives - replace @file(path) with file contents
             let file_include_result =
-                process_file_includes(&mut request).map_err(|e| IntentError::InvalidInput(e))?;
+                process_file_includes(&mut request).map_err(IntentError::InvalidInput)?;
 
             // Execute the plan
             let ctx = ProjectContext::load_or_init().await?;
