@@ -28,7 +28,7 @@ brew install wayfind/tap/intent-engine
 ### Method 3: npm
 
 ```bash
-npm install -g @m3task/intent-engine
+npm install -g @origintask/intent-engine
 ```
 
 ### Method 4: Download Pre-compiled Binaries

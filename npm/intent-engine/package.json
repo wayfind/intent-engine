@@ -1,6 +1,6 @@
 {
-  "name": "@m3task/intent-engine",
-  "version": "0.10.1",
+  "name": "@origintask/intent-engine",
+  "version": "0.10.6",
   "description": "AI long-term task memory system - cross-session persistence, hierarchical tasks, decision records",
   "keywords": [
     "cli",
@@ -10,16 +10,16 @@
     "claude",
     "llm"
   ],
-  "homepage": "https://github.com/wayfind/intent-engine",
+  "homepage": "https://github.com/anthropic-ai/intent-engine",
   "bugs": {
-    "url": "https://github.com/wayfind/intent-engine/issues"
+    "url": "https://github.com/anthropic-ai/intent-engine/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wayfind/intent-engine.git"
+    "url": "git+https://github.com/anthropic-ai/intent-engine.git"
   },
   "license": "MIT OR Apache-2.0",
-  "author": "wayfind",
+  "author": "origintask",
   "bin": {
     "ie": "bin/ie"
   },
@@ -28,11 +28,11 @@
     "lib"
   ],
   "optionalDependencies": {
-    "@m3task/intent-engine-darwin-arm64": "0.10.1",
-    "@m3task/intent-engine-darwin-x64": "0.10.1",
-    "@m3task/intent-engine-linux-arm64": "0.10.1",
-    "@m3task/intent-engine-linux-x64": "0.10.1",
-    "@m3task/intent-engine-win32-x64": "0.10.1"
+    "@origintask/intent-engine-darwin-arm64": "0.10.6",
+    "@origintask/intent-engine-darwin-x64": "0.10.6",
+    "@origintask/intent-engine-linux-arm64": "0.10.6",
+    "@origintask/intent-engine-linux-x64": "0.10.6",
+    "@origintask/intent-engine-win32-x64": "0.10.6"
   },
   "engines": {
     "node": ">=14"

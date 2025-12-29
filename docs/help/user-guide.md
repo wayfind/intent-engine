@@ -53,7 +53,7 @@ cargo install intent-engine
 
 ### Option 2: npm
 ```bash
-npm install -g @m3task/intent-engine
+npm install -g @origintask/intent-engine
 ```
 
 ### Option 3: Homebrew (macOS)

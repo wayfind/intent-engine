@@ -23,7 +23,7 @@ cargo install intent-engine
 brew install wayfind/tap/intent-engine
 
 # 方式 3：使用 npm
-npm install -g @m3task/intent-engine
+npm install -g @origintask/intent-engine
 
 # 验证安装
 ie --version

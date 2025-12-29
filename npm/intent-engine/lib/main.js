@@ -5,11 +5,11 @@ const path = require("path");
 
 // Platform to package name mapping
 const PLATFORMS = {
-  "darwin-arm64": "@m3task/intent-engine-darwin-arm64",
-  "darwin-x64": "@m3task/intent-engine-darwin-x64",
-  "linux-arm64": "@m3task/intent-engine-linux-arm64",
-  "linux-x64": "@m3task/intent-engine-linux-x64",
-  "win32-x64": "@m3task/intent-engine-win32-x64",
+  "darwin-arm64": "@origintask/intent-engine-darwin-arm64",
+  "darwin-x64": "@origintask/intent-engine-darwin-x64",
+  "linux-arm64": "@origintask/intent-engine-linux-arm64",
+  "linux-x64": "@origintask/intent-engine-linux-x64",
+  "win32-x64": "@origintask/intent-engine-win32-x64",
 };
 
 function getPlatformPackage() {
@@ -40,7 +40,7 @@ function getBinaryPath() {
   } catch (e) {
     throw new Error(
       `Could not find platform package '${packageName}'. ` +
-        `Please reinstall @m3task/intent-engine: npm install -g @m3task/intent-engine`
+        `Please reinstall @origintask/intent-engine: npm install -g @origintask/intent-engine`
     );
   }
 }

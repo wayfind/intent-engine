@@ -122,7 +122,7 @@ cargo install intent-engine
 brew install wayfind/tap/intent-engine
 
 # Or using npm
-npm install -g @m3task/intent-engine
+npm install -g @origintask/intent-engine
 
 # Verify installation
 ie --version

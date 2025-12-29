@@ -103,11 +103,11 @@ jobs:
 
           # Update optionalDependencies versions in main package
           jq --arg v "$VERSION" '
-            .optionalDependencies["@m3task/intent-engine-darwin-arm64"] = $v |
-            .optionalDependencies["@m3task/intent-engine-darwin-x64"] = $v |
-            .optionalDependencies["@m3task/intent-engine-linux-arm64"] = $v |
-            .optionalDependencies["@m3task/intent-engine-linux-x64"] = $v |
-            .optionalDependencies["@m3task/intent-engine-win32-x64"] = $v
+            .optionalDependencies["@origintask/intent-engine-darwin-arm64"] = $v |
+            .optionalDependencies["@origintask/intent-engine-darwin-x64"] = $v |
+            .optionalDependencies["@origintask/intent-engine-linux-arm64"] = $v |
+            .optionalDependencies["@origintask/intent-engine-linux-x64"] = $v |
+            .optionalDependencies["@origintask/intent-engine-win32-x64"] = $v
           ' npm/intent-engine/package.json > npm/intent-engine/package.json.tmp
           mv npm/intent-engine/package.json.tmp npm/intent-engine/package.json
 
@@ -119,16 +119,16 @@ jobs:
           # Uses OIDC trusted publishing - no token needed
           for pkg in intent-engine-linux-x64 intent-engine-linux-arm64 \
                      intent-engine-darwin-x64 intent-engine-darwin-arm64 intent-engine-win32-x64; do
-            echo "Publishing @m3task/$pkg..."
+            echo "Publishing @origintask/$pkg..."
             cd npm/$pkg
-            npm publish --provenance --access public || echo "Package @m3task/$pkg may already exist, continuing..."
+            npm publish --provenance --access public || echo "Package @origintask/$pkg may already exist, continuing..."
             cd ../..
           done
 
       - name: Publish main package
         run: |
           # Uses OIDC trusted publishing - no token needed
-          echo "Publishing @m3task/intent-engine..."
+          echo "Publishing @origintask/intent-engine..."
           cd npm/intent-engine
           npm publish --provenance --access public
 
@@ -140,14 +140,14 @@ jobs:
           echo "**Version**: ${VERSION}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Packages" >> $GITHUB_STEP_SUMMARY
-          echo "- [@m3task/intent-engine](https://www.npmjs.com/package/@m3task/intent-engine)" >> $GITHUB_STEP_SUMMARY
-          echo "- @m3task/intent-engine-linux-x64" >> $GITHUB_STEP_SUMMARY
-          echo "- @m3task/intent-engine-linux-arm64" >> $GITHUB_STEP_SUMMARY
-          echo "- @m3task/intent-engine-darwin-x64" >> $GITHUB_STEP_SUMMARY
-          echo "- @m3task/intent-engine-darwin-arm64" >> $GITHUB_STEP_SUMMARY
-          echo "- @m3task/intent-engine-win32-x64" >> $GITHUB_STEP_SUMMARY
+          echo "- [@origintask/intent-engine](https://www.npmjs.com/package/@origintask/intent-engine)" >> $GITHUB_STEP_SUMMARY
+          echo "- @origintask/intent-engine-linux-x64" >> $GITHUB_STEP_SUMMARY
+          echo "- @origintask/intent-engine-linux-arm64" >> $GITHUB_STEP_SUMMARY
+          echo "- @origintask/intent-engine-darwin-x64" >> $GITHUB_STEP_SUMMARY
+          echo "- @origintask/intent-engine-darwin-arm64" >> $GITHUB_STEP_SUMMARY
+          echo "- @origintask/intent-engine-win32-x64" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Installation" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "npm install -g @m3task/intent-engine" >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g @origintask/intent-engine" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
