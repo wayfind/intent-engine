@@ -43,13 +43,24 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Install cross-compilation tools (Linux ARM64)
+      - name: Install cross-compilation tools (Linux ARM64 GNU)
         if: inputs.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      - name: Configure linker for ARM64
+      - name: Install musl tools (Linux x86_64 musl)
+        if: inputs.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Install cross for ARM64 musl
+        if: inputs.target == 'aarch64-unknown-linux-musl'
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Configure linker for ARM64 GNU
         if: inputs.target == 'aarch64-unknown-linux-gnu'
         run: |
           mkdir -p .cargo
@@ -65,16 +76,33 @@ jobs:
           shared-key: release-${{ inputs.target }}
           cache-all-crates: true
 
-      - name: Build release binary
+      - name: Build release binary (standard)
+        if: inputs.target != 'aarch64-unknown-linux-musl'
         run: cargo build --release --target ${{ inputs.target }}
 
-      - name: Strip binary (Linux x86_64 / macOS)
-        if: inputs.os != 'windows-latest' && inputs.target != 'aarch64-unknown-linux-gnu'
+      - name: Build release binary (ARM64 musl via cross)
+        if: inputs.target == 'aarch64-unknown-linux-musl'
+        run: cross build --release --target ${{ inputs.target }}
+
+      - name: Strip binary (Linux x86_64 musl)
+        if: inputs.target == 'x86_64-unknown-linux-musl'
         run: strip target/${{ inputs.target }}/release/${{ inputs.artifact-name }}
 
-      - name: Strip binary (Linux ARM64)
+      - name: Strip binary (Linux x86_64 GNU / macOS)
+        if: inputs.os != 'windows-latest' && inputs.target != 'aarch64-unknown-linux-gnu' && inputs.target != 'aarch64-unknown-linux-musl' && inputs.target != 'x86_64-unknown-linux-musl'
+        run: strip target/${{ inputs.target }}/release/${{ inputs.artifact-name }}
+
+      - name: Strip binary (Linux ARM64 GNU)
         if: inputs.target == 'aarch64-unknown-linux-gnu'
         run: aarch64-linux-gnu-strip target/${{ inputs.target }}/release/${{ inputs.artifact-name }}
+
+      - name: Strip binary (Linux ARM64 musl)
+        if: inputs.target == 'aarch64-unknown-linux-musl'
+        run: |
+          # Install llvm for cross-platform strip
+          sudo apt-get update
+          sudo apt-get install -y llvm
+          llvm-strip target/${{ inputs.target }}/release/${{ inputs.artifact-name }}
 
       - name: Create tarball (Unix)
         if: inputs.os != 'windows-latest'
