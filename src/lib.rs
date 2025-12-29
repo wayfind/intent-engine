@@ -15,7 +15,6 @@ pub mod project;
 pub mod report;
 pub mod search;
 pub mod session_restore;
-pub mod setup;
 pub mod sql_constants;
 pub mod tasks;
 pub mod time_utils;

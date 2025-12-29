@@ -38,10 +38,6 @@ run_test() {
 
 # Run all integration tests
 run_test "Session Restore Workflow" "./test-session-restore-workflow.sh"
-run_test "SessionStart Hook Integration" "./test-session-start-hook.sh"
-# NOTE: setup-claude-code command has been replaced with unified 'ie setup' command
-# TODO: Create new test for unified setup command
-# run_test "Setup Claude Code Command" "./test-setup-claude-code.sh"
 
 # Print summary
 echo ""
