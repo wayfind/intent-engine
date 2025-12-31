@@ -857,8 +857,6 @@ pub async fn search(
 
 /// List all registered projects (from known_projects state loaded from global registry)
 pub async fn list_projects(State(state): State<AppState>) -> impl IntoResponse {
-    let port = state.port;
-    let pid = std::process::id();
     let host_path = state.host_project.path.clone();
 
     // Read from known_projects (loaded from global registry at startup)
@@ -871,14 +869,8 @@ pub async fn list_projects(State(state): State<AppState>) -> impl IntoResponse {
             json!({
                 "name": proj.name,
                 "path": proj.path.to_string_lossy(),
-                "port": port,
-                "pid": pid,
-                "url": format!("http://127.0.0.1:{}", port),
-                "started_at": chrono::Utc::now().to_rfc3339(),
-                "mcp_connected": false,
                 "is_online": is_host,  // Only host project is "online"
-                "mcp_agent": None::<String>,
-                "mcp_last_seen": None::<String>,
+                "mcp_connected": false, // MCP removed, always false
             })
         })
         .collect();

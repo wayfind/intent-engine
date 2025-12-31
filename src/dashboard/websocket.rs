@@ -757,9 +757,6 @@ async fn handle_ui_socket(socket: WebSocket, app_state: crate::dashboard::server
 
     tracing::info!("UI client connected");
 
-    // Clone app_state for use inside recv_task
-    let app_state_for_recv = app_state.clone();
-
     // Clone tx for heartbeat task
     let heartbeat_tx = tx.clone();
 
@@ -816,33 +813,12 @@ async fn handle_ui_socket(socket: WebSocket, app_state: crate::dashboard::server
                                     tracing::debug!("Sent welcome message to UI");
 
                                     // Send init after welcome (protocol-compliant flow)
-                                    // Re-fetch projects in case state changed
-                                    let current_projects = {
-                                        let port = app_state_for_recv.port;
-                                        match app_state_for_recv.get_active_project().await {
-                                            Some(active) => {
-                                                app_state_for_recv
-                                                    .ws_state
-                                                    .get_online_projects_with_current(
-                                                        &active.name,
-                                                        &active.path,
-                                                        &active.db_path,
-                                                        &app_state_for_recv.host_project,
-                                                        port,
-                                                    )
-                                                    .await
-                                            },
-                                            None => {
-                                                vec![app_state_for_recv.host_project.clone()]
-                                            },
-                                        }
-                                    };
+                                    // Projects are now fetched via REST API /api/projects
+                                    // Keep empty projects array for backward compatibility with old frontends
                                     let _ = send_protocol_message(
                                         &tx,
                                         "init",
-                                        InitPayload {
-                                            projects: current_projects,
-                                        },
+                                        InitPayload { projects: vec![] },
                                     );
                                 }
                             },

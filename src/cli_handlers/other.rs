@@ -6,6 +6,7 @@ use crate::error::{IntentError, Result};
 use crate::events::EventManager;
 use crate::project::ProjectContext;
 use crate::report::ReportManager;
+use crate::tasks::TaskManager;
 use crate::workspace::WorkspaceManager;
 use std::path::PathBuf;
 
@@ -165,6 +166,33 @@ pub async fn handle_event_command(cmd: EventCommands) -> Result<()> {
     Ok(())
 }
 
+/// Check if query is a #ID format (e.g., "#123", "#1")
+/// Returns Some(id) if it's a task ID query, None otherwise
+fn parse_task_id_query(query: &str) -> Option<i64> {
+    let query = query.trim();
+
+    // Must start with # and have at least one digit after
+    if !query.starts_with('#') || query.len() < 2 {
+        return None;
+    }
+
+    // The rest must be all digits
+    let id_part = &query[1..];
+    id_part.parse::<i64>().ok()
+}
+
+/// Safely truncate a UTF-8 string to a maximum number of characters
+/// Returns the truncated string with "..." appended if truncation occurred
+fn truncate_str(s: &str, max_chars: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count <= max_chars {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max_chars - 3).collect();
+        format!("{}...", truncated)
+    }
+}
+
 /// Check if query is a status keyword combination (todo, doing, done)
 /// Returns Some(statuses) if it's a status query, None otherwise
 fn parse_status_keywords(query: &str) -> Option<Vec<String>> {
@@ -230,7 +258,6 @@ pub async fn handle_search_command(
     format: &str,
 ) -> Result<()> {
     use crate::search::SearchManager;
-    use crate::tasks::TaskManager;
     use chrono::{DateTime, Utc};
 
     let ctx = ProjectContext::load_or_init().await?;
@@ -247,6 +274,64 @@ pub async fn handle_search_command(
     } else {
         None
     };
+
+    // Check if query is a #ID format (e.g., "#123", "#1")
+    if let Some(task_id) = parse_task_id_query(query) {
+        let task_mgr = TaskManager::new(&ctx.pool);
+        match task_mgr.get_task(task_id).await {
+            Ok(task) => {
+                if format == "json" {
+                    println!("{}", serde_json::to_string_pretty(&task)?);
+                } else {
+                    let status_icon = match task.status.as_str() {
+                        "todo" => "○",
+                        "doing" => "●",
+                        "done" => "✓",
+                        _ => "?",
+                    };
+                    let parent_info = task
+                        .parent_id
+                        .map(|p| format!(" (parent: #{})", p))
+                        .unwrap_or_default();
+                    let priority_info = task
+                        .priority
+                        .map(|p| format!(" [P{}]", p))
+                        .unwrap_or_default();
+                    println!("Task #{}", task.id);
+                    println!(
+                        "  {} {}{}{}",
+                        status_icon, task.name, parent_info, priority_info
+                    );
+                    if let Some(spec) = &task.spec {
+                        if !spec.is_empty() {
+                            println!("  Spec: {}", spec);
+                        }
+                    }
+                    println!("  Owner: {}", task.owner);
+                    if let Some(ts) = task.first_todo_at {
+                        print!("  todo: {} ", ts.format("%Y-%m-%d %H:%M:%S"));
+                    }
+                    if let Some(ts) = task.first_doing_at {
+                        print!("doing: {} ", ts.format("%Y-%m-%d %H:%M:%S"));
+                    }
+                    if let Some(ts) = task.first_done_at {
+                        print!("done: {}", ts.format("%Y-%m-%d %H:%M:%S"));
+                    }
+                    if task.first_todo_at.is_some()
+                        || task.first_doing_at.is_some()
+                        || task.first_done_at.is_some()
+                    {
+                        println!();
+                    }
+                }
+                return Ok(());
+            },
+            Err(_) => {
+                // Task not found, fall through to FTS5 search
+                // (user might be searching for "#123" as text)
+            },
+        }
+    }
 
     // Check if query is a status keyword combination
     if let Some(statuses) = parse_status_keywords(query) {
@@ -355,12 +440,7 @@ pub async fn handle_search_command(
                 );
                 if let Some(spec) = &task.spec {
                     if !spec.is_empty() {
-                        let truncated = if spec.len() > 60 {
-                            format!("{}...", &spec[..57])
-                        } else {
-                            spec.clone()
-                        };
-                        println!("      Spec: {}", truncated);
+                        println!("      Spec: {}", truncate_str(spec, 60));
                     }
                 }
                 println!("      Owner: {}", task.owner);
@@ -430,12 +510,7 @@ pub async fn handle_search_command(
                     );
                     if let Some(spec) = &task.spec {
                         if !spec.is_empty() {
-                            let truncated = if spec.len() > 60 {
-                                format!("{}...", &spec[..57])
-                            } else {
-                                spec.clone()
-                            };
-                            println!("      Spec: {}", truncated);
+                            println!("      Spec: {}", truncate_str(spec, 60));
                         }
                     }
                     if !match_snippet.is_empty() {
@@ -729,4 +804,174 @@ pub fn handle_logs_command(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ============================================================================
+    // parse_task_id_query tests
+    // ============================================================================
+
+    #[test]
+    fn test_parse_task_id_query_valid() {
+        assert_eq!(parse_task_id_query("#1"), Some(1));
+        assert_eq!(parse_task_id_query("#123"), Some(123));
+        assert_eq!(parse_task_id_query("#999999"), Some(999999));
+    }
+
+    #[test]
+    fn test_parse_task_id_query_with_whitespace() {
+        assert_eq!(parse_task_id_query("  #1  "), Some(1));
+        assert_eq!(parse_task_id_query("\t#42\n"), Some(42));
+    }
+
+    #[test]
+    fn test_parse_task_id_query_invalid() {
+        // Not starting with #
+        assert_eq!(parse_task_id_query("123"), None);
+        assert_eq!(parse_task_id_query("task"), None);
+
+        // Only #
+        assert_eq!(parse_task_id_query("#"), None);
+
+        // # followed by non-digits
+        assert_eq!(parse_task_id_query("#abc"), None);
+        assert_eq!(parse_task_id_query("#1a"), None);
+        assert_eq!(parse_task_id_query("#a1"), None);
+
+        // Mixed content
+        assert_eq!(parse_task_id_query("#123 task"), None);
+        assert_eq!(parse_task_id_query("task #123"), None);
+
+        // Negative numbers (technically parsed, but task IDs are positive in practice)
+        // Note: i64::parse accepts negative, so #-1 returns Some(-1)
+        assert_eq!(parse_task_id_query("#-1"), Some(-1));
+
+        // Empty
+        assert_eq!(parse_task_id_query(""), None);
+    }
+
+    // ============================================================================
+    // truncate_str tests (UTF-8 safe truncation)
+    // ============================================================================
+
+    #[test]
+    fn test_truncate_str_ascii() {
+        // Short string - no truncation
+        assert_eq!(truncate_str("hello", 10), "hello");
+
+        // Exact length - no truncation
+        assert_eq!(truncate_str("hello", 5), "hello");
+
+        // Needs truncation
+        assert_eq!(truncate_str("hello world", 8), "hello...");
+    }
+
+    #[test]
+    fn test_truncate_str_chinese() {
+        // Short Chinese string - no truncation
+        assert_eq!(truncate_str("你好", 10), "你好");
+
+        // Chinese string needs truncation
+        // "根据覆盖缺口分析补充" = 10 chars, truncate to 8 means keep 5 + "..."
+        let chinese = "根据覆盖缺口分析补充";
+        let result = truncate_str(chinese, 8);
+        assert_eq!(result, "根据覆盖缺...");
+        assert!(!result.contains('\u{FFFD}')); // No replacement chars
+    }
+
+    #[test]
+    fn test_truncate_str_mixed() {
+        // Mixed ASCII and Chinese
+        let mixed = "Task: 实现用户认证功能";
+        let result = truncate_str(mixed, 12);
+        assert_eq!(result, "Task: 实现用...");
+    }
+
+    #[test]
+    fn test_truncate_str_edge_cases() {
+        // Empty string
+        assert_eq!(truncate_str("", 10), "");
+
+        // Max chars less than 3 (edge case for "...")
+        assert_eq!(truncate_str("hello", 3), "...");
+
+        // Single char with truncation
+        assert_eq!(truncate_str("hello", 4), "h...");
+    }
+
+    #[test]
+    fn test_truncate_str_emoji() {
+        // Emoji (multi-byte UTF-8)
+        let emoji = "🚀🎉🔥💡";
+        let result = truncate_str(emoji, 4);
+        assert_eq!(result, "🚀🎉🔥💡"); // No truncation needed
+
+        let result = truncate_str(emoji, 3);
+        assert_eq!(result, "..."); // All replaced by ...
+    }
+
+    // ============================================================================
+    // parse_status_keywords tests
+    // ============================================================================
+
+    #[test]
+    fn test_parse_status_keywords_valid() {
+        assert_eq!(
+            parse_status_keywords("todo"),
+            Some(vec!["todo".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("doing"),
+            Some(vec!["doing".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("done"),
+            Some(vec!["done".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_parse_status_keywords_multiple() {
+        let result = parse_status_keywords("todo doing");
+        assert!(result.is_some());
+        let statuses = result.unwrap();
+        assert!(statuses.contains(&"todo".to_string()));
+        assert!(statuses.contains(&"doing".to_string()));
+    }
+
+    #[test]
+    fn test_parse_status_keywords_case_insensitive() {
+        assert_eq!(
+            parse_status_keywords("TODO"),
+            Some(vec!["todo".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("DoInG"),
+            Some(vec!["doing".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_parse_status_keywords_invalid() {
+        // Mixed with non-status words
+        assert_eq!(parse_status_keywords("todo task"), None);
+        assert_eq!(parse_status_keywords("search term"), None);
+
+        // Empty
+        assert_eq!(parse_status_keywords(""), None);
+        assert_eq!(parse_status_keywords("   "), None);
+    }
+
+    #[test]
+    fn test_parse_status_keywords_dedup() {
+        // Duplicate statuses should be deduplicated
+        let result = parse_status_keywords("todo todo todo");
+        assert!(result.is_some());
+        let statuses = result.unwrap();
+        assert_eq!(statuses.len(), 1);
+        assert_eq!(statuses[0], "todo");
+    }
 }

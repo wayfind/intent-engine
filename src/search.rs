@@ -63,25 +63,33 @@ pub fn needs_like_fallback(query: &str) -> bool {
 
 /// Escape FTS5 special characters in a query string
 ///
-/// FTS5 queries support advanced syntax (AND, OR, NOT, *, "phrase search", etc.).
-/// This function only escapes double quotes, which is the most common case where
-/// user input needs escaping.
+/// FTS5 queries support advanced syntax (AND, OR, NOT, *, #, "phrase search", etc.).
+/// To safely search user input as literal text, we:
+/// 1. Escape any double quotes by doubling them (`"` -> `""`)
+/// 2. Wrap the entire query in double quotes for literal phrase search
+///
+/// This prevents special characters like `#`, `*`, `+`, `-`, etc. from being
+/// interpreted as FTS5 syntax operators.
 ///
 /// # Arguments
 /// * `query` - The query string to escape
 ///
 /// # Returns
-/// The escaped query string with double quotes escaped as `""`
+/// The query string wrapped in double quotes with internal quotes escaped
 ///
 /// # Example
 /// ```ignore
 /// use crate::search::escape_fts5;
 ///
 /// let escaped = escape_fts5("user \"admin\" role");
-/// assert_eq!(escaped, "user \"\"admin\"\" role");
+/// assert_eq!(escaped, "\"user \"\"admin\"\" role\"");
+///
+/// let escaped = escape_fts5("#123");
+/// assert_eq!(escaped, "\"#123\"");
 /// ```
 pub fn escape_fts5(query: &str) -> String {
-    query.replace('"', "\"\"")
+    // Escape internal double quotes and wrap in quotes for literal search
+    format!("\"{}\"", query.replace('"', "\"\""))
 }
 
 // ============================================================================
@@ -643,32 +651,32 @@ mod tests {
 
     #[test]
     fn test_escape_fts5_basic() {
-        // No quotes - no escaping needed
-        assert_eq!(escape_fts5("hello world"), "hello world");
-        assert_eq!(escape_fts5("JWT authentication"), "JWT authentication");
+        // No quotes - wrapped in quotes for literal search
+        assert_eq!(escape_fts5("hello world"), "\"hello world\"");
+        assert_eq!(escape_fts5("JWT authentication"), "\"JWT authentication\"");
 
         // Single quote (not escaped by this function, only double quotes)
-        assert_eq!(escape_fts5("user's task"), "user's task");
+        assert_eq!(escape_fts5("user's task"), "\"user's task\"");
     }
 
     #[test]
     fn test_escape_fts5_double_quotes() {
-        // Single double quote
-        assert_eq!(escape_fts5("\"admin\""), "\"\"admin\"\"");
+        // Single double quote - escaped and wrapped
+        assert_eq!(escape_fts5("\"admin\""), "\"\"\"admin\"\"\"");
 
         // Multiple double quotes
         assert_eq!(
             escape_fts5("\"user\" and \"admin\""),
-            "\"\"user\"\" and \"\"admin\"\""
+            "\"\"\"user\"\" and \"\"admin\"\"\""
         );
 
         // Double quotes at different positions
         assert_eq!(
             escape_fts5("start \"middle\" end"),
-            "start \"\"middle\"\" end"
+            "\"start \"\"middle\"\" end\""
         );
-        assert_eq!(escape_fts5("\"start"), "\"\"start");
-        assert_eq!(escape_fts5("end\""), "end\"\"");
+        assert_eq!(escape_fts5("\"start"), "\"\"\"start\"");
+        assert_eq!(escape_fts5("end\""), "\"end\"\"\"");
     }
 
     #[test]
@@ -676,28 +684,42 @@ mod tests {
         // Mixed quotes and special characters
         assert_eq!(
             escape_fts5("search for \"exact phrase\" here"),
-            "search for \"\"exact phrase\"\" here"
+            "\"search for \"\"exact phrase\"\" here\""
         );
 
-        // Empty string
-        assert_eq!(escape_fts5(""), "");
+        // Empty string - still wrapped
+        assert_eq!(escape_fts5(""), "\"\"");
 
         // Only quotes
-        assert_eq!(escape_fts5("\""), "\"\"");
-        assert_eq!(escape_fts5("\"\""), "\"\"\"\"");
-        assert_eq!(escape_fts5("\"\"\""), "\"\"\"\"\"\"");
+        assert_eq!(escape_fts5("\""), "\"\"\"\"");
+        assert_eq!(escape_fts5("\"\""), "\"\"\"\"\"\"");
+        assert_eq!(escape_fts5("\"\"\""), "\"\"\"\"\"\"\"\"");
+    }
+
+    #[test]
+    fn test_escape_fts5_special_chars() {
+        // FTS5 special characters should be wrapped and treated as literals
+        assert_eq!(escape_fts5("#123"), "\"#123\"");
+        assert_eq!(escape_fts5("task*"), "\"task*\"");
+        assert_eq!(escape_fts5("+keyword"), "\"+keyword\"");
+        assert_eq!(escape_fts5("-exclude"), "\"-exclude\"");
+        assert_eq!(escape_fts5("a AND b"), "\"a AND b\"");
+        assert_eq!(escape_fts5("a OR b"), "\"a OR b\"");
     }
 
     #[test]
     fn test_escape_fts5_cjk_with_quotes() {
-        // CJK text with quotes
-        assert_eq!(escape_fts5("用户\"管理员\"权限"), "用户\"\"管理员\"\"权限");
-        assert_eq!(escape_fts5("\"認証\"システム"), "\"\"認証\"\"システム");
+        // CJK text with quotes - escaped and wrapped
+        assert_eq!(
+            escape_fts5("用户\"管理员\"权限"),
+            "\"用户\"\"管理员\"\"权限\""
+        );
+        assert_eq!(escape_fts5("\"認証\"システム"), "\"\"\"認証\"\"システム\"");
 
         // Mixed CJK and English with quotes
         assert_eq!(
             escape_fts5("API\"接口\"documentation"),
-            "API\"\"接口\"\"documentation"
+            "\"API\"\"接口\"\"documentation\""
         );
     }
 
