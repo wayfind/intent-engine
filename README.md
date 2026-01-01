@@ -66,38 +66,60 @@ When AI starts a session, it runs `ie status`. Everything comes back:
 
 ---
 
-## Integration
+## Installation
 
-### Claude Code (One-Click)
+### Step 1: Install Binary
+
+Choose one method:
 
 ```bash
-claude plugin marketplace add wayfind/origin-task
-claude plugin install intent-engine
+# Homebrew (macOS/Linux)
+brew install wayfind/tap/intent-engine
+
+# npm (cross-platform)
+npm install -g @origintask/intent-engine
+
+# Cargo (requires Rust)
+cargo install intent-engine
+
+# Direct download (no dependencies)
+curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
 ```
 
-That's it. The plugin automatically:
+Verify installation:
+```bash
+ie --version
+```
+
+### Step 2: Integrate with AI Tool
+
+#### Claude Code
+
+**Option A: Plugin (Recommended)**
+
+```
+/plugin marketplace add wayfind/origin-task
+/plugin install intent-engine@wayfind/origin-task
+```
+
+The plugin automatically:
 - Runs `ie status` at every session start
-- Auto-installs `ie` CLI via npm if not found
 - Guides Claude to use `ie plan` instead of TodoWrite
 
-### Manual Install
+**Option B: Manual Setup**
 
-If you prefer manual setup:
-
-```bash
-# 1. Install binary (choose one)
-cargo install intent-engine
-# or: brew install wayfind/tap/intent-engine
-# or: npm install -g @origintask/intent-engine
-# or (no Rust needed): curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
-
-# 2. Add system prompt
-claude --append-system-prompt "Use ie plan instead of TodoWrite. Commands: ie status, echo '{...}'|ie plan, ie log, ie search"
+Add to your `~/.claude/CLAUDE.md`:
+```markdown
+Use `ie` for task management instead of TodoWrite.
+Run `ie status` at session start to restore context.
 ```
 
-### Other AI Assistants
+#### Other AI Tools
 
-Any AI with CLI access can use `ie` commands directly.
+Any AI with CLI access can use `ie` commands. Add to your system prompt:
+```
+Use ie for persistent task memory. Commands: ie status, ie plan, ie log, ie search
+```
 
 ---
 
@@ -129,13 +151,6 @@ Code changes. Intent persists.
 ## Quick Reference
 
 ```bash
-# Install
-cargo install intent-engine
-# or: brew install wayfind/tap/intent-engine
-# or: npm install -g @origintask/intent-engine
-# or: curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
-
-# Core commands
 ie status                    # Current context
 ie search "todo doing"       # Find unfinished work
 echo '{"tasks":[...]}' | ie plan   # Create/update tasks

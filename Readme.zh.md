@@ -66,38 +66,60 @@ AI 开始会话时运行 `ie status`，一切都回来了：
 
 ---
 
-## 集成
+## 安装
 
-### Claude Code（一键安装）
+### 第一步：安装二进制
+
+任选一种方式：
 
 ```bash
-claude plugin marketplace add wayfind/origin-task
-claude plugin install intent-engine
+# Homebrew (macOS/Linux)
+brew install wayfind/tap/intent-engine
+
+# npm (跨平台)
+npm install -g @origintask/intent-engine
+
+# Cargo (需要 Rust)
+cargo install intent-engine
+
+# 直接下载 (无依赖)
+curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
 ```
 
-搞定。插件会自动：
+验证安装：
+```bash
+ie --version
+```
+
+### 第二步：集成 AI 工具
+
+#### Claude Code
+
+**方式 A：插件（推荐）**
+
+```
+/plugin marketplace add wayfind/origin-task
+/plugin install intent-engine@wayfind/origin-task
+```
+
+插件会自动：
 - 每次会话启动时运行 `ie status`
-- 如果未安装，自动通过 npm 安装 `ie` CLI
 - 引导 Claude 用 `ie plan` 替代 TodoWrite
 
-### 手动安装
+**方式 B：手动配置**
 
-如果你偏好手动配置：
-
-```bash
-# 1. 安装二进制（任选一种）
-cargo install intent-engine
-# 或: brew install wayfind/tap/intent-engine
-# 或: npm install -g @origintask/intent-engine
-# 或（无需 Rust）: curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
-
-# 2. 添加系统提示词
-claude --append-system-prompt "Use ie plan instead of TodoWrite. Commands: ie status, echo '{...}'|ie plan, ie log, ie search"
+添加到 `~/.claude/CLAUDE.md`：
+```markdown
+使用 `ie` 进行任务管理，替代 TodoWrite。
+会话开始时运行 `ie status` 恢复上下文。
 ```
 
-### 其他 AI 助手
+#### 其他 AI 工具
 
-任何有 CLI 权限的 AI 都可以直接使用 `ie` 命令。
+任何有 CLI 权限的 AI 都可以使用 `ie` 命令。添加到系统提示词：
+```
+使用 ie 进行持久任务记忆。命令：ie status, ie plan, ie log, ie search
+```
 
 ---
 
@@ -129,13 +151,6 @@ Intent-Engine: "为了无状态 API 的可扩展性，选择 JWT 而非 Session"
 ## 快速参考
 
 ```bash
-# 安装
-cargo install intent-engine
-# 或：brew install wayfind/tap/intent-engine
-# 或：npm install -g @origintask/intent-engine
-# 或：curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
-
-# 核心命令
 ie status                    # 当前上下文
 ie search "todo doing"       # 查找未完成的工作
 echo '{"tasks":[...]}' | ie plan   # 创建/更新任务
