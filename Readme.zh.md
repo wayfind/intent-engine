@@ -85,10 +85,11 @@ claude plugin install intent-engine
 如果你偏好手动配置：
 
 ```bash
-# 1. 安装二进制
+# 1. 安装二进制（任选一种）
 cargo install intent-engine
 # 或: brew install wayfind/tap/intent-engine
 # 或: npm install -g @origintask/intent-engine
+# 或（无需 Rust）: curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
 
 # 2. 添加系统提示词
 claude --append-system-prompt "Use ie plan instead of TodoWrite. Commands: ie status, echo '{...}'|ie plan, ie log, ie search"
@@ -132,6 +133,7 @@ Intent-Engine: "为了无状态 API 的可扩展性，选择 JWT 而非 Session"
 cargo install intent-engine
 # 或：brew install wayfind/tap/intent-engine
 # 或：npm install -g @origintask/intent-engine
+# 或：curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
 
 # 核心命令
 ie status                    # 当前上下文

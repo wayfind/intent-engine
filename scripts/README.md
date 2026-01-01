@@ -2,6 +2,46 @@
 
 这个目录包含开发辅助脚本。
 
+## install/ie-manager.sh / ie-manager.ps1
+
+从 GitHub Releases 安装、升级、卸载 `ie` CLI 的管理脚本。**无需 Rust 环境**。
+
+### 功能
+
+- **install** - 安装指定版本（默认最新）
+- **upgrade** - 升级到指定版本（默认最新）
+- **uninstall** - 卸载并可选删除数据
+
+### 用法
+
+```bash
+# Linux/macOS
+./scripts/install/ie-manager.sh install
+./scripts/install/ie-manager.sh upgrade
+./scripts/install/ie-manager.sh uninstall
+
+# Windows PowerShell
+.\scripts\install\ie-manager.ps1 install
+.\scripts\install\ie-manager.ps1 upgrade
+.\scripts\install\ie-manager.ps1 uninstall -Force
+```
+
+### 特性
+
+- ✅ 自动检测平台 (Linux/macOS/Windows) 和架构 (x86_64/aarch64)
+- ✅ SHA256 校验和验证
+- ✅ 网络重试机制
+- ✅ 语义版本比较（避免降级）
+- ✅ 支持 `GITHUB_TOKEN` 环境变量（避免 API 限流）
+- ✅ `--force/-y` 选项用于自动化
+
+### 与 install.sh 的区别
+
+| 脚本 | 安装方式 | 依赖 |
+|------|----------|------|
+| `install.sh` | 从源码/crates.io 编译 | 需要 Rust |
+| `ie-manager.sh` | 下载预编译二进制 | 无需 Rust |
+
 ## setup-git-hooks.sh
 
 自动安装 git pre-commit hooks，在每次提交前自动运行 `cargo fmt`。

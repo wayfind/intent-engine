@@ -85,10 +85,11 @@ That's it. The plugin automatically:
 If you prefer manual setup:
 
 ```bash
-# 1. Install binary
+# 1. Install binary (choose one)
 cargo install intent-engine
 # or: brew install wayfind/tap/intent-engine
 # or: npm install -g @origintask/intent-engine
+# or (no Rust needed): curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
 
 # 2. Add system prompt
 claude --append-system-prompt "Use ie plan instead of TodoWrite. Commands: ie status, echo '{...}'|ie plan, ie log, ie search"
@@ -132,6 +133,7 @@ Code changes. Intent persists.
 cargo install intent-engine
 # or: brew install wayfind/tap/intent-engine
 # or: npm install -g @origintask/intent-engine
+# or: curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
 
 # Core commands
 ie status                    # Current context
