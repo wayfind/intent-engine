@@ -55,6 +55,17 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build frontend
+        run: |
+          cd front-end
+          npm ci
+          npm run build
+
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -69,6 +80,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build frontend
+        run: |
+          cd front-end
+          npm ci
+          npm run build
 
       - name: Build
         run: cargo build --verbose
@@ -134,6 +156,17 @@ jobs:
         with:
           shared-key: ${{ matrix.rust }}-${{ matrix.os }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build frontend
+        run: |
+          cd front-end
+          npm ci
+          npm run build
+
       - name: Build
         run: cargo build --verbose
 
@@ -193,6 +226,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build frontend
+        run: |
+          cd front-end
+          npm ci
+          npm run build
 
       - name: Verify package
         run: |

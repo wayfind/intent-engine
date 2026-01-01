@@ -1,7 +1,10 @@
 // Build script for intent-engine
 // This runs before compilation to set up the development environment
 //
-// Purpose: Automatically install git pre-commit hooks for code formatting
+// Purpose:
+// 1. Automatically install git pre-commit hooks for code formatting
+// 2. Automatically build frontend if static/ is missing
+//
 // Timing: Runs during the first `cargo build` after cloning/cleaning
 // Safety: Idempotent, skips CI/release builds, uses marker file to avoid repeats
 
@@ -14,8 +17,13 @@ fn main() {
     // Tell cargo to rerun if these files change
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=scripts/auto-setup-hooks.sh");
+    println!("cargo:rerun-if-changed=front-end/src");
+    println!("cargo:rerun-if-changed=front-end/package.json");
     // Also rerun if the hook itself is deleted
     println!("cargo:rerun-if-changed=.git/hooks/pre-commit");
+
+    // Build frontend if needed
+    build_frontend_if_needed();
 
     // Early returns for situations where we should not install hooks
     if should_skip_hooks_setup() {
@@ -44,16 +52,87 @@ fn main() {
     }
 }
 
-/// Check if we should skip hooks setup (CI, release builds, etc.)
-fn should_skip_hooks_setup() -> bool {
-    // Skip in CI environments
-    let is_ci = env::var("CI").is_ok()
+/// Build frontend if the static directory is missing or empty
+fn build_frontend_if_needed() {
+    let static_dir = Path::new("static");
+    let index_html = static_dir.join("index.html");
+    let front_end_dir = Path::new("front-end");
+
+    // Skip if frontend source doesn't exist
+    if !front_end_dir.exists() {
+        return;
+    }
+
+    // Check if static/index.html exists (indicates frontend is built)
+    if index_html.exists() {
+        return;
+    }
+
+    // Skip in CI - frontend is built separately
+    if is_ci_environment() {
+        return;
+    }
+
+    println!("cargo:warning=📦 Building frontend (static/ not found)...");
+
+    // Check if npm is available
+    let npm_cmd = if cfg!(windows) { "npm.cmd" } else { "npm" };
+
+    // Run npm ci
+    let npm_ci = Command::new(npm_cmd)
+        .args(["ci"])
+        .current_dir(front_end_dir)
+        .output();
+
+    match npm_ci {
+        Ok(output) if output.status.success() => {
+            // Run npm run build
+            let npm_build = Command::new(npm_cmd)
+                .args(["run", "build"])
+                .current_dir(front_end_dir)
+                .output();
+
+            match npm_build {
+                Ok(output) if output.status.success() => {
+                    println!("cargo:warning=✅ Frontend built successfully!");
+                },
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    eprintln!("cargo:warning=⚠️  npm run build failed: {}", stderr.trim());
+                    eprintln!("cargo:warning=Run 'cd front-end && npm run build' manually.");
+                },
+                Err(e) => {
+                    eprintln!("cargo:warning=⚠️  Could not run npm build: {}", e);
+                },
+            }
+        },
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("cargo:warning=⚠️  npm ci failed: {}", stderr.trim());
+            eprintln!("cargo:warning=Run 'cd front-end && npm ci && npm run build' manually.");
+        },
+        Err(e) => {
+            eprintln!("cargo:warning=⚠️  npm not found: {}", e);
+            eprintln!(
+                "cargo:warning=Install Node.js and run 'cd front-end && npm ci && npm run build'."
+            );
+        },
+    }
+}
+
+/// Check if running in CI environment
+fn is_ci_environment() -> bool {
+    env::var("CI").is_ok()
         || env::var("GITHUB_ACTIONS").is_ok()
         || env::var("GITLAB_CI").is_ok()
         || env::var("CIRCLECI").is_ok()
-        || env::var("TRAVIS").is_ok();
+        || env::var("TRAVIS").is_ok()
+}
 
-    if is_ci {
+/// Check if we should skip hooks setup (CI, release builds, etc.)
+fn should_skip_hooks_setup() -> bool {
+    // Skip in CI environments
+    if is_ci_environment() {
         return true;
     }
 

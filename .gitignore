@@ -49,3 +49,6 @@ Thumbs.db
 # npm platform package binaries (downloaded during CI)
 npm/intent-engine-*/bin/ie
 npm/intent-engine-*/bin/ie.exe
+
+# Frontend build artifacts (built during release)
+static/

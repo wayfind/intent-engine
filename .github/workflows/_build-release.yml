@@ -43,6 +43,17 @@ jobs:
           rustc --version
           cargo --version
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build frontend
+        run: |
+          cd front-end
+          npm ci
+          npm run build
+
       - name: Install cross-compilation tools (Linux ARM64 GNU)
         if: inputs.target == 'aarch64-unknown-linux-gnu'
         run: |
