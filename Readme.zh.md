@@ -69,13 +69,31 @@ AI 只获取所需信息，不多不少。
 | 搜索 | FTS5 | GB 级文本，毫秒响应 |
 | 隐私 | 纯本地 | 数据永不离开你的机器 |
 
-### 智能任务模型
+### 为长时任务而生
 
-- **层级化** — 把复杂目标拆解为子任务
-- **多 Agent** — 多个 agent 并行工作，各自专注不同任务（session 隔离）
-- **依赖图** — `depends_on` 支持 MapReduce 式任务编排
-- **可追溯** — 每个决策都有上下文记录
-- **可恢复** — 从任何中断点继续
+AI agent 领域的未解难题：**持续数天或数周的任务**。
+
+Intent-Engine 提供稳定基础：
+
+| 挑战 | 解决方案 |
+|------|----------|
+| 中断（崩溃、重启） | 持久记忆 |
+| 多 agent 协作 | Session 隔离 |
+| 任务调度 | 依赖图（`depends_on`） |
+| 上下文爆炸 | Focus-driven 检索 |
+
+```
+为期一周的重构项目：
+├── Agent A (session: "api")     → focus: #12 REST 接口
+├── Agent B (session: "db")      → focus: #15 Schema 迁移
+└── Agent C (session: "test")    → focus: #18 集成测试
+                                   depends_on: [#12, #15]
+
+每个 agent：隔离的 focus，共享的任务图，持久化的状态。
+编排器：读取 depends_on，尽可能并行调度。
+```
+
+**结果：** 可靠的多日、多 agent 工作流。
 
 ---
 

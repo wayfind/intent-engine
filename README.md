@@ -69,13 +69,31 @@ AI gets what it needs. Nothing more.
 | Search | FTS5 | GB-scale text, millisecond response |
 | Privacy | Local-only | Your data never leaves your machine |
 
-### Smart Task Model
+### Built for Long-Running Tasks
 
-- **Hierarchical** — Break complex goals into subtasks
-- **Multi-agent** — Multiple agents work in parallel, each with its own focus (session isolation)
-- **Dependency graph** — `depends_on` enables MapReduce-style orchestration
-- **Traceable** — Every decision recorded with context
-- **Recoverable** — Resume from any interruption point
+The unsolved problem in AI agents: **tasks that span days or weeks**.
+
+Intent-Engine provides the foundation:
+
+| Challenge | Solution |
+|-----------|----------|
+| Interruptions (crashes, restarts) | Persistent memory |
+| Multi-agent coordination | Session isolation |
+| Task scheduling | Dependency graph (`depends_on`) |
+| Context explosion | Focus-driven retrieval |
+
+```
+Week-long refactoring project:
+├── Agent A (session: "api")     → focus: #12 REST endpoints
+├── Agent B (session: "db")      → focus: #15 Schema migration
+└── Agent C (session: "test")    → focus: #18 Integration tests
+                                   depends_on: [#12, #15]
+
+Each agent: isolated focus, shared task graph, persistent state.
+Orchestrator: reads depends_on, schedules in parallel where possible.
+```
+
+**Result:** Reliable multi-day, multi-agent workflows.
 
 ---
 
