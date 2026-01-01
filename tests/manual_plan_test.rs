@@ -18,38 +18,41 @@ async fn manual_test_plan_with_status_and_active_form() {
     println!("📝 测试1: 创建pending状态的任务...");
     let request = PlanRequest {
         tasks: vec![TaskTree {
-            name: "【测试】实现用户认证功能".to_string(),
+            name: Some("【测试】实现用户认证功能".to_string()),
             spec: Some("完整的JWT认证系统".to_string()),
             priority: Some(PriorityValue::Critical),
             children: Some(vec![
                 TaskTree {
-                    name: "【测试】设计JWT Token结构".to_string(),
+                    name: Some("【测试】设计JWT Token结构".to_string()),
                     spec: Some("定义payload和claims".to_string()),
                     priority: Some(PriorityValue::High),
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: Some(TaskStatus::Todo),
                     active_form: Some("设计JWT Token结构中".to_string()),
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "【测试】实现登录API".to_string(),
+                    name: Some("【测试】实现登录API".to_string()),
                     spec: Some("POST /api/login endpoint".to_string()),
                     priority: Some(PriorityValue::High),
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: Some(TaskStatus::Todo),
                     active_form: Some("实现登录API中".to_string()),
                     parent_id: None,
+                    ..Default::default()
                 },
             ]),
             depends_on: None,
-            task_id: None,
+            id: None,
             status: Some(TaskStatus::Todo), // 使用Todo避免约束冲突
             active_form: Some("正在实现用户认证功能".to_string()),
             parent_id: None,
+            ..Default::default()
         }],
     };
 
@@ -99,15 +102,16 @@ async fn manual_test_plan_with_status_and_active_form() {
     println!("\n🚫 测试4: 验证单一in_progress约束...");
     let invalid = PlanRequest {
         tasks: vec![TaskTree {
-            name: "【测试】违反约束的任务".to_string(),
+            name: Some("【测试】违反约束的任务".to_string()),
             spec: None,
             priority: None,
             children: None,
             depends_on: None,
-            task_id: None,
+            id: None,
             status: Some(TaskStatus::Doing),
             active_form: Some("尝试违反约束".to_string()),
             parent_id: None,
+            ..Default::default()
         }],
     };
 

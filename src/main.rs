@@ -130,11 +130,26 @@ async fn run(cli: &Cli) -> Result<()> {
                     println!();
                     println!("Created: {} tasks", result.created_count);
                     println!("Updated: {} tasks", result.updated_count);
+                    if result.deleted_count > 0 {
+                        println!("Deleted: {} tasks", result.deleted_count);
+                    }
+                    if result.cascade_deleted_count > 0 {
+                        println!("Cascade deleted: {} tasks", result.cascade_deleted_count);
+                    }
                     println!("Dependencies: {}", result.dependency_count);
                     println!();
                     println!("Task ID mapping:");
                     for (name, id) in &result.task_id_map {
                         println!("  {} → #{}", name, id);
+                    }
+
+                    // Display warnings if any
+                    if !result.warnings.is_empty() {
+                        println!();
+                        println!("⚠ Warnings:");
+                        for warning in &result.warnings {
+                            println!("  - {}", warning);
+                        }
                     }
 
                     // Display focused task if present
@@ -180,14 +195,6 @@ async fn run(cli: &Cli) -> Result<()> {
                                     );
                                 }
                             }
-                        }
-                    }
-
-                    // Display warnings if any
-                    if !result.warnings.is_empty() {
-                        println!();
-                        for warning in &result.warnings {
-                            println!("💡 {}", warning);
                         }
                     }
                 } else {

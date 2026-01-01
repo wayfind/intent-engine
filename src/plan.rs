@@ -17,10 +17,12 @@ pub struct PlanRequest {
 }
 
 /// Hierarchical task definition with nested children
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
 pub struct TaskTree {
     /// Task name (used as identifier for lookups)
-    pub name: String,
+    /// Required for create/update operations, optional for delete (when id is provided)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 
     /// Optional task specification/description
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,9 +40,10 @@ pub struct TaskTree {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depends_on: Option<Vec<String>>,
 
-    /// Optional explicit task ID (for forced updates)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub task_id: Option<i64>,
+    /// Optional explicit task ID (for forced updates or delete)
+    /// Aliases: "id" or "task_id"
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "task_id")]
+    pub id: Option<i64>,
 
     /// Optional task status (for TodoWriter compatibility)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -61,6 +64,10 @@ pub struct TaskTree {
         deserialize_with = "deserialize_parent_id"
     )]
     pub parent_id: Option<Option<i64>>,
+
+    /// Delete this task (requires id)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delete: Option<bool>,
 }
 
 /// Custom deserializer for parent_id field
@@ -189,6 +196,14 @@ pub struct PlanResult {
     /// Number of tasks updated
     pub updated_count: usize,
 
+    /// Number of tasks directly deleted
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub deleted_count: usize,
+
+    /// Number of tasks cascade-deleted (descendants of deleted tasks)
+    #[serde(default, skip_serializing_if = "is_zero_i64")]
+    pub cascade_deleted_count: i64,
+
     /// Number of dependencies created
     pub dependency_count: usize,
 
@@ -206,12 +221,21 @@ pub struct PlanResult {
     pub warnings: Vec<String>,
 }
 
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
+fn is_zero_i64(n: &i64) -> bool {
+    *n == 0
+}
+
 impl PlanResult {
     /// Create a successful result with optional focused task
     pub fn success(
         task_id_map: HashMap<String, i64>,
         created_count: usize,
         updated_count: usize,
+        deleted_count: usize,
         dependency_count: usize,
         focused_task: Option<crate::db::models::TaskWithEvents>,
     ) -> Self {
@@ -220,6 +244,8 @@ impl PlanResult {
             task_id_map,
             created_count,
             updated_count,
+            deleted_count,
+            cascade_deleted_count: 0,
             dependency_count,
             focused_task,
             error: None,
@@ -227,11 +253,13 @@ impl PlanResult {
         }
     }
 
-    /// Create a successful result with warnings
+    /// Create a successful result with warnings and cascade delete count
     pub fn success_with_warnings(
         task_id_map: HashMap<String, i64>,
         created_count: usize,
         updated_count: usize,
+        deleted_count: usize,
+        cascade_deleted_count: i64,
         dependency_count: usize,
         focused_task: Option<crate::db::models::TaskWithEvents>,
         warnings: Vec<String>,
@@ -241,6 +269,8 @@ impl PlanResult {
             task_id_map,
             created_count,
             updated_count,
+            deleted_count,
+            cascade_deleted_count,
             dependency_count,
             focused_task,
             error: None,
@@ -255,6 +285,8 @@ impl PlanResult {
             task_id_map: HashMap::new(),
             created_count: 0,
             updated_count: 0,
+            deleted_count: 0,
+            cascade_deleted_count: 0,
             dependency_count: 0,
             focused_task: None,
             error: Some(message.into()),
@@ -268,11 +300,14 @@ impl PlanResult {
 // ============================================================================
 
 /// Extract all task names from a task tree (recursive)
+/// Only includes tasks that have a name (skips delete-only tasks)
 pub fn extract_all_names(tasks: &[TaskTree]) -> Vec<String> {
     let mut names = Vec::new();
 
     for task in tasks {
-        names.push(task.name.clone());
+        if let Some(name) = &task.name {
+            names.push(name.clone());
+        }
 
         if let Some(children) = &task.children {
             names.extend(extract_all_names(children));
@@ -283,15 +318,17 @@ pub fn extract_all_names(tasks: &[TaskTree]) -> Vec<String> {
 }
 
 /// Flatten task tree into a linear list with parent information
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct FlatTask {
-    pub name: String,
+    /// Task name (None for delete-only operations)
+    pub name: Option<String>,
     pub spec: Option<String>,
     pub priority: Option<PriorityValue>,
     /// Parent from children nesting (takes precedence over explicit_parent_id)
     pub parent_name: Option<String>,
     pub depends_on: Vec<String>,
-    pub task_id: Option<i64>,
+    /// Task ID for updates or deletes
+    pub id: Option<i64>,
     pub status: Option<TaskStatus>,
     pub active_form: Option<String>,
     /// Explicit parent_id from JSON
@@ -299,6 +336,8 @@ pub struct FlatTask {
     /// - Some(None): explicitly create as root task (no parent)
     /// - Some(Some(id)): explicitly set parent to task with given ID
     pub explicit_parent_id: Option<Option<i64>>,
+    /// Delete this task
+    pub delete: bool,
 }
 
 pub fn flatten_task_tree(tasks: &[TaskTree]) -> Vec<FlatTask> {
@@ -315,20 +354,20 @@ fn flatten_task_tree_recursive(tasks: &[TaskTree], parent_name: Option<String>) 
             priority: task.priority.clone(),
             parent_name: parent_name.clone(),
             depends_on: task.depends_on.clone().unwrap_or_default(),
-            task_id: task.task_id,
+            id: task.id,
             status: task.status.clone(),
             active_form: task.active_form.clone(),
             explicit_parent_id: task.parent_id,
+            delete: task.delete.unwrap_or(false),
         };
 
         flat.push(flat_task);
 
-        // Recursively flatten children
+        // Recursively flatten children (only if task has a name)
         if let Some(children) = &task.children {
-            flat.extend(flatten_task_tree_recursive(
-                children,
-                Some(task.name.clone()),
-            ));
+            if let Some(name) = &task.name {
+                flat.extend(flatten_task_tree_recursive(children, Some(name.clone())));
+            }
         }
     }
 
@@ -339,17 +378,18 @@ fn flatten_task_tree_recursive(tasks: &[TaskTree], parent_name: Option<String>) 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operation {
     Create(FlatTask),
-    Update { task_id: i64, task: FlatTask },
+    Update { id: i64, task: FlatTask },
+    Delete { id: i64 },
 }
 
-/// Classify tasks into create/update operations based on existing task IDs
+/// Classify tasks into create/update/delete operations based on existing task IDs
 ///
 /// # Arguments
 /// * `flat_tasks` - Flattened task list
 /// * `existing_names` - Map of existing task names to their IDs
 ///
 /// # Returns
-/// Classified operations (create or update)
+/// Classified operations (create, update, or delete)
 pub fn classify_operations(
     flat_tasks: &[FlatTask],
     existing_names: &HashMap<String, i64>,
@@ -357,22 +397,37 @@ pub fn classify_operations(
     let mut operations = Vec::new();
 
     for task in flat_tasks {
-        // Priority: explicit task_id > name lookup > create
-        let operation = if let Some(task_id) = task.task_id {
-            // Explicit task_id → forced update
+        // Handle delete operations (requires explicit id)
+        if task.delete {
+            if let Some(id) = task.id {
+                operations.push(Operation::Delete { id });
+            }
+            // Skip delete without id (validation should catch this earlier)
+            continue;
+        }
+
+        // Priority: explicit id > name lookup > create
+        let operation = if let Some(id) = task.id {
+            // Explicit id → forced update
             Operation::Update {
-                task_id,
+                id,
                 task: task.clone(),
             }
-        } else if let Some(&task_id) = existing_names.get(&task.name) {
-            // Name found in DB → update
-            Operation::Update {
-                task_id,
-                task: task.clone(),
+        } else if let Some(name) = &task.name {
+            // Try name lookup
+            if let Some(&id) = existing_names.get(name) {
+                // Name found in DB → update
+                Operation::Update {
+                    id,
+                    task: task.clone(),
+                }
+            } else {
+                // Not found → create
+                Operation::Create(task.clone())
             }
         } else {
-            // Not found → create
-            Operation::Create(task.clone())
+            // No id and no name → skip (invalid)
+            continue;
         };
 
         operations.push(operation);
@@ -496,8 +551,107 @@ impl<'a> PlanExecutor<'a> {
         let mut warnings: Vec<String> = Vec::new();
         let mut newly_created_names: std::collections::HashSet<String> =
             std::collections::HashSet::new();
+        let mut deleted_count = 0;
 
-        for task in &flat_tasks {
+        // ============================================================================
+        // Delete Operations (processed first, before create/update)
+        // ============================================================================
+        // Delete operations are separated from normal operations for several reasons:
+        // 1. Deletes should happen first to avoid conflicts with creates/updates
+        // 2. Non-existent IDs should generate warnings, not errors (idempotent)
+        // 3. Cascade deletes (due to ON DELETE CASCADE on parent_id) are tracked
+        // 4. Deleting focused task should warn the user
+
+        // Separate delete operations from normal operations
+        let (delete_tasks, normal_tasks): (Vec<_>, Vec<_>) =
+            flat_tasks.iter().partition(|t| t.delete);
+
+        // Validate delete operations: each must have an id
+        for task in &delete_tasks {
+            if task.id.is_none() {
+                return Ok(PlanResult::error(
+                    "Delete operation requires 'id' field. Use {\"id\": <task_id>, \"delete\": true}",
+                ));
+            }
+        }
+
+        // Process delete operations first
+        // ============================================================================
+        // Focus Protection Check (BEFORE any deletions)
+        // ============================================================================
+        // We must check ALL delete targets and their subtrees for focus BEFORE
+        // executing any deletes. This prevents:
+        // 1. Direct deletion of focused task
+        // 2. CASCADE deletion of focused task via parent deletion
+        // 3. Batch delete order tricks (deleting parent before checking child)
+        //
+        // Rationale: Focus represents "commitment to complete". Deleting it
+        // without explicitly switching focus is semantically incomplete.
+        for task in &delete_tasks {
+            if let Some(id) = task.id {
+                // Check entire subtree (task + all descendants) for focus in ANY session
+                if let Some((focused_id, session_id)) =
+                    task_mgr.find_focused_in_subtree_in_tx(&mut tx, id).await?
+                {
+                    if focused_id == id {
+                        // Direct deletion of focused task
+                        return Ok(PlanResult::error(format!(
+                            "Task #{} is the current focus of session '{}'. That session must switch focus first.",
+                            id, session_id
+                        )));
+                    } else {
+                        // Cascade would delete focused task
+                        return Ok(PlanResult::error(format!(
+                            "Task #{} is the current focus of session '{}' and would be deleted by cascade (descendant of #{}). That session must switch focus first.",
+                            focused_id, session_id, id
+                        )));
+                    }
+                }
+            }
+        }
+
+        // ============================================================================
+        // Execute Deletions (focus protection already verified)
+        // ============================================================================
+        let mut cascade_deleted_count: i64 = 0;
+        for task in &delete_tasks {
+            if let Some(id) = task.id {
+                let delete_result = task_mgr.delete_task_in_tx(&mut tx, id).await?;
+
+                if !delete_result.found {
+                    // Task doesn't exist - generate warning but don't fail
+                    // This ensures idempotent behavior: deleting already-deleted task is OK
+                    warnings.push(format!(
+                        "Task #{} not found (may have been already deleted)",
+                        id
+                    ));
+                } else {
+                    deleted_count += 1;
+
+                    // Track cascade-deleted descendants (due to ON DELETE CASCADE)
+                    if delete_result.descendant_count > 0 {
+                        cascade_deleted_count += delete_result.descendant_count;
+                        warnings.push(format!(
+                            "Task #{} had {} descendant(s) that were also deleted (cascade)",
+                            id, delete_result.descendant_count
+                        ));
+                    }
+                }
+            }
+        }
+
+        // ============================================================================
+        // Create/Update Operations
+        // ============================================================================
+
+        // Process normal operations (create/update)
+        for task in &normal_tasks {
+            // Skip tasks without name (shouldn't happen for normal operations)
+            let task_name = match &task.name {
+                Some(name) => name,
+                None => continue, // Skip invalid entries
+            };
+
             // Check if task is transitioning to 'doing' status and validate spec
             let is_becoming_doing = task.status.as_ref() == Some(&TaskStatus::Doing);
             let has_spec = task
@@ -506,7 +660,7 @@ impl<'a> PlanExecutor<'a> {
                 .map(|s| !s.trim().is_empty())
                 .unwrap_or(false);
 
-            if let Some(existing_info) = existing.get(&task.name) {
+            if let Some(existing_info) = existing.get(task_name) {
                 // Task exists -> UPDATE
 
                 // Validation: if transitioning to 'doing' and no spec provided,
@@ -527,7 +681,7 @@ impl<'a> PlanExecutor<'a> {
                             • What is the goal of this task\n  \
                             • How do you plan to approach it\n\n\
                             Tip: Use @file(path) to include content from a file",
-                            task.name
+                            task_name
                         )));
                     }
                 }
@@ -562,12 +716,12 @@ impl<'a> PlanExecutor<'a> {
                         return Ok(PlanResult::error(format!(
                             "Cannot complete task '{}': {}\n\n\
                             Please complete all subtasks before marking the parent as done.",
-                            task.name, e
+                            task_name, e
                         )));
                     }
                 }
 
-                task_id_map.insert(task.name.clone(), existing_info.id);
+                task_id_map.insert(task_name.clone(), existing_info.id);
                 updated_count += 1;
             } else {
                 // Task doesn't exist -> CREATE
@@ -580,14 +734,14 @@ impl<'a> PlanExecutor<'a> {
                         • What is the goal of this task\n  \
                         • How do you plan to approach it\n\n\
                         Tip: Use @file(path) to include content from a file",
-                        task.name
+                        task_name
                     )));
                 }
 
                 let id = task_mgr
                     .create_task_in_tx(
                         &mut tx,
-                        &task.name,
+                        task_name,
                         task.spec.as_deref(),
                         task.priority.as_ref().map(|p| p.to_int()),
                         task.status.as_ref().map(|s| s.as_db_str()),
@@ -595,38 +749,40 @@ impl<'a> PlanExecutor<'a> {
                         "ai", // Plan-created tasks are AI-owned
                     )
                     .await?;
-                task_id_map.insert(task.name.clone(), id);
-                newly_created_names.insert(task.name.clone());
+                task_id_map.insert(task_name.clone(), id);
+                newly_created_names.insert(task_name.clone());
                 created_count += 1;
 
                 // Warning: new task without spec (non-doing tasks only, doing already validated)
                 if !has_spec && !is_becoming_doing {
                     warnings.push(format!(
                         "Task '{}' has no description. Consider adding one for better context.",
-                        task.name
+                        task_name
                     ));
                 }
             }
         }
 
-        // 11. Build parent-child relationships via TaskManager
-        for task in &flat_tasks {
+        // 11. Build parent-child relationships via TaskManager (only for normal tasks)
+        for task in &normal_tasks {
             if let Some(parent_name) = &task.parent_name {
-                let task_id = task_id_map.get(&task.name).ok_or_else(|| {
-                    IntentError::InvalidInput(format!("Task not found: {}", task.name))
-                })?;
-                let parent_id = task_id_map.get(parent_name).ok_or_else(|| {
-                    IntentError::InvalidInput(format!("Parent task not found: {}", parent_name))
-                })?;
-                task_mgr
-                    .set_parent_in_tx(&mut tx, *task_id, *parent_id)
-                    .await?;
+                if let Some(task_name) = &task.name {
+                    let task_id = task_id_map.get(task_name).ok_or_else(|| {
+                        IntentError::InvalidInput(format!("Task not found: {}", task_name))
+                    })?;
+                    let parent_id = task_id_map.get(parent_name).ok_or_else(|| {
+                        IntentError::InvalidInput(format!("Parent task not found: {}", parent_name))
+                    })?;
+                    task_mgr
+                        .set_parent_in_tx(&mut tx, *task_id, *parent_id)
+                        .await?;
+                }
             }
         }
 
         // 11b. Handle explicit parent_id (takes precedence over auto-parenting)
         // Priority: children nesting > explicit parent_id > auto-parent
-        for task in &flat_tasks {
+        for task in &normal_tasks {
             // Skip if parent was set via children nesting
             if task.parent_name.is_some() {
                 continue;
@@ -634,41 +790,45 @@ impl<'a> PlanExecutor<'a> {
 
             // Handle explicit parent_id
             if let Some(explicit_parent) = &task.explicit_parent_id {
-                let task_id = task_id_map.get(&task.name).ok_or_else(|| {
-                    IntentError::InvalidInput(format!("Task not found: {}", task.name))
-                })?;
+                if let Some(task_name) = &task.name {
+                    let task_id = task_id_map.get(task_name).ok_or_else(|| {
+                        IntentError::InvalidInput(format!("Task not found: {}", task_name))
+                    })?;
 
-                match explicit_parent {
-                    None => {
-                        // parent_id: null → explicitly set as root task (clear parent)
-                        task_mgr.clear_parent_in_tx(&mut tx, *task_id).await?;
-                    },
-                    Some(parent_id) => {
-                        // parent_id: N → set parent to task N (validate exists)
-                        // Note: parent task may be in this batch or already in DB
-                        task_mgr
-                            .set_parent_in_tx(&mut tx, *task_id, *parent_id)
-                            .await?;
-                    },
+                    match explicit_parent {
+                        None => {
+                            // parent_id: null → explicitly set as root task (clear parent)
+                            task_mgr.clear_parent_in_tx(&mut tx, *task_id).await?;
+                        },
+                        Some(parent_id) => {
+                            // parent_id: N → set parent to task N (validate exists)
+                            // Note: parent task may be in this batch or already in DB
+                            task_mgr
+                                .set_parent_in_tx(&mut tx, *task_id, *parent_id)
+                                .await?;
+                        },
+                    }
                 }
             }
         }
 
         // 11c. Auto-parent newly created root tasks to default_parent_id (focused task)
         if let Some(default_parent) = self.default_parent_id {
-            for task in &flat_tasks {
+            for task in &normal_tasks {
                 // Only auto-parent if:
                 // 1. Task was newly created (not updated)
                 // 2. Task has no explicit parent in the plan (children nesting)
                 // 3. Task has no explicit parent_id in JSON
-                if newly_created_names.contains(&task.name)
-                    && task.parent_name.is_none()
-                    && task.explicit_parent_id.is_none()
-                {
-                    if let Some(&task_id) = task_id_map.get(&task.name) {
-                        task_mgr
-                            .set_parent_in_tx(&mut tx, task_id, default_parent)
-                            .await?;
+                if let Some(task_name) = &task.name {
+                    if newly_created_names.contains(task_name)
+                        && task.parent_name.is_none()
+                        && task.explicit_parent_id.is_none()
+                    {
+                        if let Some(&task_id) = task_id_map.get(task_name) {
+                            task_mgr
+                                .set_parent_in_tx(&mut tx, task_id, default_parent)
+                                .await?;
+                        }
                     }
                 }
             }
@@ -686,17 +846,21 @@ impl<'a> PlanExecutor<'a> {
         task_mgr.notify_batch_changed().await;
 
         // 15. Auto-focus the doing task if present and return full context
-        // Find the doing task in the batch
-        let doing_task = flat_tasks
+        // Find the doing task in the batch (only from normal tasks, not deletes)
+        let doing_task = normal_tasks
             .iter()
             .find(|task| matches!(task.status, Some(TaskStatus::Doing)));
 
         let focused_task_response = if let Some(doing_task) = doing_task {
             // Get the task ID from the map
-            if let Some(&task_id) = task_id_map.get(&doing_task.name) {
-                // Call task_start with events to get full context
-                let response = task_mgr.start_task(task_id, true).await?;
-                Some(response)
+            if let Some(task_name) = &doing_task.name {
+                if let Some(&task_id) = task_id_map.get(task_name) {
+                    // Call task_start with events to get full context
+                    let response = task_mgr.start_task(task_id, true).await?;
+                    Some(response)
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -709,6 +873,8 @@ impl<'a> PlanExecutor<'a> {
             task_id_map,
             created_count,
             updated_count,
+            deleted_count,
+            cascade_deleted_count,
             dep_count,
             focused_task_response,
             warnings,
@@ -762,16 +928,25 @@ impl<'a> PlanExecutor<'a> {
         let mut count = 0;
 
         for task in flat_tasks {
+            // Skip delete operations and tasks without names
+            if task.delete {
+                continue;
+            }
+            let task_name = match &task.name {
+                Some(name) => name,
+                None => continue,
+            };
+
             if !task.depends_on.is_empty() {
-                let blocked_id = task_id_map.get(&task.name).ok_or_else(|| {
-                    IntentError::InvalidInput(format!("Task not found: {}", task.name))
+                let blocked_id = task_id_map.get(task_name).ok_or_else(|| {
+                    IntentError::InvalidInput(format!("Task not found: {}", task_name))
                 })?;
 
                 for dep_name in &task.depends_on {
                     let blocking_id = task_id_map.get(dep_name).ok_or_else(|| {
                         IntentError::InvalidInput(format!(
                             "Dependency '{}' not found for task '{}'",
-                            dep_name, task.name
+                            dep_name, task_name
                         ))
                     })?;
 
@@ -793,15 +968,18 @@ impl<'a> PlanExecutor<'a> {
 
     /// Validate that all dependencies exist in the plan
     fn validate_dependencies(&self, flat_tasks: &[FlatTask]) -> Result<()> {
-        let task_names: std::collections::HashSet<_> =
-            flat_tasks.iter().map(|t| t.name.as_str()).collect();
+        let task_names: std::collections::HashSet<_> = flat_tasks
+            .iter()
+            .filter_map(|t| t.name.as_ref().map(|n| n.as_str()))
+            .collect();
 
         for task in flat_tasks {
             for dep_name in &task.depends_on {
                 if !task_names.contains(dep_name.as_str()) {
+                    let task_name = task.name.as_deref().unwrap_or("<unknown>");
                     return Err(IntentError::InvalidInput(format!(
                         "Task '{}' depends on '{}', but '{}' is not in the plan",
-                        task.name, dep_name, dep_name
+                        task_name, dep_name, dep_name
                     )));
                 }
             }
@@ -822,7 +1000,10 @@ impl<'a> PlanExecutor<'a> {
 
         // If more than one task in the request wants to be doing, that's an error
         if doing_tasks.len() > 1 {
-            let names: Vec<&str> = doing_tasks.iter().map(|t| t.name.as_str()).collect();
+            let names: Vec<&str> = doing_tasks
+                .iter()
+                .map(|t| t.name.as_deref().unwrap_or("<unknown>"))
+                .collect();
             return Err(IntentError::InvalidInput(format!(
                 "Batch single doing constraint violated: only one task per batch can have status='doing'. Found: {}",
                 names.join(", ")
@@ -838,11 +1019,11 @@ impl<'a> PlanExecutor<'a> {
             return Ok(());
         }
 
-        // Build name-to-index mapping
+        // Build name-to-index mapping (only for tasks with names)
         let name_to_idx: HashMap<&str, usize> = flat_tasks
             .iter()
             .enumerate()
-            .map(|(i, t)| (t.name.as_str(), i))
+            .filter_map(|(i, t)| t.name.as_ref().map(|n| (n.as_str(), i)))
             .collect();
 
         // Build dependency graph (adjacency list)
@@ -857,11 +1038,13 @@ impl<'a> PlanExecutor<'a> {
 
         // Check for self-loops first
         for task in flat_tasks {
-            if task.depends_on.contains(&task.name) {
-                return Err(IntentError::InvalidInput(format!(
-                    "Circular dependency detected: task '{}' depends on itself",
-                    task.name
-                )));
+            if let Some(name) = &task.name {
+                if task.depends_on.contains(name) {
+                    return Err(IntentError::InvalidInput(format!(
+                        "Circular dependency detected: task '{}' depends on itself",
+                        name
+                    )));
+                }
             }
         }
 
@@ -874,7 +1057,7 @@ impl<'a> PlanExecutor<'a> {
                 // Found a cycle - build error message
                 let cycle_names: Vec<&str> = scc
                     .iter()
-                    .map(|&idx| flat_tasks[idx].name.as_str())
+                    .map(|&idx| flat_tasks[idx].name.as_deref().unwrap_or("<unknown>"))
                     .collect();
 
                 return Err(IntentError::InvalidInput(format!(
@@ -1104,12 +1287,12 @@ mod tests {
         let request: PlanRequest = serde_json::from_str(json).unwrap();
 
         assert_eq!(request.tasks.len(), 1);
-        assert_eq!(request.tasks[0].name, "Test Task");
+        assert_eq!(request.tasks[0].name, Some("Test Task".to_string()));
         assert_eq!(request.tasks[0].spec, None);
         assert_eq!(request.tasks[0].priority, None);
         assert_eq!(request.tasks[0].children, None);
         assert_eq!(request.tasks[0].depends_on, None);
-        assert_eq!(request.tasks[0].task_id, None);
+        assert_eq!(request.tasks[0].id, None);
     }
 
     #[test]
@@ -1132,14 +1315,14 @@ mod tests {
 
         assert_eq!(request.tasks.len(), 1);
         let parent = &request.tasks[0];
-        assert_eq!(parent.name, "Parent Task");
+        assert_eq!(parent.name, Some("Parent Task".to_string()));
         assert_eq!(parent.spec, Some("Parent spec".to_string()));
         assert_eq!(parent.priority, Some(PriorityValue::High));
-        assert_eq!(parent.task_id, Some(42));
+        assert_eq!(parent.id, Some(42));
 
         let children = parent.children.as_ref().unwrap();
         assert_eq!(children.len(), 1);
-        assert_eq!(children[0].name, "Child Task");
+        assert_eq!(children[0].name, Some("Child Task".to_string()));
 
         let depends = parent.depends_on.as_ref().unwrap();
         assert_eq!(depends.len(), 1);
@@ -1150,15 +1333,16 @@ mod tests {
     fn test_plan_request_serialization() {
         let request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Test Task".to_string(),
+                name: Some("Test Task".to_string()),
                 spec: Some("Test spec".to_string()),
                 priority: Some(PriorityValue::Medium),
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -1174,7 +1358,7 @@ mod tests {
         map.insert("Task 1".to_string(), 1);
         map.insert("Task 2".to_string(), 2);
 
-        let result = PlanResult::success(map.clone(), 2, 0, 1, None);
+        let result = PlanResult::success(map.clone(), 2, 0, 0, 1, None);
 
         assert!(result.success);
         assert_eq!(result.task_id_map, map);
@@ -1200,38 +1384,41 @@ mod tests {
     #[test]
     fn test_task_tree_nested() {
         let tree = TaskTree {
-            name: "Parent".to_string(),
+            name: Some("Parent".to_string()),
             spec: None,
             priority: None,
             children: Some(vec![
                 TaskTree {
-                    name: "Child 1".to_string(),
+                    name: Some("Child 1".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Child 2".to_string(),
+                    name: Some("Child 2".to_string()),
                     spec: None,
                     priority: Some(PriorityValue::High),
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
             ]),
             depends_on: None,
-            task_id: None,
+            id: None,
             status: None,
             active_form: None,
             parent_id: None,
+            ..Default::default()
         };
 
         let json = serde_json::to_string_pretty(&tree).unwrap();
@@ -1256,26 +1443,28 @@ mod tests {
     fn test_extract_all_names_simple() {
         let tasks = vec![
             TaskTree {
-                name: "Task 1".to_string(),
+                name: Some("Task 1".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             },
             TaskTree {
-                name: "Task 2".to_string(),
+                name: Some("Task 2".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             },
         ];
 
@@ -1286,48 +1475,52 @@ mod tests {
     #[test]
     fn test_extract_all_names_nested() {
         let tasks = vec![TaskTree {
-            name: "Parent".to_string(),
+            name: Some("Parent".to_string()),
             spec: None,
             priority: None,
             children: Some(vec![
                 TaskTree {
-                    name: "Child 1".to_string(),
+                    name: Some("Child 1".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Child 2".to_string(),
+                    name: Some("Child 2".to_string()),
                     spec: None,
                     priority: None,
                     children: Some(vec![TaskTree {
-                        name: "Grandchild".to_string(),
+                        name: Some("Grandchild".to_string()),
                         spec: None,
                         priority: None,
                         children: None,
                         depends_on: None,
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     }]),
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
             ]),
             depends_on: None,
-            task_id: None,
+            id: None,
             status: None,
             active_form: None,
             parent_id: None,
+            ..Default::default()
         }];
 
         let names = extract_all_names(&tasks);
@@ -1337,20 +1530,21 @@ mod tests {
     #[test]
     fn test_flatten_task_tree_simple() {
         let tasks = vec![TaskTree {
-            name: "Task 1".to_string(),
+            name: Some("Task 1".to_string()),
             spec: Some("Spec 1".to_string()),
             priority: Some(PriorityValue::High),
             children: None,
             depends_on: Some(vec!["Task 0".to_string()]),
-            task_id: None,
+            id: None,
             status: None,
             active_form: None,
             parent_id: None,
+            ..Default::default()
         }];
 
         let flat = flatten_task_tree(&tasks);
         assert_eq!(flat.len(), 1);
-        assert_eq!(flat[0].name, "Task 1");
+        assert_eq!(flat[0].name, Some("Task 1".to_string()));
         assert_eq!(flat[0].spec, Some("Spec 1".to_string()));
         assert_eq!(flat[0].priority, Some(PriorityValue::High));
         assert_eq!(flat[0].parent_name, None);
@@ -1360,52 +1554,55 @@ mod tests {
     #[test]
     fn test_flatten_task_tree_nested() {
         let tasks = vec![TaskTree {
-            name: "Parent".to_string(),
+            name: Some("Parent".to_string()),
             spec: None,
             priority: None,
             children: Some(vec![
                 TaskTree {
-                    name: "Child 1".to_string(),
+                    name: Some("Child 1".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Child 2".to_string(),
+                    name: Some("Child 2".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
             ]),
             depends_on: None,
-            task_id: None,
+            id: None,
             status: None,
             active_form: None,
             parent_id: None,
+            ..Default::default()
         }];
 
         let flat = flatten_task_tree(&tasks);
         assert_eq!(flat.len(), 3);
 
         // Parent should have no parent_name
-        assert_eq!(flat[0].name, "Parent");
+        assert_eq!(flat[0].name, Some("Parent".to_string()));
         assert_eq!(flat[0].parent_name, None);
 
         // Children should have Parent as parent_name
-        assert_eq!(flat[1].name, "Child 1");
+        assert_eq!(flat[1].name, Some("Child 1".to_string()));
         assert_eq!(flat[1].parent_name, Some("Parent".to_string()));
 
-        assert_eq!(flat[2].name, "Child 2");
+        assert_eq!(flat[2].name, Some("Child 2".to_string()));
         assert_eq!(flat[2].parent_name, Some("Parent".to_string()));
     }
 
@@ -1413,26 +1610,28 @@ mod tests {
     fn test_classify_operations_all_create() {
         let flat_tasks = vec![
             FlatTask {
-                name: "Task 1".to_string(),
+                name: Some("Task 1".to_string()),
                 spec: None,
                 priority: None,
                 parent_name: None,
                 depends_on: vec![],
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 explicit_parent_id: None,
+                ..Default::default()
             },
             FlatTask {
-                name: "Task 2".to_string(),
+                name: Some("Task 2".to_string()),
                 spec: None,
                 priority: None,
                 parent_name: None,
                 depends_on: vec![],
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 explicit_parent_id: None,
+                ..Default::default()
             },
         ];
 
@@ -1448,26 +1647,28 @@ mod tests {
     fn test_classify_operations_all_update() {
         let flat_tasks = vec![
             FlatTask {
-                name: "Task 1".to_string(),
+                name: Some("Task 1".to_string()),
                 spec: None,
                 priority: None,
                 parent_name: None,
                 depends_on: vec![],
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 explicit_parent_id: None,
+                ..Default::default()
             },
             FlatTask {
-                name: "Task 2".to_string(),
+                name: Some("Task 2".to_string()),
                 spec: None,
                 priority: None,
                 parent_name: None,
                 depends_on: vec![],
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 explicit_parent_id: None,
+                ..Default::default()
             },
         ];
 
@@ -1478,40 +1679,36 @@ mod tests {
         let operations = classify_operations(&flat_tasks, &existing);
 
         assert_eq!(operations.len(), 2);
-        assert!(matches!(
-            operations[0],
-            Operation::Update { task_id: 1, .. }
-        ));
-        assert!(matches!(
-            operations[1],
-            Operation::Update { task_id: 2, .. }
-        ));
+        assert!(matches!(operations[0], Operation::Update { id: 1, .. }));
+        assert!(matches!(operations[1], Operation::Update { id: 2, .. }));
     }
 
     #[test]
     fn test_classify_operations_mixed() {
         let flat_tasks = vec![
             FlatTask {
-                name: "Existing Task".to_string(),
+                name: Some("Existing Task".to_string()),
                 spec: None,
                 priority: None,
                 parent_name: None,
                 depends_on: vec![],
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 explicit_parent_id: None,
+                ..Default::default()
             },
             FlatTask {
-                name: "New Task".to_string(),
+                name: Some("New Task".to_string()),
                 spec: None,
                 priority: None,
                 parent_name: None,
                 depends_on: vec![],
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 explicit_parent_id: None,
+                ..Default::default()
             },
         ];
 
@@ -1521,25 +1718,23 @@ mod tests {
         let operations = classify_operations(&flat_tasks, &existing);
 
         assert_eq!(operations.len(), 2);
-        assert!(matches!(
-            operations[0],
-            Operation::Update { task_id: 42, .. }
-        ));
+        assert!(matches!(operations[0], Operation::Update { id: 42, .. }));
         assert!(matches!(operations[1], Operation::Create(_)));
     }
 
     #[test]
     fn test_classify_operations_explicit_task_id() {
         let flat_tasks = vec![FlatTask {
-            name: "Task".to_string(),
+            name: Some("Task".to_string()),
             spec: None,
             priority: None,
             parent_name: None,
             depends_on: vec![],
-            task_id: Some(99), // Explicit task_id
+            id: Some(99), // Explicit task_id
             status: None,
             active_form: None,
             explicit_parent_id: None,
+            ..Default::default()
         }];
 
         let existing = HashMap::new(); // Not in existing
@@ -1548,36 +1743,35 @@ mod tests {
 
         // Should still be update because of explicit task_id
         assert_eq!(operations.len(), 1);
-        assert!(matches!(
-            operations[0],
-            Operation::Update { task_id: 99, .. }
-        ));
+        assert!(matches!(operations[0], Operation::Update { id: 99, .. }));
     }
 
     #[test]
     fn test_find_duplicate_names_no_duplicates() {
         let tasks = vec![
             TaskTree {
-                name: "Task 1".to_string(),
+                name: Some("Task 1".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             },
             TaskTree {
-                name: "Task 2".to_string(),
+                name: Some("Task 2".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             },
         ];
 
@@ -1589,37 +1783,40 @@ mod tests {
     fn test_find_duplicate_names_with_duplicates() {
         let tasks = vec![
             TaskTree {
-                name: "Duplicate".to_string(),
+                name: Some("Duplicate".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             },
             TaskTree {
-                name: "Unique".to_string(),
+                name: Some("Unique".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             },
             TaskTree {
-                name: "Duplicate".to_string(),
+                name: Some("Duplicate".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             },
         ];
 
@@ -1631,25 +1828,27 @@ mod tests {
     #[test]
     fn test_find_duplicate_names_nested() {
         let tasks = vec![TaskTree {
-            name: "Parent".to_string(),
+            name: Some("Parent".to_string()),
             spec: None,
             priority: None,
             children: Some(vec![TaskTree {
-                name: "Parent".to_string(), // Duplicate name in child
+                name: Some("Parent".to_string()), // Duplicate name in child
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }]),
             depends_on: None,
-            task_id: None,
+            id: None,
             status: None,
             active_form: None,
             parent_id: None,
+            ..Default::default()
         }];
 
         let duplicates = find_duplicate_names(&tasks);
@@ -1668,61 +1867,65 @@ mod tests {
     fn test_flatten_task_tree_deep_nesting() {
         // Create 4-level deep nesting: Root -> L1 -> L2 -> L3
         let tasks = vec![TaskTree {
-            name: "Root".to_string(),
+            name: Some("Root".to_string()),
             spec: None,
             priority: None,
             children: Some(vec![TaskTree {
-                name: "Level1".to_string(),
+                name: Some("Level1".to_string()),
                 spec: None,
                 priority: None,
                 children: Some(vec![TaskTree {
-                    name: "Level2".to_string(),
+                    name: Some("Level2".to_string()),
                     spec: None,
                     priority: None,
                     children: Some(vec![TaskTree {
-                        name: "Level3".to_string(),
+                        name: Some("Level3".to_string()),
                         spec: None,
                         priority: None,
                         children: None,
                         depends_on: None,
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     }]),
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 }]),
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }]),
             depends_on: None,
-            task_id: None,
+            id: None,
             status: None,
             active_form: None,
             parent_id: None,
+            ..Default::default()
         }];
 
         let flat = flatten_task_tree(&tasks);
         assert_eq!(flat.len(), 4);
 
         // Check parent relationships
-        assert_eq!(flat[0].name, "Root");
+        assert_eq!(flat[0].name, Some("Root".to_string()));
         assert_eq!(flat[0].parent_name, None);
 
-        assert_eq!(flat[1].name, "Level1");
+        assert_eq!(flat[1].name, Some("Level1".to_string()));
         assert_eq!(flat[1].parent_name, Some("Root".to_string()));
 
-        assert_eq!(flat[2].name, "Level2");
+        assert_eq!(flat[2].name, Some("Level2".to_string()));
         assert_eq!(flat[2].parent_name, Some("Level1".to_string()));
 
-        assert_eq!(flat[3].name, "Level3");
+        assert_eq!(flat[3].name, Some("Level3".to_string()));
         assert_eq!(flat[3].parent_name, Some("Level2".to_string()));
     }
 
@@ -1730,28 +1933,30 @@ mod tests {
     fn test_flatten_task_tree_many_siblings() {
         let children: Vec<TaskTree> = (0..10)
             .map(|i| TaskTree {
-                name: format!("Child {}", i),
+                name: Some(format!("Child {}", i)),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             })
             .collect();
 
         let tasks = vec![TaskTree {
-            name: "Parent".to_string(),
+            name: Some("Parent".to_string()),
             spec: None,
             priority: None,
             children: Some(children),
             depends_on: None,
-            task_id: None,
+            id: None,
             status: None,
             active_form: None,
             parent_id: None,
+            ..Default::default()
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -1768,59 +1973,64 @@ mod tests {
         // Complex structure with multiple levels and siblings
         let tasks = vec![
             TaskTree {
-                name: "Task 1".to_string(),
+                name: Some("Task 1".to_string()),
                 spec: None,
                 priority: None,
                 children: Some(vec![
                     TaskTree {
-                        name: "Task 1.1".to_string(),
+                        name: Some("Task 1.1".to_string()),
                         spec: None,
                         priority: None,
                         children: None,
                         depends_on: None,
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     },
                     TaskTree {
-                        name: "Task 1.2".to_string(),
+                        name: Some("Task 1.2".to_string()),
                         spec: None,
                         priority: None,
                         children: Some(vec![TaskTree {
-                            name: "Task 1.2.1".to_string(),
+                            name: Some("Task 1.2.1".to_string()),
                             spec: None,
                             priority: None,
                             children: None,
                             depends_on: None,
-                            task_id: None,
+                            id: None,
                             status: None,
                             active_form: None,
                             parent_id: None,
+                            ..Default::default()
                         }]),
                         depends_on: None,
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     },
                 ]),
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             },
             TaskTree {
-                name: "Task 2".to_string(),
+                name: Some("Task 2".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: Some(vec!["Task 1".to_string()]),
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             },
         ];
 
@@ -1828,19 +2038,19 @@ mod tests {
         assert_eq!(flat.len(), 5);
 
         // Verify structure
-        assert_eq!(flat[0].name, "Task 1");
+        assert_eq!(flat[0].name, Some("Task 1".to_string()));
         assert_eq!(flat[0].parent_name, None);
 
-        assert_eq!(flat[1].name, "Task 1.1");
+        assert_eq!(flat[1].name, Some("Task 1.1".to_string()));
         assert_eq!(flat[1].parent_name, Some("Task 1".to_string()));
 
-        assert_eq!(flat[2].name, "Task 1.2");
+        assert_eq!(flat[2].name, Some("Task 1.2".to_string()));
         assert_eq!(flat[2].parent_name, Some("Task 1".to_string()));
 
-        assert_eq!(flat[3].name, "Task 1.2.1");
+        assert_eq!(flat[3].name, Some("Task 1.2.1".to_string()));
         assert_eq!(flat[3].parent_name, Some("Task 1.2".to_string()));
 
-        assert_eq!(flat[4].name, "Task 2");
+        assert_eq!(flat[4].name, Some("Task 2".to_string()));
         assert_eq!(flat[4].parent_name, None);
         assert_eq!(flat[4].depends_on, vec!["Task 1"]);
     }
@@ -1854,38 +2064,41 @@ mod tests {
         // Create a plan with hierarchy and dependencies
         let request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Integration Test Plan".to_string(),
+                name: Some("Integration Test Plan".to_string()),
                 spec: Some("Test plan execution end-to-end".to_string()),
                 priority: Some(PriorityValue::High),
                 children: Some(vec![
                     TaskTree {
-                        name: "Subtask A".to_string(),
+                        name: Some("Subtask A".to_string()),
                         spec: Some("First subtask".to_string()),
                         priority: None,
                         children: None,
                         depends_on: None,
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     },
                     TaskTree {
-                        name: "Subtask B".to_string(),
+                        name: Some("Subtask B".to_string()),
                         spec: Some("Second subtask depends on A".to_string()),
                         priority: None,
                         children: None,
                         depends_on: Some(vec!["Subtask A".to_string()]),
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     },
                 ]),
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -1957,38 +2170,41 @@ mod tests {
         // Create a plan
         let request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Idempotent Task".to_string(),
+                name: Some("Idempotent Task".to_string()),
                 spec: Some("Initial spec".to_string()),
                 priority: Some(PriorityValue::High),
                 children: Some(vec![
                     TaskTree {
-                        name: "Child 1".to_string(),
+                        name: Some("Child 1".to_string()),
                         spec: Some("Child spec 1".to_string()),
                         priority: None,
                         children: None,
                         depends_on: None,
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     },
                     TaskTree {
-                        name: "Child 2".to_string(),
+                        name: Some("Child 2".to_string()),
                         spec: Some("Child spec 2".to_string()),
                         priority: Some(PriorityValue::Low),
                         children: None,
                         depends_on: None,
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     },
                 ]),
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -2035,38 +2251,41 @@ mod tests {
         // Third execution with modified plan - should update with new values
         let modified_request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Idempotent Task".to_string(),
+                name: Some("Idempotent Task".to_string()),
                 spec: Some("Updated spec".to_string()), // Changed
                 priority: Some(PriorityValue::Critical), // Changed
                 children: Some(vec![
                     TaskTree {
-                        name: "Child 1".to_string(),
+                        name: Some("Child 1".to_string()),
                         spec: Some("Updated child spec 1".to_string()), // Changed
                         priority: None,
                         children: None,
                         depends_on: None,
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     },
                     TaskTree {
-                        name: "Child 2".to_string(),
+                        name: Some("Child 2".to_string()),
                         spec: Some("Child spec 2".to_string()), // Unchanged
                         priority: Some(PriorityValue::Low),
                         children: None,
                         depends_on: None,
-                        task_id: None,
+                        id: None,
                         status: None,
                         active_form: None,
                         parent_id: None,
+                        ..Default::default()
                     },
                 ]),
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -2105,48 +2324,52 @@ mod tests {
         let request = PlanRequest {
             tasks: vec![
                 TaskTree {
-                    name: "Foundation".to_string(),
+                    name: Some("Foundation".to_string()),
                     spec: Some("Base layer".to_string()),
                     priority: Some(PriorityValue::Critical),
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Layer 1".to_string(),
+                    name: Some("Layer 1".to_string()),
                     spec: Some("Depends on Foundation".to_string()),
                     priority: Some(PriorityValue::High),
                     children: None,
                     depends_on: Some(vec!["Foundation".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Layer 2".to_string(),
+                    name: Some("Layer 2".to_string()),
                     spec: Some("Depends on Layer 1".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Layer 1".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Integration".to_string(),
+                    name: Some("Integration".to_string()),
                     spec: Some("Depends on both Foundation and Layer 2".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Foundation".to_string(), "Layer 2".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
             ],
         };
@@ -2213,15 +2436,16 @@ mod tests {
         // Create a plan with an invalid dependency
         let request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Task A".to_string(),
+                name: Some("Task A".to_string()),
                 spec: Some("Depends on non-existent task".to_string()),
                 priority: None,
                 children: None,
                 depends_on: Some(vec!["NonExistent".to_string()]),
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -2248,26 +2472,28 @@ mod tests {
         let request = PlanRequest {
             tasks: vec![
                 TaskTree {
-                    name: "Task A".to_string(),
+                    name: Some("Task A".to_string()),
                     spec: Some("Depends on B".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Task B".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Task B".to_string(),
+                    name: Some("Task B".to_string()),
                     spec: Some("Depends on A".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Task A".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
             ],
         };
@@ -2300,37 +2526,40 @@ mod tests {
         let request = PlanRequest {
             tasks: vec![
                 TaskTree {
-                    name: "Task A".to_string(),
+                    name: Some("Task A".to_string()),
                     spec: Some("Depends on B".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Task B".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Task B".to_string(),
+                    name: Some("Task B".to_string()),
                     spec: Some("Depends on C".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Task C".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Task C".to_string(),
+                    name: Some("Task C".to_string()),
                     spec: Some("Depends on A".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Task A".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
             ],
         };
@@ -2368,48 +2597,52 @@ mod tests {
         let request = PlanRequest {
             tasks: vec![
                 TaskTree {
-                    name: "Task A".to_string(),
+                    name: Some("Task A".to_string()),
                     spec: Some("Root task".to_string()),
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Task B".to_string(),
+                    name: Some("Task B".to_string()),
                     spec: Some("Depends on A".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Task A".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Task C".to_string(),
+                    name: Some("Task C".to_string()),
                     spec: Some("Depends on A".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Task A".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Task D".to_string(),
+                    name: Some("Task D".to_string()),
                     spec: Some("Depends on B and C".to_string()),
                     priority: None,
                     children: None,
                     depends_on: Some(vec!["Task B".to_string(), "Task C".to_string()]),
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
             ],
         };
@@ -2434,15 +2667,16 @@ mod tests {
         // Create a plan with self-dependency: A → A
         let request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Task A".to_string(),
+                name: Some("Task A".to_string()),
                 spec: Some("Depends on itself".to_string()),
                 priority: None,
                 children: None,
                 depends_on: Some(vec!["Task A".to_string()]),
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -2485,26 +2719,28 @@ mod tests {
         let request = PlanRequest {
             tasks: vec![
                 TaskTree {
-                    name: "Task A".to_string(),
+                    name: Some("Task A".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Task B".to_string(),
+                    name: Some("Task B".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
             ],
         };
@@ -2536,15 +2772,16 @@ mod tests {
         let mut tasks = Vec::new();
         for i in 0..1000 {
             tasks.push(TaskTree {
-                name: format!("Task {}", i),
+                name: Some(format!("Task {}", i)),
                 spec: Some(format!("Spec for task {}", i)),
                 priority: Some(PriorityValue::Medium),
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             });
         }
 
@@ -2575,7 +2812,7 @@ mod tests {
         // Generate deep nesting: 20 levels
         fn build_deep_tree(depth: usize, current: usize) -> TaskTree {
             TaskTree {
-                name: format!("Level {}", current),
+                name: Some(format!("Level {}", current)),
                 spec: Some(format!("Task at depth {}", current)),
                 priority: Some(PriorityValue::Low),
                 children: if current < depth {
@@ -2584,10 +2821,11 @@ mod tests {
                     None
                 },
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }
         }
 
@@ -2616,26 +2854,27 @@ mod tests {
     #[test]
     fn test_flatten_preserves_all_fields() {
         let tasks = vec![TaskTree {
-            name: "Full Task".to_string(),
+            name: Some("Full Task".to_string()),
             spec: Some("Detailed spec".to_string()),
             priority: Some(PriorityValue::Critical),
             children: None,
             depends_on: Some(vec!["Dep1".to_string(), "Dep2".to_string()]),
-            task_id: Some(42),
+            id: Some(42),
             status: None,
             active_form: None,
             parent_id: None,
+            ..Default::default()
         }];
 
         let flat = flatten_task_tree(&tasks);
         assert_eq!(flat.len(), 1);
 
         let task = &flat[0];
-        assert_eq!(task.name, "Full Task");
+        assert_eq!(task.name, Some("Full Task".to_string()));
         assert_eq!(task.spec, Some("Detailed spec".to_string()));
         assert_eq!(task.priority, Some(PriorityValue::Critical));
         assert_eq!(task.depends_on, vec!["Dep1", "Dep2"]);
-        assert_eq!(task.task_id, Some(42));
+        assert_eq!(task.id, Some(42));
     }
 }
 
@@ -2653,15 +2892,16 @@ mod dataflow_tests {
         // 第1步：使用Plan工具创建带status和active_form的任务
         let request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Test Active Form Task".to_string(),
+                name: Some("Test Active Form Task".to_string()),
                 spec: Some("Testing complete dataflow".to_string()),
                 priority: Some(PriorityValue::High),
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: Some(TaskStatus::Doing),
                 active_form: Some("Testing complete dataflow now".to_string()),
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -2733,15 +2973,16 @@ mod parent_id_tests {
     #[test]
     fn test_flatten_propagates_parent_id() {
         let tasks = vec![TaskTree {
-            name: "Task with explicit parent".to_string(),
+            name: Some("Task with explicit parent".to_string()),
             spec: None,
             priority: None,
             children: None,
             depends_on: None,
-            task_id: None,
+            id: None,
             status: None,
             active_form: None,
             parent_id: Some(Some(99)),
+            ..Default::default()
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -2752,15 +2993,16 @@ mod parent_id_tests {
     #[test]
     fn test_flatten_propagates_null_parent_id() {
         let tasks = vec![TaskTree {
-            name: "Explicit root task".to_string(),
+            name: Some("Explicit root task".to_string()),
             spec: None,
             priority: None,
             children: None,
             depends_on: None,
-            task_id: None,
+            id: None,
             status: None,
             active_form: None,
             parent_id: Some(None), // Explicit null
+            ..Default::default()
         }];
 
         let flat = flatten_task_tree(&tasks);
@@ -2775,15 +3017,16 @@ mod parent_id_tests {
         // First create a parent task
         let request1 = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Parent Task".to_string(),
+                name: Some("Parent Task".to_string()),
                 spec: Some("This is the parent".to_string()),
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: Some(TaskStatus::Doing),
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -2795,15 +3038,16 @@ mod parent_id_tests {
         // Now create a child task using explicit parent_id
         let request2 = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Child Task".to_string(),
+                name: Some("Child Task".to_string()),
                 spec: Some("This uses explicit parent_id".to_string()),
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: Some(Some(parent_id)),
+                ..Default::default()
             }],
         };
 
@@ -2828,15 +3072,16 @@ mod parent_id_tests {
         // Even when default_parent_id is set
         let request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Explicit Root Task".to_string(),
+                name: Some("Explicit Root Task".to_string()),
                 spec: Some("Should be root despite default parent".to_string()),
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: Some(TaskStatus::Doing),
                 active_form: None,
                 parent_id: Some(None), // Explicit null = root
+                ..Default::default()
             }],
         };
 
@@ -2844,15 +3089,16 @@ mod parent_id_tests {
         // First create a "default parent" task
         let parent_request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Default Parent".to_string(),
+                name: Some("Default Parent".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
         let executor = PlanExecutor::new(&ctx.pool);
@@ -2885,25 +3131,27 @@ mod parent_id_tests {
         // Create a task hierarchy where children nesting should override parent_id
         let request = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Parent via Nesting".to_string(),
+                name: Some("Parent via Nesting".to_string()),
                 spec: Some("Test parent spec".to_string()),
                 priority: None,
                 children: Some(vec![TaskTree {
-                    name: "Child via Nesting".to_string(),
+                    name: Some("Child via Nesting".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: Some(Some(999)), // This should be ignored!
+                    ..Default::default()
                 }]),
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: Some(TaskStatus::Doing),
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -2936,26 +3184,28 @@ mod parent_id_tests {
         let request1 = PlanRequest {
             tasks: vec![
                 TaskTree {
-                    name: "Task A".to_string(),
+                    name: Some("Task A".to_string()),
                     spec: Some("Task A spec".to_string()),
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: Some(TaskStatus::Doing),
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
                 TaskTree {
-                    name: "Task B".to_string(),
+                    name: Some("Task B".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: None,
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 },
             ],
         };
@@ -2976,15 +3226,16 @@ mod parent_id_tests {
         // Now update Task B to be a child of Task A using parent_id
         let request2 = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Task B".to_string(), // Same name = update
+                name: Some("Task B".to_string()), // Same name = update
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: None,
                 active_form: None,
                 parent_id: Some(Some(task_a_id)), // Set parent to Task A
+                ..Default::default()
             }],
         };
 
@@ -3013,25 +3264,27 @@ mod parent_id_tests {
         // Create parent with incomplete child
         let request1 = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Parent Task".to_string(),
+                name: Some("Parent Task".to_string()),
                 spec: Some("Parent spec".to_string()),
                 priority: None,
                 children: Some(vec![TaskTree {
-                    name: "Child Task".to_string(),
+                    name: Some("Child Task".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: Some(TaskStatus::Todo), // Child is not done
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 }]),
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: Some(TaskStatus::Doing),
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -3041,15 +3294,16 @@ mod parent_id_tests {
         // Try to complete parent while child is incomplete
         let request2 = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Parent Task".to_string(),
+                name: Some("Parent Task".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: Some(TaskStatus::Done), // Try to set done
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -3074,25 +3328,27 @@ mod parent_id_tests {
         // Create parent with child
         let request1 = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Parent Task".to_string(),
+                name: Some("Parent Task".to_string()),
                 spec: Some("Parent spec".to_string()),
                 priority: None,
                 children: Some(vec![TaskTree {
-                    name: "Child Task".to_string(),
+                    name: Some("Child Task".to_string()),
                     spec: None,
                     priority: None,
                     children: None,
                     depends_on: None,
-                    task_id: None,
+                    id: None,
                     status: Some(TaskStatus::Todo),
                     active_form: None,
                     parent_id: None,
+                    ..Default::default()
                 }]),
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: Some(TaskStatus::Doing),
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -3102,15 +3358,16 @@ mod parent_id_tests {
         // Complete child first
         let request2 = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Child Task".to_string(),
+                name: Some("Child Task".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: Some(TaskStatus::Done),
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
@@ -3120,19 +3377,1248 @@ mod parent_id_tests {
         // Now parent can be completed
         let request3 = PlanRequest {
             tasks: vec![TaskTree {
-                name: "Parent Task".to_string(),
+                name: Some("Parent Task".to_string()),
                 spec: None,
                 priority: None,
                 children: None,
                 depends_on: None,
-                task_id: None,
+                id: None,
                 status: Some(TaskStatus::Done),
                 active_form: None,
                 parent_id: None,
+                ..Default::default()
             }],
         };
 
         let result3 = executor.execute(&request3).await.unwrap();
         assert!(result3.success, "Should succeed when child is complete");
+    }
+}
+
+#[cfg(test)]
+mod delete_tests {
+    use super::*;
+    use crate::test_utils::test_helpers::TestContext;
+    use serial_test::serial;
+
+    #[tokio::test]
+    async fn test_delete_task_by_id_only() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // First create a task
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Task to delete".to_string()),
+                spec: Some("This will be deleted".to_string()),
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let task_id = *result1.task_id_map.get("Task to delete").unwrap();
+
+        // Verify task exists
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(exists.0, 1, "Task should exist");
+
+        // Delete by id only (no name)
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None, // No name needed!
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(task_id),
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+        assert!(result2.success, "Delete should succeed");
+        assert_eq!(result2.deleted_count, 1, "Should delete 1 task");
+        assert_eq!(result2.created_count, 0);
+        assert_eq!(result2.updated_count, 0);
+
+        // Verify task no longer exists
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(exists.0, 0, "Task should be deleted");
+    }
+
+    #[tokio::test]
+    async fn test_delete_requires_id() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Try to delete without id
+        let request = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Task name without id".to_string()),
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: None, // No id!
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result = executor.execute(&request).await.unwrap();
+        assert!(!result.success, "Delete without id should fail");
+        assert!(
+            result.error.as_ref().unwrap().contains("id"),
+            "Error should mention 'id' requirement"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_with_json_syntax() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // First create a task
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("JSON delete test".to_string()),
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let task_id = *result1.task_id_map.get("JSON delete test").unwrap();
+
+        // Test JSON deserialization with just id and delete
+        let json = format!(r#"{{"tasks": [{{"id": {}, "delete": true}}]}}"#, task_id);
+        let request2: PlanRequest = serde_json::from_str(&json).unwrap();
+
+        let result2 = executor.execute(&request2).await.unwrap();
+        assert!(result2.success, "Delete via JSON should succeed");
+        assert_eq!(result2.deleted_count, 1);
+
+        // Verify task no longer exists
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(exists.0, 0, "Task should be deleted");
+    }
+
+    #[tokio::test]
+    async fn test_mixed_create_update_delete_in_one_request() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Create initial tasks
+        let request1 = PlanRequest {
+            tasks: vec![
+                TaskTree {
+                    name: Some("To Update".to_string()),
+                    spec: Some("Original spec".to_string()),
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: None,
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    ..Default::default()
+                },
+                TaskTree {
+                    name: Some("To Delete".to_string()),
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: None,
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    ..Default::default()
+                },
+            ],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let delete_id = *result1.task_id_map.get("To Delete").unwrap();
+
+        // Mixed request: create + update + delete
+        let request2 = PlanRequest {
+            tasks: vec![
+                // Create new
+                TaskTree {
+                    name: Some("Newly Created".to_string()),
+                    spec: Some("Brand new".to_string()),
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: None,
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    ..Default::default()
+                },
+                // Update existing
+                TaskTree {
+                    name: Some("To Update".to_string()),
+                    spec: Some("Updated spec".to_string()),
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: None,
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    ..Default::default()
+                },
+                // Delete existing
+                TaskTree {
+                    name: None,
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: Some(delete_id),
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    delete: Some(true),
+                },
+            ],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+        assert!(result2.success);
+        assert_eq!(result2.created_count, 1, "Should create 1 task");
+        assert_eq!(result2.updated_count, 1, "Should update 1 task");
+        assert_eq!(result2.deleted_count, 1, "Should delete 1 task");
+
+        // Verify "To Delete" no longer exists
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
+            .bind(delete_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(exists.0, 0, "Deleted task should not exist");
+    }
+
+    #[tokio::test]
+    async fn test_delete_nonexistent_id_returns_warning() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Delete a non-existent ID
+        let request = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None,
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(99999), // Non-existent ID
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result = executor.execute(&request).await.unwrap();
+
+        // Should succeed but with warning
+        assert!(
+            result.success,
+            "Delete of non-existent ID should still succeed"
+        );
+        assert_eq!(
+            result.deleted_count, 0,
+            "Should not count non-existent task as deleted"
+        );
+        assert!(
+            !result.warnings.is_empty(),
+            "Should have warning about non-existent task"
+        );
+        assert!(
+            result.warnings[0].contains("not found"),
+            "Warning should mention task not found: {:?}",
+            result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cascade_delete_reports_descendants() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Create a parent with 2 children
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Parent Task".to_string()),
+                spec: None,
+                priority: None,
+                children: Some(vec![
+                    TaskTree {
+                        name: Some("Child 1".to_string()),
+                        spec: None,
+                        priority: None,
+                        children: None,
+                        depends_on: None,
+                        id: None,
+                        status: None,
+                        active_form: None,
+                        parent_id: None,
+                        ..Default::default()
+                    },
+                    TaskTree {
+                        name: Some("Child 2".to_string()),
+                        spec: None,
+                        priority: None,
+                        children: None,
+                        depends_on: None,
+                        id: None,
+                        status: None,
+                        active_form: None,
+                        parent_id: None,
+                        ..Default::default()
+                    },
+                ]),
+                depends_on: None,
+                id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        assert_eq!(
+            result1.created_count, 3,
+            "Should create parent + 2 children"
+        );
+        let parent_id = *result1.task_id_map.get("Parent Task").unwrap();
+
+        // Delete parent - should cascade to children
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None,
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(parent_id),
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        assert!(result2.success, "Cascade delete should succeed");
+        assert_eq!(
+            result2.deleted_count, 1,
+            "deleted_count should only count direct deletes"
+        );
+        assert_eq!(
+            result2.cascade_deleted_count, 2,
+            "Should report 2 cascade-deleted children"
+        );
+        assert!(
+            result2.warnings.iter().any(|w| w.contains("descendant")),
+            "Should have warning about cascade-deleted descendants: {:?}",
+            result2.warnings
+        );
+
+        // Verify all tasks are gone
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks")
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 0, "All tasks should be deleted");
+    }
+
+    #[tokio::test]
+    async fn test_cascade_delete_deep_hierarchy() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Create a deep hierarchy: Root -> L1 -> L2 -> L3
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Root".to_string()),
+                spec: None,
+                priority: None,
+                children: Some(vec![TaskTree {
+                    name: Some("Level1".to_string()),
+                    spec: None,
+                    priority: None,
+                    children: Some(vec![TaskTree {
+                        name: Some("Level2".to_string()),
+                        spec: None,
+                        priority: None,
+                        children: Some(vec![TaskTree {
+                            name: Some("Level3".to_string()),
+                            spec: None,
+                            priority: None,
+                            children: None,
+                            depends_on: None,
+                            id: None,
+                            status: None,
+                            active_form: None,
+                            parent_id: None,
+                            ..Default::default()
+                        }]),
+                        depends_on: None,
+                        id: None,
+                        status: None,
+                        active_form: None,
+                        parent_id: None,
+                        ..Default::default()
+                    }]),
+                    depends_on: None,
+                    id: None,
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    ..Default::default()
+                }]),
+                depends_on: None,
+                id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        assert_eq!(result1.created_count, 4);
+        let root_id = *result1.task_id_map.get("Root").unwrap();
+
+        // Delete root - should cascade to all descendants
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None,
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(root_id),
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        assert!(result2.success);
+        assert_eq!(
+            result2.deleted_count, 1,
+            "Only root counted as direct delete"
+        );
+        assert_eq!(
+            result2.cascade_deleted_count, 3,
+            "Should cascade-delete 3 descendants"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_multiple_ids_with_mixed_results() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Create one task
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Existing Task".to_string()),
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        let existing_id = *result1.task_id_map.get("Existing Task").unwrap();
+
+        // Try to delete: one existing, one non-existent
+        let request2 = PlanRequest {
+            tasks: vec![
+                TaskTree {
+                    name: None,
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: Some(existing_id),
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    delete: Some(true),
+                },
+                TaskTree {
+                    name: None,
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: Some(88888), // Non-existent
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    delete: Some(true),
+                },
+            ],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        assert!(result2.success, "Mixed delete should still succeed");
+        assert_eq!(result2.deleted_count, 1, "Only one task actually deleted");
+        assert!(
+            result2
+                .warnings
+                .iter()
+                .any(|w| w.contains("88888") && w.contains("not found")),
+            "Should warn about non-existent ID 88888: {:?}",
+            result2.warnings
+        );
+    }
+
+    /// P0: Verify that deleting a focused task returns an error (not allowed)
+    #[tokio::test]
+    #[serial]
+    async fn test_delete_focused_task_returns_error() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Set a unique session ID for this test
+        let test_session_id = format!("test-delete-focus-{}", std::process::id());
+        std::env::set_var("IE_SESSION_ID", &test_session_id);
+
+        // Create a task with status: doing (this auto-focuses the task)
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Focused Task".to_string()),
+                spec: Some("## Goal\nTest focus deletion".to_string()),
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: None,
+                status: Some(TaskStatus::Doing),
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success, "Create focused task should succeed");
+        let task_id = *result1.task_id_map.get("Focused Task").unwrap();
+
+        // Verify the task is actually the session's focus
+        let focus_check: Option<(i64,)> =
+            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(&test_session_id)
+                .fetch_optional(&ctx.pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            focus_check.map(|r| r.0),
+            Some(task_id),
+            "Task should be the session's current focus"
+        );
+
+        // Try to delete the focused task - should FAIL
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None,
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(task_id),
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        // Should fail with error about focus
+        assert!(!result2.success, "Delete focused task should fail");
+        let error = result2.error.as_ref().unwrap();
+        assert!(
+            error.contains("focus") && error.contains(&test_session_id),
+            "Error should mention focus and session: {}",
+            error
+        );
+        assert_eq!(result2.deleted_count, 0, "Nothing should be deleted");
+
+        // Verify task still exists
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(exists.0, 1, "Focused task should NOT be deleted");
+
+        // Clean up env var
+        std::env::remove_var("IE_SESSION_ID");
+    }
+
+    /// P0: Verify that deleting the same ID twice in a batch behaves correctly
+    #[tokio::test]
+    async fn test_delete_duplicate_id_in_batch() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Create a task
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Duplicate Delete Target".to_string()),
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let task_id = *result1.task_id_map.get("Duplicate Delete Target").unwrap();
+
+        // Delete the same ID twice in one batch
+        let request2 = PlanRequest {
+            tasks: vec![
+                TaskTree {
+                    name: None,
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: Some(task_id),
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    delete: Some(true),
+                },
+                TaskTree {
+                    name: None,
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: Some(task_id), // Same ID again
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    delete: Some(true),
+                },
+            ],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        // Should succeed but only count 1 deletion
+        assert!(result2.success, "Duplicate delete should still succeed");
+        assert_eq!(
+            result2.deleted_count, 1,
+            "Only the first delete should count"
+        );
+
+        // Second delete attempt should generate a "not found" warning
+        let not_found_warnings: Vec<_> = result2
+            .warnings
+            .iter()
+            .filter(|w| w.contains("not found"))
+            .collect();
+        assert_eq!(
+            not_found_warnings.len(),
+            1,
+            "Should have exactly one 'not found' warning for the duplicate: {:?}",
+            result2.warnings
+        );
+
+        // Verify task is actually deleted
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(exists.0, 0, "Task should be deleted");
+    }
+
+    /// P0: Verify that deleting a parent task is blocked when a child is focused
+    /// This tests CASCADE delete protection
+    #[tokio::test]
+    #[serial]
+    async fn test_delete_parent_blocked_when_child_is_focused() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Set a unique session ID for this test
+        let test_session_id = format!("test-cascade-focus-{}", std::process::id());
+        std::env::set_var("IE_SESSION_ID", &test_session_id);
+
+        // Create a hierarchy: Parent -> Child (focused)
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Parent Task".to_string()),
+                spec: None,
+                priority: None,
+                children: Some(vec![TaskTree {
+                    name: Some("Child Task".to_string()),
+                    spec: Some("## Goal\nChild is focused".to_string()),
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: None,
+                    status: Some(TaskStatus::Doing), // This makes child the focus
+                    active_form: None,
+                    parent_id: None,
+                    ..Default::default()
+                }]),
+                depends_on: None,
+                id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success, "Create hierarchy should succeed");
+        let parent_id = *result1.task_id_map.get("Parent Task").unwrap();
+        let child_id = *result1.task_id_map.get("Child Task").unwrap();
+
+        // Verify child is the focus
+        let focus_check: Option<(i64,)> =
+            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(&test_session_id)
+                .fetch_optional(&ctx.pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            focus_check.map(|r| r.0),
+            Some(child_id),
+            "Child should be the session's focus"
+        );
+
+        // Try to delete parent - should FAIL because child is focused
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None,
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(parent_id),
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        // Should fail with error about cascade
+        assert!(
+            !result2.success,
+            "Delete parent should fail when child is focused"
+        );
+        let error = result2.error.as_ref().unwrap();
+        assert!(
+            error.contains("cascade"),
+            "Error should mention cascade: {}",
+            error
+        );
+        assert!(
+            error.contains(&child_id.to_string()),
+            "Error should mention child task ID {}: {}",
+            child_id,
+            error
+        );
+
+        // Verify both tasks still exist
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks")
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 2, "Both tasks should still exist");
+
+        // Clean up env var
+        std::env::remove_var("IE_SESSION_ID");
+    }
+
+    /// P0: Verify that batch delete is blocked when ANY subtree contains focus
+    /// This prevents order-based bypass tricks
+    #[tokio::test]
+    #[serial]
+    async fn test_batch_delete_blocked_when_subtree_contains_focus() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Set a unique session ID for this test
+        let test_session_id = format!("test-batch-focus-{}", std::process::id());
+        std::env::set_var("IE_SESSION_ID", &test_session_id);
+
+        // Create: Parent -> Child (focused)
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("BatchParent".to_string()),
+                spec: None,
+                priority: None,
+                children: Some(vec![TaskTree {
+                    name: Some("BatchChild".to_string()),
+                    spec: Some("## Goal\nFocused child".to_string()),
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: None,
+                    status: Some(TaskStatus::Doing),
+                    active_form: None,
+                    parent_id: None,
+                    ..Default::default()
+                }]),
+                depends_on: None,
+                id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let parent_id = *result1.task_id_map.get("BatchParent").unwrap();
+        let child_id = *result1.task_id_map.get("BatchChild").unwrap();
+
+        // Try batch delete: [parent, child] - should fail even though parent is first
+        // Because focus check happens BEFORE any deletions
+        let request2 = PlanRequest {
+            tasks: vec![
+                TaskTree {
+                    name: None,
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: Some(parent_id),
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    delete: Some(true),
+                },
+                TaskTree {
+                    name: None,
+                    spec: None,
+                    priority: None,
+                    children: None,
+                    depends_on: None,
+                    id: Some(child_id),
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    delete: Some(true),
+                },
+            ],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        // Should fail - focus protection kicks in before any delete
+        assert!(!result2.success, "Batch delete should fail");
+        assert!(
+            result2.error.as_ref().unwrap().contains("focus"),
+            "Error should mention focus: {:?}",
+            result2.error
+        );
+        assert_eq!(result2.deleted_count, 0, "Nothing should be deleted");
+
+        // Verify both tasks still exist
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks")
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 2, "Both tasks should still exist");
+
+        // Clean up env var
+        std::env::remove_var("IE_SESSION_ID");
+    }
+
+    /// P0: Verify focus protection works for deep hierarchies
+    #[tokio::test]
+    #[serial]
+    async fn test_delete_blocked_when_deep_descendant_is_focused() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        let test_session_id = format!("test-deep-focus-{}", std::process::id());
+        std::env::set_var("IE_SESSION_ID", &test_session_id);
+
+        // Create: Root -> L1 -> L2 -> L3 (focused)
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Root".to_string()),
+                spec: None,
+                priority: None,
+                children: Some(vec![TaskTree {
+                    name: Some("Level1".to_string()),
+                    spec: None,
+                    priority: None,
+                    children: Some(vec![TaskTree {
+                        name: Some("Level2".to_string()),
+                        spec: None,
+                        priority: None,
+                        children: Some(vec![TaskTree {
+                            name: Some("Level3".to_string()),
+                            spec: Some("## Goal\nDeep focused task".to_string()),
+                            priority: None,
+                            children: None,
+                            depends_on: None,
+                            id: None,
+                            status: Some(TaskStatus::Doing),
+                            active_form: None,
+                            parent_id: None,
+                            ..Default::default()
+                        }]),
+                        depends_on: None,
+                        id: None,
+                        status: None,
+                        active_form: None,
+                        parent_id: None,
+                        ..Default::default()
+                    }]),
+                    depends_on: None,
+                    id: None,
+                    status: None,
+                    active_form: None,
+                    parent_id: None,
+                    ..Default::default()
+                }]),
+                depends_on: None,
+                id: None,
+                status: None,
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let root_id = *result1.task_id_map.get("Root").unwrap();
+        let level3_id = *result1.task_id_map.get("Level3").unwrap();
+
+        // Verify Level3 is focused
+        let focus_check: Option<(i64,)> =
+            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(&test_session_id)
+                .fetch_optional(&ctx.pool)
+                .await
+                .unwrap();
+        assert_eq!(focus_check.map(|r| r.0), Some(level3_id));
+
+        // Try to delete Root - should fail because Level3 (deep descendant) is focused
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None,
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(root_id),
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        assert!(
+            !result2.success,
+            "Delete root should fail when deep descendant is focused"
+        );
+        let error = result2.error.as_ref().unwrap();
+        assert!(
+            error.contains("cascade"),
+            "Error should mention cascade: {}",
+            error
+        );
+        assert!(
+            error.contains(&level3_id.to_string()),
+            "Error should mention Level3 ID {}: {}",
+            level3_id,
+            error
+        );
+
+        // Verify all 4 tasks still exist
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks")
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 4, "All tasks should still exist");
+
+        std::env::remove_var("IE_SESSION_ID");
+    }
+
+    /// Verify that deleting a non-existent task with subtree check works correctly
+    /// The subtree check should return None for non-existent tasks (not error)
+    #[tokio::test]
+    async fn test_delete_nonexistent_task_subtree_check_succeeds() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Try to delete a non-existent task ID
+        // The subtree focus check should handle this gracefully
+        let request = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None,
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(99999), // Non-existent
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result = executor.execute(&request).await.unwrap();
+
+        // Should succeed with warning (not error)
+        assert!(result.success, "Delete of non-existent should succeed");
+        assert_eq!(result.deleted_count, 0);
+        assert!(
+            result.warnings.iter().any(|w| w.contains("not found")),
+            "Should have 'not found' warning: {:?}",
+            result.warnings
+        );
+    }
+
+    /// Verify that default session (-1) focus is also protected
+    /// Even without explicit IE_SESSION_ID, tasks use default session "-1"
+    #[tokio::test]
+    #[serial]
+    async fn test_default_session_focus_also_protected() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Remove IE_SESSION_ID - will use default session "-1"
+        std::env::remove_var("IE_SESSION_ID");
+
+        // Create a task with status: doing
+        // This uses default session "-1" for focus
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Default Session Task".to_string()),
+                spec: Some("## Goal\nTest default session".to_string()),
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: None,
+                status: Some(TaskStatus::Doing),
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let task_id = *result1.task_id_map.get("Default Session Task").unwrap();
+
+        // Try to delete - should FAIL because it's focused by default session "-1"
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None,
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(task_id),
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        // Should fail - default session's focus is protected too
+        assert!(
+            !result2.success,
+            "Default session focus should be protected"
+        );
+        assert_eq!(result2.deleted_count, 0);
+
+        // Error should mention default session "-1"
+        let error = result2.error.as_ref().unwrap();
+        assert!(
+            error.contains("-1"),
+            "Error should mention default session '-1': {}",
+            error
+        );
+
+        // Verify task still exists
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(exists.0, 1, "Task should still exist");
+    }
+
+    /// Verify cross-session behavior: Session B CANNOT delete Session A's focus
+    /// Focus protection is GLOBAL - protects tasks focused by ANY session
+    #[tokio::test]
+    #[serial]
+    async fn test_cross_session_delete_blocked() {
+        let ctx = TestContext::new().await;
+        let executor = PlanExecutor::new(&ctx.pool);
+
+        // Session A creates a focused task
+        let session_a = "session-A-cross-test";
+        std::env::set_var("IE_SESSION_ID", session_a);
+
+        let request1 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: Some("Session A Focus".to_string()),
+                spec: Some("## Goal\nSession A's task".to_string()),
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: None,
+                status: Some(TaskStatus::Doing),
+                active_form: None,
+                parent_id: None,
+                ..Default::default()
+            }],
+        };
+
+        let result1 = executor.execute(&request1).await.unwrap();
+        assert!(result1.success);
+        let task_id = *result1.task_id_map.get("Session A Focus").unwrap();
+
+        // Verify Session A has focus
+        let focus_a: Option<(i64,)> =
+            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = ?")
+                .bind(session_a)
+                .fetch_optional(&ctx.pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            focus_a.map(|r| r.0),
+            Some(task_id),
+            "Session A should have focus"
+        );
+
+        // Session B tries to delete Session A's focus
+        let session_b = "session-B-cross-test";
+        std::env::set_var("IE_SESSION_ID", session_b);
+
+        let request2 = PlanRequest {
+            tasks: vec![TaskTree {
+                name: None,
+                spec: None,
+                priority: None,
+                children: None,
+                depends_on: None,
+                id: Some(task_id),
+                status: None,
+                active_form: None,
+                parent_id: None,
+                delete: Some(true),
+            }],
+        };
+
+        let result2 = executor.execute(&request2).await.unwrap();
+
+        // Session B should NOT be able to delete Session A's focus
+        assert!(
+            !result2.success,
+            "Session B should NOT be able to delete Session A's focus"
+        );
+        assert_eq!(result2.deleted_count, 0);
+
+        // Error should mention Session A
+        let error = result2.error.as_ref().unwrap();
+        assert!(
+            error.contains(session_a),
+            "Error should mention session '{}': {}",
+            session_a,
+            error
+        );
+
+        // Verify task still exists
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+        assert_eq!(exists.0, 1, "Task should still exist");
+
+        // Clean up
+        std::env::remove_var("IE_SESSION_ID");
     }
 }

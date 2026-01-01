@@ -9,6 +9,16 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 
 pub use crate::db::models::TaskContext;
+
+/// Result of a delete operation within a transaction
+#[derive(Debug, Clone)]
+pub struct DeleteTaskResult {
+    /// Whether the task was found (false if ID didn't exist)
+    pub found: bool,
+    /// Number of descendant tasks that were cascade-deleted
+    pub descendant_count: i64,
+}
+
 pub struct TaskManager<'a> {
     pool: &'a SqlitePool,
     notifier: crate::notifications::NotificationSender,
@@ -311,6 +321,116 @@ impl<'a> TaskManager<'a> {
             .await?;
 
         Ok(())
+    }
+
+    /// Delete a task within a transaction (no notification)
+    ///
+    /// Used by PlanExecutor for batch delete operations.
+    /// WebSocket notification is sent after transaction commit via notify_batch_changed().
+    ///
+    /// **Warning**: Due to `ON DELETE CASCADE` on `parent_id`, deleting a parent task
+    /// will also delete all descendant tasks. The returned `DeleteTaskResult` includes
+    /// the count of descendants that will be cascade-deleted.
+    ///
+    /// Returns `DeleteTaskResult` with:
+    /// - `found`: whether the task existed
+    /// - `descendant_count`: number of descendants that will be cascade-deleted
+    ///
+    /// Note: Focus protection is handled by the caller (PlanExecutor) BEFORE
+    /// calling this function, using `find_focused_in_subtree_in_tx`.
+    pub async fn delete_task_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        task_id: i64,
+    ) -> Result<DeleteTaskResult> {
+        // Check if task exists and count descendants before deletion
+        let task_info: Option<(i64,)> = sqlx::query_as("SELECT id FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+
+        if task_info.is_none() {
+            return Ok(DeleteTaskResult {
+                found: false,
+                descendant_count: 0,
+            });
+        }
+
+        // Count descendants that will be cascade-deleted
+        let descendant_count = self.count_descendants_in_tx(tx, task_id).await?;
+
+        // Perform the delete (CASCADE will handle children)
+        sqlx::query("DELETE FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .execute(&mut **tx)
+            .await?;
+
+        Ok(DeleteTaskResult {
+            found: true,
+            descendant_count,
+        })
+    }
+
+    /// Count all descendants of a task (children, grandchildren, etc.)
+    async fn count_descendants_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        task_id: i64,
+    ) -> Result<i64> {
+        // Use recursive CTE to count all descendants
+        let count: (i64,) = sqlx::query_as(
+            r#"
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM tasks WHERE parent_id = ?
+                UNION ALL
+                SELECT t.id FROM tasks t
+                INNER JOIN descendants d ON t.parent_id = d.id
+            )
+            SELECT COUNT(*) FROM descendants
+            "#,
+        )
+        .bind(task_id)
+        .fetch_one(&mut **tx)
+        .await?;
+
+        Ok(count.0)
+    }
+
+    /// Find if a task or any of its descendants is ANY session's focus
+    ///
+    /// This is critical for delete protection: deleting a parent task cascades
+    /// to all descendants, so we must check the entire subtree for focus.
+    ///
+    /// Focus protection is GLOBAL - a task focused by any session cannot be deleted.
+    /// This prevents one session from accidentally breaking another session's work.
+    ///
+    /// Returns `Some((task_id, session_id))` if any task in the subtree is focused,
+    /// `None` if no focus found in the subtree.
+    pub async fn find_focused_in_subtree_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        task_id: i64,
+    ) -> Result<Option<(i64, String)>> {
+        // Use recursive CTE to get all task IDs in the subtree (including the root)
+        // Then check if any of them is focused by ANY session
+        let row: Option<(i64, String)> = sqlx::query_as(
+            r#"
+            WITH RECURSIVE subtree AS (
+                SELECT id FROM tasks WHERE id = ?
+                UNION ALL
+                SELECT t.id FROM tasks t
+                INNER JOIN subtree s ON t.parent_id = s.id
+            )
+            SELECT s.current_task_id, s.session_id FROM sessions s
+            WHERE s.current_task_id IN (SELECT id FROM subtree)
+            LIMIT 1
+            "#,
+        )
+        .bind(task_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        Ok(row)
     }
 
     /// Count incomplete children of a task within a transaction

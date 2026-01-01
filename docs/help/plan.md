@@ -82,13 +82,44 @@ echo '{"tasks":[{"name":"Login","status":"doing"}]}' | ie plan
 echo '{"tasks":[{"name":"Login","status":"done"}]}' | ie plan
 ```
 
+### 5. Delete Tasks (delete)
+
+Delete tasks by ID - no name required:
+
+```bash
+# Delete a task by ID only
+echo '{"tasks":[{"id":42,"delete":true}]}' | ie plan
+
+# Mixed operations in one request: create, update, delete
+echo '{
+  "tasks": [
+    {"name": "New Task", "status": "todo"},
+    {"name": "Existing Task", "spec": "Updated spec"},
+    {"id": 99, "delete": true}
+  ]
+}' | ie plan
+```
+
+**Key points:**
+- Delete requires `id` field (name is optional)
+- Delete operations are processed first
+- Can mix create/update/delete in one request
+- **Cascade delete**: Deleting a parent task also deletes all its descendants
+- **Non-existent ID**: Returns success with a warning (not an error)
+- **Focus protection**: Cannot delete ANY session's focus task or its ancestors
+  - Direct delete of focused task → Error
+  - Delete parent when child is focused → Error (would cascade-delete focus)
+  - Focus protection is **global** - protects tasks focused by ANY session
+  - Error message includes which session holds the focus
+  - The session owning the focus must switch focus first, then delete
+
 ## JSON Schema
 
 ```typescript
 {
   "tasks": [
     {
-      "name": string,           // Required: task name (used as identifier)
+      "name": string?,          // Task name (required for create/update, optional for delete)
       "spec": string?,          // Optional: description/specification
       "status": "todo"|"doing"|"done"?,  // Optional: task status
       "priority": "critical"|"high"|"medium"|"low"?,
@@ -96,7 +127,8 @@ echo '{"tasks":[{"name":"Login","status":"done"}]}' | ie plan
       "parent_id": number|null?, // Optional: explicit parent (null = root)
       "children": TaskTree[]?,  // Optional: nested child tasks
       "depends_on": string[]?,  // Optional: dependency names
-      "task_id": number?        // Optional: force update specific task
+      "id": number?,            // Optional: task ID (required for delete, alias: task_id)
+      "delete": boolean?        // Optional: set true to delete the task
     }
   ]
 }
@@ -151,11 +183,12 @@ echo '{
 ## Key Concepts
 
 - **Idempotent**: Safe to run multiple times (updates by name)
-- **Batch**: Create multiple tasks in one operation
+- **Batch**: Create, update, and delete multiple tasks in one operation
 - **Hierarchical**: Nest tasks with children or parent_id
 - **Dependencies**: Automatic cycle detection
 - **Status**: todo/doing/done (only one doing allowed per batch)
 - **Focus**: Doing task auto-focuses
+- **Delete**: Remove tasks by ID (processed first)
 
 ## Common Errors
 
@@ -229,12 +262,17 @@ Plan executed successfully
 
 Created: 3 tasks
 Updated: 1 tasks
+Deleted: 1 tasks
+Cascade deleted: 2 tasks
 Dependencies: 2
 
 Task ID mapping:
   Login -> #42
   Database -> #43
   Tests -> #44
+
+Warnings:
+  - Task #42 had 2 descendant(s) that were also deleted (cascade)
 ```
 
 **JSON** (`--format json`):
@@ -242,7 +280,11 @@ Task ID mapping:
 {
   "success": true,
   "created_count": 3,
-  "task_id_map": {"Login": 42}
+  "updated_count": 1,
+  "deleted_count": 1,
+  "cascade_deleted_count": 2,
+  "task_id_map": {"Login": 42},
+  "warnings": ["Task #42 had 2 descendant(s) that were also deleted (cascade)"]
 }
 ```
 

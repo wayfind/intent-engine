@@ -58,15 +58,16 @@ async fn test_plan_creates_ai_owned_tasks() -> Result<()> {
     // Create tasks via plan (should set owner='ai')
     let plan = PlanRequest {
         tasks: vec![TaskTree {
-            name: "Plan Test Task".to_string(),
+            name: Some("Plan Test Task".to_string()),
             spec: None,
             priority: None,
             status: None,
             active_form: None,
             children: None,
             depends_on: None,
-            task_id: None,
+            id: None,
             parent_id: None,
+            ..Default::default()
         }],
     };
 
