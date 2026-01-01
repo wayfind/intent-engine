@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.11] - 2026-01-01
+
+### Bug Fixes
+
+- Handle FTS5 special chars and UTF-8 truncation in search
+- Restore WebSocket init projects and gitignore static/
+
+### Documentation
+
+- Update CHANGELOG for v0.10.10
+
+### Features
+
+- Add ie-manager scripts for binary installation
+- Add task delete operation in plan command
+
+### Miscellaneous Tasks
+
+- Bump version to v0.10.11
+
 ## [0.10.10] - 2025-12-29
 
 ### Bug Fixes
