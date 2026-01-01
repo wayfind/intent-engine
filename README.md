@@ -68,6 +68,8 @@ When AI starts a session, it runs `ie status`. Everything comes back:
 
 ## Installation
 
+**Claude Code users:** Skip to [Plugin Install](#claude-code) — it handles everything automatically.
+
 ### Step 1: Install Binary
 
 Choose one method:
