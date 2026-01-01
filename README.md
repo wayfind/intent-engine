@@ -10,183 +10,148 @@
 
 ---
 
-## The Problem
-
-AI assistants lose context constantly:
-
-| Scenario | What Happens |
-|----------|--------------|
-| Session ends | All context lost |
-| Tool crashes | Progress vanishes |
-| Computer restarts | Start from zero |
-| After a week | "What was I working on?" |
-
-You waste time re-explaining. AI wastes tokens re-understanding.
-
-## The Solution
-
-```bash
-# Claude Code users: just run this
-/plugin marketplace add wayfind/origin-task
-/plugin install intent-engine@wayfind/origin-task
-```
-
-Now your AI remembers everything — across sessions, crashes, restarts, weeks.
+## AI Forgets. Every Time.
 
 ```
-Week 1, Monday:    "Build authentication system"
-                   AI works, records decisions → saved locally
+Day 1: "Let's build authentication"
+       AI works brilliantly, makes smart decisions...
+       [session ends]
 
-Week 2, Wednesday: "Continue auth"
-                   AI reads memory → "Resuming #42: JWT auth.
-                   Done: token generation, validation middleware.
-                   Next: refresh token rotation.
-                   Decision log: chose HS256 for single-service simplicity."
+Day 2: "Continue authentication"
+       AI: "What authentication?"
 ```
 
-**One command restores full context. Every time.**
+You've been there. We all have.
 
 ---
 
-## Why Intent-Engine
+## One Command Changes Everything
 
-### Context-Friendly
+```bash
+ie status
+```
+
+Now your AI remembers:
+
+```
+Day 2: "Continue authentication"
+       AI: "Resuming task #42: JWT auth.
+            Done: token generation, validation.
+            Next: refresh token rotation.
+            Decision: chose HS256 for single-service simplicity."
+```
+
+**Full context. Instantly restored.**
+
+---
+
+## But It's Not Just About "Remembering"
+
+Think about what actually happens during development:
+
+| Scenario | Without Intent-Engine | With Intent-Engine |
+|----------|----------------------|-------------------|
+| Session ends | Context lost | ✓ Persisted |
+| Tool crashes | Progress gone | ✓ Recoverable |
+| Computer restarts | Start over | ✓ Resume instantly |
+| After a week | "What was I doing?" | ✓ Full history |
+| Multiple agents | Chaos | ✓ Isolated sessions |
+| Complex project | Context explosion | ✓ Focus-driven |
+
+**It's not memory. It's infrastructure for reliable AI workflows.**
+
+---
+
+## Why Intent-Engine Works
+
+### Minimal Footprint
 
 | Aspect | Intent-Engine | Typical Solutions |
 |--------|---------------|-------------------|
-| Context usage | ~200 tokens | Thousands of tokens |
-| Integration | System prompt / Hook / Skill | Heavy MCP servers |
-| Footprint | Single binary, no daemon | Background processes |
+| Context overhead | ~200 tokens | Thousands |
+| Integration | System prompt / Hook | Heavy MCP servers |
+| Runtime | Single binary | Background daemons |
 
-AI gets what it needs. Nothing more.
+AI gets exactly what it needs. Nothing more.
 
-### High Performance
+### Battle-Tested Stack
 
-| Component | Technology | Capability |
-|-----------|------------|------------|
-| Core | Rust | Memory-safe, zero-cost abstractions |
-| Storage | SQLite | Battle-tested, zero-config |
-| Search | FTS5 | GB-scale text, millisecond response |
-| Privacy | Local-only | Your data never leaves your machine |
-
-### Built for Long-Running Tasks
-
-The unsolved problem in AI agents: **tasks that span days or weeks**.
-
-Intent-Engine provides the foundation:
-
-| Challenge | Solution |
-|-----------|----------|
-| Interruptions (crashes, restarts) | Persistent memory |
-| Multi-agent coordination | Session isolation |
-| Task scheduling | Dependency graph (`depends_on`) |
-| Context explosion | Focus-driven retrieval |
-
-```
-Week-long refactoring project:
-├── Agent A (session: "api")     → focus: #12 REST endpoints
-├── Agent B (session: "db")      → focus: #15 Schema migration
-└── Agent C (session: "test")    → focus: #18 Integration tests
-                                   depends_on: [#12, #15]
-
-Each agent: isolated focus, shared task graph, persistent state.
-Orchestrator: reads depends_on, schedules in parallel where possible.
-```
-
-**Result:** Reliable multi-day, multi-agent workflows.
+| Component | Choice | Why |
+|-----------|--------|-----|
+| Language | Rust | Memory-safe, fast |
+| Storage | SQLite | Zero-config, reliable |
+| Search | FTS5 | GB-scale, milliseconds |
+| Location | Local-only | Your data stays yours |
 
 ---
 
-## Quick Start
+## The Bigger Picture: Long-Running Tasks
 
-**Claude Code users:** Plugin handles everything (binary + integration).
+Here's the unsolved problem in AI agents: **tasks that span days or weeks**.
+
+Single-session AI can't handle this. Intent-Engine can.
+
+```
+Week-long refactoring project:
+
+├── Agent A (session: "api")    → focus: #12 REST endpoints
+├── Agent B (session: "db")     → focus: #15 Schema migration
+└── Agent C (session: "test")   → focus: #18 Integration tests
+                                  depends_on: [#12, #15]
+```
+
+**Four capabilities working together:**
+
+| Challenge | Solution |
+|-----------|----------|
+| Interruptions | Persistent memory |
+| Multi-agent | Session isolation |
+| Scheduling | Dependency graph |
+| Context explosion | Focus-driven retrieval |
+
+Each agent maintains isolated focus. Orchestrators read `depends_on` for parallel scheduling. State persists across crashes, restarts, days.
+
+**Result: Reliable multi-day, multi-agent workflows.**
+
+---
+
+## Get Started
+
+**Claude Code (one command):**
 
 ```
 /plugin marketplace add wayfind/origin-task
 /plugin install intent-engine@wayfind/origin-task
 ```
 
-**Other users:** Two steps.
+Done. Plugin handles binary installation and integration.
+
+**Other setups:**
 
 ```bash
-# Step 1: Install binary
-brew install wayfind/tap/intent-engine
-# or: npm install -g @origintask/intent-engine
-# or: cargo install intent-engine
+# Install
+brew install wayfind/tap/intent-engine  # or npm, cargo
 
-# Step 2: Add to your AI's system prompt
-# "Use ie for task memory. Run ie status at session start."
+# Use
+ie status                         # Restore context
+echo '{"tasks":[...]}' | ie plan  # Create tasks
+ie log decision "chose X"         # Record decisions
+ie search "keyword"               # Search history
 ```
 
 ---
 
 ## How It Works
 
-```bash
-ie status              # Restore context: current task, ancestors, decisions
-ie plan                # Create/update tasks (JSON via stdin)
-ie log decision "..."  # Record why you made a choice
-ie search "keyword"    # Full-text search across all history
 ```
-
-Typical AI workflow:
-
-```
-Session Start → ie status → Full context restored
+Session Start → ie status → Context restored
                             ↓
-Working       → ie plan    → Tasks created/updated
-              → ie log     → Decisions recorded
+Working       → ie plan   → Tasks updated
+              → ie log    → Decisions recorded
                             ↓
-Session End   → Data persisted locally
+Interruption  → State persisted automatically
                             ↓
-Next Session  → ie status  → Continue exactly where you left off
-```
-
----
-
-## Installation Details
-
-### Binary Installation
-
-| Method | Command | Notes |
-|--------|---------|-------|
-| Homebrew | `brew install wayfind/tap/intent-engine` | macOS/Linux |
-| npm | `npm install -g @origintask/intent-engine` | Cross-platform |
-| Cargo | `cargo install intent-engine` | Requires Rust |
-| Direct | `curl -fsSL .../ie-manager.sh \| bash -s install` | No dependencies |
-
-### AI Tool Integration
-
-**Claude Code (Plugin)**
-```
-/plugin marketplace add wayfind/origin-task
-/plugin install intent-engine@wayfind/origin-task
-```
-
-**Claude Code (Manual)**
-
-Add to `~/.claude/CLAUDE.md`:
-```markdown
-Use `ie` for task management. Run `ie status` at session start.
-```
-
-**Other AI Tools**
-
-Add to system prompt:
-```
-Use ie for persistent task memory. Commands: ie status, ie plan, ie log, ie search
-```
-
----
-
-## Command Reference
-
-```bash
-ie status                         # Current context
-ie search "todo doing"            # Find unfinished work
-echo '{"tasks":[...]}' | ie plan  # Create/update tasks
-ie log decision "chose X"         # Record decision
-ie dashboard open                 # Visual UI at localhost:11391
+Next Session  → ie status → Continue exactly where you left off
 ```
 
 ---
@@ -194,7 +159,7 @@ ie dashboard open                 # Visual UI at localhost:11391
 ## Documentation
 
 - [Quick Start](docs/en/guide/quickstart.md)
-- [CLAUDE.md](CLAUDE.md) — AI assistant guide
+- [CLAUDE.md](CLAUDE.md) — AI integration guide
 - [Command Reference](docs/en/guide/command-reference-full.md)
 
 ---
