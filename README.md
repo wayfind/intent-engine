@@ -6,93 +6,101 @@
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 
-> **Persistent memory for AI coding assistants.**
+**Persistent memory for AI coding assistants.**
 
----
+<br>
 
 ## AI Forgets. Every Time.
 
+<table>
+<tr>
+<td width="50%">
+
+**Without Intent-Engine**
+
 ```
-Day 1: "Let's build authentication"
-       AI works brilliantly, makes smart decisions...
+Day 1: "Build authentication"
+       AI works brilliantly...
        [session ends]
 
-Day 2: "Continue authentication"
+Day 2: "Continue auth"
        AI: "What authentication?"
 ```
 
-You've been there. We all have.
+</td>
+<td width="50%">
 
----
-
-## One Command Changes Everything
-
-```bash
-ie status
-```
-
-Now your AI remembers:
+**With Intent-Engine**
 
 ```
-Day 2: "Continue authentication"
-       AI: "Resuming task #42: JWT auth.
-            Done: token generation, validation.
-            Next: refresh token rotation.
-            Decision: chose HS256 for single-service simplicity."
+Day 1: "Build authentication"
+       AI works, saves progress...
+       [session ends]
+
+Day 2: "Continue auth"
+       AI: "Resuming #42: JWT auth.
+            Done: token generation.
+            Next: refresh tokens."
 ```
 
-**Full context. Instantly restored.**
+</td>
+</tr>
+</table>
 
----
+**One command restores everything:** `ie status`
 
-## But It's Not Just About "Remembering"
+<br>
 
-Think about what actually happens during development:
+## Not Just Memory — Infrastructure
 
-| Scenario | Without Intent-Engine | With Intent-Engine |
-|----------|----------------------|-------------------|
-| Session ends | Context lost | ✓ Persisted |
-| Tool crashes | Progress gone | ✓ Recoverable |
-| Computer restarts | Start over | ✓ Resume instantly |
-| After a week | "What was I doing?" | ✓ Full history |
-| Multiple agents | Chaos | ✓ Isolated sessions |
+Think about what actually happens:
+
+| | Without | With |
+|:--|:--|:--|
+| Session ends | Lost | ✓ Persisted |
+| Tool crashes | Gone | ✓ Recoverable |
+| Week later | "What was I doing?" | ✓ Full history |
+| Multiple agents | Chaos | ✓ Isolated |
 | Complex project | Context explosion | ✓ Focus-driven |
 
-**It's not memory. It's infrastructure for reliable AI workflows.**
+<br>
 
----
+## Why It Works
 
-## Why Intent-Engine Works
+<table>
+<tr>
+<td width="50%">
 
 ### Minimal Footprint
 
-| Aspect | Intent-Engine | Typical Solutions |
-|--------|---------------|-------------------|
-| Context overhead | ~200 tokens | Thousands |
-| Integration | System prompt / Hook | Heavy MCP servers |
-| Runtime | Single binary | Background daemons |
+- **~200 tokens** context overhead
+- **System prompt / Hook** integration
+- **Single binary**, no daemons
 
-AI gets exactly what it needs. Nothing more.
+</td>
+<td width="50%">
 
 ### Battle-Tested Stack
 
-| Component | Choice | Why |
-|-----------|--------|-----|
-| Language | Rust | Memory-safe, fast |
-| Storage | SQLite | Zero-config, reliable |
-| Search | FTS5 | GB-scale, milliseconds |
-| Location | Local-only | Your data stays yours |
+- **Rust** — memory-safe, fast
+- **SQLite** — zero-config, reliable
+- **FTS5** — GB-scale, milliseconds
+- **Local-only** — your data stays yours
 
----
+</td>
+</tr>
+</table>
 
-## The Bigger Picture: Long-Running Tasks
+<br>
 
-Here's the unsolved problem in AI agents: **tasks that span days or weeks**.
+## The Bigger Picture
 
-Single-session AI can't handle this. Intent-Engine can.
+> **The unsolved problem in AI agents: tasks that span days or weeks.**
+
+Intent-Engine provides the foundation:
 
 ```
-Week-long refactoring project:
+Week-long refactoring:
 
 ├── Agent A (session: "api")    → focus: #12 REST endpoints
 ├── Agent B (session: "db")     → focus: #15 Schema migration
@@ -100,74 +108,68 @@ Week-long refactoring project:
                                   depends_on: [#12, #15]
 ```
 
-**Four capabilities working together:**
-
 | Challenge | Solution |
-|-----------|----------|
+|:--|:--|
 | Interruptions | Persistent memory |
 | Multi-agent | Session isolation |
-| Scheduling | Dependency graph |
+| Scheduling | Dependency graph (`depends_on`) |
 | Context explosion | Focus-driven retrieval |
 
-Each agent maintains isolated focus. Orchestrators read `depends_on` for parallel scheduling. State persists across crashes, restarts, days.
+**Result:** Reliable multi-day, multi-agent workflows.
 
-**Result: Reliable multi-day, multi-agent workflows.**
-
----
+<br>
 
 ## Get Started
 
-**Claude Code (one command):**
+**Claude Code** — one command does everything:
 
 ```
 /plugin marketplace add wayfind/origin-task
 /plugin install intent-engine@wayfind/origin-task
 ```
 
-Done. Plugin handles binary installation and integration.
-
-**Other setups:**
+**Manual setup:**
 
 ```bash
-# Install
-brew install wayfind/tap/intent-engine  # or npm, cargo
+# Install (choose one)
+brew install wayfind/tap/intent-engine
+npm install -g @origintask/intent-engine
+cargo install intent-engine
 
-# Use
+# Core commands
 ie status                         # Restore context
-echo '{"tasks":[...]}' | ie plan  # Create tasks
+echo '{"tasks":[...]}' | ie plan  # Create/update tasks
 ie log decision "chose X"         # Record decisions
 ie search "keyword"               # Search history
 ```
 
----
+<br>
 
 ## How It Works
 
 ```
-Session Start → ie status → Context restored
-                            ↓
-Working       → ie plan   → Tasks updated
-              → ie log    → Decisions recorded
-                            ↓
-Interruption  → State persisted automatically
-                            ↓
-Next Session  → ie status → Continue exactly where you left off
+Session Start  →  ie status  →  Full context restored
+                                       ↓
+Working        →  ie plan    →  Tasks tracked
+               →  ie log     →  Decisions recorded
+                                       ↓
+Interruption   →  Auto-persisted
+                                       ↓
+Next Session   →  ie status  →  Continue where you left off
 ```
 
----
+<br>
 
 ## Documentation
 
-- [Quick Start](docs/en/guide/quickstart.md)
-- [CLAUDE.md](CLAUDE.md) — AI integration guide
-- [Command Reference](docs/en/guide/command-reference-full.md)
+- **[Quick Start](docs/en/guide/quickstart.md)** — Get running in 5 minutes
+- **[CLAUDE.md](CLAUDE.md)** — AI integration guide
+- **[Commands](docs/en/guide/command-reference-full.md)** — Full reference
+
+<br>
 
 ---
 
-## License
+**MIT OR Apache-2.0** · [GitHub](https://github.com/wayfind/intent-engine)
 
-MIT OR Apache-2.0
-
----
-
-**Give your AI the memory it deserves.**
+*Give your AI the memory it deserves.*
