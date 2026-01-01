@@ -6,178 +6,184 @@
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 
----
+> **AI 编程助手的持久记忆。**
 
-> **AI 会遗忘。你不应该反复提醒它。**
+---
 
 ## 问题
 
-每次和 AI 开始新会话：
+AI 助手不断丢失上下文：
 
-```
-第一天："帮我做登录系统"
-       AI 工作出色，做了很多聪明的决策...
-       [会话结束]
+| 场景 | 后果 |
+|------|------|
+| 会话结束 | 上下文全部丢失 |
+| 工具崩溃 | 进度消失 |
+| 电脑重启 | 从零开始 |
+| 一周之后 | "我之前在做什么？" |
 
-第二天："继续做登录系统"
-       AI："什么登录系统？我完全不记得了。"
-```
-
-AI 有强大的推理能力，只是记不住事。
+你浪费时间反复解释。AI 浪费 token 重新理解。
 
 ## 解决方案
 
 ```bash
-cargo install intent-engine
+# Claude Code 用户：运行这一条命令
+/plugin marketplace add wayfind/origin-task
+/plugin install intent-engine@wayfind/origin-task
 ```
 
-现在你的 AI 能记住一切——跨天、跨周、跨月。
+现在你的 AI 记住一切 — 跨会话、跨崩溃、跨重启、跨周。
 
 ```
-第一天："帮我做登录系统"
-       AI 创建任务、工作、记录决策 → 保存到磁盘
+第一周，周一：  "做认证系统"
+                AI 工作，记录决策 → 保存到本地
 
-第二天："继续做登录系统"
-       AI 读取记忆 → "接着做...我们选了 JWT + HS256，
-       token 生成已完成，下一步：OAuth 集成"
+第二周，周三：  "继续认证"
+                AI 读取记忆 → "恢复任务 #42：JWT 认证。
+                已完成：token 生成、验证中间件。
+                下一步：refresh token 轮换。
+                决策记录：选择 HS256，因为单服务场景更简单。"
 ```
 
-**无云端。零配置。纯粹的持久记忆。**
+**一条命令恢复完整上下文。每一次。**
 
 ---
 
-## 工作原理
+## 为什么选择 Intent-Engine
 
-Intent-Engine 给 AI 一套简单协议：
+### 上下文友好
 
-```bash
-ie status              # 我在做什么？
-ie plan                # 创建或更新任务（JSON stdin）
-ie log decision "..."  # 记录为什么做这个选择
-ie search "登录"       # 查找相关历史
-```
+| 方面 | Intent-Engine | 典型方案 |
+|------|---------------|----------|
+| 上下文占用 | ~200 tokens | 数千 tokens |
+| 集成方式 | 系统提示词 / Hook / Skill | 重量级 MCP 服务器 |
+| 运行足迹 | 单二进制，无守护进程 | 后台进程 |
 
-AI 开始会话时运行 `ie status`，一切都回来了：
-- 当前任务及其上下文
-- 所有祖先任务（更大的蓝图）
-- 决策历史（每个选择背后的"为什么"）
+AI 只获取所需信息，不多不少。
 
-**一条命令，完整的上下文恢复。**
+### 高性能
+
+| 组件 | 技术 | 能力 |
+|------|------|------|
+| 核心 | Rust | 内存安全，零成本抽象 |
+| 存储 | SQLite | 久经考验，零配置 |
+| 搜索 | FTS5 | GB 级文本，毫秒响应 |
+| 隐私 | 纯本地 | 数据永不离开你的机器 |
+
+### 智能任务模型
+
+- **层级化** — 把复杂目标拆解为子任务
+- **并行化** — 同时处理多个任务
+- **可追溯** — 每个决策都有上下文记录
+- **可恢复** — 从任何中断点继续
 
 ---
 
-## 安装
+## 快速开始
 
-**Claude Code 用户：** 直接跳到 [插件安装](#claude-code) — 一键完成所有配置。
-
-### 第一步：安装二进制
-
-任选一种方式：
-
-```bash
-# Homebrew (macOS/Linux)
-brew install wayfind/tap/intent-engine
-
-# npm (跨平台)
-npm install -g @origintask/intent-engine
-
-# Cargo (需要 Rust)
-cargo install intent-engine
-
-# 直接下载 (无依赖)
-curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
-```
-
-验证安装：
-```bash
-ie --version
-```
-
-### 第二步：集成 AI 工具
-
-#### Claude Code
-
-**方式 A：插件（推荐）**
+**Claude Code 用户：** 插件一键完成（二进制 + 集成）。
 
 ```
 /plugin marketplace add wayfind/origin-task
 /plugin install intent-engine@wayfind/origin-task
 ```
 
-插件会自动：
-- 每次会话启动时运行 `ie status`
-- 引导 Claude 用 `ie plan` 替代 TodoWrite
+**其他用户：** 两步搞定。
 
-**方式 B：手动配置**
+```bash
+# 第一步：安装二进制
+brew install wayfind/tap/intent-engine
+# 或：npm install -g @origintask/intent-engine
+# 或：cargo install intent-engine
+
+# 第二步：添加到 AI 系统提示词
+# "使用 ie 管理任务记忆。会话开始时运行 ie status。"
+```
+
+---
+
+## 工作原理
+
+```bash
+ie status              # 恢复上下文：当前任务、祖先任务、决策历史
+ie plan                # 创建/更新任务（JSON 通过 stdin）
+ie log decision "..."  # 记录为什么做这个选择
+ie search "关键词"     # 全文搜索所有历史
+```
+
+典型 AI 工作流：
+
+```
+会话开始 → ie status → 完整上下文恢复
+                       ↓
+工作中   → ie plan   → 任务创建/更新
+         → ie log    → 决策记录
+                       ↓
+会话结束 → 数据持久化到本地
+                       ↓
+下次会话 → ie status → 从上次离开的地方继续
+```
+
+---
+
+## 安装详情
+
+### 二进制安装
+
+| 方式 | 命令 | 说明 |
+|------|------|------|
+| Homebrew | `brew install wayfind/tap/intent-engine` | macOS/Linux |
+| npm | `npm install -g @origintask/intent-engine` | 跨平台 |
+| Cargo | `cargo install intent-engine` | 需要 Rust |
+| 直接下载 | `curl -fsSL .../ie-manager.sh \| bash -s install` | 无依赖 |
+
+### AI 工具集成
+
+**Claude Code（插件）**
+```
+/plugin marketplace add wayfind/origin-task
+/plugin install intent-engine@wayfind/origin-task
+```
+
+**Claude Code（手动）**
 
 添加到 `~/.claude/CLAUDE.md`：
 ```markdown
-使用 `ie` 进行任务管理，替代 TodoWrite。
-会话开始时运行 `ie status` 恢复上下文。
+使用 `ie` 管理任务。会话开始时运行 `ie status`。
 ```
 
-#### 其他 AI 工具
+**其他 AI 工具**
 
-任何有 CLI 权限的 AI 都可以使用 `ie` 命令。添加到系统提示词：
+添加到系统提示词：
 ```
-使用 ie 进行持久任务记忆。命令：ie status, ie plan, ie log, ie search
+使用 ie 管理持久任务记忆。命令：ie status, ie plan, ie log, ie search
 ```
 
 ---
 
-## 更深层的理念
-
-大多数工具追踪的是**发生了什么**（提交、日志、事件）。
-
-Intent-Engine 追踪的是**你想做什么**以及**为什么**。
-
-```
-Git:           "修改了 auth.rs 第 42 行"
-Intent-Engine: "为了无状态 API 的可扩展性，选择 JWT 而非 Session"
-```
-
-代码会变。意图永存。
-
----
-
-## 核心功能
-
-- **层级任务** — 把大目标拆解成小目标
-- **决策历史** — 每个"为什么"都有记录
-- **跨会话记忆** — 从上次离开的地方继续
-- **本地存储** — 一切都在 `~/.intent-engine/`，无云端
-- **Dashboard UI** — 在 `localhost:11391` 可视化进度
-
----
-
-## 快速参考
+## 命令参考
 
 ```bash
-ie status                    # 当前上下文
-ie search "todo doing"       # 查找未完成的工作
-echo '{"tasks":[...]}' | ie plan   # 创建/更新任务
-ie log decision "选了 X"     # 记录决策
-ie dashboard open            # 可视化 UI
+ie status                         # 当前上下文
+ie search "todo doing"            # 查找未完成的工作
+echo '{"tasks":[...]}' | ie plan  # 创建/更新任务
+ie log decision "选了 X"          # 记录决策
+ie dashboard open                 # 可视化 UI (localhost:11391)
 ```
 
 ---
 
 ## 文档
 
-- [快速开始](docs/zh-CN/guide/quickstart.md) — 5 分钟上手
-- [CLAUDE.md](CLAUDE.md) — 给 AI 助手
-- [命令参考](docs/zh-CN/guide/command-reference-full.md) — 所有命令
+- [快速开始](docs/zh-CN/guide/quickstart.md)
+- [CLAUDE.md](CLAUDE.md) — AI 助手指南
+- [命令参考](docs/zh-CN/guide/command-reference-full.md)
 
 ---
 
 ## 许可证
 
-MIT 或 Apache-2.0，任选。
+MIT 或 Apache-2.0
 
 ---
 
 **给你的 AI 它应得的记忆。**
-
-```bash
-cargo install intent-engine
-```

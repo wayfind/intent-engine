@@ -6,178 +6,184 @@
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 
----
+> **Persistent memory for AI coding assistants.**
 
-> **AI forgets. You shouldn't have to remind it.**
+---
 
 ## The Problem
 
-Every new session with an AI assistant:
+AI assistants lose context constantly:
 
-```
-Day 1: "Let's build authentication"
-       AI works brilliantly, makes smart decisions...
-       [session ends]
+| Scenario | What Happens |
+|----------|--------------|
+| Session ends | All context lost |
+| Tool crashes | Progress vanishes |
+| Computer restarts | Start from zero |
+| After a week | "What was I working on?" |
 
-Day 2: "Continue authentication"
-       AI: "What authentication? I have no memory of this."
-```
-
-AI has powerful reasoning. It just can't remember.
+You waste time re-explaining. AI wastes tokens re-understanding.
 
 ## The Solution
 
 ```bash
-cargo install intent-engine
+# Claude Code users: just run this
+/plugin marketplace add wayfind/origin-task
+/plugin install intent-engine@wayfind/origin-task
 ```
 
-Now your AI remembers everything — across days, weeks, months.
+Now your AI remembers everything — across sessions, crashes, restarts, weeks.
 
 ```
-Day 1: "Let's build authentication"
-       AI creates task, works, records decisions → saved to disk
+Week 1, Monday:    "Build authentication system"
+                   AI works, records decisions → saved locally
 
-Day 2: "Continue authentication"
-       AI reads memory → "Resuming... we chose JWT with HS256,
-       finished token generation, next: OAuth integration"
+Week 2, Wednesday: "Continue auth"
+                   AI reads memory → "Resuming #42: JWT auth.
+                   Done: token generation, validation middleware.
+                   Next: refresh token rotation.
+                   Decision log: chose HS256 for single-service simplicity."
 ```
 
-**No cloud. No config. Just persistent memory.**
+**One command restores full context. Every time.**
 
 ---
 
-## How It Works
+## Why Intent-Engine
 
-Intent-Engine gives AI a simple protocol:
+### Context-Friendly
 
-```bash
-ie status              # What am I working on?
-ie plan                # Create or update tasks (JSON stdin)
-ie log decision "..."  # Record why I made this choice
-ie search "auth"       # Find relevant history
-```
+| Aspect | Intent-Engine | Typical Solutions |
+|--------|---------------|-------------------|
+| Context usage | ~200 tokens | Thousands of tokens |
+| Integration | System prompt / Hook / Skill | Heavy MCP servers |
+| Footprint | Single binary, no daemon | Background processes |
 
-When AI starts a session, it runs `ie status`. Everything comes back:
-- Current task and its context
-- All ancestor tasks (the bigger picture)
-- Decision history (the "why" behind every choice)
+AI gets what it needs. Nothing more.
 
-**One command. Full context restoration.**
+### High Performance
+
+| Component | Technology | Capability |
+|-----------|------------|------------|
+| Core | Rust | Memory-safe, zero-cost abstractions |
+| Storage | SQLite | Battle-tested, zero-config |
+| Search | FTS5 | GB-scale text, millisecond response |
+| Privacy | Local-only | Your data never leaves your machine |
+
+### Smart Task Model
+
+- **Hierarchical** — Break complex goals into subtasks
+- **Parallel** — Work on multiple tasks concurrently
+- **Traceable** — Every decision recorded with context
+- **Recoverable** — Resume from any interruption point
 
 ---
 
-## Installation
+## Quick Start
 
-**Claude Code users:** Skip to [Plugin Install](#claude-code) — it handles everything automatically.
-
-### Step 1: Install Binary
-
-Choose one method:
-
-```bash
-# Homebrew (macOS/Linux)
-brew install wayfind/tap/intent-engine
-
-# npm (cross-platform)
-npm install -g @origintask/intent-engine
-
-# Cargo (requires Rust)
-cargo install intent-engine
-
-# Direct download (no dependencies)
-curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | bash -s install
-```
-
-Verify installation:
-```bash
-ie --version
-```
-
-### Step 2: Integrate with AI Tool
-
-#### Claude Code
-
-**Option A: Plugin (Recommended)**
+**Claude Code users:** Plugin handles everything (binary + integration).
 
 ```
 /plugin marketplace add wayfind/origin-task
 /plugin install intent-engine@wayfind/origin-task
 ```
 
-The plugin automatically:
-- Runs `ie status` at every session start
-- Guides Claude to use `ie plan` instead of TodoWrite
+**Other users:** Two steps.
 
-**Option B: Manual Setup**
+```bash
+# Step 1: Install binary
+brew install wayfind/tap/intent-engine
+# or: npm install -g @origintask/intent-engine
+# or: cargo install intent-engine
 
-Add to your `~/.claude/CLAUDE.md`:
-```markdown
-Use `ie` for task management instead of TodoWrite.
-Run `ie status` at session start to restore context.
+# Step 2: Add to your AI's system prompt
+# "Use ie for task memory. Run ie status at session start."
 ```
 
-#### Other AI Tools
+---
 
-Any AI with CLI access can use `ie` commands. Add to your system prompt:
+## How It Works
+
+```bash
+ie status              # Restore context: current task, ancestors, decisions
+ie plan                # Create/update tasks (JSON via stdin)
+ie log decision "..."  # Record why you made a choice
+ie search "keyword"    # Full-text search across all history
+```
+
+Typical AI workflow:
+
+```
+Session Start → ie status → Full context restored
+                            ↓
+Working       → ie plan    → Tasks created/updated
+              → ie log     → Decisions recorded
+                            ↓
+Session End   → Data persisted locally
+                            ↓
+Next Session  → ie status  → Continue exactly where you left off
+```
+
+---
+
+## Installation Details
+
+### Binary Installation
+
+| Method | Command | Notes |
+|--------|---------|-------|
+| Homebrew | `brew install wayfind/tap/intent-engine` | macOS/Linux |
+| npm | `npm install -g @origintask/intent-engine` | Cross-platform |
+| Cargo | `cargo install intent-engine` | Requires Rust |
+| Direct | `curl -fsSL .../ie-manager.sh \| bash -s install` | No dependencies |
+
+### AI Tool Integration
+
+**Claude Code (Plugin)**
+```
+/plugin marketplace add wayfind/origin-task
+/plugin install intent-engine@wayfind/origin-task
+```
+
+**Claude Code (Manual)**
+
+Add to `~/.claude/CLAUDE.md`:
+```markdown
+Use `ie` for task management. Run `ie status` at session start.
+```
+
+**Other AI Tools**
+
+Add to system prompt:
 ```
 Use ie for persistent task memory. Commands: ie status, ie plan, ie log, ie search
 ```
 
 ---
 
-## The Deeper Idea
-
-Most tools track **what happened** (commits, logs, events).
-
-Intent-Engine tracks **what you intended** and **why**.
-
-```
-Git:           "Changed auth.rs line 42"
-Intent-Engine: "Chose JWT over sessions for stateless API scalability"
-```
-
-Code changes. Intent persists.
-
----
-
-## Core Features
-
-- **Hierarchical tasks** — break big goals into smaller ones
-- **Decision history** — every "why" recorded with context
-- **Cross-session memory** — pick up where you left off
-- **Local storage** — everything in `~/.intent-engine/`, no cloud
-- **Dashboard UI** — visualize progress at `localhost:11391`
-
----
-
-## Quick Reference
+## Command Reference
 
 ```bash
-ie status                    # Current context
-ie search "todo doing"       # Find unfinished work
-echo '{"tasks":[...]}' | ie plan   # Create/update tasks
-ie log decision "chose X"    # Record decision
-ie dashboard open            # Visual UI
+ie status                         # Current context
+ie search "todo doing"            # Find unfinished work
+echo '{"tasks":[...]}' | ie plan  # Create/update tasks
+ie log decision "chose X"         # Record decision
+ie dashboard open                 # Visual UI at localhost:11391
 ```
 
 ---
 
 ## Documentation
 
-- [Quick Start](docs/en/guide/quickstart.md) — 5 minutes to get going
-- [CLAUDE.md](CLAUDE.md) — For AI assistants
-- [Command Reference](docs/en/guide/command-reference-full.md) — All commands
+- [Quick Start](docs/en/guide/quickstart.md)
+- [CLAUDE.md](CLAUDE.md) — AI assistant guide
+- [Command Reference](docs/en/guide/command-reference-full.md)
 
 ---
 
 ## License
 
-MIT OR Apache-2.0, at your option.
+MIT OR Apache-2.0
 
 ---
 
 **Give your AI the memory it deserves.**
-
-```bash
-cargo install intent-engine
-```
