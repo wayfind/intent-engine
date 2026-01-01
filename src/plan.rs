@@ -254,6 +254,7 @@ impl PlanResult {
     }
 
     /// Create a successful result with warnings and cascade delete count
+    #[allow(clippy::too_many_arguments)]
     pub fn success_with_warnings(
         task_id_map: HashMap<String, i64>,
         created_count: usize,
@@ -970,7 +971,7 @@ impl<'a> PlanExecutor<'a> {
     fn validate_dependencies(&self, flat_tasks: &[FlatTask]) -> Result<()> {
         let task_names: std::collections::HashSet<_> = flat_tasks
             .iter()
-            .filter_map(|t| t.name.as_ref().map(|n| n.as_str()))
+            .filter_map(|t| t.name.as_deref())
             .collect();
 
         for task in flat_tasks {
