@@ -16,10 +16,75 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
+  # Verify CI passed before releasing
+  verify-ci:
+    name: Verify CI Status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get commit SHA for tag
+        id: sha
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+          fi
+
+          # Get the commit SHA that the tag points to
+          SHA=$(gh api repos/${{ github.repository }}/git/refs/tags/$TAG --jq '.object.sha')
+
+          # If it's an annotated tag, get the actual commit
+          TYPE=$(gh api repos/${{ github.repository }}/git/tags/$SHA --jq '.object.type' 2>/dev/null || echo "commit")
+          if [ "$TYPE" == "commit" ]; then
+            COMMIT_SHA=$(gh api repos/${{ github.repository }}/git/tags/$SHA --jq '.object.sha' 2>/dev/null || echo "$SHA")
+          else
+            COMMIT_SHA=$SHA
+          fi
+
+          echo "sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "Tag $TAG points to commit: $COMMIT_SHA"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check CI status
+        run: |
+          echo "Checking CI status for commit: ${{ steps.sha.outputs.sha }}"
+
+          # Wait for CI to complete (max 10 minutes)
+          for i in {1..20}; do
+            STATUS=$(gh api repos/${{ github.repository }}/commits/${{ steps.sha.outputs.sha }}/check-runs \
+              --jq '[.check_runs[] | select(.name | test("CI Success|Quick Tests|Clippy"))] |
+                    if length == 0 then "pending"
+                    elif all(.conclusion == "success") then "success"
+                    elif any(.conclusion == "failure") then "failure"
+                    elif any(.status == "in_progress" or .status == "queued") then "pending"
+                    else "unknown" end')
+
+            echo "Attempt $i: CI status = $STATUS"
+
+            if [ "$STATUS" == "success" ]; then
+              echo "✅ CI passed! Proceeding with release."
+              exit 0
+            elif [ "$STATUS" == "failure" ]; then
+              echo "❌ CI failed! Cannot release."
+              exit 1
+            fi
+
+            echo "⏳ CI still running, waiting 30s..."
+            sleep 30
+          done
+
+          echo "❌ Timeout waiting for CI. Status: $STATUS"
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Build binaries for all platforms in parallel
   build-linux-x64:
+    needs: verify-ci
     uses: ./.github/workflows/_build-release.yml
     with:
       os: ubuntu-latest
@@ -28,6 +93,7 @@ jobs:
       asset-name: intent-engine-linux-x86_64
 
   build-linux-arm64:
+    needs: verify-ci
     uses: ./.github/workflows/_build-release.yml
     with:
       os: ubuntu-latest
@@ -36,6 +102,7 @@ jobs:
       asset-name: intent-engine-linux-aarch64
 
   build-macos-x64:
+    needs: verify-ci
     uses: ./.github/workflows/_build-release.yml
     with:
       os: macos-latest
@@ -44,6 +111,7 @@ jobs:
       asset-name: intent-engine-macos-x86_64
 
   build-macos-arm64:
+    needs: verify-ci
     uses: ./.github/workflows/_build-release.yml
     with:
       os: macos-latest
@@ -52,6 +120,7 @@ jobs:
       asset-name: intent-engine-macos-aarch64
 
   build-windows-x64:
+    needs: verify-ci
     uses: ./.github/workflows/_build-release.yml
     with:
       os: windows-latest
