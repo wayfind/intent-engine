@@ -116,7 +116,8 @@ download_and_install() {
 
     local tmp_dir
     tmp_dir=$(mktemp -d)
-    trap 'rm -rf "${tmp_dir}"' EXIT
+    # Use subshell trap to avoid unbound variable when script exits from other paths
+    trap '[[ -d "${tmp_dir:-}" ]] && rm -rf "${tmp_dir}"' EXIT
 
     # Download with retry
     local max_retries=3
