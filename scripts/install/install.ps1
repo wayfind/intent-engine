@@ -96,19 +96,19 @@ if ($isSourceRepo) {
 # Verify installation
 Print-Info "Verifying installation..."
 try {
-    $intentEngineVersion = intent-engine --version 2>&1
+    $ieVersion = ie --version 2>&1
     if ($LASTEXITCODE -eq 0) {
-        Print-Info "intent-engine is installed: $intentEngineVersion"
+        Print-Info "ie is installed: $ieVersion"
 
         # Run doctor command to check system health
         Print-Info "Running system health check..."
-        intent-engine doctor
+        ie doctor
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host ""
             Print-Info "Installation complete! 🎉"
-            Print-Info "You can now use 'intent-engine' command"
-            Print-Info "Try: intent-engine --help"
+            Print-Info "You can now use 'ie' command"
+            Print-Info "Try: ie --help"
         } else {
             Print-Warning "Installation succeeded but health check failed"
             Print-Info "You may need to troubleshoot your environment"
