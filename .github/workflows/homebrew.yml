@@ -1,11 +1,12 @@
 name: Update Homebrew Formula
 
 # Automatically update homebrew-tap after a successful release
-# This workflow is triggered when a new release is published
+# Triggers: after Release workflow completes successfully
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -17,6 +18,8 @@ jobs:
   update-formula:
     name: Update Homebrew Formula
     runs-on: ubuntu-latest
+    # Only run if Release workflow succeeded (or manual trigger)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout intent-engine
@@ -28,7 +31,8 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             TAG="${{ inputs.tag }}"
           else
-            TAG="${{ github.event.release.tag_name }}"
+            # workflow_run event: get tag from the triggering workflow
+            TAG="${{ github.event.workflow_run.head_branch }}"
           fi
           VERSION="${TAG#v}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
