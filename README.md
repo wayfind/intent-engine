@@ -8,16 +8,11 @@
 
 **Persistent memory for AI coding assistants.**
 
-<br>
+---
 
 ## AI Forgets. Every Time.
 
-<table>
-<tr>
-<td width="50%">
-
-**Without Intent-Engine**
-
+**Without Intent-Engine:**
 ```
 Day 1: "Build authentication"
        AI works brilliantly...
@@ -27,11 +22,7 @@ Day 2: "Continue auth"
        AI: "What authentication?"
 ```
 
-</td>
-<td width="50%">
-
-**With Intent-Engine**
-
+**With Intent-Engine:**
 ```
 Day 1: "Build authentication"
        AI works, saves progress...
@@ -43,55 +34,29 @@ Day 2: "Continue auth"
             Next: refresh tokens."
 ```
 
-</td>
-</tr>
-</table>
-
 **One command restores everything:** `ie status`
 
-<br>
+---
 
 ## Not Just Memory — Infrastructure
 
-Think about what actually happens:
+What actually happens when things go wrong:
 
-| | Without | With |
-|:--|:--|:--|
-| Session ends | Lost | ✓ Persisted |
-| Tool crashes | Gone | ✓ Recoverable |
-| Week later | "What was I doing?" | ✓ Full history |
-| Multiple agents | Chaos | ✓ Isolated |
-| Complex project | Context explosion | ✓ Focus-driven |
+- **Session ends** → ✓ Persisted
+- **Tool crashes** → ✓ Recoverable
+- **Week later** → ✓ Full history
+- **Multiple agents** → ✓ Isolated
+- **Complex project** → ✓ Focus-driven
 
-<br>
+---
 
 ## Why It Works
 
-<table>
-<tr>
-<td width="50%">
+**Minimal Footprint** — ~200 tokens overhead, single binary, no daemons
 
-### Minimal Footprint
+**Battle-Tested Stack** — Rust + SQLite + FTS5, GB-scale in milliseconds, local-only
 
-- **~200 tokens** context overhead
-- **System prompt / Hook** integration
-- **Single binary**, no daemons
-
-</td>
-<td width="50%">
-
-### Battle-Tested Stack
-
-- **Rust** — memory-safe, fast
-- **SQLite** — zero-config, reliable
-- **FTS5** — GB-scale, milliseconds
-- **Local-only** — your data stays yours
-
-</td>
-</tr>
-</table>
-
-<br>
+---
 
 ## The Bigger Picture
 
@@ -108,16 +73,14 @@ Week-long refactoring:
                                   depends_on: [#12, #15]
 ```
 
-| Challenge | Solution |
-|:--|:--|
-| Interruptions | Persistent memory |
-| Multi-agent | Session isolation |
-| Scheduling | Dependency graph (`depends_on`) |
-| Context explosion | Focus-driven retrieval |
+- **Interruptions** → Persistent memory
+- **Multi-agent** → Session isolation
+- **Scheduling** → Dependency graph (`depends_on`)
+- **Context explosion** → Focus-driven retrieval
 
 **Result:** Reliable multi-day, multi-agent workflows.
 
-<br>
+---
 
 ## Get Started
 
@@ -143,7 +106,7 @@ ie log decision "chose X"         # Record decisions
 ie search "keyword"               # Search history
 ```
 
-<br>
+---
 
 ## How It Works
 
@@ -158,15 +121,13 @@ Interruption   →  Auto-persisted
 Next Session   →  ie status  →  Continue where you left off
 ```
 
-<br>
+---
 
 ## Documentation
 
 - **[Quick Start](docs/en/guide/quickstart.md)** — Get running in 5 minutes
 - **[CLAUDE.md](CLAUDE.md)** — AI integration guide
 - **[Commands](docs/en/guide/command-reference-full.md)** — Full reference
-
-<br>
 
 ---
 
