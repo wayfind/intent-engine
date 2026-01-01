@@ -51,12 +51,11 @@ jobs:
 
       - name: Generate coverage
         run: |
-          # Run coverage on unit tests and working integration tests only
-          # cli_tests and cli_special_chars_tests use removed CLI commands (task, event, etc.)
-          # and are behind feature flag test-removed-cli-commands
-          cargo llvm-cov --lib --bins --all-features --lcov --output-path lcov.info
-          cargo llvm-cov --test integration_tests --all-features --no-clean --lcov --output-path lcov.info
-          cargo llvm-cov --test interface_spec_test --all-features --no-clean --lcov --output-path lcov.info
+          # Run coverage on unit tests and current integration tests only
+          # Do NOT use --all-features: it enables test-removed-cli-commands which runs
+          # tests for CLI commands removed in v0.10.0 (task, event, current, etc.)
+          cargo llvm-cov --lib --bins --lcov --output-path lcov.info
+          cargo llvm-cov --test interface_spec_test --no-clean --lcov --output-path lcov.info
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
