@@ -73,6 +73,7 @@ AI gets what it needs. Nothing more.
 
 - **Hierarchical** — Break complex goals into subtasks
 - **Multi-agent** — Multiple agents work in parallel, each with its own focus (session isolation)
+- **Dependency graph** — `depends_on` enables MapReduce-style orchestration
 - **Traceable** — Every decision recorded with context
 - **Recoverable** — Resume from any interruption point
 
