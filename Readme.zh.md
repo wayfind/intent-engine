@@ -95,6 +95,7 @@ Intent-Engine 提供基础：
 
 ```bash
 # 安装（任选一种）
+curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | sh -s install
 brew install wayfind/tap/intent-engine
 npm install -g @origintask/intent-engine
 cargo install intent-engine
