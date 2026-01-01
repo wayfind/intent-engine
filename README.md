@@ -72,7 +72,7 @@ AI gets what it needs. Nothing more.
 ### Smart Task Model
 
 - **Hierarchical** — Break complex goals into subtasks
-- **Parallel** — Work on multiple tasks concurrently
+- **Multi-agent** — Multiple agents work in parallel, each with its own focus (session isolation)
 - **Traceable** — Every decision recorded with context
 - **Recoverable** — Resume from any interruption point
 
