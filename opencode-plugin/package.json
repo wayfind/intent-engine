@@ -1,10 +1,10 @@
 {
-  "name": "@anthropic/intent-engine-opencode-plugin",
+  "name": "@origintask/intent-engine-opencode-plugin",
   "version": "0.1.0",
   "description": "Intent-Engine plugin for OpenCode - Cross-session task memory",
   "main": "intent-engine.ts",
   "keywords": ["opencode", "plugin", "intent-engine", "task", "memory"],
-  "author": "Anthropic",
+  "author": "OriginTask",
   "license": "MIT",
   "repository": {
     "type": "git",

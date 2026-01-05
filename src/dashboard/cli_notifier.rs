@@ -43,18 +43,25 @@ pub struct CliNotifier {
 impl CliNotifier {
     /// Create a new CLI notifier
     pub fn new() -> Self {
-        Self::with_port(DASHBOARD_PORT)
+        let base_url = std::env::var("IE_DASHBOARD_BASE_URL")
+            .unwrap_or_else(|_| format!("http://127.0.0.1:{}", DASHBOARD_PORT));
+        Self::with_base_url(base_url)
     }
 
-    /// Create a CLI notifier with custom port (for testing)
-    pub fn with_port(port: u16) -> Self {
-        let base_url = format!("http://127.0.0.1:{}", port);
+    /// Create a CLI notifier with custom base_url (for testing or custom config)
+    pub fn with_base_url(base_url: String) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_millis(100)) // Short timeout - don't block CLI
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
 
         Self { base_url, client }
+    }
+
+    /// Create a CLI notifier with custom port (for testing)
+    pub fn with_port(port: u16) -> Self {
+        let base_url = format!("http://127.0.0.1:{}", port);
+        Self::with_base_url(base_url)
     }
 
     /// Send a notification to Dashboard (fire-and-forget, non-blocking)
