@@ -1,6 +1,6 @@
 // Intent-Engine Plugin for OpenCode
 // Provides cross-session task persistence, decision logging, and plan management
-// https://github.com/anthropics/intent-engine
+// https://github.com/wayfind/intent-engine
 
 import { Plugin, tool } from "@opencode-ai/plugin"
 
@@ -11,70 +11,151 @@ import { Plugin, tool } from "@opencode-ai/plugin"
 const IE_SYSTEM_PROMPT = `
 ## Intent-Engine Protocol (MANDATORY)
 
-Intent-Engine is your **external brain** - persistent memory across sessions.
+Intent-Engine is your **external brain** — persistent memory across sessions.
 
-### Session Start
-IMMEDIATELY call: ie_status
-- For sub-agent work on specific task: ie_status <task_id> (retrieves full ancestry)
+---
 
-### Planning with ie_plan
+### Critical Rules
 
-MUST use ie_plan as ONLY plan storage. Structure:
-{
-  "tasks": [{
-    "name": "<task name>",
-    "status": "doing",
-    "spec": "<RICH MARKDOWN>",
-    "children": [<subtasks>],
-    "depends_on": ["<task_name>"]
-  }]
-}
+#### 1. ALWAYS Create Plan First
+Never start a complex task without \`ie plan\`. This is non-negotiable.
 
-**spec is a DOCUMENTATION STORE** - supports GB-scale markdown:
-- Include: mermaid diagrams, code blocks, tables
-- Document EVERYTHING about the task
+#### 2. Refresh Before Decide  
+Before ANY major decision:
+\`\`\`
+ie status           # Refresh current task context
+ie search "keyword" # Check past decisions
+THEN decide         # Log with ie log decision
+\`\`\`
 
-### Workflow-Specific Patterns
+#### 3. Update After Act
+After completing any phase, immediately:
+- Mark task done or update status
+- Log any errors as \`blocker\`
+- Record decisions made
 
-**Bug Fix Workflow** (reproduce→diagnose→fix→verify):
-- FLAT task structure (linear steps, not deeply nested)
-- Heavy \`note\` events for investigation findings
-- \`blocker\` when investigation is stuck (missing logs, can't reproduce)
-- \`decision\` for fix approach (quick patch vs proper fix)
-- \`milestone\` when root cause identified
+#### 4. Log All Errors
+Every error goes in \`ie log blocker\`. This builds knowledge for future sessions.
 
-**Refactoring/Migration Workflow** (analyze→design→migrate→verify):
-- DEEP task hierarchy (phase→component→step)
-- SEQUENTIAL \`depends_on\` chain (migrate A before B)
-- \`decision\` for risk mitigation strategies
-- \`milestone\` after each component migrated
+---
 
-**Feature Development Workflow** (design→implement→integrate→test):
-- PARALLEL branches: Backend and Frontend can start simultaneously
-- \`depends_on\` shows what MUST wait vs what can run in parallel
-- Integration task depends on BOTH Backend AND Frontend
-- Rich specs with API contracts, schemas, diagrams
+### Quick Start
 
-### Events as CQRS Audit Trail
+\`\`\`
+ie status                         # Session start (ALWAYS first)
+ie status <id>                    # Get specific task with ancestry
+echo '{"tasks":[...]}' | ie plan  # Create/update tasks  
+ie log decision "chose X"         # Record decisions
+ie log blocker "stuck on Y"       # Record blockers
+ie search "keyword"               # Search history
+ie done                           # Complete current task
+\`\`\`
 
-ie_log records immutable events. Match event type to situation:
+---
 
-| Type | When to Use | Workflow Hint |
-|------|-------------|---------------|
-| decision | Chose X over Y with trade-offs | All workflows |
-| blocker | Cannot proceed, waiting for X | Bug fix (stuck), Migration (dependency) |
-| milestone | Significant checkpoint | Migration (component done), Feature (phase done) |
-| note | Observations, findings | Bug fix (investigation clues) |
+### Task Structure with children
 
-**Events support rich markdown** - document thoroughly.
+Use \`children\` array for hierarchy (NOT multiple ie plan calls):
 
-### Search Liberally
-ie_search PROACTIVELY before decisions or when resuming work.
+\`\`\`json
+{"tasks":[{
+  "name": "Migration Project",
+  "status": "doing",
+  "spec": "## Goal\\n...",
+  "children": [
+    {
+      "name": "Phase 1: Analysis",
+      "status": "todo",
+      "children": [
+        {"name": "Inventory queries", "status": "todo"},
+        {"name": "Map dependencies", "status": "todo"}
+      ]
+    },
+    {
+      "name": "Phase 2: Migration", 
+      "status": "todo",
+      "depends_on": ["Phase 1: Analysis"],
+      "children": [
+        {"name": "Migrate UserService", "status": "todo"},
+        {"name": "Migrate OrderService", "status": "todo", "depends_on": ["Migrate UserService"]}
+      ]
+    }
+  ]
+}]}
+\`\`\`
+
+---
+
+### Task Spec Template
+
+Every task with \`status: "doing"\` MUST have a spec:
+
+\`\`\`markdown
+## Goal
+[One sentence: what does "done" look like?]
+
+## Approach
+[How will you achieve it?]
+
+## Key Questions
+1. [Question to answer]
+2. [Question to answer]
+
+## Errors Encountered
+- [Error]: [Resolution]
+\`\`\`
+
+---
+
+### Workflow Patterns
+
+**Bug Fix** (reproduce→diagnose→fix→verify):
+- FLAT structure (linear sibling steps)
+- Heavy \`note\` for investigation
+- \`blocker\` when stuck
+- \`milestone\` when root cause found
+
+**Refactoring/Migration** (analyze→design→migrate→verify):
+- DEEP hierarchy using nested \`children\` arrays
+- Sequential \`depends_on\` chain
+- \`milestone\` after each component
+
+**Feature Development** (design→implement→integrate→test):
+- PARALLEL branches (Backend || Frontend) via \`children\`
+- Integration depends on BOTH
+- Rich specs with diagrams
+
+---
+
+### Anti-Patterns to Avoid
+
+| Don't | Do Instead |
+|-------|------------|
+| Decide without checking history | \`ie search\` first |
+| Hide errors and retry silently | \`ie log blocker "error"\` |
+| Start task without spec | Write Goal + Approach first |
+| Use TodoWrite for persistent work | Use \`ie plan\` |
+| Multiple \`ie plan\` calls for hierarchy | Single call with nested \`children\` |
+| Forget what you were doing | \`ie status\` at session start |
+
+---
+
+### Event Types
+
+| Type | When | Example |
+|------|------|---------|
+| decision | Chose X over Y | "JWT over sessions: stateless" |
+| blocker | Cannot proceed | "Waiting for API credentials" |
+| milestone | Checkpoint reached | "Auth flow working e2e" |
+| note | Observations | "Found helper in /src/utils" |
+
+---
 
 ### FORBIDDEN
 - Creating .opencode/plan/*.md files
 - Using todowrite for persistent work
 - Making decisions without ie_log
+- Starting tasks without spec
 `
 
 // =============================================================================
