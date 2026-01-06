@@ -41,7 +41,9 @@ test-consistency.sh
 # OS
 .DS_Store
 Thumbs.db
-.claude/
+
+# Claude Code local config (settings excluded, skills shared)
+.claude/settings.local.json
 
 # Intent-Engine local database and state
 .intent-engine/
