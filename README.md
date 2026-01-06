@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/wayfind/intent-engine/workflows/CI/badge.svg)](https://github.com/wayfind/intent-engine/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/intent-engine.svg)](https://crates.io/crates/intent-engine)
+[![npm](https://img.shields.io/npm/v/@origintask/intent-engine.svg)](https://www.npmjs.com/package/@origintask/intent-engine)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 
 **Persistent memory for AI coding assistants.**
@@ -35,6 +36,24 @@ Day 2: "Continue auth"
 ```
 
 **One command restores everything:** `ie status`
+
+---
+
+## Visual Dashboard
+
+See your entire task structure at a glance:
+
+```bash
+ie dashboard
+```
+
+![IE Dashboard](docs/iedashboard.png)
+
+**Features:**
+- **Task Navigator** — Hierarchical tree view with search
+- **Task Detail** — Full spec with markdown rendering (mermaid diagrams, code blocks)
+- **Decision Timeline** — Chronological log of all decisions and notes
+- **Multi-project Support** — Switch between projects via tabs
 
 ---
 
@@ -84,24 +103,37 @@ Week-long refactoring:
 
 ## Get Started
 
-**Claude Code** — one command does everything:
-
-```
-/plugin marketplace add wayfind/origin-task
-/plugin install intent-engine@wayfind/origin-task
-```
-
-**Manual setup:**
+### Claude Code (recommended)
 
 ```bash
-# Install (choose one)
-curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | sh -s install
-brew install wayfind/tap/intent-engine
+/plugin marketplace add wayfind/origin-task
+/plugin install intent-engine
+```
+
+### OpenCode
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/opencode-plugin/intent-engine.ts \
+  -o ~/.config/opencode/plugin/intent-engine.ts
+```
+
+### Manual Install
+
+```bash
+# Choose one
 npm install -g @origintask/intent-engine
+brew install wayfind/tap/intent-engine
 cargo install intent-engine
 
-# Core commands
+# Or use the install script
+curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/scripts/install/ie-manager.sh | sh -s install
+```
+
+### Core Commands
+
+```bash
 ie status                         # Restore context
+ie dashboard                      # Open visual dashboard
 echo '{"tasks":[...]}' | ie plan  # Create/update tasks
 ie log decision "chose X"         # Record decisions
 ie search "keyword"               # Search history
@@ -127,6 +159,7 @@ Next Session   →  ie status  →  Continue where you left off
 ## Documentation
 
 - **[Quick Start](docs/en/guide/quickstart.md)** — Get running in 5 minutes
+- **[Dashboard Guide](docs/dashboard-user-guide.md)** — Visual interface walkthrough
 - **[CLAUDE.md](CLAUDE.md)** — AI integration guide
 - **[Commands](docs/en/guide/command-reference-full.md)** — Full reference
 

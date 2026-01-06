@@ -8,14 +8,14 @@ Cross-session task memory for OpenCode.
 
 ```bash
 # Download plugin to OpenCode plugin directory
-curl -fsSL https://raw.githubusercontent.com/anthropics/intent-engine/main/opencode-plugin/intent-engine.ts \
+curl -fsSL https://raw.githubusercontent.com/wayfind/intent-engine/main/opencode-plugin/intent-engine.ts \
   -o ~/.config/opencode/plugin/intent-engine.ts
 ```
 
 ### From Source (symlink)
 
 ```bash
-git clone https://github.com/anthropics/intent-engine.git
+git clone https://github.com/wayfind/intent-engine.git
 cd intent-engine
 
 # Create symlink
@@ -30,7 +30,7 @@ Intent-Engine CLI must be installed:
 ```bash
 npm install -g @origintask/intent-engine
 # or: cargo install intent-engine
-# or: brew install origintask/tap/intent-engine
+# or: brew install wayfind/tap/intent-engine
 ```
 
 ## Features
@@ -39,6 +39,23 @@ npm install -g @origintask/intent-engine
 - **Task Hierarchy**: `ie_plan` creates hierarchical task trees with `depends_on`
 - **Decision Logging**: `ie_log` records decisions, blockers, milestones, notes
 - **Full-Text Search**: `ie_search` finds past decisions and tasks
+- **Visual Dashboard**: `ie dashboard` opens a web UI for task management
+
+## Dashboard
+
+Launch the visual dashboard for a complete overview of your tasks:
+
+```bash
+ie dashboard
+```
+
+![IE Dashboard](https://raw.githubusercontent.com/wayfind/intent-engine/main/docs/iedashboard.png)
+
+The dashboard provides:
+- **Task Navigator** — Hierarchical tree view with search
+- **Task Detail** — Full spec with markdown rendering (diagrams, code blocks)
+- **Decision Timeline** — Chronological log of all decisions and notes
+- **Multi-project Support** — Switch between projects via tabs
 
 ## Workflow-Specific Patterns
 
