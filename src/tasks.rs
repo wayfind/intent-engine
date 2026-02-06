@@ -790,6 +790,9 @@ impl<'a> TaskManager<'a> {
         status: Option<&str>,
         complexity: Option<i32>,
         priority: Option<i32>,
+        active_form: Option<&str>,
+        owner: Option<&str>,
+        metadata: Option<&str>,
     ) -> Result<Task> {
         // Check task exists
         let task = self.get_task(id).await?;
@@ -862,6 +865,35 @@ impl<'a> TaskManager<'a> {
                 builder.push(", ");
             }
             builder.push("priority = ").push_bind(p);
+            has_updates = true;
+        }
+
+        if let Some(af) = active_form {
+            if has_updates {
+                builder.push(", ");
+            }
+            builder.push("active_form = ").push_bind(af);
+            has_updates = true;
+        }
+
+        if let Some(o) = owner {
+            if o.is_empty() {
+                return Err(IntentError::InvalidInput(
+                    "owner cannot be empty".to_string(),
+                ));
+            }
+            if has_updates {
+                builder.push(", ");
+            }
+            builder.push("owner = ").push_bind(o);
+            has_updates = true;
+        }
+
+        if let Some(m) = metadata {
+            if has_updates {
+                builder.push(", ");
+            }
+            builder.push("metadata = ").push_bind(m);
             has_updates = true;
         }
 
@@ -1288,6 +1320,157 @@ impl<'a> TaskManager<'a> {
         })
     }
 
+    /// Complete a task by its ID directly (without requiring it to be the current focus).
+    ///
+    /// Unlike `done_task` which only completes the currently focused task, this method
+    /// completes a task by ID. If the task happens to be the current session's focus,
+    /// the focus is cleared. Otherwise, the current focus is left unchanged.
+    ///
+    /// # Arguments
+    /// * `id` - The task ID to complete
+    /// * `is_ai_caller` - Whether this is called from AI. When true and task is human-owned, fails.
+    #[tracing::instrument(skip(self))]
+    pub async fn done_task_by_id(&self, id: i64, is_ai_caller: bool) -> Result<DoneTaskResponse> {
+        let session_id = crate::workspace::resolve_session_id(None);
+        let mut tx = self.pool.begin().await?;
+
+        // Get the task info (name, parent_id, owner) by ID
+        let task_info: (String, Option<i64>, String) =
+            sqlx::query_as("SELECT name, parent_id, owner FROM tasks WHERE id = ?")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .ok_or(IntentError::TaskNotFound(id))?;
+        let (task_name, parent_id, owner) = task_info;
+
+        // Human Task Protection: AI cannot complete human-owned tasks
+        if owner == "human" && is_ai_caller {
+            return Err(IntentError::HumanTaskCannotBeCompletedByAI {
+                task_id: id,
+                task_name: task_name.clone(),
+            });
+        }
+
+        // Complete the task (validates children + updates status)
+        self.complete_task_in_tx(&mut tx, id).await?;
+
+        // If this task is the current session's focus, clear it (otherwise leave focus untouched)
+        sqlx::query(
+            "UPDATE sessions SET current_task_id = NULL, last_active_at = datetime('now') WHERE session_id = ? AND current_task_id = ?",
+        )
+        .bind(&session_id)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+        // Read back the actual current_task_id (may still be set if we completed a non-focused task)
+        let actual_current_task_id: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .flatten();
+
+        // Determine next step suggestion (same logic as done_task)
+        let next_step_suggestion = if let Some(parent_task_id) = parent_id {
+            let remaining_siblings: i64 = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ?",
+            )
+            .bind(parent_task_id)
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+            if remaining_siblings == 0 {
+                let parent_name: String =
+                    sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
+                        .bind(parent_task_id)
+                        .fetch_one(&mut *tx)
+                        .await?;
+
+                NextStepSuggestion::ParentIsReady {
+                    message: format!(
+                        "All sub-tasks of parent #{} '{}' are now complete. The parent task is ready for your attention.",
+                        parent_task_id, parent_name
+                    ),
+                    parent_task_id,
+                    parent_task_name: parent_name,
+                }
+            } else {
+                let parent_name: String =
+                    sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
+                        .bind(parent_task_id)
+                        .fetch_one(&mut *tx)
+                        .await?;
+
+                NextStepSuggestion::SiblingTasksRemain {
+                    message: format!(
+                        "Task #{} completed. Parent task #{} '{}' has other sub-tasks remaining.",
+                        id, parent_task_id, parent_name
+                    ),
+                    parent_task_id,
+                    parent_task_name: parent_name,
+                    remaining_siblings_count: remaining_siblings,
+                }
+            }
+        } else {
+            let child_count: i64 =
+                sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_CHILDREN_TOTAL)
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+
+            if child_count > 0 {
+                NextStepSuggestion::TopLevelTaskCompleted {
+                    message: format!(
+                        "Top-level task #{} '{}' has been completed. Well done!",
+                        id, task_name
+                    ),
+                    completed_task_id: id,
+                    completed_task_name: task_name.clone(),
+                }
+            } else {
+                let remaining_tasks: i64 = sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ?",
+                )
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+
+                if remaining_tasks == 0 {
+                    NextStepSuggestion::WorkspaceIsClear {
+                        message: format!(
+                            "Project complete! Task #{} was the last remaining task. There are no more 'todo' or 'doing' tasks.",
+                            id
+                        ),
+                        completed_task_id: id,
+                    }
+                } else {
+                    NextStepSuggestion::NoParentContext {
+                        message: format!("Task #{} '{}' has been completed.", id, task_name),
+                        completed_task_id: id,
+                        completed_task_name: task_name.clone(),
+                    }
+                }
+            }
+        };
+
+        tx.commit().await?;
+
+        // Fetch the completed task to notify UI
+        let completed_task = self.get_task(id).await?;
+        self.notify_task_updated(&completed_task).await;
+
+        Ok(DoneTaskResponse {
+            completed_task,
+            workspace_status: WorkspaceStatus {
+                current_task_id: actual_current_task_id,
+            },
+            next_step_suggestion,
+        })
+    }
+
     /// Check if a task exists
     async fn check_task_exists(&self, id: i64) -> Result<()> {
         let exists: bool = sqlx::query_scalar::<_, bool>(crate::sql_constants::CHECK_TASK_EXISTS)
@@ -1680,11 +1863,33 @@ mod tests {
 
         // Update statuses
         manager
-            .update_task(task1.id, None, None, None, Some("doing"), None, None)
+            .update_task(
+                task1.id,
+                None,
+                None,
+                None,
+                Some("doing"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         manager
-            .update_task(task2.id, None, None, None, Some("done"), None, None)
+            .update_task(
+                task2.id,
+                None,
+                None,
+                None,
+                Some("done"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         // task3 stays as todo
@@ -1780,7 +1985,18 @@ mod tests {
             .await
             .unwrap();
         let updated = manager
-            .update_task(task.id, Some("New name"), None, None, None, None, None)
+            .update_task(
+                task.id,
+                Some("New name"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -1797,7 +2013,18 @@ mod tests {
             .await
             .unwrap();
         let updated = manager
-            .update_task(task.id, None, None, None, Some("doing"), None, None)
+            .update_task(
+                task.id,
+                None,
+                None,
+                None,
+                Some("doing"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -1834,7 +2061,18 @@ mod tests {
             .await
             .unwrap();
         manager
-            .update_task(doing_task.id, None, None, None, Some("doing"), None, None)
+            .update_task(
+                doing_task.id,
+                None,
+                None,
+                None,
+                Some("doing"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2031,7 +2269,18 @@ mod tests {
 
         // Try to make task1 a child of task2 (circular)
         let result = manager
-            .update_task(task1.id, None, None, Some(Some(task2.id)), None, None, None)
+            .update_task(
+                task1.id,
+                None,
+                None,
+                Some(Some(task2.id)),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
 
         assert!(matches!(
@@ -2059,7 +2308,18 @@ mod tests {
             .await
             .unwrap();
         let updated = manager
-            .update_task(task.id, None, None, None, None, Some(8), Some(10))
+            .update_task(
+                task.id,
+                None,
+                None,
+                None,
+                None,
+                Some(8),
+                Some(10),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2221,7 +2481,18 @@ mod tests {
             .await
             .unwrap();
         manager
-            .update_task(low.id, None, None, None, None, None, Some(1))
+            .update_task(
+                low.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(1),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2230,7 +2501,18 @@ mod tests {
             .await
             .unwrap();
         manager
-            .update_task(high.id, None, None, None, None, None, Some(10))
+            .update_task(
+                high.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(10),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2239,7 +2521,18 @@ mod tests {
             .await
             .unwrap();
         manager
-            .update_task(medium.id, None, None, None, None, None, Some(5))
+            .update_task(
+                medium.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(5),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2261,19 +2554,52 @@ mod tests {
         // Create tasks with different complexities (same priority)
         let complex = manager.add_task("Complex", None, None, None).await.unwrap();
         manager
-            .update_task(complex.id, None, None, None, None, Some(9), Some(5))
+            .update_task(
+                complex.id,
+                None,
+                None,
+                None,
+                None,
+                Some(9),
+                Some(5),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
         let simple = manager.add_task("Simple", None, None, None).await.unwrap();
         manager
-            .update_task(simple.id, None, None, None, None, Some(1), Some(5))
+            .update_task(
+                simple.id,
+                None,
+                None,
+                None,
+                None,
+                Some(1),
+                Some(5),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
         let medium = manager.add_task("Medium", None, None, None).await.unwrap();
         manager
-            .update_task(medium.id, None, None, None, None, Some(5), Some(5))
+            .update_task(
+                medium.id,
+                None,
+                None,
+                None,
+                None,
+                Some(5),
+                Some(5),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2413,6 +2739,135 @@ mod tests {
         }
     }
 
+    // =========================================================================
+    // done_task_by_id tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_done_task_by_id_non_focused_task_preserves_focus() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create two tasks, focus on task_a
+        let task_a = manager.add_task("Task A", None, None, None).await.unwrap();
+        let task_b = manager.add_task("Task B", None, None, None).await.unwrap();
+        manager.start_task(task_a.id, false).await.unwrap();
+
+        // Complete task_b by ID (not the focused task)
+        let response = manager.done_task_by_id(task_b.id, false).await.unwrap();
+
+        // task_b should be done
+        assert_eq!(response.completed_task.status, "done");
+        assert_eq!(response.completed_task.id, task_b.id);
+
+        // Focus should still be on task_a
+        assert_eq!(response.workspace_status.current_task_id, Some(task_a.id));
+
+        // Verify via direct DB query
+        let session_id = crate::workspace::resolve_session_id(None);
+        let current: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(ctx.pool())
+        .await
+        .unwrap()
+        .flatten();
+        assert_eq!(current, Some(task_a.id));
+    }
+
+    #[tokio::test]
+    async fn test_done_task_by_id_focused_task_clears_focus() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        let task = manager
+            .add_task("Focused task", None, None, None)
+            .await
+            .unwrap();
+        manager.start_task(task.id, false).await.unwrap();
+
+        // Complete the focused task by ID
+        let response = manager.done_task_by_id(task.id, false).await.unwrap();
+
+        assert_eq!(response.completed_task.status, "done");
+        assert_eq!(response.workspace_status.current_task_id, None);
+
+        // Verify via direct DB query
+        let session_id = crate::workspace::resolve_session_id(None);
+        let current: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT current_task_id FROM sessions WHERE session_id = ?",
+        )
+        .bind(&session_id)
+        .fetch_optional(ctx.pool())
+        .await
+        .unwrap()
+        .flatten();
+        assert!(current.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_done_task_by_id_human_task_rejected_for_ai_caller() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create a human-owned task and set it to doing
+        let task = manager
+            .add_task("Human task", None, None, Some("human"))
+            .await
+            .unwrap();
+        manager
+            .update_task(
+                task.id,
+                None,
+                None,
+                None,
+                Some("doing"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // AI caller should be rejected
+        let result = manager.done_task_by_id(task.id, true).await;
+        assert!(matches!(
+            result,
+            Err(IntentError::HumanTaskCannotBeCompletedByAI { .. })
+        ));
+
+        // Human caller should succeed
+        let response = manager.done_task_by_id(task.id, false).await.unwrap();
+        assert_eq!(response.completed_task.status, "done");
+    }
+
+    #[tokio::test]
+    async fn test_done_task_by_id_with_uncompleted_children() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        let parent = manager.add_task("Parent", None, None, None).await.unwrap();
+        manager
+            .add_task("Incomplete child", None, Some(parent.id), None)
+            .await
+            .unwrap();
+
+        let result = manager.done_task_by_id(parent.id, false).await;
+        assert!(matches!(result, Err(IntentError::UncompletedChildren)));
+    }
+
+    #[tokio::test]
+    async fn test_done_task_by_id_nonexistent_task() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        let result = manager.done_task_by_id(99999, false).await;
+        assert!(matches!(result, Err(IntentError::TaskNotFound(99999))));
+    }
+
     #[tokio::test]
     async fn test_pick_next_focused_subtask() {
         let ctx = TestContext::new().await;
@@ -2437,11 +2892,33 @@ mod tests {
 
         // Set priorities: subtask1 = 2, subtask2 = 1 (lower number = higher priority)
         manager
-            .update_task(subtask1.id, None, None, None, None, None, Some(2))
+            .update_task(
+                subtask1.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(2),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         manager
-            .update_task(subtask2.id, None, None, None, None, None, Some(1))
+            .update_task(
+                subtask2.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(1),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2465,11 +2942,33 @@ mod tests {
 
         // Set priorities: task1 = 5, task2 = 3 (lower number = higher priority)
         manager
-            .update_task(task1.id, None, None, None, None, None, Some(5))
+            .update_task(
+                task1.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(5),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         manager
-            .update_task(task2.id, None, None, None, None, None, Some(3))
+            .update_task(
+                task2.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(3),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2585,7 +3084,18 @@ mod tests {
             .await
             .unwrap();
         manager
-            .update_task(sub1.id, None, None, None, None, None, Some(10))
+            .update_task(
+                sub1.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(10),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2594,7 +3104,18 @@ mod tests {
             .await
             .unwrap();
         manager
-            .update_task(sub2.id, None, None, None, None, None, Some(1))
+            .update_task(
+                sub2.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(1),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2603,7 +3124,18 @@ mod tests {
             .await
             .unwrap();
         manager
-            .update_task(sub3.id, None, None, None, None, None, Some(5))
+            .update_task(
+                sub3.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(5),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2982,7 +3514,18 @@ mod tests {
             .await
             .unwrap();
         let _ = task_mgr
-            .update_task(child_low.id, None, None, None, None, None, Some(10))
+            .update_task(
+                child_low.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(10),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2991,7 +3534,18 @@ mod tests {
             .await
             .unwrap();
         let _ = task_mgr
-            .update_task(child_high.id, None, None, None, None, None, Some(1))
+            .update_task(
+                child_high.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(1),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3000,7 +3554,18 @@ mod tests {
             .await
             .unwrap();
         let _ = task_mgr
-            .update_task(child_medium.id, None, None, None, None, None, Some(5))
+            .update_task(
+                child_medium.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(5),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3031,7 +3596,18 @@ mod tests {
         // Create siblings with mixed null and set priorities
         let task1 = task_mgr.add_task("Task 1", None, None, None).await.unwrap();
         let _ = task_mgr
-            .update_task(task1.id, None, None, None, None, None, Some(1))
+            .update_task(
+                task1.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(1),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3040,7 +3616,18 @@ mod tests {
 
         let task3 = task_mgr.add_task("Task 3", None, None, None).await.unwrap();
         let _ = task_mgr
-            .update_task(task3.id, None, None, None, None, None, Some(5))
+            .update_task(
+                task3.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(5),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3067,7 +3654,18 @@ mod tests {
             .await
             .unwrap();
         task_mgr
-            .update_task(critical.id, None, None, None, None, None, Some(1))
+            .update_task(
+                critical.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(1),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3076,7 +3674,18 @@ mod tests {
             .await
             .unwrap();
         task_mgr
-            .update_task(low.id, None, None, None, None, None, Some(4))
+            .update_task(
+                low.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(4),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3085,7 +3694,18 @@ mod tests {
             .await
             .unwrap();
         task_mgr
-            .update_task(high.id, None, None, None, None, None, Some(2))
+            .update_task(
+                high.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(2),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3094,7 +3714,18 @@ mod tests {
             .await
             .unwrap();
         task_mgr
-            .update_task(medium.id, None, None, None, None, None, Some(3))
+            .update_task(
+                medium.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(3),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 

@@ -36,7 +36,18 @@ async fn test_task_update_nonexistent_id() {
 
     // Try to update task with ID that doesn't exist
     let result = manager
-        .update_task(99999, Some("New Name"), None, None, None, None, None)
+        .update_task(
+            99999,
+            Some("New Name"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await;
 
     assert!(result.is_err());

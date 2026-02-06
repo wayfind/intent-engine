@@ -504,7 +504,18 @@ mod tests {
             .await
             .unwrap();
         task_mgr
-            .update_task(sibling1.id, None, None, None, Some("done"), None, None)
+            .update_task(
+                sibling1.id,
+                None,
+                None,
+                None,
+                Some("done"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -513,7 +524,18 @@ mod tests {
             .await
             .unwrap();
         task_mgr
-            .update_task(current.id, None, None, None, Some("doing"), None, None)
+            .update_task(
+                current.id,
+                None,
+                None,
+                None,
+                Some("doing"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         workspace_mgr

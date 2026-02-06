@@ -163,7 +163,18 @@ async fn test_human_can_complete_human_owned_task() -> Result<()> {
     // Set as current task and doing status
     workspace_mgr.set_current_task(task.id, None).await?;
     task_mgr
-        .update_task(task.id, None, None, None, Some("doing"), None, None)
+        .update_task(
+            task.id,
+            None,
+            None,
+            None,
+            Some("doing"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await?;
 
     // Complete as human (is_ai_caller=false)
@@ -191,7 +202,18 @@ async fn test_ai_can_complete_ai_owned_task() -> Result<()> {
     // Set as current task and doing status
     workspace_mgr.set_current_task(task.id, None).await?;
     task_mgr
-        .update_task(task.id, None, None, None, Some("doing"), None, None)
+        .update_task(
+            task.id,
+            None,
+            None,
+            None,
+            Some("doing"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await?;
 
     // Complete as AI (is_ai_caller=true)

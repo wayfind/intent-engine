@@ -71,6 +71,9 @@ fn bench_task_update(c: &mut Criterion) {
                     Some("doing"),
                     None,
                     None,
+                    None,
+                    None,
+                    None,
                 )
                 .await
                 .unwrap();

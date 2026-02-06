@@ -61,7 +61,18 @@ async fn test_pick_next_recommends_after_blocking_complete() {
 
     // Complete task1 (status = "done")
     manager
-        .update_task(task1.id, None, None, None, Some("done"), None, None)
+        .update_task(
+            task1.id,
+            None,
+            None,
+            None,
+            Some("done"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -100,7 +111,18 @@ async fn test_pick_next_multiple_dependencies() {
 
     // Complete only task1
     manager
-        .update_task(task1.id, None, None, None, Some("done"), None, None)
+        .update_task(
+            task1.id,
+            None,
+            None,
+            None,
+            Some("done"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -110,7 +132,18 @@ async fn test_pick_next_multiple_dependencies() {
 
     // Now complete task2
     manager
-        .update_task(task2.id, None, None, None, Some("done"), None, None)
+        .update_task(
+            task2.id,
+            None,
+            None,
+            None,
+            Some("done"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -178,7 +211,18 @@ async fn test_pick_next_no_available_tasks_due_to_blocking() {
 
     // Set task2 to doing (not done, so still blocking)
     manager
-        .update_task(task2.id, None, None, None, Some("doing"), None, None)
+        .update_task(
+            task2.id,
+            None,
+            None,
+            None,
+            Some("doing"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -217,7 +261,18 @@ async fn test_pick_next_respects_priority_with_blocking() {
     let medium_priority = PriorityLevel::parse_to_int("medium").unwrap();
 
     manager
-        .update_task(task1.id, None, None, None, None, None, Some(low_priority))
+        .update_task(
+            task1.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(low_priority),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
@@ -229,6 +284,9 @@ async fn test_pick_next_respects_priority_with_blocking() {
             None,
             None,
             Some(critical_priority),
+            None,
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -241,6 +299,9 @@ async fn test_pick_next_respects_priority_with_blocking() {
             None,
             None,
             Some(medium_priority),
+            None,
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -279,7 +340,18 @@ async fn test_pick_next_unblocked_task_normal_behavior() {
 
     // Complete task1
     manager
-        .update_task(task1.id, None, None, None, Some("done"), None, None)
+        .update_task(
+            task1.id,
+            None,
+            None,
+            None,
+            Some("done"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 

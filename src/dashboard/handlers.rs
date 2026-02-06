@@ -161,7 +161,18 @@ pub async fn create_task(
             // If priority was requested, update it
             if let Some(priority) = req.priority {
                 if let Ok(updated_task) = task_mgr
-                    .update_task(task.id, None, None, None, None, None, Some(priority))
+                    .update_task(
+                        task.id,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(priority),
+                        None,
+                        None,
+                        None,
+                    )
                     .await
                 {
                     task = updated_task;
@@ -242,7 +253,6 @@ pub async fn update_task(
     }
 
     // Update task fields
-    // Signature: update_task(id, name, spec, parent_id, status, complexity, priority)
     match task_mgr
         .update_task(
             id,
@@ -252,6 +262,9 @@ pub async fn update_task(
             req.status.as_deref(),
             None, // complexity - not exposed in API
             req.priority,
+            None, // active_form
+            None, // owner
+            None, // metadata
         )
         .await
     {

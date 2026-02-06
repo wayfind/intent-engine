@@ -200,25 +200,30 @@ async fn handle_create(
         .add_task(&name, description.as_deref(), parent_id, Some(&owner))
         .await?;
 
-    // Update priority if specified
-    if priority.is_some() {
-        task = task_mgr
-            .update_task(task.id, None, None, None, None, None, priority)
-            .await?;
-    }
-
-    // Update metadata if specified
-    if !metadata.is_empty() {
+    // Pre-merge metadata if specified
+    let merged_metadata = if !metadata.is_empty() {
         let meta_json = parse_metadata(&metadata)?;
-        let merged = merge_metadata(task.metadata.as_deref(), &meta_json);
-        if merged.is_some() {
-            sqlx::query("UPDATE tasks SET metadata = ? WHERE id = ?")
-                .bind(&merged)
-                .bind(task.id)
-                .execute(&ctx.pool)
-                .await?;
-            task = task_mgr.get_task(task.id).await?;
-        }
+        merge_metadata(task.metadata.as_deref(), &meta_json)
+    } else {
+        None
+    };
+
+    // Apply priority and metadata in a single update_task call if either is set
+    if priority.is_some() || merged_metadata.is_some() {
+        task = task_mgr
+            .update_task(
+                task.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                priority,
+                None,
+                None,
+                merged_metadata.as_deref(),
+            )
+            .await?;
     }
 
     // If status is "doing", start the task
@@ -228,7 +233,18 @@ async fn handle_create(
     } else if status == "done" {
         // For "done" status, update directly (rare use case)
         task = task_mgr
-            .update_task(task.id, None, None, None, Some("done"), None, None)
+            .update_task(
+                task.id,
+                None,
+                None,
+                None,
+                Some("done"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await?;
     }
 
@@ -404,7 +420,16 @@ async fn handle_update(
         status.as_deref().map(String::from)
     };
 
-    // Core update via TaskManager
+    // Pre-merge metadata if provided (need current task to merge against)
+    let merged_metadata = if !metadata.is_empty() {
+        let current_task = task_mgr.get_task(id).await?;
+        let meta_json = parse_metadata(&metadata)?;
+        merge_metadata(current_task.metadata.as_deref(), &meta_json)
+    } else {
+        None
+    };
+
+    // Core update via TaskManager (single call with all fields)
     let mut task = task_mgr
         .update_task(
             id,
@@ -414,40 +439,11 @@ async fn handle_update(
             effective_status.as_deref(),
             None, // complexity
             priority,
+            active_form.as_deref(),
+            owner.as_deref(),
+            merged_metadata.as_deref(),
         )
         .await?;
-
-    // Update active_form if provided
-    if let Some(af) = &active_form {
-        sqlx::query("UPDATE tasks SET active_form = ? WHERE id = ?")
-            .bind(af)
-            .bind(id)
-            .execute(&ctx.pool)
-            .await?;
-        task = task_mgr.get_task(id).await?;
-    }
-
-    // Update owner if provided
-    if let Some(o) = &owner {
-        sqlx::query("UPDATE tasks SET owner = ? WHERE id = ?")
-            .bind(o)
-            .bind(id)
-            .execute(&ctx.pool)
-            .await?;
-        task = task_mgr.get_task(id).await?;
-    }
-
-    // Merge metadata if provided
-    if !metadata.is_empty() {
-        let meta_json = parse_metadata(&metadata)?;
-        let merged = merge_metadata(task.metadata.as_deref(), &meta_json);
-        sqlx::query("UPDATE tasks SET metadata = ? WHERE id = ?")
-            .bind(&merged)
-            .bind(id)
-            .execute(&ctx.pool)
-            .await?;
-        task = task_mgr.get_task(id).await?;
-    }
 
     // If status was "doing", use start_task for proper workflow
     if status.as_deref() == Some("doing") {
@@ -614,18 +610,17 @@ async fn handle_delete(id: i64, cascade: bool, format: String) -> Result<()> {
         }
     } else {
         // Check if task has children first
-        let children: Vec<crate::db::models::Task> = sqlx::query_as(
-            "SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata FROM tasks WHERE parent_id = ?",
-        )
-        .bind(id)
-        .fetch_all(&ctx.pool)
-        .await?;
+        let child_count: i64 =
+            sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_CHILDREN_TOTAL)
+                .bind(id)
+                .fetch_one(&ctx.pool)
+                .await?;
 
-        if !children.is_empty() {
+        if child_count > 0 {
             return Err(IntentError::ActionNotAllowed(format!(
                 "Task #{} has {} child tasks. Use --cascade to delete them too, or delete children first.",
                 id,
-                children.len()
+                child_count
             )));
         }
 
@@ -654,7 +649,18 @@ async fn handle_start(id: i64, description: Option<String>, format: String) -> R
     // Update description first if provided
     if let Some(desc) = &description {
         task_mgr
-            .update_task(id, None, Some(desc.as_str()), None, None, None, None)
+            .update_task(
+                id,
+                None,
+                Some(desc.as_str()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await?;
     }
 
@@ -684,19 +690,13 @@ async fn handle_done(id: Option<i64>, format: String) -> Result<()> {
     let ctx = ProjectContext::load_or_init().await?;
     let project_path = ctx.root.to_string_lossy().to_string();
     let task_mgr = TaskManager::with_project_path(&ctx.pool, project_path);
-    let workspace_mgr = WorkspaceManager::new(&ctx.pool);
 
-    // If id is provided and it's not the current task, focus it first
-    if let Some(task_id) = id {
-        let current = workspace_mgr.get_current_task(None).await?;
-        if current.current_task_id != Some(task_id) {
-            // Start the task first to set it as current
-            task_mgr.start_task(task_id, false).await?;
-        }
-    }
-
-    // Complete the current focused task (is_ai_caller = false for CLI)
-    let result = task_mgr.done_task(false).await?;
+    // If ID given, complete by ID directly. If not, complete current focus.
+    let result = if let Some(task_id) = id {
+        task_mgr.done_task_by_id(task_id, false).await?
+    } else {
+        task_mgr.done_task(false).await?
+    };
 
     if format == "json" {
         println!("{}", serde_json::to_string_pretty(&result)?);

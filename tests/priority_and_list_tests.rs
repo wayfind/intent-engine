@@ -23,7 +23,18 @@ async fn test_priority_critical() {
     // Update with critical priority
     let critical = PriorityLevel::parse_to_int("critical").unwrap();
     let updated = manager
-        .update_task(task.id, None, None, None, None, None, Some(critical))
+        .update_task(
+            task.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(critical),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -43,7 +54,18 @@ async fn test_priority_high() {
 
     let high = PriorityLevel::parse_to_int("high").unwrap();
     let updated = manager
-        .update_task(task.id, None, None, None, None, None, Some(high))
+        .update_task(
+            task.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(high),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -63,7 +85,18 @@ async fn test_priority_medium() {
 
     let medium = PriorityLevel::parse_to_int("medium").unwrap();
     let updated = manager
-        .update_task(task.id, None, None, None, None, None, Some(medium))
+        .update_task(
+            task.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(medium),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -83,7 +116,18 @@ async fn test_priority_low() {
 
     let low = PriorityLevel::parse_to_int("low").unwrap();
     let updated = manager
-        .update_task(task.id, None, None, None, None, None, Some(low))
+        .update_task(
+            task.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(low),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -104,7 +148,18 @@ async fn test_priority_case_insensitive() {
     // Test uppercase
     let high = PriorityLevel::parse_to_int("HIGH").unwrap();
     let updated = manager
-        .update_task(task.id, None, None, None, None, None, Some(high))
+        .update_task(
+            task.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(high),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(updated.priority.unwrap(), 2);
@@ -112,7 +167,18 @@ async fn test_priority_case_insensitive() {
     // Test mixed case
     let critical = PriorityLevel::parse_to_int("CriTiCaL").unwrap();
     let updated = manager
-        .update_task(task.id, None, None, None, None, None, Some(critical))
+        .update_task(
+            task.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(critical),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(updated.priority.unwrap(), 1);
@@ -161,22 +227,55 @@ async fn test_priority_ordering_still_works() {
     let medium = PriorityLevel::parse_to_int("medium").unwrap();
 
     manager
-        .update_task(task1.id, None, None, None, None, None, Some(low))
+        .update_task(
+            task1.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(low),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .update_task(task2.id, None, None, None, None, None, Some(critical))
+        .update_task(
+            task2.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(critical),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .update_task(task3.id, None, None, None, None, None, Some(medium))
+        .update_task(
+            task3.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(medium),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
     // Query all tasks and verify priorities
     let all_tasks: Vec<Task> = sqlx::query_as(
         "SELECT id, parent_id, name, spec, status, complexity, priority, \
-         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata \
          FROM tasks ORDER BY id",
     )
     .fetch_all(db.pool())
@@ -214,7 +313,7 @@ async fn test_task_list_filtering() {
     // List all tasks
     let all_tasks: Vec<Task> = sqlx::query_as(
         "SELECT id, parent_id, name, spec, status, complexity, priority, \
-         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata \
          FROM tasks",
     )
     .fetch_all(db.pool())
@@ -225,7 +324,7 @@ async fn test_task_list_filtering() {
     // List with status filter (todo)
     let todo_tasks: Vec<Task> = sqlx::query_as(
         "SELECT id, parent_id, name, spec, status, complexity, priority, \
-         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata \
          FROM tasks WHERE status = ?",
     )
     .bind("todo")
@@ -237,7 +336,7 @@ async fn test_task_list_filtering() {
     // List with parent filter (children of task1)
     let children: Vec<Task> = sqlx::query_as(
         "SELECT id, parent_id, name, spec, status, complexity, priority, \
-         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata \
          FROM tasks WHERE parent_id = ?",
     )
     .bind(task1.id)
@@ -250,7 +349,7 @@ async fn test_task_list_filtering() {
     // List top-level tasks only (parent_id IS NULL)
     let top_level: Vec<Task> = sqlx::query_as(
         "SELECT id, parent_id, name, spec, status, complexity, priority, \
-         first_todo_at, first_doing_at, first_done_at, active_form, owner \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata \
          FROM tasks WHERE parent_id IS NULL",
     )
     .fetch_all(db.pool())
