@@ -141,6 +141,7 @@ mod tests {
             first_done_at: None,
             active_form: None,
             owner: "human".to_string(),
+            metadata: None,
         }
     }
 

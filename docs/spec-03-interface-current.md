@@ -1,7 +1,7 @@
 # Intent-Engine Interface Specification
 
-**Version**: 0.10
-**Last Updated**: 2025-12-16
+**Version**: 0.11
+**Last Updated**: 2026-02-06
 **Status**: Experimental (Pre-1.0)
 
 ---
@@ -28,6 +28,32 @@
 ---
 
 ## Changelog
+
+### Version 0.11 (2026-02-06)
+
+**Theme**: "Individual Task CRUD - Claude Code Task Management Parity"
+
+**New Features:**
+- **`ie task` CRUD Subcommands**: 8 new subcommands for individual task operations:
+  - `ie task create` - Create a task with name, description, parent, status, priority, owner, metadata, and dependency options
+  - `ie task get` - Get task details by ID, with optional event history and full context
+  - `ie task update` - Update any task field (name, description, status, priority, owner, parent, metadata, dependencies)
+  - `ie task list` - List tasks with filters (status, parent), sorting, pagination, and tree view
+  - `ie task delete` - Delete a task, with optional cascade to descendants
+  - `ie task start` - Start a task (sets status to doing and focuses it)
+  - `ie task done` - Mark a task as done (by ID or current focused task)
+  - `ie task next` - Suggest the next task to work on (context-aware priority)
+- **Metadata Field**: Arbitrary JSON key-value metadata on tasks via `--metadata key=value` (use `key=` to delete a key)
+- **Relaxed Owner Field**: Owner accepts any string, not just `human`/`ai`
+
+**Data Model Changes:**
+- Added `metadata` TEXT column to tasks table (stores JSON key-value pairs)
+
+**Migration:**
+- `ie plan` still works for batch task operations
+- `ie task` commands are now recommended for individual task create/read/update/delete operations
+
+---
 
 ### Version 0.10 (2025-12-16)
 
@@ -698,6 +724,182 @@ ie task update <TASK_ID> \
 
 ---
 
+### 2.1b `ie task` CRUD Subcommands (v0.11)
+
+These subcommands provide direct CRUD operations on individual tasks. Use `ie task` for individual operations and `ie plan` for batch operations.
+
+#### `ie task create`
+**Purpose**: Create a new task
+
+**Signature**:
+```bash
+ie task create <NAME> \
+  [--description <DESC>] \
+  [--parent <PARENT_ID>] \
+  [--status <STATUS>] \
+  [--priority <1-4>] \
+  [--owner <OWNER>] \
+  [--metadata key=value ...] \
+  [--blocked-by <ID> ...] \
+  [--blocks <ID> ...] \
+  [--format <text|json>]
+```
+
+**Parameters**:
+- `<NAME>` (required, positional): Task name
+- `--description` / `-d` (optional): Task description/spec (markdown)
+- `--parent` / `-p` (optional): Parent task ID (0 = root, omit = auto-parent to current focus)
+- `--status` / `-s` (optional, default: `todo`): Initial status
+- `--priority` (optional): Priority (1=critical, 2=high, 3=medium, 4=low)
+- `--owner` (optional, default: `human`): Task owner (any string)
+- `--metadata` (optional, repeatable): Key-value pairs (e.g., `--metadata type=epic`)
+- `--blocked-by` (optional, repeatable): IDs of tasks that block this task
+- `--blocks` (optional, repeatable): IDs of tasks this task blocks
+- `--format` (optional, default: `text`): Output format
+
+---
+
+#### `ie task get`
+**Purpose**: Get task details by ID
+
+**Signature**:
+```bash
+ie task get <ID> \
+  [--with-events] \
+  [--with-context] \
+  [--format <text|json>]
+```
+
+**Parameters**:
+- `<ID>` (required, positional): Task ID
+- `--with-events` / `-e` (optional): Include event history
+- `--with-context` / `-c` (optional): Include full context (ancestors, siblings, children, dependencies)
+- `--format` (optional, default: `text`): Output format
+
+---
+
+#### `ie task update`
+**Purpose**: Update any field of an existing task
+
+**Signature**:
+```bash
+ie task update <ID> \
+  [--name <NAME>] \
+  [--description <DESC>] \
+  [--status <STATUS>] \
+  [--priority <1-4>] \
+  [--active-form <TEXT>] \
+  [--owner <OWNER>] \
+  [--parent <PARENT_ID>] \
+  [--metadata key=value ...] \
+  [--add-blocked-by <ID> ...] \
+  [--add-blocks <ID> ...] \
+  [--rm-blocked-by <ID> ...] \
+  [--rm-blocks <ID> ...] \
+  [--format <text|json>]
+```
+
+**Parameters**:
+- `<ID>` (required, positional): Task ID
+- `--name` (optional): New task name
+- `--description` / `-d` (optional): New description/spec
+- `--status` / `-s` (optional): New status (todo, doing, done)
+- `--priority` (optional): New priority
+- `--active-form` (optional): New active form text
+- `--owner` (optional): New owner
+- `--parent` (optional): New parent ID (0 = make root task)
+- `--metadata` (optional, repeatable): Metadata key=value pairs to merge (`key=` to delete a key)
+- `--add-blocked-by` (optional, repeatable): Add blocked-by dependency
+- `--add-blocks` (optional, repeatable): Add blocks dependency
+- `--rm-blocked-by` (optional, repeatable): Remove blocked-by dependency
+- `--rm-blocks` (optional, repeatable): Remove blocks dependency
+- `--format` (optional, default: `text`): Output format
+
+---
+
+#### `ie task list`
+**Purpose**: List tasks with optional filters, sorting, and pagination
+
+**Signature**:
+```bash
+ie task list \
+  [--status <STATUS>] \
+  [--parent <PARENT_ID>] \
+  [--sort <SORT>] \
+  [--limit <N>] \
+  [--offset <N>] \
+  [--tree] \
+  [--format <text|json>]
+```
+
+**Parameters**:
+- `--status` / `-s` (optional): Filter by status (todo, doing, done)
+- `--parent` / `-p` (optional): Filter by parent ID (0 = root tasks only)
+- `--sort` (optional): Sort by (id, priority, time, focus_aware)
+- `--limit` (optional): Maximum number of results
+- `--offset` (optional): Result offset for pagination
+- `--tree` (optional): Show as hierarchical tree
+- `--format` (optional, default: `text`): Output format
+
+---
+
+#### `ie task delete`
+**Purpose**: Delete a task
+
+**Signature**:
+```bash
+ie task delete <ID> [--cascade] [--format <text|json>]
+```
+
+**Parameters**:
+- `<ID>` (required, positional): Task ID
+- `--cascade` (optional): Also delete all descendant tasks
+- `--format` (optional, default: `text`): Output format
+
+---
+
+#### `ie task start`
+**Purpose**: Start working on a task (sets status to `doing` and focuses it)
+
+**Signature**:
+```bash
+ie task start <ID> [--description <DESC>] [--format <text|json>]
+```
+
+**Parameters**:
+- `<ID>` (required, positional): Task ID
+- `--description` / `-d` (optional): Update description before starting
+- `--format` (optional, default: `text`): Output format
+
+---
+
+#### `ie task done`
+**Purpose**: Mark a task as done
+
+**Signature**:
+```bash
+ie task done [<ID>] [--format <text|json>]
+```
+
+**Parameters**:
+- `<ID>` (optional, positional): Task ID. If omitted, completes the current focused task
+- `--format` (optional, default: `text`): Output format
+
+---
+
+#### `ie task next`
+**Purpose**: Suggest the next task to work on (context-aware, depth-first priority)
+
+**Signature**:
+```bash
+ie task next [--format <text|json>]
+```
+
+**Parameters**:
+- `--format` (optional, default: `text`): Output format
+
+---
+
 ### 2.2 Event Commands
 
 #### `event add`
@@ -1219,10 +1421,10 @@ Intent-Engine follows [SemVer 2.0](https://semver.org/):
 
 | Version | CLI Interface | Rust API | Status |
 |---------|--------------|----------|--------|
-| 0.10.x  | Experimental | Experimental | Current |
+| 0.11.x  | Experimental | Experimental | Current |
 | 1.0.x   | Stable       | Stable | Future |
 
-**Current Status (0.10.x)**: All interfaces are **experimental** and may change.
+**Current Status (0.11.x)**: All interfaces are **experimental** and may change.
 
 **Experimental means**:
 - Interface may change without major version bump
@@ -1275,7 +1477,7 @@ All breaking changes documented in `CHANGELOG.md` with migration guide.
 
 | Intent-Engine | CLI Version | Min Rust API |
 |--------------|-------------|--------------|
-| 0.10.x       | 0.10.x      | 0.10.x       |
+| 0.11.x       | 0.11.x      | 0.11.x       |
 
 ---
 
@@ -1302,6 +1504,6 @@ This specification is maintained as the **single source of truth** for Intent-En
 
 ---
 
-**Specification Version**: 0.10.0
+**Specification Version**: 0.11.0
 **Maintained by**: Intent-Engine Contributors
 **License**: MIT OR Apache-2.0

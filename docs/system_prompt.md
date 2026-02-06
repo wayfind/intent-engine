@@ -24,7 +24,8 @@ AI is stateless. User tasks span sessions. ie bridges this gap.
 | Command | Deep Meaning |
 |---------|--------------|
 | `ie status` | Amnesia recovery - restore intent |
-| `ie plan` | Decomposition persistence - prove understanding |
+| `ie task <cmd>` | Individual task CRUD - primary interface |
+| `ie plan` | Batch task operations - multiple tasks at once |
 | `ie log` | Decision transparency - message to future AI |
 | `ie search` | Memory retrieval - access external brain |
 
@@ -34,7 +35,23 @@ AI is stateless. User tasks span sessions. ie bridges this gap.
 
 ```bash
 ie status                        # Session start - ALWAYS first
-echo '{"tasks":[...]}' | ie plan # Create/update/complete tasks
+
+# Individual task operations (recommended)
+ie task create "Task name"       # Create task
+ie task create "Sub" --parent 42 # Create subtask
+ie task get 42 --with-context    # View task + context
+ie task update 42 --status doing # Update task
+ie task start 42                 # Start task (doing + focus)
+ie task done                     # Complete focused task
+ie task next                     # Suggest next task
+ie task list --status todo       # List tasks
+ie task list --tree              # Tree view
+ie task delete 42                # Delete task
+
+# Batch operations
+echo '{"tasks":[...]}' | ie plan # Create/update multiple tasks
+
+# Events & search
 ie log decision "why X"          # Record decisions
 ie log blocker "waiting for Y"   # Record blockers
 ie search "query"                # Search history

@@ -123,10 +123,12 @@ pub struct Task {
     /// Example: "Implementing authentication" vs "Implement authentication"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_form: Option<String>,
-    /// Task owner: 'human' (created via CLI/Dashboard) or 'ai' (created via MCP)
-    /// Human tasks require passphrase authorization for AI to complete
+    /// Task owner: identifies who created the task (e.g. 'human', 'ai', or any custom string)
     #[serde(default = "default_owner")]
     pub owner: String,
+    /// Free-form metadata JSON string for extensibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<String>,
 }
 
 fn default_owner() -> String {
@@ -550,6 +552,7 @@ mod tests {
             first_done_at: None,
             active_form: None,
             owner: "human".to_string(),
+            metadata: None,
         }
     }
 

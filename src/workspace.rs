@@ -69,7 +69,7 @@ impl<'a> WorkspaceManager<'a> {
         let task = if let Some(id) = current_task_id {
             sqlx::query_as::<_, Task>(
                 r#"
-                SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner
+                SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
                 FROM tasks
                 WHERE id = ?
                 "#,

@@ -2,7 +2,7 @@ use clap::Parser;
 use intent_engine::cli::{Cli, Commands, DashboardCommands};
 use intent_engine::cli_handlers::{
     handle_dashboard_command, handle_doctor_command, handle_init_command, handle_search_command,
-    read_stdin,
+    handle_task_command, read_stdin,
 };
 use intent_engine::error::{IntentError, Result};
 use intent_engine::events::EventManager;
@@ -274,6 +274,8 @@ async fn run(cli: &Cli) -> Result<()> {
         Commands::Dashboard(dashboard_cmd) => handle_dashboard_command(dashboard_cmd).await?,
 
         Commands::Doctor => handle_doctor_command().await?,
+
+        Commands::Task(task_cmd) => handle_task_command(task_cmd).await?,
 
         Commands::Status {
             task_id,

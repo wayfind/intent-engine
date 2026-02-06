@@ -147,7 +147,15 @@ No history                   Traceable
 | Command | Function | Purpose |
 |---------|----------|---------|
 | `ie status` | View current state | **Context recovery** - restore working memory |
-| `ie plan` | Create/update tasks | **Intent persistence** - externalize goals |
+| `ie plan` | Batch create/update tasks | **Intent persistence** - externalize goals (batch) |
+| `ie task create` | Create a single task | **Task creation** - with metadata, deps, owner |
+| `ie task get` | Get task details | **Task inspection** - with events and context |
+| `ie task update` | Update a task | **Task mutation** - any field, metadata, deps |
+| `ie task list` | List/filter tasks | **Task discovery** - filter, sort, tree view |
+| `ie task delete` | Delete a task | **Task cleanup** - with optional cascade |
+| `ie task start` | Start a task | **Focus + status** - sets doing and focuses |
+| `ie task done` | Complete a task | **Completion** - by ID or current focus |
+| `ie task next` | Suggest next task | **Prioritization** - context-aware pick |
 | `ie log` | Record events | **Decision history** - capture the "why" |
 | `ie search` | Find history | **Memory retrieval** - access past context |
 
@@ -166,6 +174,10 @@ No history                   Traceable
 **Simple rule:**
 - Would be a shame to lose → ie
 - Use once and discard → TodoWrite
+
+**ie task vs ie plan:**
+- Single task operation (create, update, delete) → `ie task` (preferred)
+- Batch create/update multiple tasks at once → `ie plan`
 
 ---
 
@@ -242,7 +254,21 @@ Before starting, think through these. This ensures clarity before action.
 # Session start - ALWAYS run this first
 ie status
 
-# Create/update tasks (JSON via stdin)
+# Individual task operations (preferred for single tasks)
+ie task create "Task name"                          # Create task
+ie task create "Subtask" --parent 42                # Create subtask
+ie task get 42 --with-context                       # View task details
+ie task update 42 --status doing --priority 1       # Update task
+ie task update 42 --metadata type=epic              # Set metadata
+ie task start 42                                    # Start task (doing + focus)
+ie task done                                        # Complete focused task
+ie task done 42                                     # Complete specific task
+ie task next                                        # Suggest next task
+ie task list --status todo                          # List todo tasks
+ie task list --tree                                 # Show task tree
+ie task delete 42 --cascade                         # Delete task + children
+
+# Batch create/update tasks (JSON via stdin)
 echo '{"tasks":[{
   "name":"Task name",
   "status":"doing",

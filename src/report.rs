@@ -51,7 +51,7 @@ impl<'a> ReportManager<'a> {
                 " AND id IN ({})",
                 task_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
             ));
-            let full_query = task_query.replace("SELECT id", "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner");
+            let full_query = task_query.replace("SELECT id", "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata");
             let mut q = sqlx::query_as::<_, Task>(&full_query);
             for cond in &task_conditions {
                 q = q.bind(cond);
@@ -61,7 +61,7 @@ impl<'a> ReportManager<'a> {
             }
             q.fetch_all(self.pool).await?
         } else if filter_name.is_none() && filter_spec.is_none() {
-            let full_query = task_query.replace("SELECT id", "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner");
+            let full_query = task_query.replace("SELECT id", "SELECT id, parent_id, name, NULL as spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata");
             let mut q = sqlx::query_as::<_, Task>(&full_query);
             for cond in &task_conditions {
                 q = q.bind(cond);

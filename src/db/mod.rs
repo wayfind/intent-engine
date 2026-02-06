@@ -41,9 +41,10 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             first_done_at DATETIME,
             active_form TEXT,
             owner TEXT NOT NULL DEFAULT 'human',
+            metadata TEXT DEFAULT '{}',
             FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE,
             CHECK (status IN ('todo', 'doing', 'done')),
-            CHECK (owner IN ('human', 'ai'))
+            CHECK (owner IS NOT NULL AND owner != '')
         )
         "#,
     )
@@ -331,18 +332,24 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .await?;
 
     // Add owner column to tasks table (v0.9.0 - Human Task Protection)
-    // 'human' = created by human (CLI/Dashboard), 'ai' = created by AI (MCP)
+    // Owner identifies who created the task (e.g. 'human', 'ai', or any custom string)
     // Note: SQLite doesn't support CHECK constraints in ALTER TABLE, so we use a simple default
     let _ = sqlx::query("ALTER TABLE tasks ADD COLUMN owner TEXT NOT NULL DEFAULT 'human'")
         .execute(pool)
         .await; // Ignore error if column already exists
 
-    // Update schema version to 0.11.0
+    // Add metadata column to tasks table (v0.12.0 - Extensible metadata)
+    // Free-form JSON string for storing additional task metadata
+    let _ = sqlx::query("ALTER TABLE tasks ADD COLUMN metadata TEXT DEFAULT '{}'")
+        .execute(pool)
+        .await; // Ignore error if column already exists
+
+    // Update schema version to 0.12.0
     sqlx::query(
         r#"
         INSERT INTO workspace_state (key, value)
-        VALUES ('schema_version', '0.11.0')
-        ON CONFLICT(key) DO UPDATE SET value = '0.11.0'
+        VALUES ('schema_version', '0.12.0')
+        ON CONFLICT(key) DO UPDATE SET value = '0.12.0'
         "#,
     )
     .execute(pool)
@@ -688,7 +695,7 @@ mod tests {
                 .await
                 .unwrap();
 
-        assert_eq!(version, "0.11.0");
+        assert_eq!(version, "0.12.0");
     }
 
     #[tokio::test]
@@ -719,7 +726,7 @@ mod tests {
                 .await
                 .unwrap();
 
-        assert_eq!(version, "0.11.0");
+        assert_eq!(version, "0.12.0");
     }
 
     #[tokio::test]
