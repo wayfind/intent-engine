@@ -6,7 +6,10 @@
 mod test_helpers_rewrite;
 
 use intent_engine::{
-    dependencies, priority::PriorityLevel, tasks::TaskManager, workspace::WorkspaceManager,
+    dependencies,
+    priority::PriorityLevel,
+    tasks::{TaskManager, TaskUpdate},
+    workspace::WorkspaceManager,
 };
 use test_helpers_rewrite::TestDb;
 
@@ -38,15 +41,10 @@ async fn test_task_update_nonexistent_id() {
     let result = manager
         .update_task(
             99999,
-            Some("New Name"),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+            TaskUpdate {
+                name: Some("New Name"),
+                ..Default::default()
+            },
         )
         .await;
 

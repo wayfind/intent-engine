@@ -7,7 +7,10 @@
 mod test_helpers_rewrite;
 
 use intent_engine::{
-    dependencies, priority::PriorityLevel, tasks::TaskManager, workspace::WorkspaceManager,
+    dependencies,
+    priority::PriorityLevel,
+    tasks::{TaskManager, TaskUpdate},
+    workspace::WorkspaceManager,
 };
 use test_helpers_rewrite::TestDb;
 
@@ -63,15 +66,10 @@ async fn test_pick_next_recommends_after_blocking_complete() {
     manager
         .update_task(
             task1.id,
-            None,
-            None,
-            None,
-            Some("done"),
-            None,
-            None,
-            None,
-            None,
-            None,
+            TaskUpdate {
+                status: Some("done"),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -113,15 +111,10 @@ async fn test_pick_next_multiple_dependencies() {
     manager
         .update_task(
             task1.id,
-            None,
-            None,
-            None,
-            Some("done"),
-            None,
-            None,
-            None,
-            None,
-            None,
+            TaskUpdate {
+                status: Some("done"),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -134,15 +127,10 @@ async fn test_pick_next_multiple_dependencies() {
     manager
         .update_task(
             task2.id,
-            None,
-            None,
-            None,
-            Some("done"),
-            None,
-            None,
-            None,
-            None,
-            None,
+            TaskUpdate {
+                status: Some("done"),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -213,15 +201,10 @@ async fn test_pick_next_no_available_tasks_due_to_blocking() {
     manager
         .update_task(
             task2.id,
-            None,
-            None,
-            None,
-            Some("doing"),
-            None,
-            None,
-            None,
-            None,
-            None,
+            TaskUpdate {
+                status: Some("doing"),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -263,45 +246,30 @@ async fn test_pick_next_respects_priority_with_blocking() {
     manager
         .update_task(
             task1.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(low_priority),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(low_priority),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
     manager
         .update_task(
             task2.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(critical_priority),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(critical_priority),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
     manager
         .update_task(
             task3.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(medium_priority),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(medium_priority),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -342,15 +310,10 @@ async fn test_pick_next_unblocked_task_normal_behavior() {
     manager
         .update_task(
             task1.id,
-            None,
-            None,
-            None,
-            Some("done"),
-            None,
-            None,
-            None,
-            None,
-            None,
+            TaskUpdate {
+                status: Some("done"),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();

@@ -2,7 +2,7 @@ use intent_engine::{
     error::Result,
     plan::{PlanExecutor, PlanRequest, TaskTree},
     project::ProjectContext,
-    tasks::TaskManager,
+    tasks::{TaskManager, TaskUpdate},
     workspace::WorkspaceManager,
 };
 use tempfile::TempDir;
@@ -165,15 +165,10 @@ async fn test_human_can_complete_human_owned_task() -> Result<()> {
     task_mgr
         .update_task(
             task.id,
-            None,
-            None,
-            None,
-            Some("doing"),
-            None,
-            None,
-            None,
-            None,
-            None,
+            TaskUpdate {
+                status: Some("doing"),
+                ..Default::default()
+            },
         )
         .await?;
 
@@ -204,15 +199,10 @@ async fn test_ai_can_complete_ai_owned_task() -> Result<()> {
     task_mgr
         .update_task(
             task.id,
-            None,
-            None,
-            None,
-            Some("doing"),
-            None,
-            None,
-            None,
-            None,
-            None,
+            TaskUpdate {
+                status: Some("doing"),
+                ..Default::default()
+            },
         )
         .await?;
 

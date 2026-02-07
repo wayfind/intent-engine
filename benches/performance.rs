@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use intent_engine::db::{create_pool, run_migrations};
 use intent_engine::events::EventManager;
 use intent_engine::report::ReportManager;
-use intent_engine::tasks::TaskManager;
+use intent_engine::tasks::{TaskManager, TaskUpdate};
 use std::hint::black_box;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
@@ -65,15 +65,11 @@ fn bench_task_update(c: &mut Criterion) {
             task_mgr
                 .update_task(
                     task.id,
-                    Some("New name"),
-                    None,
-                    None,
-                    Some("doing"),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
+                    TaskUpdate {
+                        name: Some("New name"),
+                        status: Some("doing"),
+                        ..Default::default()
+                    },
                 )
                 .await
                 .unwrap();

@@ -436,7 +436,7 @@ impl<'a> SessionRestoreManager<'a> {
 mod tests {
     use super::*;
     use crate::events::EventManager;
-    use crate::tasks::TaskManager;
+    use crate::tasks::{TaskManager, TaskUpdate};
     use crate::test_utils::test_helpers::TestContext;
     use crate::workspace::WorkspaceManager;
 
@@ -506,15 +506,10 @@ mod tests {
         task_mgr
             .update_task(
                 sibling1.id,
-                None,
-                None,
-                None,
-                Some("done"),
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    status: Some("done"),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -526,15 +521,10 @@ mod tests {
         task_mgr
             .update_task(
                 current.id,
-                None,
-                None,
-                None,
-                Some("doing"),
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    status: Some("doing"),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();

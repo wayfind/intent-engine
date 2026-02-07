@@ -8,7 +8,10 @@ use serde_json::json;
 use super::models::*;
 use super::server::AppState;
 use crate::{
-    db::models::TaskSortBy, events::EventManager, search::SearchManager, tasks::TaskManager,
+    db::models::TaskSortBy,
+    events::EventManager,
+    search::SearchManager,
+    tasks::{TaskManager, TaskUpdate},
     workspace::WorkspaceManager,
 };
 
@@ -163,15 +166,10 @@ pub async fn create_task(
                 if let Ok(updated_task) = task_mgr
                     .update_task(
                         task.id,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        Some(priority),
-                        None,
-                        None,
-                        None,
+                        TaskUpdate {
+                            priority: Some(priority),
+                            ..Default::default()
+                        },
                     )
                     .await
                 {
@@ -256,15 +254,13 @@ pub async fn update_task(
     match task_mgr
         .update_task(
             id,
-            req.name.as_deref(),
-            req.spec.as_deref(),
-            None, // parent_id - not supported via update API
-            req.status.as_deref(),
-            None, // complexity - not exposed in API
-            req.priority,
-            None, // active_form
-            None, // owner
-            None, // metadata
+            TaskUpdate {
+                name: req.name.as_deref(),
+                spec: req.spec.as_deref(),
+                status: req.status.as_deref(),
+                priority: req.priority,
+                ..Default::default()
+            },
         )
         .await
     {

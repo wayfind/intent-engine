@@ -19,6 +19,21 @@ pub struct DeleteTaskResult {
     pub descendant_count: i64,
 }
 
+/// Parameter struct for `TaskManager::update_task`.
+/// Only set the fields you want to change; the rest default to `None` (no change).
+#[derive(Debug, Default)]
+pub struct TaskUpdate<'a> {
+    pub name: Option<&'a str>,
+    pub spec: Option<&'a str>,
+    pub parent_id: Option<Option<i64>>,
+    pub status: Option<&'a str>,
+    pub complexity: Option<i32>,
+    pub priority: Option<i32>,
+    pub active_form: Option<&'a str>,
+    pub owner: Option<&'a str>,
+    pub metadata: Option<&'a str>,
+}
+
 pub struct TaskManager<'a> {
     pool: &'a SqlitePool,
     notifier: crate::notifications::NotificationSender,
@@ -780,20 +795,19 @@ impl<'a> TaskManager<'a> {
     }
 
     /// Update a task
-    #[allow(clippy::too_many_arguments)]
-    pub async fn update_task(
-        &self,
-        id: i64,
-        name: Option<&str>,
-        spec: Option<&str>,
-        parent_id: Option<Option<i64>>,
-        status: Option<&str>,
-        complexity: Option<i32>,
-        priority: Option<i32>,
-        active_form: Option<&str>,
-        owner: Option<&str>,
-        metadata: Option<&str>,
-    ) -> Result<Task> {
+    pub async fn update_task(&self, id: i64, update: TaskUpdate<'_>) -> Result<Task> {
+        let TaskUpdate {
+            name,
+            spec,
+            parent_id,
+            status,
+            complexity,
+            priority,
+            active_form,
+            owner,
+            metadata,
+        } = update;
+
         // Check task exists
         let task = self.get_task(id).await?;
 
@@ -1865,30 +1879,20 @@ mod tests {
         manager
             .update_task(
                 task1.id,
-                None,
-                None,
-                None,
-                Some("doing"),
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    status: Some("doing"),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
         manager
             .update_task(
                 task2.id,
-                None,
-                None,
-                None,
-                Some("done"),
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    status: Some("done"),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -1987,15 +1991,10 @@ mod tests {
         let updated = manager
             .update_task(
                 task.id,
-                Some("New name"),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    name: Some("New name"),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2015,15 +2014,10 @@ mod tests {
         let updated = manager
             .update_task(
                 task.id,
-                None,
-                None,
-                None,
-                Some("doing"),
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    status: Some("doing"),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2063,15 +2057,10 @@ mod tests {
         manager
             .update_task(
                 doing_task.id,
-                None,
-                None,
-                None,
-                Some("doing"),
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    status: Some("doing"),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2271,15 +2260,10 @@ mod tests {
         let result = manager
             .update_task(
                 task1.id,
-                None,
-                None,
-                Some(Some(task2.id)),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    parent_id: Some(Some(task2.id)),
+                    ..Default::default()
+                },
             )
             .await;
 
@@ -2310,15 +2294,11 @@ mod tests {
         let updated = manager
             .update_task(
                 task.id,
-                None,
-                None,
-                None,
-                None,
-                Some(8),
-                Some(10),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    complexity: Some(8),
+                    priority: Some(10),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2483,15 +2463,10 @@ mod tests {
         manager
             .update_task(
                 low.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(1),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(1),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2503,15 +2478,10 @@ mod tests {
         manager
             .update_task(
                 high.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(10),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(10),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2523,15 +2493,10 @@ mod tests {
         manager
             .update_task(
                 medium.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(5),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(5),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2556,15 +2521,11 @@ mod tests {
         manager
             .update_task(
                 complex.id,
-                None,
-                None,
-                None,
-                None,
-                Some(9),
-                Some(5),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    complexity: Some(9),
+                    priority: Some(5),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2573,15 +2534,11 @@ mod tests {
         manager
             .update_task(
                 simple.id,
-                None,
-                None,
-                None,
-                None,
-                Some(1),
-                Some(5),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    complexity: Some(1),
+                    priority: Some(5),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2590,15 +2547,11 @@ mod tests {
         manager
             .update_task(
                 medium.id,
-                None,
-                None,
-                None,
-                None,
-                Some(5),
-                Some(5),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    complexity: Some(5),
+                    priority: Some(5),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2819,15 +2772,10 @@ mod tests {
         manager
             .update_task(
                 task.id,
-                None,
-                None,
-                None,
-                Some("doing"),
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    status: Some("doing"),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2894,30 +2842,20 @@ mod tests {
         manager
             .update_task(
                 subtask1.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(2),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(2),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
         manager
             .update_task(
                 subtask2.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(1),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(1),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -2944,30 +2882,20 @@ mod tests {
         manager
             .update_task(
                 task1.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(5),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(5),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
         manager
             .update_task(
                 task2.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(3),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(3),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3086,15 +3014,10 @@ mod tests {
         manager
             .update_task(
                 sub1.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(10),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(10),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3106,15 +3029,10 @@ mod tests {
         manager
             .update_task(
                 sub2.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(1),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(1),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3126,15 +3044,10 @@ mod tests {
         manager
             .update_task(
                 sub3.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(5),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(5),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3516,15 +3429,10 @@ mod tests {
         let _ = task_mgr
             .update_task(
                 child_low.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(10),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(10),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3536,15 +3444,10 @@ mod tests {
         let _ = task_mgr
             .update_task(
                 child_high.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(1),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(1),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3556,15 +3459,10 @@ mod tests {
         let _ = task_mgr
             .update_task(
                 child_medium.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(5),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(5),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3598,15 +3496,10 @@ mod tests {
         let _ = task_mgr
             .update_task(
                 task1.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(1),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(1),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3618,15 +3511,10 @@ mod tests {
         let _ = task_mgr
             .update_task(
                 task3.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(5),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(5),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3656,15 +3544,10 @@ mod tests {
         task_mgr
             .update_task(
                 critical.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(1),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(1),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3676,15 +3559,10 @@ mod tests {
         task_mgr
             .update_task(
                 low.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(4),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(4),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3696,15 +3574,10 @@ mod tests {
         task_mgr
             .update_task(
                 high.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(2),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(2),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -3716,15 +3589,10 @@ mod tests {
         task_mgr
             .update_task(
                 medium.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(3),
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    priority: Some(3),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();

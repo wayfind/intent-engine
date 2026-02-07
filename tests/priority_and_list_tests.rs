@@ -5,7 +5,11 @@
 
 mod test_helpers_rewrite;
 
-use intent_engine::{db::models::Task, priority::PriorityLevel, tasks::TaskManager};
+use intent_engine::{
+    db::models::Task,
+    priority::PriorityLevel,
+    tasks::{TaskManager, TaskUpdate},
+};
 use test_helpers_rewrite::TestDb;
 
 /// Test setting critical priority
@@ -25,15 +29,10 @@ async fn test_priority_critical() {
     let updated = manager
         .update_task(
             task.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(critical),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(critical),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -56,15 +55,10 @@ async fn test_priority_high() {
     let updated = manager
         .update_task(
             task.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(high),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(high),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -87,15 +81,10 @@ async fn test_priority_medium() {
     let updated = manager
         .update_task(
             task.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(medium),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(medium),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -118,15 +107,10 @@ async fn test_priority_low() {
     let updated = manager
         .update_task(
             task.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(low),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(low),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -150,15 +134,10 @@ async fn test_priority_case_insensitive() {
     let updated = manager
         .update_task(
             task.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(high),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(high),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -169,15 +148,10 @@ async fn test_priority_case_insensitive() {
     let updated = manager
         .update_task(
             task.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(critical),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(critical),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -229,45 +203,30 @@ async fn test_priority_ordering_still_works() {
     manager
         .update_task(
             task1.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(low),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(low),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
     manager
         .update_task(
             task2.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(critical),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(critical),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
     manager
         .update_task(
             task3.id,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(medium),
-            None,
-            None,
-            None,
+            TaskUpdate {
+                priority: Some(medium),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();

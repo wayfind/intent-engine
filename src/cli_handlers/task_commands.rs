@@ -2,7 +2,7 @@ use crate::cli::TaskCommands;
 use crate::dependencies::add_dependency;
 use crate::error::{IntentError, Result};
 use crate::project::ProjectContext;
-use crate::tasks::TaskManager;
+use crate::tasks::{TaskManager, TaskUpdate};
 use crate::workspace::WorkspaceManager;
 use serde_json::json;
 
@@ -213,15 +213,11 @@ async fn handle_create(
         task = task_mgr
             .update_task(
                 task.id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                priority,
-                None,
-                None,
-                merged_metadata.as_deref(),
+                TaskUpdate {
+                    priority,
+                    metadata: merged_metadata.as_deref(),
+                    ..Default::default()
+                },
             )
             .await?;
     }
@@ -235,15 +231,10 @@ async fn handle_create(
         task = task_mgr
             .update_task(
                 task.id,
-                None,
-                None,
-                None,
-                Some("done"),
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    status: Some("done"),
+                    ..Default::default()
+                },
             )
             .await?;
     }
@@ -433,15 +424,17 @@ async fn handle_update(
     let mut task = task_mgr
         .update_task(
             id,
-            name.as_deref(),
-            description.as_deref(),
-            parent_id_opt,
-            effective_status.as_deref(),
-            None, // complexity
-            priority,
-            active_form.as_deref(),
-            owner.as_deref(),
-            merged_metadata.as_deref(),
+            TaskUpdate {
+                name: name.as_deref(),
+                spec: description.as_deref(),
+                parent_id: parent_id_opt,
+                status: effective_status.as_deref(),
+                priority,
+                active_form: active_form.as_deref(),
+                owner: owner.as_deref(),
+                metadata: merged_metadata.as_deref(),
+                ..Default::default()
+            },
         )
         .await?;
 
@@ -651,15 +644,10 @@ async fn handle_start(id: i64, description: Option<String>, format: String) -> R
         task_mgr
             .update_task(
                 id,
-                None,
-                Some(desc.as_str()),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
+                TaskUpdate {
+                    spec: Some(desc.as_str()),
+                    ..Default::default()
+                },
             )
             .await?;
     }
