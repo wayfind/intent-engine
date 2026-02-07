@@ -1177,6 +1177,93 @@ impl<'a> TaskManager<'a> {
         }
     }
 
+    /// Build a next-step suggestion after completing a task.
+    ///
+    /// Shared by `done_task` and `done_task_by_id` to avoid duplication.
+    async fn build_next_step_suggestion(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        id: i64,
+        task_name: &str,
+        parent_id: Option<i64>,
+    ) -> Result<NextStepSuggestion> {
+        if let Some(parent_task_id) = parent_id {
+            let remaining_siblings: i64 = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ?",
+            )
+            .bind(parent_task_id)
+            .bind(id)
+            .fetch_one(&mut **tx)
+            .await?;
+
+            let parent_name: String =
+                sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
+                    .bind(parent_task_id)
+                    .fetch_one(&mut **tx)
+                    .await?;
+
+            if remaining_siblings == 0 {
+                Ok(NextStepSuggestion::ParentIsReady {
+                    message: format!(
+                        "All sub-tasks of parent #{} '{}' are now complete. The parent task is ready for your attention.",
+                        parent_task_id, parent_name
+                    ),
+                    parent_task_id,
+                    parent_task_name: parent_name,
+                })
+            } else {
+                Ok(NextStepSuggestion::SiblingTasksRemain {
+                    message: format!(
+                        "Task #{} completed. Parent task #{} '{}' has other sub-tasks remaining.",
+                        id, parent_task_id, parent_name
+                    ),
+                    parent_task_id,
+                    parent_task_name: parent_name,
+                    remaining_siblings_count: remaining_siblings,
+                })
+            }
+        } else {
+            let child_count: i64 =
+                sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_CHILDREN_TOTAL)
+                    .bind(id)
+                    .fetch_one(&mut **tx)
+                    .await?;
+
+            if child_count > 0 {
+                Ok(NextStepSuggestion::TopLevelTaskCompleted {
+                    message: format!(
+                        "Top-level task #{} '{}' has been completed. Well done!",
+                        id, task_name
+                    ),
+                    completed_task_id: id,
+                    completed_task_name: task_name.to_string(),
+                })
+            } else {
+                let remaining_tasks: i64 = sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ?",
+                )
+                .bind(id)
+                .fetch_one(&mut **tx)
+                .await?;
+
+                if remaining_tasks == 0 {
+                    Ok(NextStepSuggestion::WorkspaceIsClear {
+                        message: format!(
+                            "Project complete! Task #{} was the last remaining task. There are no more 'todo' or 'doing' tasks.",
+                            id
+                        ),
+                        completed_task_id: id,
+                    })
+                } else {
+                    Ok(NextStepSuggestion::NoParentContext {
+                        message: format!("Task #{} '{}' has been completed.", id, task_name),
+                        completed_task_id: id,
+                        completed_task_name: task_name.to_string(),
+                    })
+                }
+            }
+        }
+    }
+
     /// Complete the current focused task (atomic: check children + update status + clear current)
     /// This command only operates on the current_task_id.
     /// Prerequisites: A task must be set as current
@@ -1229,95 +1316,8 @@ impl<'a> TaskManager<'a> {
             .execute(&mut *tx)
             .await?;
 
-        // Determine next step suggestion based on context
-        let next_step_suggestion = if let Some(parent_task_id) = parent_id {
-            // Task has a parent - check sibling status
-            let remaining_siblings: i64 = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ?",
-            )
-            .bind(parent_task_id)
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
-
-            if remaining_siblings == 0 {
-                // All siblings are done - parent is ready
-                let parent_name: String =
-                    sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
-                        .bind(parent_task_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
-
-                NextStepSuggestion::ParentIsReady {
-                    message: format!(
-                        "All sub-tasks of parent #{} '{}' are now complete. The parent task is ready for your attention.",
-                        parent_task_id, parent_name
-                    ),
-                    parent_task_id,
-                    parent_task_name: parent_name,
-                }
-            } else {
-                // Siblings remain
-                let parent_name: String =
-                    sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
-                        .bind(parent_task_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
-
-                NextStepSuggestion::SiblingTasksRemain {
-                    message: format!(
-                        "Task #{} completed. Parent task #{} '{}' has other sub-tasks remaining.",
-                        id, parent_task_id, parent_name
-                    ),
-                    parent_task_id,
-                    parent_task_name: parent_name,
-                    remaining_siblings_count: remaining_siblings,
-                }
-            }
-        } else {
-            // No parent - check if this was a top-level task with children or standalone
-            let child_count: i64 =
-                sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_CHILDREN_TOTAL)
-                    .bind(id)
-                    .fetch_one(&mut *tx)
-                    .await?;
-
-            if child_count > 0 {
-                // Top-level task with children completed
-                NextStepSuggestion::TopLevelTaskCompleted {
-                    message: format!(
-                        "Top-level task #{} '{}' has been completed. Well done!",
-                        id, task_name
-                    ),
-                    completed_task_id: id,
-                    completed_task_name: task_name.clone(),
-                }
-            } else {
-                // Check if workspace is clear
-                let remaining_tasks: i64 = sqlx::query_scalar::<_, i64>(
-                    "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ?",
-                )
-                .bind(id)
-                .fetch_one(&mut *tx)
-                .await?;
-
-                if remaining_tasks == 0 {
-                    NextStepSuggestion::WorkspaceIsClear {
-                        message: format!(
-                            "Project complete! Task #{} was the last remaining task. There are no more 'todo' or 'doing' tasks.",
-                            id
-                        ),
-                        completed_task_id: id,
-                    }
-                } else {
-                    NextStepSuggestion::NoParentContext {
-                        message: format!("Task #{} '{}' has been completed.", id, task_name),
-                        completed_task_id: id,
-                        completed_task_name: task_name.clone(),
-                    }
-                }
-            }
-        };
+        let next_step_suggestion =
+            Self::build_next_step_suggestion(&mut tx, id, &task_name, parent_id).await?;
 
         tx.commit().await?;
 
@@ -1386,89 +1386,8 @@ impl<'a> TaskManager<'a> {
         .await?
         .flatten();
 
-        // Determine next step suggestion (same logic as done_task)
-        let next_step_suggestion = if let Some(parent_task_id) = parent_id {
-            let remaining_siblings: i64 = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ?",
-            )
-            .bind(parent_task_id)
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
-
-            if remaining_siblings == 0 {
-                let parent_name: String =
-                    sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
-                        .bind(parent_task_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
-
-                NextStepSuggestion::ParentIsReady {
-                    message: format!(
-                        "All sub-tasks of parent #{} '{}' are now complete. The parent task is ready for your attention.",
-                        parent_task_id, parent_name
-                    ),
-                    parent_task_id,
-                    parent_task_name: parent_name,
-                }
-            } else {
-                let parent_name: String =
-                    sqlx::query_scalar::<_, String>(crate::sql_constants::SELECT_TASK_NAME)
-                        .bind(parent_task_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
-
-                NextStepSuggestion::SiblingTasksRemain {
-                    message: format!(
-                        "Task #{} completed. Parent task #{} '{}' has other sub-tasks remaining.",
-                        id, parent_task_id, parent_name
-                    ),
-                    parent_task_id,
-                    parent_task_name: parent_name,
-                    remaining_siblings_count: remaining_siblings,
-                }
-            }
-        } else {
-            let child_count: i64 =
-                sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_CHILDREN_TOTAL)
-                    .bind(id)
-                    .fetch_one(&mut *tx)
-                    .await?;
-
-            if child_count > 0 {
-                NextStepSuggestion::TopLevelTaskCompleted {
-                    message: format!(
-                        "Top-level task #{} '{}' has been completed. Well done!",
-                        id, task_name
-                    ),
-                    completed_task_id: id,
-                    completed_task_name: task_name.clone(),
-                }
-            } else {
-                let remaining_tasks: i64 = sqlx::query_scalar::<_, i64>(
-                    "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ?",
-                )
-                .bind(id)
-                .fetch_one(&mut *tx)
-                .await?;
-
-                if remaining_tasks == 0 {
-                    NextStepSuggestion::WorkspaceIsClear {
-                        message: format!(
-                            "Project complete! Task #{} was the last remaining task. There are no more 'todo' or 'doing' tasks.",
-                            id
-                        ),
-                        completed_task_id: id,
-                    }
-                } else {
-                    NextStepSuggestion::NoParentContext {
-                        message: format!("Task #{} '{}' has been completed.", id, task_name),
-                        completed_task_id: id,
-                        completed_task_name: task_name.clone(),
-                    }
-                }
-            }
-        };
+        let next_step_suggestion =
+            Self::build_next_step_suggestion(&mut tx, id, &task_name, parent_id).await?;
 
         tx.commit().await?;
 
