@@ -1389,10 +1389,21 @@ impl<'a> TaskManager<'a> {
         let next_step_suggestion =
             Self::build_next_step_suggestion(&mut tx, id, &task_name, parent_id).await?;
 
+        // LLM Synthesis: Generate updated task description from events (if configured)
+        let synthesis_result = self.try_synthesize_task_description(id, &task_name).await;
+
         tx.commit().await?;
 
         // Fetch the completed task to notify UI
-        let completed_task = self.get_task(id).await?;
+        let mut completed_task = self.get_task(id).await?;
+
+        // Apply synthesis if available and appropriate (respects owner field)
+        if let Ok(Some(new_spec)) = synthesis_result {
+            completed_task = self
+                .apply_synthesis_if_appropriate(completed_task, &new_spec, &owner)
+                .await?;
+        }
+
         self.notify_task_updated(&completed_task).await;
 
         Ok(DoneTaskResponse {
@@ -1761,6 +1772,87 @@ impl<'a> TaskManager<'a> {
 
         // Otherwise, there are tasks but none available based on current context
         Ok(PickNextResponse::no_available_todos())
+    }
+
+    /// Try to synthesize task description using LLM
+    ///
+    /// Returns Ok(None) if LLM is not configured (graceful degradation)
+    /// Returns Ok(Some(synthesis)) if successful
+    /// Returns Err only on critical failures
+    async fn try_synthesize_task_description(
+        &self,
+        task_id: i64,
+        task_name: &str,
+    ) -> Result<Option<String>> {
+        // Get task spec and events
+        let task = self.get_task(task_id).await?;
+        let events = crate::events::EventManager::new(self.pool)
+            .list_events(Some(task_id), None, None, None)
+            .await?;
+
+        // Call LLM synthesis (returns None if not configured)
+        match crate::llm::synthesize_task_description(
+            self.pool,
+            task_name,
+            task.spec.as_deref(),
+            &events,
+        )
+        .await
+        {
+            Ok(synthesis) => Ok(synthesis),
+            Err(e) => {
+                // Log error but don't fail the task completion
+                tracing::warn!("LLM synthesis failed: {}", e);
+                Ok(None)
+            },
+        }
+    }
+
+    /// Apply LLM synthesis to task based on owner field
+    ///
+    /// - AI-owned tasks: auto-apply
+    /// - Human-owned tasks: prompt for approval (currently just logs and skips)
+    async fn apply_synthesis_if_appropriate(
+        &self,
+        task: Task,
+        new_spec: &str,
+        owner: &str,
+    ) -> Result<Task> {
+        if owner == "ai" {
+            // AI-owned task: auto-apply synthesis
+            tracing::info!("Auto-applying LLM synthesis for AI-owned task #{}", task.id);
+
+            let updated = self
+                .update_task(
+                    task.id,
+                    TaskUpdate {
+                        spec: Some(new_spec),
+                        ..Default::default()
+                    },
+                )
+                .await?;
+
+            Ok(updated)
+        } else {
+            // Human-owned task: would prompt user, but for CLI we just log
+            // TODO: Implement interactive prompt for human tasks
+            tracing::info!(
+                "LLM synthesis available for human-owned task #{}, but auto-apply disabled. \
+                 User would be prompted in interactive mode.",
+                task.id
+            );
+            eprintln!("\n💡 LLM generated a task summary:");
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            eprintln!("{}", new_spec);
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            eprintln!("(Auto-apply disabled for human-owned tasks)");
+            eprintln!(
+                "To apply manually: ie task update {} --description \"<new spec>\"",
+                task.id
+            );
+
+            Ok(task) // Return unchanged
+        }
     }
 }
 

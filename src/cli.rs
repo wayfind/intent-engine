@@ -278,6 +278,23 @@ pub enum ConfigCommands {
         #[arg(long, default_value = "text")]
         format: String,
     },
+
+    /// Test LLM endpoint connectivity
+    ///
+    /// Sends a simple test message to verify the configured LLM endpoint is working.
+    ///
+    /// Examples:
+    ///   ie config test-llm
+    ///   ie config test-llm --prompt "Hello, introduce yourself"
+    TestLlm {
+        /// Custom test prompt (default: "你好，请用一句话介绍你自己")
+        #[arg(long)]
+        prompt: Option<String>,
+
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
 }
 
 #[derive(Subcommand, Clone)]

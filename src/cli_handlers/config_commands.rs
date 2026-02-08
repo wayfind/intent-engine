@@ -29,6 +29,7 @@ pub async fn handle_config_command(cmd: ConfigCommands) -> Result<()> {
         ConfigCommands::Get { key, format } => handle_get(&key, &format).await,
         ConfigCommands::List { prefix, format } => handle_list(prefix.as_deref(), &format).await,
         ConfigCommands::Unset { key, format } => handle_unset(&key, &format).await,
+        ConfigCommands::TestLlm { prompt, format } => handle_test_llm(prompt, &format).await,
     }
 }
 
@@ -171,6 +172,87 @@ async fn handle_unset(key: &str, format: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn handle_test_llm(prompt: Option<String>, format: &str) -> Result<()> {
+    use crate::llm::LlmClient;
+
+    let ctx = ProjectContext::load_or_init().await?;
+
+    // Check if LLM is configured
+    if !LlmClient::is_configured(&ctx.pool).await {
+        let error_msg = "LLM not configured. Set llm.endpoint, llm.api_key, and llm.model first.";
+        if format == "json" {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "success": false,
+                    "error": error_msg,
+                }))?
+            );
+        } else {
+            eprintln!("❌ {}", error_msg);
+            eprintln!("\n💡 Configure LLM:");
+            eprintln!(
+                "   ie config set llm.endpoint \"http://localhost:8080/v1/chat/completions\""
+            );
+            eprintln!("   ie config set llm.api_key \"sk-your-key\"");
+            eprintln!("   ie config set llm.model \"your-model\"");
+        }
+        return Err(IntentError::InvalidInput(error_msg.to_string()));
+    }
+
+    // Create LLM client
+    let client = LlmClient::from_pool(&ctx.pool).await?;
+
+    // Use custom prompt or default
+    let test_prompt = prompt.unwrap_or_else(|| "你好，请用一句话介绍你自己".to_string());
+
+    if format != "json" {
+        println!("🔍 Testing LLM endpoint...");
+        println!("📤 Sending: {}", test_prompt);
+        println!();
+    }
+
+    // Make API call
+    match client.chat(&test_prompt).await {
+        Ok(response) => {
+            if format == "json" {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "success": true,
+                        "prompt": test_prompt,
+                        "response": response,
+                    }))?
+                );
+            } else {
+                println!("✅ LLM endpoint is working!");
+                println!("📥 Response: {}", response);
+            }
+            Ok(())
+        },
+        Err(e) => {
+            if format == "json" {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "success": false,
+                        "prompt": test_prompt,
+                        "error": e.to_string(),
+                    }))?
+                );
+            } else {
+                eprintln!("❌ LLM API call failed: {}", e);
+                eprintln!("\n💡 Possible reasons:");
+                eprintln!("   • Endpoint not running at the configured URL");
+                eprintln!("   • Network connectivity issues");
+                eprintln!("   • Invalid API key");
+                eprintln!("   • Endpoint returned an error");
+            }
+            Err(e)
+        },
+    }
 }
 
 // ============================================================================

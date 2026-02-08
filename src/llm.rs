@@ -167,6 +167,83 @@ impl LlmClient {
                 crate::error::IntentError::OtherError(anyhow::anyhow!("LLM returned empty choices"))
             })
     }
+
+    /// Synthesize task description from accumulated events
+    ///
+    /// This function takes a task and its event history, and uses the LLM to generate
+    /// a structured summary in markdown format.
+    pub async fn synthesize_task_description(
+        &self,
+        task_name: &str,
+        original_spec: Option<&str>,
+        events: &[crate::db::models::Event],
+    ) -> Result<String> {
+        // Build the event summary
+        let events_text = if events.is_empty() {
+            "No events recorded.".to_string()
+        } else {
+            events
+                .iter()
+                .map(|e| {
+                    format!(
+                        "[{}] {} - {}",
+                        e.log_type,
+                        e.timestamp.format("%Y-%m-%d %H:%M"),
+                        e.discussion_data
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        let original_spec_text = original_spec.unwrap_or("(No original description)");
+
+        // Construct the prompt
+        let prompt = format!(
+            r#"You are summarizing a completed task based on its execution history.
+
+Task: {}
+Original description: {}
+
+Events (chronological):
+{}
+
+Synthesize a clear, structured description capturing:
+1. Goal (what was the objective?)
+2. Approach (how was it accomplished?)
+3. Key Decisions (what choices were made and why?)
+4. Outcome (what was delivered?)
+
+Use markdown format with ## headers. Be concise but preserve critical context.
+Output ONLY the markdown summary, no preamble or explanation."#,
+            task_name, original_spec_text, events_text
+        );
+
+        self.chat(&prompt).await
+    }
+}
+
+/// Synthesize task description using LLM (convenience function)
+///
+/// Returns None if LLM is not configured (graceful degradation)
+pub async fn synthesize_task_description(
+    pool: &SqlitePool,
+    task_name: &str,
+    original_spec: Option<&str>,
+    events: &[crate::db::models::Event],
+) -> Result<Option<String>> {
+    // Check if LLM is configured
+    if !LlmClient::is_configured(pool).await {
+        return Ok(None);
+    }
+
+    // Create client and synthesize
+    let client = LlmClient::from_pool(pool).await?;
+    let synthesis = client
+        .synthesize_task_description(task_name, original_spec, events)
+        .await?;
+
+    Ok(Some(synthesis))
 }
 
 #[cfg(test)]
