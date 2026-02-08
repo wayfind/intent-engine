@@ -186,8 +186,16 @@ async fn handle_create(
     // --parent 0 means root task (no parent)
     // --parent N means use task N as parent
     // omitted means auto-parent to current focused task
+    let mut focused_task_for_hint: Option<(i64, String, String)> = None;
     let parent_id = match parent {
-        Some(0) => None,
+        Some(0) => {
+            // User explicitly requested root task — check if there's a focused task for hint
+            let current = workspace_mgr.get_current_task(None).await?;
+            if let Some(task) = &current.task {
+                focused_task_for_hint = Some((task.id, task.name.clone(), task.status.clone()));
+            }
+            None
+        },
         Some(p) => Some(p),
         None => {
             let current = workspace_mgr.get_current_task(None).await?;
@@ -251,7 +259,14 @@ async fn handle_create(
 
     // Output
     if format == "json" {
-        println!("{}", serde_json::to_string_pretty(&task)?);
+        let mut response = serde_json::to_value(&task)?;
+        if let Some((fid, fname, fstatus)) = &focused_task_for_hint {
+            response["hint"] = json!(format!(
+                "Current focus: #{} {} [{}]. To make this a subtask: ie task update {} --parent {}",
+                fid, fname, fstatus, task.id, fid
+            ));
+        }
+        println!("{}", serde_json::to_string_pretty(&response)?);
     } else {
         println!("Task created: #{} {}", task.id, task.name);
         println!("  Status: {}", task.status);
@@ -270,6 +285,16 @@ async fn handle_create(
         }
         if !blocks.is_empty() {
             println!("  Blocks: {:?}", blocks);
+        }
+
+        // Hint: suggest making this a subtask of the focused task
+        if let Some((fid, fname, fstatus)) = &focused_task_for_hint {
+            eprintln!();
+            eprintln!("\u{1f4a1} Current focus: #{} {} [{}]", fid, fname, fstatus);
+            eprintln!(
+                "   To make this a subtask: ie task update {} --parent {}",
+                task.id, fid
+            );
         }
     }
 

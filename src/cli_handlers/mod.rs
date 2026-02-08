@@ -4,12 +4,14 @@
 // Core: plan, log, search, task
 // System: init, dashboard, doctor
 
+pub mod config_commands;
 pub mod dashboard;
 pub mod other;
 pub mod task_commands;
 pub mod utils;
 
 // Re-export commonly used functions
+pub use config_commands::handle_config_command;
 pub use dashboard::{check_dashboard_status, check_mcp_connections, handle_dashboard_command};
 pub use other::{
     handle_doctor_command,

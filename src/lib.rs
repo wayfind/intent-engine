@@ -6,6 +6,7 @@ pub mod dependencies;
 pub mod error;
 pub mod events;
 pub mod global_projects;
+pub mod llm;
 pub mod logging;
 pub mod logs;
 pub mod notifications;

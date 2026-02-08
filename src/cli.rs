@@ -201,6 +201,83 @@ pub enum Commands {
     ///   ie task next
     #[command(subcommand)]
     Task(TaskCommands),
+
+    /// Configuration management (key-value store)
+    ///
+    /// Manage configuration settings stored in the project database.
+    /// Used for LLM endpoints, API keys, and other project-level settings.
+    ///
+    /// Examples:
+    ///   ie config set llm.endpoint "http://localhost:8080/v1/chat/completions"
+    ///   ie config get llm.api_key
+    ///   ie config list --prefix llm
+    ///   ie config unset llm.model
+    #[command(subcommand)]
+    Config(ConfigCommands),
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ConfigCommands {
+    /// Set a configuration value
+    ///
+    /// Examples:
+    ///   ie config set llm.endpoint "http://localhost:8080/v1/chat/completions"
+    ///   ie config set llm.api_key "sk-your-key"
+    Set {
+        /// Configuration key (e.g., llm.endpoint)
+        key: String,
+
+        /// Configuration value
+        value: String,
+
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
+    /// Get a configuration value
+    ///
+    /// Sensitive values (api_key, secret) are automatically masked.
+    ///
+    /// Examples:
+    ///   ie config get llm.endpoint
+    ///   ie config get llm.api_key    # Shows masked value
+    Get {
+        /// Configuration key
+        key: String,
+
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
+    /// List configuration entries
+    ///
+    /// Examples:
+    ///   ie config list
+    ///   ie config list --prefix llm
+    List {
+        /// Filter by key prefix (e.g., "llm" shows all llm.* keys)
+        #[arg(long)]
+        prefix: Option<String>,
+
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
+    /// Remove a configuration entry
+    ///
+    /// Examples:
+    ///   ie config unset llm.model
+    Unset {
+        /// Configuration key to remove
+        key: String,
+
+        /// Output format (text or json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
 }
 
 #[derive(Subcommand, Clone)]
