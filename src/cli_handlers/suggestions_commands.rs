@@ -59,11 +59,14 @@ pub async fn handle_dismiss(id: Option<i64>, all: bool, format: &str) -> Result<
         dismiss_suggestion(&ctx.pool, suggestion_id).await?;
         1
     } else {
-        eprintln!("Error: Must provide either suggestion ID or --all flag");
-        eprintln!("Usage:");
-        eprintln!("  ie suggestions dismiss 5");
-        eprintln!("  ie suggestions dismiss --all");
-        std::process::exit(1);
+        use crate::error::IntentError;
+        return Err(IntentError::InvalidInput(
+            "Must provide either suggestion ID or --all flag.\n\
+             Usage:\n\
+               ie suggestions dismiss 5\n\
+               ie suggestions dismiss --all"
+                .to_string(),
+        ));
     };
 
     if format == "json" {

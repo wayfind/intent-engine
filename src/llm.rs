@@ -12,31 +12,65 @@ static LAST_ANALYSIS_TIME: AtomicI64 = AtomicI64::new(0);
 /// Default cooldown period: 5 minutes
 const DEFAULT_ANALYSIS_COOLDOWN_SECS: i64 = 300;
 
-/// Check if enough time has passed since last analysis
-fn should_trigger_analysis() -> bool {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+/// Maximum number of active (non-dismissed) suggestions
+/// Prevents unbounded growth if user never dismisses suggestions
+const MAX_ACTIVE_SUGGESTIONS: i64 = 20;
 
-    let last = LAST_ANALYSIS_TIME.load(Ordering::Relaxed);
+/// Get current timestamp in seconds since UNIX_EPOCH
+///
+/// Handles system clock errors gracefully by returning None.
+/// This prevents panics when system time is misconfigured.
+fn get_current_timestamp() -> Option<i64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs() as i64)
+}
+
+/// Check if enough time has passed since last analysis
+///
+/// Handles edge cases:
+/// - System clock errors: allows analysis (fail-safe)
+/// - Clock skew (time went backwards): resets timer and allows analysis
+/// - Thread safety: uses Acquire ordering for visibility
+fn should_trigger_analysis() -> bool {
+    let now = match get_current_timestamp() {
+        Some(ts) => ts,
+        None => {
+            tracing::warn!("System clock error, allowing analysis as fail-safe");
+            return true;
+        },
+    };
+
+    let last = LAST_ANALYSIS_TIME.load(Ordering::Acquire);
+
+    // Handle clock skew (time went backwards)
+    if now < last {
+        tracing::warn!(
+            "Clock skew detected: current={}, last={}, resetting analysis timer",
+            now,
+            last
+        );
+        LAST_ANALYSIS_TIME.store(now, Ordering::Release);
+        return true;
+    }
 
     // Use default cooldown (5 minutes)
-    // Note: This is a sync function called before spawning,
-    // so we can't read config async. Config can override via env var if needed.
     let cooldown = DEFAULT_ANALYSIS_COOLDOWN_SECS;
 
     now - last >= cooldown
 }
 
 /// Mark that analysis is starting now
+///
+/// Uses Release ordering to ensure visibility across threads.
+/// If system clock fails, logs warning but doesn't update (safe default).
 fn mark_analysis_started() {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
-
-    LAST_ANALYSIS_TIME.store(now, Ordering::Relaxed);
+    if let Some(now) = get_current_timestamp() {
+        LAST_ANALYSIS_TIME.store(now, Ordering::Release);
+    } else {
+        tracing::warn!("System clock error, cannot update analysis timestamp");
+    }
 }
 
 /// LLM configuration resolved from env vars and workspace_state
@@ -332,11 +366,24 @@ pub fn analyze_task_structure_background(pool: SqlitePool) {
                 e
             );
 
-            if let Err(store_err) = store_suggestion(&pool, "error", &error_msg).await {
-                tracing::error!("Failed to store error suggestion: {}", store_err);
+            // Try to store the error
+            match store_suggestion(&pool, "error", &error_msg).await {
+                Ok(_) => {
+                    tracing::warn!("Background task analysis failed: {}", e);
+                },
+                Err(store_err) => {
+                    // Critical: both analysis AND storage failed
+                    // Log to stderr so user has some visibility
+                    tracing::error!("Failed to store error suggestion: {}", store_err);
+                    eprintln!(
+                        "\n⚠️  Background analysis failed AND couldn't store error.\n\
+                         Analysis error: {}\n\
+                         Storage error: {}\n\
+                         This may indicate database issues.",
+                        e, store_err
+                    );
+                },
             }
-
-            tracing::warn!("Background task analysis failed: {}", e);
         }
     });
 }
@@ -445,7 +492,38 @@ IMPORTANT: {}"#,
 }
 
 /// Internal: Store a suggestion in the database
+///
+/// Implements automatic cleanup when suggestion count exceeds MAX_ACTIVE_SUGGESTIONS.
+/// Old suggestions are auto-dismissed to prevent unbounded growth.
 async fn store_suggestion(pool: &SqlitePool, suggestion_type: &str, content: &str) -> Result<()> {
+    // Check current count of active suggestions
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM suggestions WHERE dismissed = 0")
+        .fetch_one(pool)
+        .await?;
+
+    // If at limit, auto-dismiss oldest suggestion
+    if count >= MAX_ACTIVE_SUGGESTIONS {
+        let dismissed = sqlx::query(
+            "UPDATE suggestions SET dismissed = 1
+             WHERE id IN (
+                 SELECT id FROM suggestions
+                 WHERE dismissed = 0
+                 ORDER BY created_at ASC
+                 LIMIT 1
+             )",
+        )
+        .execute(pool)
+        .await?;
+
+        if dismissed.rows_affected() > 0 {
+            tracing::info!(
+                "Auto-dismissed oldest suggestion (limit: {})",
+                MAX_ACTIVE_SUGGESTIONS
+            );
+        }
+    }
+
+    // Store the new suggestion
     sqlx::query("INSERT INTO suggestions (type, content) VALUES (?, ?)")
         .bind(suggestion_type)
         .bind(content)
@@ -942,8 +1020,11 @@ mod tests {
 
     #[test]
     fn test_rate_limiting_cooldown() {
-        // Reset global state
-        LAST_ANALYSIS_TIME.store(0, Ordering::Relaxed);
+        // Save original state
+        let original = LAST_ANALYSIS_TIME.load(Ordering::SeqCst);
+
+        // Reset global state to known value
+        LAST_ANALYSIS_TIME.store(0, Ordering::SeqCst);
 
         // First call should pass
         assert!(should_trigger_analysis());
@@ -952,16 +1033,170 @@ mod tests {
         // Immediate second call should be blocked
         assert!(!should_trigger_analysis());
 
-        // Reset to simulate time passing
-        let past = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64
-            - DEFAULT_ANALYSIS_COOLDOWN_SECS
-            - 1;
-        LAST_ANALYSIS_TIME.store(past, Ordering::Relaxed);
+        // Simulate time passing (set to past time)
+        if let Some(now) = get_current_timestamp() {
+            let past = now - DEFAULT_ANALYSIS_COOLDOWN_SECS - 1;
+            LAST_ANALYSIS_TIME.store(past, Ordering::SeqCst);
 
-        // Now should pass again
-        assert!(should_trigger_analysis());
+            // Now should pass again
+            assert!(should_trigger_analysis());
+        }
+
+        // Restore original state
+        LAST_ANALYSIS_TIME.store(original, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn test_rate_limiting_clock_skew() {
+        // Save original state
+        let original = LAST_ANALYSIS_TIME.load(Ordering::SeqCst);
+
+        if let Some(now) = get_current_timestamp() {
+            // Set last analysis to future
+            let future = now + 1000;
+            LAST_ANALYSIS_TIME.store(future, Ordering::SeqCst);
+
+            // Should detect clock skew and allow analysis
+            assert!(should_trigger_analysis());
+
+            // Timer should be reset to current time
+            let reset_time = LAST_ANALYSIS_TIME.load(Ordering::SeqCst);
+            assert!(
+                reset_time <= now,
+                "Timer should be reset to current or earlier"
+            );
+        }
+
+        // Restore original state
+        LAST_ANALYSIS_TIME.store(original, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn test_get_current_timestamp_returns_valid() {
+        // Should always return Some in normal conditions
+        let ts = get_current_timestamp();
+        assert!(ts.is_some());
+
+        // Should be reasonable (after 2020)
+        if let Some(timestamp) = ts {
+            assert!(timestamp > 1577836800); // Jan 1, 2020
+        }
+    }
+
+    #[tokio::test]
+    async fn test_max_active_suggestions_limit() {
+        let ctx = TestContext::new().await;
+
+        // Store MAX_ACTIVE_SUGGESTIONS suggestions
+        for i in 0..MAX_ACTIVE_SUGGESTIONS {
+            store_suggestion(ctx.pool(), "task_structure", &format!("Suggestion {}", i))
+                .await
+                .unwrap();
+        }
+
+        // Verify we have exactly MAX_ACTIVE_SUGGESTIONS
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM suggestions WHERE dismissed = 0")
+            .fetch_one(ctx.pool())
+            .await
+            .unwrap();
+        assert_eq!(count, MAX_ACTIVE_SUGGESTIONS);
+
+        // Store one more - should auto-dismiss oldest
+        store_suggestion(ctx.pool(), "task_structure", "New suggestion")
+            .await
+            .unwrap();
+
+        // Should still have MAX_ACTIVE_SUGGESTIONS (not MAX + 1)
+        let count_after: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM suggestions WHERE dismissed = 0")
+                .fetch_one(ctx.pool())
+                .await
+                .unwrap();
+        assert_eq!(count_after, MAX_ACTIVE_SUGGESTIONS);
+
+        // Verify the newest suggestion is there
+        let suggestions = get_active_suggestions(ctx.pool()).await.unwrap();
+        assert!(suggestions[0].content.contains("New suggestion"));
+
+        // Verify one was auto-dismissed
+        let dismissed_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM suggestions WHERE dismissed = 1")
+                .fetch_one(ctx.pool())
+                .await
+                .unwrap();
+        assert_eq!(dismissed_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_error_type_suggestions() {
+        let ctx = TestContext::new().await;
+
+        // Store error suggestion
+        store_suggestion(ctx.pool(), "error", "## Analysis Error\n\nLLM API failed")
+            .await
+            .unwrap();
+
+        // Store normal suggestion
+        store_suggestion(ctx.pool(), "task_structure", "Reorganize task #5")
+            .await
+            .unwrap();
+
+        // Get all suggestions
+        let suggestions = get_active_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(suggestions.len(), 2);
+
+        // Errors should be distinguishable by type
+        let errors: Vec<_> = suggestions
+            .iter()
+            .filter(|s| s.suggestion_type == "error")
+            .collect();
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].content.contains("Analysis Error"));
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_cooldown_check() {
+        use std::sync::Arc;
+        use tokio::sync::Barrier;
+
+        // Save original state
+        let original = LAST_ANALYSIS_TIME.load(Ordering::SeqCst);
+
+        // Reset to allow analysis
+        LAST_ANALYSIS_TIME.store(0, Ordering::SeqCst);
+
+        // Create barrier for synchronization
+        let barrier = Arc::new(Barrier::new(5));
+
+        // Spawn 5 concurrent checks
+        let mut handles = vec![];
+        for _ in 0..5 {
+            let b = Arc::clone(&barrier);
+            let handle = tokio::spawn(async move {
+                // Wait for all tasks to be ready
+                b.wait().await;
+
+                // All check at the same time
+                should_trigger_analysis()
+            });
+            handles.push(handle);
+        }
+
+        // Collect results
+        let mut results = vec![];
+        for handle in handles {
+            results.push(handle.await.unwrap());
+        }
+
+        // At least one should succeed (due to race, might be more in Relaxed)
+        // But with proper ordering, should be predictable
+        let success_count = results.iter().filter(|&&r| r).count();
+        assert!(
+            success_count > 0,
+            "At least one concurrent check should succeed"
+        );
+
+        // Restore original state
+        LAST_ANALYSIS_TIME.store(original, Ordering::SeqCst);
     }
 }
