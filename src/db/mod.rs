@@ -249,7 +249,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             content TEXT NOT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             dismissed BOOLEAN NOT NULL DEFAULT 0,
-            CHECK (type IN ('task_structure', 'event_synthesis'))
+            CHECK (type IN ('task_structure', 'event_synthesis', 'error'))
         )
         "#,
     )

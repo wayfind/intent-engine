@@ -277,6 +277,23 @@ async fn run(cli: &Cli) -> Result<()> {
 
         Commands::Task(task_cmd) => handle_task_command(task_cmd).await?,
 
+        Commands::Suggestions(suggestions_cmd) => {
+            use intent_engine::cli::SuggestionsCommands;
+            use intent_engine::cli_handlers::suggestions_commands;
+
+            match suggestions_cmd {
+                SuggestionsCommands::List { format } => {
+                    suggestions_commands::handle_list(&format).await?
+                },
+                SuggestionsCommands::Dismiss { id, all, format } => {
+                    suggestions_commands::handle_dismiss(id, all, &format).await?
+                },
+                SuggestionsCommands::Clear { format } => {
+                    suggestions_commands::handle_clear(&format).await?
+                },
+            }
+        },
+
         Commands::Config(config_cmd) => handle_config_command(config_cmd).await?,
 
         Commands::Status {

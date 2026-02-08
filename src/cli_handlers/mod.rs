@@ -7,6 +7,7 @@
 pub mod config_commands;
 pub mod dashboard;
 pub mod other;
+pub mod suggestions_commands;
 pub mod task_commands;
 pub mod utils;
 

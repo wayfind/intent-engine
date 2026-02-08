@@ -2,6 +2,42 @@ use crate::cli_handlers::config_commands::{config_get, config_set};
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Global cooldown to prevent unlimited task spawning
+/// Stores the timestamp of the last analysis (seconds since epoch)
+static LAST_ANALYSIS_TIME: AtomicI64 = AtomicI64::new(0);
+
+/// Default cooldown period: 5 minutes
+const DEFAULT_ANALYSIS_COOLDOWN_SECS: i64 = 300;
+
+/// Check if enough time has passed since last analysis
+fn should_trigger_analysis() -> bool {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let last = LAST_ANALYSIS_TIME.load(Ordering::Relaxed);
+
+    // Use default cooldown (5 minutes)
+    // Note: This is a sync function called before spawning,
+    // so we can't read config async. Config can override via env var if needed.
+    let cooldown = DEFAULT_ANALYSIS_COOLDOWN_SECS;
+
+    now - last >= cooldown
+}
+
+/// Mark that analysis is starting now
+fn mark_analysis_started() {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    LAST_ANALYSIS_TIME.store(now, Ordering::Relaxed);
+}
 
 /// LLM configuration resolved from env vars and workspace_state
 #[derive(Debug, Clone)]
@@ -269,9 +305,37 @@ pub async fn synthesize_task_description(
 ///
 /// This function runs asynchronously without blocking the caller.
 /// Suggestions are stored in the database and shown at next interaction.
+///
+/// **Rate Limiting**: Uses a cooldown period (default 5 minutes) to prevent
+/// unlimited task spawning. If called within the cooldown period, it's a no-op.
 pub fn analyze_task_structure_background(pool: SqlitePool) {
+    // Check cooldown BEFORE spawning to avoid unnecessary tasks
+    if !should_trigger_analysis() {
+        tracing::debug!("Analysis cooldown active, skipping background analysis");
+        return;
+    }
+
+    // Mark as started immediately to prevent race conditions
+    mark_analysis_started();
+
     tokio::spawn(async move {
         if let Err(e) = analyze_and_store_suggestions(&pool).await {
+            // Store error as a suggestion so user knows it failed
+            let error_msg = format!(
+                "## Analysis Error\n\n\
+                Background task structure analysis failed: {}\n\n\
+                This may indicate:\n\
+                - LLM API endpoint is unreachable\n\
+                - API quota exceeded\n\
+                - Network connectivity issues\n\n\
+                Check logs for details: `ie log`",
+                e
+            );
+
+            if let Err(store_err) = store_suggestion(&pool, "error", &error_msg).await {
+                tracing::error!("Failed to store error suggestion: {}", store_err);
+            }
+
             tracing::warn!("Background task analysis failed: {}", e);
         }
     });
@@ -418,6 +482,24 @@ pub async fn dismiss_suggestion(pool: &SqlitePool, id: i64) -> Result<()> {
     Ok(())
 }
 
+/// Dismiss all active suggestions
+pub async fn dismiss_all_suggestions(pool: &SqlitePool) -> Result<usize> {
+    let result = sqlx::query("UPDATE suggestions SET dismissed = 1 WHERE dismissed = 0")
+        .execute(pool)
+        .await?;
+
+    Ok(result.rows_affected() as usize)
+}
+
+/// Clear all dismissed suggestions from database
+pub async fn clear_dismissed_suggestions(pool: &SqlitePool) -> Result<usize> {
+    let result = sqlx::query("DELETE FROM suggestions WHERE dismissed = 1")
+        .execute(pool)
+        .await?;
+
+    Ok(result.rows_affected() as usize)
+}
+
 /// Display suggestions to the user (called from CLI commands)
 pub async fn display_suggestions(pool: &SqlitePool) -> Result<()> {
     let suggestions = get_active_suggestions(pool).await?;
@@ -426,13 +508,34 @@ pub async fn display_suggestions(pool: &SqlitePool) -> Result<()> {
         return Ok(());
     }
 
-    eprintln!("\n💡 Suggestions:");
-    for suggestion in &suggestions {
-        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        eprintln!("{}", suggestion.content);
-        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    // Separate errors from other suggestions
+    let (errors, others): (Vec<_>, Vec<_>) = suggestions
+        .iter()
+        .partition(|s| s.suggestion_type == "error");
+
+    // Display errors first (more urgent)
+    if !errors.is_empty() {
+        eprintln!("\n⚠️  Background Analysis Errors:");
+        for error in &errors {
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            eprintln!("{}", error.content);
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        }
+        eprintln!("\nTo dismiss: ie suggestions dismiss {}", errors[0].id);
+        eprintln!("To dismiss all: ie suggestions dismiss --all");
     }
-    eprintln!("\n(These suggestions are automatically generated by LLM analysis)");
+
+    // Display regular suggestions
+    if !others.is_empty() {
+        eprintln!("\n💡 Suggestions:");
+        for suggestion in &others {
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            eprintln!("{}", suggestion.content);
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        }
+        eprintln!("\nTo dismiss: ie suggestions dismiss {}", others[0].id);
+        eprintln!("To list all: ie suggestions list");
+    }
 
     Ok(())
 }
@@ -757,5 +860,108 @@ mod tests {
 
         // Newest first (ORDER BY created_at DESC)
         assert!(suggestions[0].content.contains("Suggestion 3"));
+    }
+
+    #[tokio::test]
+    async fn test_dismiss_all_suggestions() {
+        let ctx = TestContext::new().await;
+
+        // Store 3 suggestions
+        store_suggestion(ctx.pool(), "task_structure", "Suggestion 1")
+            .await
+            .unwrap();
+        store_suggestion(ctx.pool(), "task_structure", "Suggestion 2")
+            .await
+            .unwrap();
+        store_suggestion(ctx.pool(), "error", "Error message")
+            .await
+            .unwrap();
+
+        // Verify all active
+        let active = get_active_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(active.len(), 3);
+
+        // Dismiss all
+        let count = dismiss_all_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(count, 3);
+
+        // No active suggestions left
+        let remaining = get_active_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(remaining.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_clear_dismissed_suggestions() {
+        let ctx = TestContext::new().await;
+
+        // Store and dismiss some suggestions
+        store_suggestion(ctx.pool(), "task_structure", "Suggestion 1")
+            .await
+            .unwrap();
+        store_suggestion(ctx.pool(), "task_structure", "Suggestion 2")
+            .await
+            .unwrap();
+
+        let suggestions = get_active_suggestions(ctx.pool()).await.unwrap();
+        dismiss_suggestion(ctx.pool(), suggestions[0].id)
+            .await
+            .unwrap();
+        dismiss_suggestion(ctx.pool(), suggestions[1].id)
+            .await
+            .unwrap();
+
+        // Clear dismissed
+        let count = clear_dismissed_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(count, 2);
+
+        // Verify they're gone from database
+        let all: Vec<crate::db::models::Suggestion> =
+            sqlx::query_as("SELECT id, type, content, created_at, dismissed FROM suggestions")
+                .fetch_all(ctx.pool())
+                .await
+                .unwrap();
+        assert_eq!(all.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_error_suggestion_storage() {
+        let ctx = TestContext::new().await;
+
+        // Store an error suggestion
+        let error_msg = "LLM API failed: connection timeout";
+        store_suggestion(ctx.pool(), "error", error_msg)
+            .await
+            .unwrap();
+
+        // Verify it's stored
+        let suggestions = get_active_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].suggestion_type, "error");
+        assert!(suggestions[0].content.contains("timeout"));
+    }
+
+    #[test]
+    fn test_rate_limiting_cooldown() {
+        // Reset global state
+        LAST_ANALYSIS_TIME.store(0, Ordering::Relaxed);
+
+        // First call should pass
+        assert!(should_trigger_analysis());
+        mark_analysis_started();
+
+        // Immediate second call should be blocked
+        assert!(!should_trigger_analysis());
+
+        // Reset to simulate time passing
+        let past = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64
+            - DEFAULT_ANALYSIS_COOLDOWN_SECS
+            - 1;
+        LAST_ANALYSIS_TIME.store(past, Ordering::Relaxed);
+
+        // Now should pass again
+        assert!(should_trigger_analysis());
     }
 }
