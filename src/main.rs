@@ -291,6 +291,9 @@ async fn run(cli: &Cli) -> Result<()> {
             let task_mgr = TaskManager::new(&ctx.pool);
             let workspace_mgr = WorkspaceManager::new(&ctx.pool);
 
+            // Trigger background task structure analysis (async, non-blocking)
+            intent_engine::llm::analyze_task_structure_background(ctx.pool.clone());
+
             // Determine which task to show status for
             let target_task_id = if let Some(id) = task_id {
                 // Explicit task ID provided
@@ -420,6 +423,9 @@ async fn run(cli: &Cli) -> Result<()> {
                                 );
                             }
                         }
+
+                        // Display LLM suggestions (text format only)
+                        intent_engine::llm::display_suggestions(&ctx.pool).await?;
                     }
                 },
                 None => {
@@ -449,6 +455,9 @@ async fn run(cli: &Cli) -> Result<()> {
                                 );
                             }
                         }
+
+                        // Display LLM suggestions (text format only)
+                        intent_engine::llm::display_suggestions(&ctx.pool).await?;
                     }
                 },
             }

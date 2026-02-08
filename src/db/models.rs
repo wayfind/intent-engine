@@ -534,6 +534,19 @@ pub struct NoFocusResponse {
     pub root_tasks: Vec<TaskBrief>,
 }
 
+/// LLM-generated suggestion for background analysis
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Suggestion {
+    pub id: i64,
+    #[serde(rename = "type")]
+    #[sqlx(rename = "type")]
+    pub suggestion_type: String,
+    pub content: String,
+    #[serde(with = "datetime_format")]
+    pub created_at: DateTime<Utc>,
+    pub dismissed: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -265,6 +265,178 @@ pub async fn synthesize_task_description(
     Ok(Some(synthesis))
 }
 
+/// Analyze task structure in background and store suggestions
+///
+/// This function runs asynchronously without blocking the caller.
+/// Suggestions are stored in the database and shown at next interaction.
+pub fn analyze_task_structure_background(pool: SqlitePool) {
+    tokio::spawn(async move {
+        if let Err(e) = analyze_and_store_suggestions(&pool).await {
+            tracing::warn!("Background task analysis failed: {}", e);
+        }
+    });
+}
+
+/// Internal: Perform analysis and store suggestions
+async fn analyze_and_store_suggestions(pool: &SqlitePool) -> Result<()> {
+    // Check if LLM is configured
+    if !LlmClient::is_configured(pool).await {
+        return Ok(()); // Silent skip
+    }
+
+    // Get all tasks
+    let tasks: Vec<crate::db::models::Task> = sqlx::query_as(
+        "SELECT id, parent_id, name, spec, status, complexity, priority, \
+         first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata \
+         FROM tasks ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // Need at least 5 tasks to make meaningful suggestions
+    if tasks.len() < 5 {
+        return Ok(());
+    }
+
+    let analysis = perform_structure_analysis(pool, &tasks).await?;
+
+    // Only store if there are actual suggestions
+    if !analysis.contains("no reorganization needed") && !analysis.contains("looks good") {
+        store_suggestion(pool, "task_structure", &analysis).await?;
+    }
+
+    Ok(())
+}
+
+/// Internal: Perform the actual LLM analysis
+async fn perform_structure_analysis(
+    pool: &SqlitePool,
+    tasks: &[crate::db::models::Task],
+) -> Result<String> {
+    // Build task tree representation
+    let task_summary = tasks
+        .iter()
+        .map(|t| {
+            format!(
+                "#{} {} [{}] (parent: {})",
+                t.id,
+                t.name,
+                t.status,
+                t.parent_id.map_or("none".to_string(), |p| p.to_string())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Detect language from task names
+    let is_cjk = tasks.iter().any(|t| {
+        t.name.chars().any(|c| {
+            matches!(c,
+                '\u{4E00}'..='\u{9FFF}' |
+                '\u{3400}'..='\u{4DBF}' |
+                '\u{3040}'..='\u{309F}' |
+                '\u{30A0}'..='\u{30FF}' |
+                '\u{AC00}'..='\u{D7AF}'
+            )
+        })
+    });
+
+    let language_instruction = if is_cjk {
+        "Respond in Chinese (中文)."
+    } else {
+        "Respond in English."
+    };
+
+    let prompt = format!(
+        r#"You are analyzing a task hierarchy for structural issues.
+
+Current task tree:
+{}
+
+Identify tasks that should be reorganized:
+1. Semantically related tasks that should be grouped under a common parent
+2. Root tasks that could be subtasks of existing tasks
+3. Tasks with similar names or themes that should share a parent
+
+For each suggestion:
+- Explain WHY the reorganization makes sense
+- Provide the EXACT command to execute
+- Only suggest if there's clear semantic relationship
+
+Output format:
+## Suggestion 1: [Brief description]
+**Reason**: [Why this makes sense]
+**Command**: `ie task update <id> --parent <parent_id>`
+
+If no reorganization needed, respond with: "Task structure looks good, no reorganization needed."
+
+IMPORTANT: {}"#,
+        task_summary, language_instruction
+    );
+
+    let client = LlmClient::from_pool(pool).await?;
+    let analysis = client.chat(&prompt).await?;
+
+    Ok(analysis)
+}
+
+/// Internal: Store a suggestion in the database
+async fn store_suggestion(pool: &SqlitePool, suggestion_type: &str, content: &str) -> Result<()> {
+    sqlx::query("INSERT INTO suggestions (type, content) VALUES (?, ?)")
+        .bind(suggestion_type)
+        .bind(content)
+        .execute(pool)
+        .await?;
+
+    tracing::info!("Stored {} suggestion in database", suggestion_type);
+    Ok(())
+}
+
+/// Retrieve active (non-dismissed) suggestions from database
+pub async fn get_active_suggestions(
+    pool: &SqlitePool,
+) -> Result<Vec<crate::db::models::Suggestion>> {
+    let suggestions = sqlx::query_as::<_, crate::db::models::Suggestion>(
+        "SELECT id, type, content, created_at, dismissed \
+         FROM suggestions \
+         WHERE dismissed = 0 \
+         ORDER BY created_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(suggestions)
+}
+
+/// Dismiss a suggestion (mark as read/acted upon)
+pub async fn dismiss_suggestion(pool: &SqlitePool, id: i64) -> Result<()> {
+    sqlx::query("UPDATE suggestions SET dismissed = 1 WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+/// Display suggestions to the user (called from CLI commands)
+pub async fn display_suggestions(pool: &SqlitePool) -> Result<()> {
+    let suggestions = get_active_suggestions(pool).await?;
+
+    if suggestions.is_empty() {
+        return Ok(());
+    }
+
+    eprintln!("\n💡 Suggestions:");
+    for suggestion in &suggestions {
+        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        eprintln!("{}", suggestion.content);
+        eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    }
+    eprintln!("\n(These suggestions are automatically generated by LLM analysis)");
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -519,5 +691,71 @@ mod tests {
             )
         });
         assert!(is_cjk, "Should detect Korean characters");
+    }
+
+    #[tokio::test]
+    async fn test_store_and_retrieve_suggestions() {
+        let ctx = TestContext::new().await;
+
+        // Store a suggestion
+        store_suggestion(
+            ctx.pool(),
+            "task_structure",
+            "## Suggestion\nReorganize task #5 under task #3",
+        )
+        .await
+        .unwrap();
+
+        // Retrieve suggestions
+        let suggestions = get_active_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].suggestion_type, "task_structure");
+        assert!(suggestions[0].content.contains("Reorganize"));
+        assert!(!suggestions[0].dismissed);
+    }
+
+    #[tokio::test]
+    async fn test_dismiss_suggestion() {
+        let ctx = TestContext::new().await;
+
+        // Store a suggestion
+        store_suggestion(ctx.pool(), "task_structure", "Test suggestion")
+            .await
+            .unwrap();
+
+        // Get the suggestion
+        let suggestions = get_active_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(suggestions.len(), 1);
+        let suggestion_id = suggestions[0].id;
+
+        // Dismiss it
+        dismiss_suggestion(ctx.pool(), suggestion_id).await.unwrap();
+
+        // Should not appear in active suggestions anymore
+        let active = get_active_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(active.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_suggestions() {
+        let ctx = TestContext::new().await;
+
+        // Store multiple suggestions
+        store_suggestion(ctx.pool(), "task_structure", "Suggestion 1")
+            .await
+            .unwrap();
+        store_suggestion(ctx.pool(), "task_structure", "Suggestion 2")
+            .await
+            .unwrap();
+        store_suggestion(ctx.pool(), "event_synthesis", "Suggestion 3")
+            .await
+            .unwrap();
+
+        // All should be active
+        let suggestions = get_active_suggestions(ctx.pool()).await.unwrap();
+        assert_eq!(suggestions.len(), 3);
+
+        // Newest first (ORDER BY created_at DESC)
+        assert!(suggestions[0].content.contains("Suggestion 3"));
     }
 }

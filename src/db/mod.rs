@@ -239,6 +239,34 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Create suggestions table for async LLM hints (v0.13.0)
+    // Stores background analysis results to show at next interaction
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS suggestions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            dismissed BOOLEAN NOT NULL DEFAULT 0,
+            CHECK (type IN ('task_structure', 'event_synthesis'))
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Index for finding active suggestions
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_suggestions_active
+        ON suggestions(dismissed, created_at)
+        WHERE dismissed = 0
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     // Migrate existing current_task_id from workspace_state to default session (v0.11.0)
     // This ensures backward compatibility - existing focus is preserved in session "-1"
     sqlx::query(

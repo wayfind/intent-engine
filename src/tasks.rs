@@ -1404,6 +1404,9 @@ impl<'a> TaskManager<'a> {
                 .await?;
         }
 
+        // Trigger background task structure analysis (async, non-blocking)
+        crate::llm::analyze_task_structure_background(self.pool.clone());
+
         self.notify_task_updated(&completed_task).await;
 
         Ok(DoneTaskResponse {
