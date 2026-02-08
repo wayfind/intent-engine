@@ -293,12 +293,38 @@ if task.owner == "human" && caller == "ai" {
 }
 ```
 
+### Cost and Performance Considerations
+
+**Token Usage Estimation**:
+- Average task: ~20 events × 50 characters = 1,000 tokens input
+- Output: ~500 tokens (structured markdown)
+- Total: ~1,500 tokens per synthesis
+
+**Cost Estimates** (GPT-4 pricing as reference):
+- GPT-4: $0.03/1K input + $0.06/1K output = ~$0.075/task
+- GPT-3.5: $0.001/1K input + $0.002/1K output = ~$0.003/task
+- User completing 20 tasks/day:
+  - GPT-4: $1.50/day = $550/year
+  - GPT-3.5: $0.06/day = $22/year
+
+**Cost Control Recommendations**:
+1. Use cheaper models for synthesis (GPT-3.5, local models)
+2. Implement `llm.max_events_for_synthesis` config (default: 20)
+3. Optional: Add `llm.synthesis_enabled` flag (default: true for AI tasks only)
+4. Monitor token usage via logging
+
+**Performance**:
+- Synthesis happens AFTER task completion (non-blocking for user)
+- Typical latency: 2-5 seconds (acceptable for async operation)
+- Failed synthesis does NOT block task completion
+
 ### Error Handling
 
 **Graceful degradation**:
 - If LLM unavailable → skip analysis/synthesis
 - If LLM returns invalid JSON → log warning, continue
 - If user disables → respect setting immediately
+- If synthesis fails → warn user, complete task anyway
 
 **No blocking**: LLM failure never prevents core operations.
 

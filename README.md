@@ -139,6 +139,29 @@ ie log decision "chose X"         # Record decisions
 ie search "keyword"               # Search history
 ```
 
+### LLM-Powered Features (Optional)
+
+**Event-to-Task Synthesis** - Automatically generate structured task summaries from event history:
+
+```bash
+# Configure LLM (one-time setup)
+ie config set llm.endpoint "http://localhost:8080/v1/chat/completions"
+ie config set llm.api_key "sk-your-key"
+ie config set llm.model "gpt-3.5-turbo"  # Or local model
+
+# Test connection
+ie config test-llm
+
+# Now when completing tasks, synthesis happens automatically for AI-owned tasks
+ie task done 42  # Generates structured Goal/Approach/Decisions/Outcome summary
+```
+
+**Cost Awareness**:
+- ~1,500 tokens per synthesis (~$0.003 with GPT-3.5-turbo)
+- 20 tasks/day ≈ $22/year with GPT-3.5, or use local models (free)
+- Synthesis only happens when LLM configured (graceful degradation)
+- See [LLM Use Cases](docs/design/llm-use-cases.md) for full details
+
 ---
 
 ## How It Works

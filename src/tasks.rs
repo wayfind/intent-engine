@@ -2828,6 +2828,92 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_done_task_synthesis_graceful_when_llm_unconfigured() {
+        // Verify that task completion works even when LLM is not configured
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+        let event_mgr = EventManager::new(ctx.pool());
+
+        // Create and complete a task
+        let task = manager
+            .add_task("Test Task", Some("Original spec"), None, Some("ai"))
+            .await
+            .unwrap();
+
+        // Add some events
+        event_mgr
+            .add_event(task.id, "decision", "Test decision")
+            .await
+            .unwrap();
+
+        manager.start_task(task.id, false).await.unwrap();
+
+        // Should complete successfully even without LLM
+        let result = manager.done_task_by_id(task.id, false).await;
+        assert!(result.is_ok(), "Task completion should succeed without LLM");
+
+        // Verify task is actually done
+        let completed_task = manager.get_task(task.id).await.unwrap();
+        assert_eq!(completed_task.status, "done");
+
+        // Original spec should be unchanged (no synthesis happened)
+        assert_eq!(completed_task.spec, Some("Original spec".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_done_task_synthesis_respects_owner_field() {
+        // This test verifies the owner field logic without actual LLM
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        // Create AI-owned task
+        let ai_task = manager
+            .add_task("AI Task", Some("AI spec"), None, Some("ai"))
+            .await
+            .unwrap();
+        assert_eq!(ai_task.owner, "ai");
+
+        // Create human-owned task
+        let human_task = manager
+            .add_task("Human Task", Some("Human spec"), None, Some("human"))
+            .await
+            .unwrap();
+        assert_eq!(human_task.owner, "human");
+
+        // Both should complete successfully
+        manager.start_task(ai_task.id, false).await.unwrap();
+        let result = manager.done_task_by_id(ai_task.id, false).await;
+        assert!(result.is_ok());
+
+        manager.start_task(human_task.id, false).await.unwrap();
+        let result = manager.done_task_by_id(human_task.id, false).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_try_synthesize_task_description_basic() {
+        let ctx = TestContext::new().await;
+        let manager = TaskManager::new(ctx.pool());
+
+        let task = manager
+            .add_task("Synthesis Test", Some("Original"), None, None)
+            .await
+            .unwrap();
+
+        // Should return None when LLM not configured (graceful degradation)
+        let result = manager
+            .try_synthesize_task_description(task.id, &task.name)
+            .await;
+
+        assert!(result.is_ok(), "Should not error when LLM unconfigured");
+        assert_eq!(
+            result.unwrap(),
+            None,
+            "Should return None when LLM unconfigured"
+        );
+    }
+
+    #[tokio::test]
     async fn test_pick_next_focused_subtask() {
         let ctx = TestContext::new().await;
         let manager = TaskManager::new(ctx.pool());

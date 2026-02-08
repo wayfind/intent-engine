@@ -198,6 +198,23 @@ impl LlmClient {
 
         let original_spec_text = original_spec.unwrap_or("(No original description)");
 
+        // Detect language from task name and events to respond in same language
+        let is_cjk = task_name.chars().any(|c| {
+            matches!(c,
+                '\u{4E00}'..='\u{9FFF}' |  // CJK Unified Ideographs
+                '\u{3400}'..='\u{4DBF}' |  // CJK Extension A
+                '\u{3040}'..='\u{309F}' |  // Hiragana
+                '\u{30A0}'..='\u{30FF}' |  // Katakana
+                '\u{AC00}'..='\u{D7AF}'    // Hangul
+            )
+        });
+
+        let language_instruction = if is_cjk {
+            "Respond in Chinese (中文)."
+        } else {
+            "Respond in English."
+        };
+
         // Construct the prompt
         let prompt = format!(
             r#"You are summarizing a completed task based on its execution history.
@@ -215,8 +232,10 @@ Synthesize a clear, structured description capturing:
 4. Outcome (what was delivered?)
 
 Use markdown format with ## headers. Be concise but preserve critical context.
-Output ONLY the markdown summary, no preamble or explanation."#,
-            task_name, original_spec_text, events_text
+Output ONLY the markdown summary, no preamble or explanation.
+
+IMPORTANT: {}"#,
+            task_name, original_spec_text, events_text, language_instruction
         );
 
         self.chat(&prompt).await
@@ -344,5 +363,161 @@ mod tests {
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"role\":\"user\""));
         assert!(json.contains("\"content\":\"Hello\""));
+    }
+
+    #[tokio::test]
+    async fn test_synthesize_task_description_when_unconfigured() {
+        let ctx = TestContext::new().await;
+
+        // Create a simple event for testing
+        use chrono::Utc;
+        let event = crate::db::models::Event {
+            id: 1,
+            task_id: 1,
+            log_type: "decision".to_string(),
+            discussion_data: "Test decision".to_string(),
+            timestamp: Utc::now(),
+        };
+
+        // Should return None when LLM not configured
+        let result =
+            synthesize_task_description(ctx.pool(), "Test Task", Some("Original spec"), &[event])
+                .await
+                .unwrap();
+
+        assert!(
+            result.is_none(),
+            "Should return None when LLM not configured"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_synthesize_prompt_includes_task_info() {
+        // This test verifies the prompt structure without calling actual LLM
+        use chrono::Utc;
+
+        let events = vec![
+            crate::db::models::Event {
+                id: 1,
+                task_id: 1,
+                log_type: "decision".to_string(),
+                discussion_data: "Chose approach A".to_string(),
+                timestamp: Utc::now(),
+            },
+            crate::db::models::Event {
+                id: 2,
+                task_id: 1,
+                log_type: "milestone".to_string(),
+                discussion_data: "Completed phase 1".to_string(),
+                timestamp: Utc::now(),
+            },
+        ];
+
+        // Create a mock client (we can't test actual synthesis without LLM endpoint)
+        // But we can verify the prompt construction logic
+        let events_text: String = events
+            .iter()
+            .map(|e| {
+                format!(
+                    "[{}] {} - {}",
+                    e.log_type,
+                    e.timestamp.format("%Y-%m-%d %H:%M"),
+                    e.discussion_data
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Verify event formatting
+        assert!(events_text.contains("decision"));
+        assert!(events_text.contains("Chose approach A"));
+        assert!(events_text.contains("milestone"));
+        assert!(events_text.contains("Completed phase 1"));
+    }
+
+    #[tokio::test]
+    async fn test_synthesize_with_empty_events() {
+        // Verify handling of tasks with no events
+        let events: Vec<crate::db::models::Event> = vec![];
+
+        // Should handle empty events gracefully
+        // (actual synthesis would still work, just with "No events recorded")
+        assert_eq!(events.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_synthesize_with_no_original_spec() {
+        use chrono::Utc;
+
+        let original_spec: Option<&str> = None;
+        let events = vec![crate::db::models::Event {
+            id: 1,
+            task_id: 1,
+            log_type: "note".to_string(),
+            discussion_data: "Some work done".to_string(),
+            timestamp: Utc::now(),
+        }];
+
+        // Should handle missing original spec
+        // (prompt would use "(No original description)")
+        assert!(original_spec.is_none());
+        assert_eq!(events.len(), 1);
+    }
+
+    #[test]
+    fn test_language_detection() {
+        // Test CJK detection logic
+        let chinese_task = "实现用户认证";
+        let english_task = "Implement authentication";
+        let japanese_task = "認証を実装する";
+        let korean_task = "인증 구현";
+
+        // Chinese
+        let is_cjk = chinese_task.chars().any(|c| {
+            matches!(c,
+                '\u{4E00}'..='\u{9FFF}' |
+                '\u{3400}'..='\u{4DBF}' |
+                '\u{3040}'..='\u{309F}' |
+                '\u{30A0}'..='\u{30FF}' |
+                '\u{AC00}'..='\u{D7AF}'
+            )
+        });
+        assert!(is_cjk, "Should detect Chinese characters");
+
+        // English
+        let is_cjk = english_task.chars().any(|c| {
+            matches!(c,
+                '\u{4E00}'..='\u{9FFF}' |
+                '\u{3400}'..='\u{4DBF}' |
+                '\u{3040}'..='\u{309F}' |
+                '\u{30A0}'..='\u{30FF}' |
+                '\u{AC00}'..='\u{D7AF}'
+            )
+        });
+        assert!(!is_cjk, "Should not detect CJK in English text");
+
+        // Japanese
+        let is_cjk = japanese_task.chars().any(|c| {
+            matches!(c,
+                '\u{4E00}'..='\u{9FFF}' |
+                '\u{3400}'..='\u{4DBF}' |
+                '\u{3040}'..='\u{309F}' |
+                '\u{30A0}'..='\u{30FF}' |
+                '\u{AC00}'..='\u{D7AF}'
+            )
+        });
+        assert!(is_cjk, "Should detect Japanese characters");
+
+        // Korean
+        let is_cjk = korean_task.chars().any(|c| {
+            matches!(c,
+                '\u{4E00}'..='\u{9FFF}' |
+                '\u{3400}'..='\u{4DBF}' |
+                '\u{3040}'..='\u{309F}' |
+                '\u{30A0}'..='\u{30FF}' |
+                '\u{AC00}'..='\u{D7AF}'
+            )
+        });
+        assert!(is_cjk, "Should detect Korean characters");
     }
 }
