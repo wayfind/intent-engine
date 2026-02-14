@@ -22,5 +22,8 @@ pub mod time_utils;
 pub mod windows_console;
 pub mod workspace;
 
+#[cfg(feature = "neo4j")]
+pub mod neo4j;
+
 #[cfg(test)]
 pub mod test_utils;

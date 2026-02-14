@@ -61,6 +61,7 @@ open = "5.3"
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rand = "0.9"
+neo4rs = { version = "0.8", optional = true }
 
 # Unix process management
 [target.'cfg(unix)'.dependencies]
@@ -87,10 +88,17 @@ tokio-tungstenite = "0.24"  # Matches axum's version for WebSocket tests
 # Feature flag to enable tests for removed CLI commands (v0.10.0 removed: task, event, current, etc.)
 # These tests are disabled by default and can be enabled with: cargo test --features test-removed-cli-commands
 test-removed-cli-commands = []
+# Neo4j graph database backend (ie-neo4j binary)
+neo4j = ["neo4rs"]
 
 [[bin]]
 name = "ie"
 path = "src/main.rs"
+
+[[bin]]
+name = "ie-neo4j"
+path = "src/bin/ie_neo4j.rs"
+required-features = ["neo4j"]
 
 [[bench]]
 name = "performance"
