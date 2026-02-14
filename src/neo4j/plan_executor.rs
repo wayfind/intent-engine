@@ -5,7 +5,7 @@
 //!
 //! Key differences from SQLite version:
 //! - Uses `Neo4jTaskManager` methods instead of raw SQL
-//! - Uses neo4rs transactions (`start_txn()`) for atomicity
+//! - Individual operations are NOT wrapped in a transaction (no atomicity guarantee)
 //! - No dashboard notifications (no SQLite DB available)
 //! - Dependencies (BLOCKED_BY) deferred to Phase 4
 
@@ -15,6 +15,7 @@ use crate::plan::{
     extract_all_names, find_duplicate_names, flatten_task_tree, ExistingTaskInfo, FlatTask,
     PlanRequest, PlanResult, TaskStatus,
 };
+use crate::plan_validation;
 use crate::tasks::TaskUpdate;
 use neo4rs::{query, Graph};
 use std::collections::{HashMap, HashSet};
@@ -64,17 +65,17 @@ impl Neo4jPlanExecutor {
         let flat_tasks = flatten_task_tree(&request.tasks);
 
         // ── 4. Validate dependencies exist in plan ──
-        if let Err(e) = validate_dependencies(&flat_tasks) {
+        if let Err(e) = plan_validation::validate_dependencies(&flat_tasks) {
             return Ok(PlanResult::error(e.to_string()));
         }
 
         // ── 5. Detect circular dependencies ──
-        if let Err(e) = detect_circular_dependencies(&flat_tasks) {
+        if let Err(e) = plan_validation::detect_circular_dependencies(&flat_tasks) {
             return Ok(PlanResult::error(e.to_string()));
         }
 
         // ── 6. Validate batch-level single doing constraint ──
-        if let Err(e) = validate_batch_single_doing(&flat_tasks) {
+        if let Err(e) = plan_validation::validate_batch_single_doing(&flat_tasks) {
             return Ok(PlanResult::error(e.to_string()));
         }
 
@@ -97,8 +98,7 @@ impl Neo4jPlanExecutor {
         // ── 9. Focus protection check (before any deletions) ──
         for task in &delete_tasks {
             if let Some(id) = task.id {
-                if let Some((focused_id, session_id)) =
-                    task_mgr.find_focused_in_subtree_pub(id).await?
+                if let Some((focused_id, session_id)) = task_mgr.find_focused_in_subtree(id).await?
                 {
                     if focused_id == id {
                         return Ok(PlanResult::error(format!(
@@ -201,18 +201,15 @@ impl Neo4jPlanExecutor {
                     task.status.as_ref().map(|s| s.as_db_str())
                 };
 
-                let mut update = TaskUpdate {
+                // Note: task was found by name match, so name is already correct.
+                // No need to fetch task again just to compare names.
+                let update = TaskUpdate {
                     spec: task.spec.as_deref(),
                     priority: task.priority.as_ref().map(|p| p.to_int()),
                     status: status_for_update,
                     active_form: task.active_form.as_deref(),
                     ..Default::default()
                 };
-
-                // Only set name if it differs (avoid unnecessary updates)
-                if task.name.as_deref() != Some(&*task_mgr.get_task(existing_info.id).await?.name) {
-                    update.name = task.name.as_deref();
-                }
 
                 task_mgr.update_task(existing_info.id, update).await?;
 
@@ -260,27 +257,17 @@ impl Neo4jPlanExecutor {
                     )
                     .await?;
 
-                // Set status if not default
-                if let Some(status) = initial_status {
-                    if status != "todo" {
-                        task_mgr
-                            .update_task(
-                                new_task.id,
-                                TaskUpdate {
-                                    status: Some(status),
-                                    ..Default::default()
-                                },
-                            )
-                            .await?;
-                    }
-                }
-
-                // Set active_form if provided
-                if task.active_form.is_some() {
+                // Set status and active_form in a single update if needed
+                let needs_status = initial_status
+                    .as_ref()
+                    .map(|s| *s != "todo")
+                    .unwrap_or(false);
+                if needs_status || task.active_form.is_some() {
                     task_mgr
                         .update_task(
                             new_task.id,
                             TaskUpdate {
+                                status: if needs_status { initial_status } else { None },
                                 active_form: task.active_form.as_deref(),
                                 ..Default::default()
                             },
@@ -477,284 +464,5 @@ impl Neo4jPlanExecutor {
     }
 }
 
-// ── Pure validation functions (no DB access) ────────────────────
-
-fn validate_dependencies(flat_tasks: &[FlatTask]) -> Result<()> {
-    let task_names: HashSet<&str> = flat_tasks
-        .iter()
-        .filter_map(|t| t.name.as_deref())
-        .collect();
-
-    for task in flat_tasks {
-        for dep_name in &task.depends_on {
-            if !task_names.contains(dep_name.as_str()) {
-                let task_name = task.name.as_deref().unwrap_or("<unknown>");
-                return Err(IntentError::InvalidInput(format!(
-                    "Task '{}' depends on '{}', but '{}' is not in the plan",
-                    task_name, dep_name, dep_name
-                )));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn validate_batch_single_doing(flat_tasks: &[FlatTask]) -> Result<()> {
-    let doing_tasks: Vec<&FlatTask> = flat_tasks
-        .iter()
-        .filter(|task| matches!(task.status, Some(TaskStatus::Doing)))
-        .collect();
-
-    if doing_tasks.len() > 1 {
-        let names: Vec<&str> = doing_tasks
-            .iter()
-            .map(|t| t.name.as_deref().unwrap_or("<unknown>"))
-            .collect();
-        return Err(IntentError::InvalidInput(format!(
-            "Batch single doing constraint violated: only one task per batch can have status='doing'. Found: {}",
-            names.join(", ")
-        )));
-    }
-
-    Ok(())
-}
-
-fn detect_circular_dependencies(flat_tasks: &[FlatTask]) -> Result<()> {
-    if flat_tasks.is_empty() {
-        return Ok(());
-    }
-
-    let name_to_idx: HashMap<&str, usize> = flat_tasks
-        .iter()
-        .enumerate()
-        .filter_map(|(i, t)| t.name.as_ref().map(|n| (n.as_str(), i)))
-        .collect();
-
-    // Build adjacency list
-    let mut graph: Vec<Vec<usize>> = vec![Vec::new(); flat_tasks.len()];
-    for (idx, task) in flat_tasks.iter().enumerate() {
-        for dep_name in &task.depends_on {
-            if let Some(&dep_idx) = name_to_idx.get(dep_name.as_str()) {
-                graph[idx].push(dep_idx);
-            }
-        }
-    }
-
-    // Check self-loops
-    for task in flat_tasks {
-        if let Some(name) = &task.name {
-            if task.depends_on.contains(name) {
-                return Err(IntentError::InvalidInput(format!(
-                    "Circular dependency detected: task '{}' depends on itself",
-                    name
-                )));
-            }
-        }
-    }
-
-    // Tarjan's SCC
-    let sccs = tarjan_scc(&graph);
-    for scc in sccs {
-        if scc.len() > 1 {
-            let cycle_names: Vec<&str> = scc
-                .iter()
-                .map(|&idx| flat_tasks[idx].name.as_deref().unwrap_or("<unknown>"))
-                .collect();
-            return Err(IntentError::InvalidInput(format!(
-                "Circular dependency detected: {}",
-                cycle_names.join(" → ")
-            )));
-        }
-    }
-
-    Ok(())
-}
-
-/// Tarjan's SCC algorithm (copied from SQLite plan.rs)
-fn tarjan_scc(graph: &[Vec<usize>]) -> Vec<Vec<usize>> {
-    let n = graph.len();
-    let mut index_counter = 0;
-    let mut stack = Vec::new();
-    let mut on_stack = vec![false; n];
-    let mut index = vec![usize::MAX; n];
-    let mut lowlink = vec![0; n];
-    let mut result = Vec::new();
-
-    fn strongconnect(
-        v: usize,
-        graph: &[Vec<usize>],
-        index_counter: &mut usize,
-        stack: &mut Vec<usize>,
-        on_stack: &mut Vec<bool>,
-        index: &mut Vec<usize>,
-        lowlink: &mut Vec<usize>,
-        result: &mut Vec<Vec<usize>>,
-    ) {
-        index[v] = *index_counter;
-        lowlink[v] = *index_counter;
-        *index_counter += 1;
-        stack.push(v);
-        on_stack[v] = true;
-
-        for &w in &graph[v] {
-            if index[w] == usize::MAX {
-                strongconnect(
-                    w,
-                    graph,
-                    index_counter,
-                    stack,
-                    on_stack,
-                    index,
-                    lowlink,
-                    result,
-                );
-                lowlink[v] = lowlink[v].min(lowlink[w]);
-            } else if on_stack[w] {
-                lowlink[v] = lowlink[v].min(index[w]);
-            }
-        }
-
-        if lowlink[v] == index[v] {
-            let mut component = Vec::new();
-            loop {
-                let w = stack.pop().unwrap();
-                on_stack[w] = false;
-                component.push(w);
-                if w == v {
-                    break;
-                }
-            }
-            result.push(component);
-        }
-    }
-
-    for v in 0..n {
-        if index[v] == usize::MAX {
-            strongconnect(
-                v,
-                graph,
-                &mut index_counter,
-                &mut stack,
-                &mut on_stack,
-                &mut index,
-                &mut lowlink,
-                &mut result,
-            );
-        }
-    }
-
-    result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_validate_batch_single_doing() {
-        let tasks = vec![
-            FlatTask {
-                name: Some("A".to_string()),
-                status: Some(TaskStatus::Doing),
-                ..Default::default()
-            },
-            FlatTask {
-                name: Some("B".to_string()),
-                status: Some(TaskStatus::Todo),
-                ..Default::default()
-            },
-        ];
-        assert!(validate_batch_single_doing(&tasks).is_ok());
-
-        let tasks = vec![
-            FlatTask {
-                name: Some("A".to_string()),
-                status: Some(TaskStatus::Doing),
-                ..Default::default()
-            },
-            FlatTask {
-                name: Some("B".to_string()),
-                status: Some(TaskStatus::Doing),
-                ..Default::default()
-            },
-        ];
-        assert!(validate_batch_single_doing(&tasks).is_err());
-    }
-
-    #[test]
-    fn test_validate_dependencies() {
-        let tasks = vec![
-            FlatTask {
-                name: Some("A".to_string()),
-                depends_on: vec!["B".to_string()],
-                ..Default::default()
-            },
-            FlatTask {
-                name: Some("B".to_string()),
-                ..Default::default()
-            },
-        ];
-        assert!(validate_dependencies(&tasks).is_ok());
-
-        let tasks = vec![FlatTask {
-            name: Some("A".to_string()),
-            depends_on: vec!["NonExistent".to_string()],
-            ..Default::default()
-        }];
-        assert!(validate_dependencies(&tasks).is_err());
-    }
-
-    #[test]
-    fn test_detect_circular_dependencies() {
-        // No cycle
-        let tasks = vec![
-            FlatTask {
-                name: Some("A".to_string()),
-                depends_on: vec!["B".to_string()],
-                ..Default::default()
-            },
-            FlatTask {
-                name: Some("B".to_string()),
-                ..Default::default()
-            },
-        ];
-        assert!(detect_circular_dependencies(&tasks).is_ok());
-
-        // Self-loop
-        let tasks = vec![FlatTask {
-            name: Some("A".to_string()),
-            depends_on: vec!["A".to_string()],
-            ..Default::default()
-        }];
-        assert!(detect_circular_dependencies(&tasks).is_err());
-
-        // A → B → A cycle
-        let tasks = vec![
-            FlatTask {
-                name: Some("A".to_string()),
-                depends_on: vec!["B".to_string()],
-                ..Default::default()
-            },
-            FlatTask {
-                name: Some("B".to_string()),
-                depends_on: vec!["A".to_string()],
-                ..Default::default()
-            },
-        ];
-        assert!(detect_circular_dependencies(&tasks).is_err());
-    }
-
-    #[test]
-    fn test_tarjan_scc_no_cycle() {
-        let graph = vec![vec![1], vec![]]; // A → B
-        let sccs = tarjan_scc(&graph);
-        assert!(sccs.iter().all(|scc| scc.len() == 1));
-    }
-
-    #[test]
-    fn test_tarjan_scc_with_cycle() {
-        let graph = vec![vec![1], vec![0]]; // A → B → A
-        let sccs = tarjan_scc(&graph);
-        assert!(sccs.iter().any(|scc| scc.len() > 1));
-    }
-}
+// Validation functions (validate_dependencies, validate_batch_single_doing,
+// detect_circular_dependencies, tarjan_scc) are in crate::plan_validation.

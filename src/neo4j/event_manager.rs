@@ -198,7 +198,7 @@ impl Neo4jEventManager {
 }
 
 /// Convert a Neo4j Event node to an Event struct.
-fn node_to_event(node: &neo4rs::Node) -> Result<Event> {
+pub(crate) fn node_to_event(node: &neo4rs::Node) -> Result<Event> {
     let id: i64 = node.get("id").map_err(|e| neo4j_err("event.id", e))?;
     let task_id: i64 = node
         .get("task_id")

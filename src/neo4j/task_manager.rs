@@ -1062,16 +1062,14 @@ impl Neo4jTaskManager {
 
     // ── Internal Helpers ────────────────────────────────────────
 
-    /// Public wrapper for focus-protection checks used by plan_executor.
-    pub async fn find_focused_in_subtree_pub(&self, task_id: i64) -> Result<Option<(i64, String)>> {
-        self.find_focused_in_subtree(task_id).await
-    }
-
     /// Check if any task in the subtree (self + descendants) is focused by any session.
     ///
     /// Uses `[:CHILD_OF*0..]` to include the root task itself in the check.
     /// Returns `Some((focused_task_id, session_id))` if found, `None` otherwise.
-    async fn find_focused_in_subtree(&self, task_id: i64) -> Result<Option<(i64, String)>> {
+    pub(crate) async fn find_focused_in_subtree(
+        &self,
+        task_id: i64,
+    ) -> Result<Option<(i64, String)>> {
         let mut result = self
             .graph
             .execute(

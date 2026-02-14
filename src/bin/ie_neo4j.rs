@@ -62,10 +62,18 @@ async fn run(cli: Cli) -> Result<()> {
             events,
             limit,
             offset,
-            since: _,
-            until: _,
+            since,
+            until,
             format,
-        } => handle_search(query, tasks, events, limit, offset, format).await,
+        } => {
+            if since.is_some() {
+                eprintln!("Warning: --since is not yet supported for Neo4j backend (ignored)");
+            }
+            if until.is_some() {
+                eprintln!("Warning: --until is not yet supported for Neo4j backend (ignored)");
+            }
+            handle_search(query, tasks, events, limit, offset, format).await
+        },
 
         _ => {
             eprintln!("Command not yet implemented for Neo4j backend.");
@@ -1021,5 +1029,187 @@ fn merge_metadata(existing: Option<&str>, new_meta: &serde_json::Value) -> Optio
         None
     } else {
         Some(serde_json::to_string(&base).unwrap_or_default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── parse_task_id_query ──────────────────────────────────────
+
+    #[test]
+    fn test_parse_task_id_valid() {
+        assert_eq!(parse_task_id_query("#123"), Some(123));
+        assert_eq!(parse_task_id_query("#1"), Some(1));
+        assert_eq!(parse_task_id_query("#0"), Some(0));
+        assert_eq!(parse_task_id_query("  #42  "), Some(42));
+    }
+
+    #[test]
+    fn test_parse_task_id_invalid() {
+        assert_eq!(parse_task_id_query("123"), None);
+        assert_eq!(parse_task_id_query("#"), None);
+        assert_eq!(parse_task_id_query("#abc"), None);
+        assert_eq!(parse_task_id_query(""), None);
+        assert_eq!(parse_task_id_query("todo"), None);
+        assert_eq!(parse_task_id_query("#-1"), Some(-1)); // negative parses as i64
+        assert_eq!(parse_task_id_query("#1.5"), None); // float
+    }
+
+    // ── parse_status_keywords ────────────────────────────────────
+
+    #[test]
+    fn test_parse_status_single() {
+        assert_eq!(
+            parse_status_keywords("todo"),
+            Some(vec!["todo".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("doing"),
+            Some(vec!["doing".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("done"),
+            Some(vec!["done".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_parse_status_multiple() {
+        assert_eq!(
+            parse_status_keywords("todo doing"),
+            Some(vec!["todo".to_string(), "doing".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("todo doing done"),
+            Some(vec![
+                "todo".to_string(),
+                "doing".to_string(),
+                "done".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn test_parse_status_case_insensitive() {
+        assert_eq!(
+            parse_status_keywords("TODO"),
+            Some(vec!["todo".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("Todo Doing"),
+            Some(vec!["todo".to_string(), "doing".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_parse_status_dedup() {
+        assert_eq!(
+            parse_status_keywords("todo todo"),
+            Some(vec!["todo".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_parse_status_not_status() {
+        assert_eq!(parse_status_keywords("hello"), None);
+        assert_eq!(parse_status_keywords("todo hello"), None);
+        assert_eq!(parse_status_keywords(""), None);
+        assert_eq!(parse_status_keywords("   "), None);
+    }
+
+    // ── parse_metadata ───────────────────────────────────────────
+
+    #[test]
+    fn test_parse_metadata_basic() {
+        let pairs = vec!["key=value".to_string()];
+        let result = parse_metadata(&pairs).unwrap();
+        assert_eq!(result["key"], "value");
+    }
+
+    #[test]
+    fn test_parse_metadata_multiple() {
+        let pairs = vec!["a=1".to_string(), "b=2".to_string()];
+        let result = parse_metadata(&pairs).unwrap();
+        assert_eq!(result["a"], "1");
+        assert_eq!(result["b"], "2");
+    }
+
+    #[test]
+    fn test_parse_metadata_empty_value_is_null() {
+        let pairs = vec!["key=".to_string()];
+        let result = parse_metadata(&pairs).unwrap();
+        assert!(result["key"].is_null());
+    }
+
+    #[test]
+    fn test_parse_metadata_empty_key_error() {
+        let pairs = vec!["=value".to_string()];
+        assert!(parse_metadata(&pairs).is_err());
+    }
+
+    #[test]
+    fn test_parse_metadata_no_equals_error() {
+        let pairs = vec!["noequalssign".to_string()];
+        assert!(parse_metadata(&pairs).is_err());
+    }
+
+    #[test]
+    fn test_parse_metadata_value_with_equals() {
+        let pairs = vec!["key=val=ue".to_string()];
+        let result = parse_metadata(&pairs).unwrap();
+        assert_eq!(result["key"], "val=ue");
+    }
+
+    // ── merge_metadata ───────────────────────────────────────────
+
+    #[test]
+    fn test_merge_metadata_new_only() {
+        let new_meta = serde_json::json!({"a": "1"});
+        let result = merge_metadata(None, &new_meta);
+        assert_eq!(result, Some(r#"{"a":"1"}"#.to_string()));
+    }
+
+    #[test]
+    fn test_merge_metadata_add_to_existing() {
+        let new_meta = serde_json::json!({"b": "2"});
+        let result = merge_metadata(Some(r#"{"a":"1"}"#), &new_meta);
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed["a"], "1");
+        assert_eq!(parsed["b"], "2");
+    }
+
+    #[test]
+    fn test_merge_metadata_remove_with_null() {
+        let new_meta = serde_json::json!({"a": null});
+        let result = merge_metadata(Some(r#"{"a":"1","b":"2"}"#), &new_meta);
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert!(parsed.get("a").is_none());
+        assert_eq!(parsed["b"], "2");
+    }
+
+    #[test]
+    fn test_merge_metadata_remove_all_returns_none() {
+        let new_meta = serde_json::json!({"a": null});
+        let result = merge_metadata(Some(r#"{"a":"1"}"#), &new_meta);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_merge_metadata_invalid_existing_ignored() {
+        let new_meta = serde_json::json!({"a": "1"});
+        let result = merge_metadata(Some("not-json"), &new_meta);
+        assert_eq!(result, Some(r#"{"a":"1"}"#.to_string()));
+    }
+
+    // ── status_icon ──────────────────────────────────────────────
+
+    #[test]
+    fn test_status_icon() {
+        assert_eq!(status_icon("todo"), "○");
+        assert_eq!(status_icon("doing"), "●");
+        assert_eq!(status_icon("done"), "✓");
+        assert_eq!(status_icon("unknown"), "?");
     }
 }

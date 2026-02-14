@@ -9,6 +9,7 @@ use crate::error::Result;
 use crate::search::{is_cjk_char, needs_like_fallback};
 use neo4rs::{query, Graph};
 
+use super::event_manager::node_to_event;
 use super::task_manager::{neo4j_err, node_to_task};
 
 /// Search manager backed by Neo4j fulltext indexes.
@@ -92,8 +93,7 @@ impl Neo4jSearchManager {
             all_results.extend(events);
         }
 
-        // Sort by relevance score (lower = better for Lucene, higher = better for CONTAINS const)
-        // Normalize: fulltext scores are positive (higher=better), we negate for sorting
+        // Sort by relevance score descending (higher = better for both Lucene and CONTAINS)
         all_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let results: Vec<SearchResult> =
@@ -485,44 +485,6 @@ fn build_context_snippet(haystack: &str, needle: &str) -> String {
             haystack.to_string()
         }
     }
-}
-
-/// Convert a Neo4j Event node to an Event struct.
-fn node_to_event(node: &neo4rs::Node) -> Result<Event> {
-    use crate::error::IntentError;
-    use chrono::Utc;
-
-    let id: i64 = node.get("id").map_err(|e| neo4j_err("event.id", e))?;
-    let task_id: i64 = node
-        .get("task_id")
-        .map_err(|e| neo4j_err("event.task_id", e))?;
-    let log_type: String = node
-        .get("log_type")
-        .map_err(|e| neo4j_err("event.log_type", e))?;
-    let discussion_data: String = node
-        .get("discussion_data")
-        .map_err(|e| neo4j_err("event.discussion_data", e))?;
-
-    let timestamp_str: String = node
-        .get("timestamp")
-        .map_err(|e| neo4j_err("event.timestamp", e))?;
-    let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
-        .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|e| {
-            IntentError::OtherError(anyhow::anyhow!(
-                "Failed to parse event timestamp '{}': {}",
-                timestamp_str,
-                e
-            ))
-        })?;
-
-    Ok(Event {
-        id,
-        task_id,
-        timestamp,
-        log_type,
-        discussion_data,
-    })
 }
 
 #[cfg(test)]

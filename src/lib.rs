@@ -11,6 +11,7 @@ pub mod logging;
 pub mod logs;
 pub mod notifications;
 pub mod plan;
+pub mod plan_validation;
 pub mod priority;
 pub mod project;
 pub mod report;
