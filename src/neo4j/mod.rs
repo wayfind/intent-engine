@@ -8,7 +8,9 @@
 
 pub mod config;
 pub mod event_manager;
+pub mod plan_executor;
 pub mod schema;
+pub mod search_manager;
 pub mod task_manager;
 pub mod workspace_manager;
 
@@ -17,6 +19,8 @@ use neo4rs::{query, Graph};
 
 pub use config::Neo4jConfig;
 pub use event_manager::Neo4jEventManager;
+pub use plan_executor::Neo4jPlanExecutor;
+pub use search_manager::Neo4jSearchManager;
 pub use task_manager::Neo4jTaskManager;
 pub use workspace_manager::Neo4jWorkspaceManager;
 
@@ -96,5 +100,15 @@ impl Neo4jContext {
     /// Create a Neo4jEventManager from this context.
     pub fn event_manager(&self) -> Neo4jEventManager {
         Neo4jEventManager::new(self.graph.clone(), self.project_id.clone())
+    }
+
+    /// Create a Neo4jPlanExecutor from this context.
+    pub fn plan_executor(&self) -> Neo4jPlanExecutor {
+        Neo4jPlanExecutor::new(self.graph.clone(), self.project_id.clone())
+    }
+
+    /// Create a Neo4jSearchManager from this context.
+    pub fn search_manager(&self) -> Neo4jSearchManager {
+        Neo4jSearchManager::new(self.graph.clone(), self.project_id.clone())
     }
 }

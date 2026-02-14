@@ -1062,6 +1062,11 @@ impl Neo4jTaskManager {
 
     // ── Internal Helpers ────────────────────────────────────────
 
+    /// Public wrapper for focus-protection checks used by plan_executor.
+    pub async fn find_focused_in_subtree_pub(&self, task_id: i64) -> Result<Option<(i64, String)>> {
+        self.find_focused_in_subtree(task_id).await
+    }
+
     /// Check if any task in the subtree (self + descendants) is focused by any session.
     ///
     /// Uses `[:CHILD_OF*0..]` to include the root task itself in the check.
@@ -1422,7 +1427,7 @@ impl Neo4jTaskManager {
 // ── Helpers ─────────────────────────────────────────────────────
 
 /// Extract a Task node from a Row by column name.
-fn row_to_task(row: &neo4rs::Row, column: &str) -> Result<Task> {
+pub(crate) fn row_to_task(row: &neo4rs::Row, column: &str) -> Result<Task> {
     let node: neo4rs::Node = row
         .get(column)
         .map_err(|e| neo4j_err(&format!("get column '{column}'"), e))?;
