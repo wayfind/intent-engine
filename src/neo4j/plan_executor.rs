@@ -7,7 +7,7 @@
 //! - Uses `Neo4jTaskManager` methods instead of raw SQL
 //! - Individual operations are NOT wrapped in a transaction (no atomicity guarantee)
 //! - No dashboard notifications (no SQLite DB available)
-//! - Dependencies (BLOCKED_BY) deferred to Phase 4
+//! - Dependencies use BLOCKED_BY relationships (MERGE for idempotency)
 
 use crate::db::models::TaskWithEvents;
 use crate::error::{IntentError, Result};
@@ -378,8 +378,8 @@ impl Neo4jPlanExecutor {
             }
         }
 
-        // ── 12. Dependencies (skip for now — Phase 4) ──
-        let dep_count = 0;
+        // ── 12. Build BLOCKED_BY dependency relationships ──
+        let dep_count = self.build_dependencies(&flat_tasks, &task_id_map).await?;
 
         // ── 13. Auto-focus the doing task ──
         let doing_task = normal_tasks
@@ -412,6 +412,114 @@ impl Neo4jPlanExecutor {
             focused_task_response,
             warnings,
         ))
+    }
+
+    /// Build BLOCKED_BY relationships from depends_on declarations.
+    ///
+    /// For each task with depends_on entries, creates:
+    ///   (blocked_task)-[:BLOCKED_BY]->(blocking_task)
+    /// where blocking_task is the task that must complete first.
+    async fn build_dependencies(
+        &self,
+        flat_tasks: &[FlatTask],
+        task_id_map: &HashMap<String, i64>,
+    ) -> Result<usize> {
+        let mut count: usize = 0;
+
+        for task in flat_tasks {
+            if task.delete || task.depends_on.is_empty() {
+                continue;
+            }
+            let task_name = match &task.name {
+                Some(name) => name,
+                None => continue,
+            };
+
+            let blocked_id = match task_id_map.get(task_name) {
+                Some(&id) => id,
+                None => continue,
+            };
+
+            for dep_name in &task.depends_on {
+                let blocking_id = task_id_map.get(dep_name).ok_or_else(|| {
+                    IntentError::InvalidInput(format!(
+                        "Dependency '{}' not found for task '{}'",
+                        dep_name, task_name
+                    ))
+                })?;
+
+                // Check for circular dependency via Neo4j path query:
+                // Would creating blocked->BLOCKED_BY->blocking create a cycle?
+                if self.would_create_cycle(blocked_id, *blocking_id).await? {
+                    return Err(IntentError::CircularDependency {
+                        blocking_task_id: *blocking_id,
+                        blocked_task_id: blocked_id,
+                    });
+                }
+
+                // Create BLOCKED_BY relationship (idempotent via MERGE)
+                let mut stream = self
+                    .graph
+                    .execute(
+                        query(
+                            "MATCH (blocked:Task {project_id: $pid, id: $blocked_id}) \
+                             MATCH (blocking:Task {project_id: $pid, id: $blocking_id}) \
+                             MERGE (blocked)-[:BLOCKED_BY]->(blocking)",
+                        )
+                        .param("pid", self.project_id.clone())
+                        .param("blocked_id", blocked_id)
+                        .param("blocking_id", *blocking_id),
+                    )
+                    .await
+                    .map_err(|e| neo4j_err("build_dependencies", e))?;
+                // Consume stream to ensure query executes
+                while stream
+                    .next()
+                    .await
+                    .map_err(|e| neo4j_err("build_dependencies consume", e))?
+                    .is_some()
+                {}
+
+                count += 1;
+            }
+        }
+
+        Ok(count)
+    }
+
+    /// Check if adding a BLOCKED_BY edge from blocked_id to blocking_id
+    /// would create a cycle (i.e., blocking_id already transitively depends on blocked_id).
+    async fn would_create_cycle(&self, blocked_id: i64, blocking_id: i64) -> Result<bool> {
+        if blocked_id == blocking_id {
+            return Ok(true);
+        }
+
+        // Check: is there already a path from blocking_id to blocked_id via BLOCKED_BY?
+        // If so, adding blocked_id->blocking_id would complete a cycle.
+        let mut result = self
+            .graph
+            .execute(
+                query(
+                    "MATCH path = (start:Task {project_id: $pid, id: $blocking_id})\
+                     -[:BLOCKED_BY*1..50]->\
+                     (end:Task {project_id: $pid, id: $blocked_id}) \
+                     RETURN count(path) > 0 AS has_cycle LIMIT 1",
+                )
+                .param("pid", self.project_id.clone())
+                .param("blocking_id", blocking_id)
+                .param("blocked_id", blocked_id),
+            )
+            .await
+            .map_err(|e| neo4j_err("would_create_cycle", e))?;
+
+        match result
+            .next()
+            .await
+            .map_err(|e| neo4j_err("would_create_cycle fetch", e))?
+        {
+            Some(row) => Ok(row.get::<bool>("has_cycle").unwrap_or(false)),
+            None => Ok(false),
+        }
     }
 
     /// Find existing tasks by names using batch Cypher query.

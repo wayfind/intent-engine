@@ -120,13 +120,12 @@ impl Neo4jSearchManager {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<(SearchResult, f64)>, i64)> {
-        // Escape for Lucene: wrap in quotes for literal phrase search
-        let lucene_query = format!("\"{}\"", query_str.replace('"', "\\\""));
+        let lucene_query = escape_lucene_phrase(query_str);
+        let end = offset + limit;
 
-        // Count
-        let count = self.count_task_fulltext_matches(&lucene_query).await?;
-
-        // Fetch
+        // Single query: collect all matches, return total count + paginated slice.
+        // NOTE: collect() materializes ALL matches into Neo4j heap before slicing.
+        // Fine for task-management scale (<10K tasks), but won't scale to millions.
         let mut result = self
             .graph
             .execute(
@@ -134,24 +133,29 @@ impl Neo4jSearchManager {
                     "CALL db.index.fulltext.queryNodes('task_fulltext', $query) \
                      YIELD node, score \
                      WHERE node.project_id = $pid \
-                     RETURN node, score \
-                     ORDER BY score DESC \
-                     SKIP $offset LIMIT $limit",
+                     WITH node, score ORDER BY score DESC \
+                     WITH collect(node) AS nodes, collect(score) AS scores \
+                     UNWIND range(toInteger($offset), toInteger($end) - 1) AS idx \
+                     WITH nodes[idx] AS node, scores[idx] AS score, size(nodes) AS total \
+                     WHERE node IS NOT NULL \
+                     RETURN node, score, total",
                 )
                 .param("query", lucene_query)
                 .param("pid", self.project_id.clone())
                 .param("offset", offset)
-                .param("limit", limit),
+                .param("end", end),
             )
             .await
             .map_err(|e| neo4j_err("search_tasks_fulltext", e))?;
 
         let mut results = Vec::new();
+        let mut total: i64 = 0;
         while let Some(row) = result
             .next()
             .await
             .map_err(|e| neo4j_err("search_tasks_fulltext iterate", e))?
         {
+            total = row.get::<i64>("total").unwrap_or(0);
             let node: neo4rs::Node = row
                 .get("node")
                 .map_err(|e| neo4j_err("search_tasks_fulltext node", e))?;
@@ -169,7 +173,7 @@ impl Neo4jSearchManager {
             ));
         }
 
-        Ok((results, count))
+        Ok((results, total))
     }
 
     async fn search_events_fulltext(
@@ -178,9 +182,8 @@ impl Neo4jSearchManager {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<(SearchResult, f64)>, i64)> {
-        let lucene_query = format!("\"{}\"", query_str.replace('"', "\\\""));
-
-        let count = self.count_event_fulltext_matches(&lucene_query).await?;
+        let lucene_query = escape_lucene_phrase(query_str);
+        let end = offset + limit;
 
         let mut result = self
             .graph
@@ -189,34 +192,49 @@ impl Neo4jSearchManager {
                     "CALL db.index.fulltext.queryNodes('event_fulltext', $query) \
                      YIELD node, score \
                      WHERE node.project_id = $pid \
-                     RETURN node, score \
-                     ORDER BY score DESC \
-                     SKIP $offset LIMIT $limit",
+                     WITH node, score ORDER BY score DESC \
+                     WITH collect(node) AS nodes, collect(score) AS scores \
+                     UNWIND range(toInteger($offset), toInteger($end) - 1) AS idx \
+                     WITH nodes[idx] AS node, scores[idx] AS score, size(nodes) AS total \
+                     WHERE node IS NOT NULL \
+                     RETURN node, score, total",
                 )
                 .param("query", lucene_query)
                 .param("pid", self.project_id.clone())
                 .param("offset", offset)
-                .param("limit", limit),
+                .param("end", end),
             )
             .await
             .map_err(|e| neo4j_err("search_events_fulltext", e))?;
 
-        let task_mgr = super::Neo4jTaskManager::new(self.graph.clone(), self.project_id.clone());
-
-        let mut results = Vec::new();
+        // Collect events first, then batch-fetch ancestry
+        let mut event_entries: Vec<(crate::db::models::Event, f64, String)> = Vec::new();
+        let mut total: i64 = 0;
         while let Some(row) = result
             .next()
             .await
             .map_err(|e| neo4j_err("search_events_fulltext iterate", e))?
         {
+            total = row.get::<i64>("total").unwrap_or(0);
             let node: neo4rs::Node = row
                 .get("node")
                 .map_err(|e| neo4j_err("search_events_fulltext node", e))?;
             let score: f64 = row.get("score").unwrap_or(0.0);
             let event = node_to_event(&node)?;
             let match_snippet = build_event_snippet(&event, query_str);
-            let task_chain = task_mgr.get_task_ancestry(event.task_id).await?;
+            event_entries.push((event, score, match_snippet));
+        }
 
+        // Batch-fetch ancestry for all unique task_ids
+        let task_mgr = super::Neo4jTaskManager::new(self.graph.clone(), self.project_id.clone());
+        let ancestry_map = batch_get_ancestry(&task_mgr, &event_entries).await?;
+
+        let mut results = Vec::new();
+        for (event, score, match_snippet) in event_entries {
+            let task_chain = ancestry_map
+                .get(&event.task_id)
+                .cloned()
+                .unwrap_or_default();
             results.push((
                 SearchResult::Event {
                     event,
@@ -227,7 +245,7 @@ impl Neo4jSearchManager {
             ));
         }
 
-        Ok((results, count))
+        Ok((results, total))
     }
 
     // ── CONTAINS fallback (short CJK) ────────────────────────────
@@ -238,38 +256,18 @@ impl Neo4jSearchManager {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<(SearchResult, f64)>, i64)> {
-        // Count
-        let mut count_result = self
-            .graph
-            .execute(
-                query(
-                    "MATCH (t:Task {project_id: $pid}) \
-                     WHERE t.name CONTAINS $q OR t.spec CONTAINS $q \
-                     RETURN count(t) AS cnt",
-                )
-                .param("pid", self.project_id.clone())
-                .param("q", query_str.to_string()),
-            )
-            .await
-            .map_err(|e| neo4j_err("search_tasks_contains count", e))?;
-
-        let count: i64 = count_result
-            .next()
-            .await
-            .map_err(|e| neo4j_err("search_tasks_contains count fetch", e))?
-            .and_then(|row| row.get::<i64>("cnt").ok())
-            .unwrap_or(0);
-
-        // Fetch
+        // Single query: count + paginated fetch
         let mut result = self
             .graph
             .execute(
                 query(
                     "MATCH (t:Task {project_id: $pid}) \
                      WHERE t.name CONTAINS $q OR t.spec CONTAINS $q \
-                     RETURN t \
-                     ORDER BY t.id ASC \
-                     SKIP $offset LIMIT $limit",
+                     WITH t ORDER BY t.id ASC \
+                     WITH collect(t) AS all \
+                     WITH all, size(all) AS total \
+                     UNWIND all[$offset..($offset + $limit)] AS t \
+                     RETURN t, total",
                 )
                 .param("pid", self.project_id.clone())
                 .param("q", query_str.to_string())
@@ -277,14 +275,16 @@ impl Neo4jSearchManager {
                 .param("limit", limit),
             )
             .await
-            .map_err(|e| neo4j_err("search_tasks_contains query", e))?;
+            .map_err(|e| neo4j_err("search_tasks_contains", e))?;
 
         let mut results = Vec::new();
+        let mut total: i64 = 0;
         while let Some(row) = result
             .next()
             .await
             .map_err(|e| neo4j_err("search_tasks_contains iterate", e))?
         {
+            total = row.get::<i64>("total").unwrap_or(0);
             let task = super::task_manager::row_to_task(&row, "t")?;
             let (match_field, match_snippet) = build_task_snippet(&task, query_str);
 
@@ -298,7 +298,7 @@ impl Neo4jSearchManager {
             ));
         }
 
-        Ok((results, count))
+        Ok((results, total))
     }
 
     async fn search_events_contains(
@@ -307,36 +307,18 @@ impl Neo4jSearchManager {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<(SearchResult, f64)>, i64)> {
-        let mut count_result = self
-            .graph
-            .execute(
-                query(
-                    "MATCH (e:Event {project_id: $pid}) \
-                     WHERE e.discussion_data CONTAINS $q \
-                     RETURN count(e) AS cnt",
-                )
-                .param("pid", self.project_id.clone())
-                .param("q", query_str.to_string()),
-            )
-            .await
-            .map_err(|e| neo4j_err("search_events_contains count", e))?;
-
-        let count: i64 = count_result
-            .next()
-            .await
-            .map_err(|e| neo4j_err("search_events_contains count fetch", e))?
-            .and_then(|row| row.get::<i64>("cnt").ok())
-            .unwrap_or(0);
-
+        // Single query: count + paginated fetch
         let mut result = self
             .graph
             .execute(
                 query(
                     "MATCH (e:Event {project_id: $pid}) \
                      WHERE e.discussion_data CONTAINS $q \
-                     RETURN e \
-                     ORDER BY e.id ASC \
-                     SKIP $offset LIMIT $limit",
+                     WITH e ORDER BY e.id ASC \
+                     WITH collect(e) AS all \
+                     WITH all, size(all) AS total \
+                     UNWIND all[$offset..($offset + $limit)] AS e \
+                     RETURN e, total",
                 )
                 .param("pid", self.project_id.clone())
                 .param("q", query_str.to_string())
@@ -344,85 +326,97 @@ impl Neo4jSearchManager {
                 .param("limit", limit),
             )
             .await
-            .map_err(|e| neo4j_err("search_events_contains query", e))?;
+            .map_err(|e| neo4j_err("search_events_contains", e))?;
 
-        let task_mgr = super::Neo4jTaskManager::new(self.graph.clone(), self.project_id.clone());
-
-        let mut results = Vec::new();
+        let mut event_entries: Vec<(crate::db::models::Event, f64, String)> = Vec::new();
+        let mut total: i64 = 0;
         while let Some(row) = result
             .next()
             .await
             .map_err(|e| neo4j_err("search_events_contains iterate", e))?
         {
+            total = row.get::<i64>("total").unwrap_or(0);
             let node: neo4rs::Node = row
                 .get("e")
                 .map_err(|e| neo4j_err("search_events_contains node", e))?;
             let event = node_to_event(&node)?;
             let match_snippet = build_event_snippet(&event, query_str);
-            let task_chain = task_mgr.get_task_ancestry(event.task_id).await?;
+            event_entries.push((event, 1.0, match_snippet));
+        }
 
+        // Batch-fetch ancestry
+        let task_mgr = super::Neo4jTaskManager::new(self.graph.clone(), self.project_id.clone());
+        let ancestry_map = batch_get_ancestry(&task_mgr, &event_entries).await?;
+
+        let mut results = Vec::new();
+        for (event, score, match_snippet) in event_entries {
+            let task_chain = ancestry_map
+                .get(&event.task_id)
+                .cloned()
+                .unwrap_or_default();
             results.push((
                 SearchResult::Event {
                     event,
                     task_chain,
                     match_snippet,
                 },
-                1.0,
+                score,
             ));
         }
 
-        Ok((results, count))
+        Ok((results, total))
+    }
+}
+
+// ── Lucene helpers ───────────────────────────────────────────────
+
+/// Escape special characters for Lucene query syntax and wrap in quotes
+/// for literal phrase search.
+///
+/// Lucene special chars: + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
+fn escape_lucene_phrase(query: &str) -> String {
+    let mut escaped = String::with_capacity(query.len() + 8);
+    escaped.push('"');
+    for ch in query.chars() {
+        match ch {
+            '\\' | '"' => {
+                escaped.push('\\');
+                escaped.push(ch);
+            },
+            // Inside a quoted phrase, most Lucene operators are already
+            // treated as literals. Only backslash and double-quote need
+            // escaping. The quote wrapping neutralizes: + - && || ! ( ) { } [ ] ^ ~ * ? : /
+            _ => escaped.push(ch),
+        }
+    }
+    escaped.push('"');
+    escaped
+}
+
+// ── Batch ancestry helper ────────────────────────────────────────
+
+/// Batch-fetch task ancestry for all unique task_ids in event results.
+///
+/// Instead of N separate get_task_ancestry calls (one per event),
+/// collects unique task_ids and fetches each ancestry once, deduplicating.
+///
+/// TODO: Replace N sequential queries with a single UNWIND-based Cypher query
+/// to eliminate per-task_id round-trips.
+async fn batch_get_ancestry(
+    task_mgr: &super::Neo4jTaskManager,
+    events: &[(crate::db::models::Event, f64, String)],
+) -> crate::error::Result<std::collections::HashMap<i64, Vec<Task>>> {
+    let mut seen = std::collections::HashSet::new();
+    let mut map = std::collections::HashMap::new();
+
+    for (event, _, _) in events {
+        if seen.insert(event.task_id) {
+            let ancestry = task_mgr.get_task_ancestry(event.task_id).await?;
+            map.insert(event.task_id, ancestry);
+        }
     }
 
-    // ── Count helpers ─────────────────────────────────────────────
-
-    async fn count_task_fulltext_matches(&self, lucene_query: &str) -> Result<i64> {
-        let mut result = self
-            .graph
-            .execute(
-                query(
-                    "CALL db.index.fulltext.queryNodes('task_fulltext', $query) \
-                     YIELD node \
-                     WHERE node.project_id = $pid \
-                     RETURN count(node) AS cnt",
-                )
-                .param("query", lucene_query.to_string())
-                .param("pid", self.project_id.clone()),
-            )
-            .await
-            .map_err(|e| neo4j_err("count_task_fulltext", e))?;
-
-        Ok(result
-            .next()
-            .await
-            .map_err(|e| neo4j_err("count_task_fulltext fetch", e))?
-            .and_then(|row| row.get::<i64>("cnt").ok())
-            .unwrap_or(0))
-    }
-
-    async fn count_event_fulltext_matches(&self, lucene_query: &str) -> Result<i64> {
-        let mut result = self
-            .graph
-            .execute(
-                query(
-                    "CALL db.index.fulltext.queryNodes('event_fulltext', $query) \
-                     YIELD node \
-                     WHERE node.project_id = $pid \
-                     RETURN count(node) AS cnt",
-                )
-                .param("query", lucene_query.to_string())
-                .param("pid", self.project_id.clone()),
-            )
-            .await
-            .map_err(|e| neo4j_err("count_event_fulltext", e))?;
-
-        Ok(result
-            .next()
-            .await
-            .map_err(|e| neo4j_err("count_event_fulltext fetch", e))?
-            .and_then(|row| row.get::<i64>("cnt").ok())
-            .unwrap_or(0))
-    }
+    Ok(map)
 }
 
 // ── Snippet helpers ─────────────────────────────────────────────
@@ -560,5 +554,39 @@ mod tests {
         };
         let (field, _snippet) = build_task_snippet(&task, "JWT");
         assert_eq!(field, "spec");
+    }
+
+    // ── Lucene escape tests ──────────────────────────────────────
+
+    #[test]
+    fn test_escape_lucene_plain() {
+        assert_eq!(escape_lucene_phrase("hello world"), "\"hello world\"");
+    }
+
+    #[test]
+    fn test_escape_lucene_quotes() {
+        assert_eq!(escape_lucene_phrase(r#"say "hi""#), r#""say \"hi\"""#);
+    }
+
+    #[test]
+    fn test_escape_lucene_backslash() {
+        assert_eq!(escape_lucene_phrase(r"path\to"), r#""path\\to""#);
+    }
+
+    #[test]
+    fn test_escape_lucene_special_chars_neutralized_by_quotes() {
+        // Inside quotes, these are literal
+        let result = escape_lucene_phrase("C++ test (foo) [bar]");
+        assert_eq!(result, "\"C++ test (foo) [bar]\"");
+    }
+
+    #[test]
+    fn test_escape_lucene_cjk() {
+        assert_eq!(escape_lucene_phrase("任务名称"), "\"任务名称\"");
+    }
+
+    #[test]
+    fn test_escape_lucene_empty() {
+        assert_eq!(escape_lucene_phrase(""), "\"\"");
     }
 }

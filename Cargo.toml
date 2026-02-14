@@ -90,6 +90,10 @@ tokio-tungstenite = "0.24"  # Matches axum's version for WebSocket tests
 test-removed-cli-commands = []
 # Neo4j graph database backend (ie-neo4j binary)
 neo4j = ["neo4rs"]
+# Integration tests against a live Neo4j instance.
+# Requires NEO4J_URI, NEO4J_PASSWORD env vars.
+# Run with: cargo test --features neo4j-tests -- --test-threads=1 neo4j
+neo4j-tests = ["neo4j"]
 
 [[bin]]
 name = "ie"
