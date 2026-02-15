@@ -326,16 +326,7 @@ async fn handle_get(id: i64, with_events: bool, with_context: bool, format: Stri
             } else {
                 crate::cli_handlers::print_task_context(&context);
                 if let Some(summary) = &task_with_events.events_summary {
-                    println!("Events ({}):", summary.total_count);
-                    for event in summary.recent_events.iter().take(10) {
-                        println!(
-                            "  #{} [{}] {}: {}",
-                            event.id,
-                            event.log_type,
-                            event.timestamp.format("%Y-%m-%d %H:%M:%S"),
-                            event.discussion_data.chars().take(60).collect::<String>()
-                        );
-                    }
+                    crate::cli_handlers::print_events_summary(summary);
                 }
             }
         } else {
@@ -354,16 +345,7 @@ async fn handle_get(id: i64, with_events: bool, with_context: bool, format: Stri
             let task = &task_with_events.task;
             super::utils::print_task_summary(task);
             if let Some(summary) = &task_with_events.events_summary {
-                println!("Events ({}):", summary.total_count);
-                for event in summary.recent_events.iter().take(10) {
-                    println!(
-                        "  #{} [{}] {}: {}",
-                        event.id,
-                        event.log_type,
-                        event.timestamp.format("%Y-%m-%d %H:%M:%S"),
-                        event.discussion_data.chars().take(60).collect::<String>()
-                    );
-                }
+                crate::cli_handlers::print_events_summary(summary);
             }
         }
     } else {

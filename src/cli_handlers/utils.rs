@@ -78,7 +78,6 @@ pub fn print_task_tree(tasks: &[crate::db::models::Task]) {
         children_map: &HashMap<Option<i64>, Vec<&crate::db::models::Task>>,
         parent_id: Option<i64>,
         indent: &str,
-        _is_last: bool,
     ) {
         if let Some(children) = children_map.get(&parent_id) {
             for (i, task) in children.iter().enumerate() {
@@ -108,7 +107,7 @@ pub fn print_task_tree(tasks: &[crate::db::models::Task]) {
                 } else {
                     format!("{}│  ", indent)
                 };
-                print_subtree(children_map, Some(task.id), &new_indent, is_last_child);
+                print_subtree(children_map, Some(task.id), &new_indent);
             }
         }
     }
@@ -120,15 +119,14 @@ pub fn print_task_tree(tasks: &[crate::db::models::Task]) {
         .filter(|t| t.parent_id.is_none() || !task_ids.contains(&t.parent_id.unwrap_or(-1)))
         .collect();
 
-    for (i, task) in roots.iter().enumerate() {
-        let _is_last = i == roots.len() - 1;
+    for task in &roots {
         let icon = status_icon(&task.status);
         let priority_info = task
             .priority
             .map(|p| format!(" [P{}]", p))
             .unwrap_or_default();
         println!("  {} #{} {}{}", icon, task.id, task.name, priority_info);
-        print_subtree(&children_map, Some(task.id), "  ", _is_last);
+        print_subtree(&children_map, Some(task.id), "  ");
     }
 }
 
