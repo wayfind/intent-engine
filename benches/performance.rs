@@ -24,7 +24,7 @@ fn bench_task_add(c: &mut Criterion) {
             let task_mgr = TaskManager::new(&pool);
 
             task_mgr
-                .add_task("Benchmark task", None, None, None)
+                .add_task("Benchmark task", None, None, None, None, None)
                 .await
                 .unwrap();
         });
@@ -40,7 +40,7 @@ fn bench_task_get(c: &mut Criterion) {
             let task_mgr = TaskManager::new(&pool);
 
             let task = task_mgr
-                .add_task("Test task", None, None, None)
+                .add_task("Test task", None, None, None, None, None)
                 .await
                 .unwrap();
 
@@ -58,7 +58,7 @@ fn bench_task_update(c: &mut Criterion) {
             let task_mgr = TaskManager::new(&pool);
 
             let task = task_mgr
-                .add_task("Original name", None, None, None)
+                .add_task("Original name", None, None, None, None, None)
                 .await
                 .unwrap();
 
@@ -91,7 +91,7 @@ fn bench_task_find(c: &mut Criterion) {
                 // Create tasks
                 for i in 0..size {
                     task_mgr
-                        .add_task(&format!("Task {}", i), None, None, None)
+                        .add_task(&format!("Task {}", i), None, None, None, None, None)
                         .await
                         .unwrap();
                 }
@@ -119,7 +119,7 @@ fn bench_event_add(c: &mut Criterion) {
             let event_mgr = EventManager::new(&pool);
 
             let task = task_mgr
-                .add_task("Test task", None, None, None)
+                .add_task("Test task", None, None, None, None, None)
                 .await
                 .unwrap();
 
@@ -144,7 +144,7 @@ fn bench_event_list(c: &mut Criterion) {
                 let event_mgr = EventManager::new(&pool);
 
                 let task = task_mgr
-                    .add_task("Test task", None, None, None)
+                    .add_task("Test task", None, None, None, None, None)
                     .await
                     .unwrap();
 
@@ -184,7 +184,7 @@ fn bench_report_summary(c: &mut Criterion) {
                 // Create tasks with different statuses
                 for i in 0..size {
                     let task = task_mgr
-                        .add_task(&format!("Task {}", i), None, None, None)
+                        .add_task(&format!("Task {}", i), None, None, None, None, None)
                         .await
                         .unwrap();
 
@@ -228,7 +228,7 @@ fn bench_task_hierarchy(c: &mut Criterion) {
                 let mut parent_id = None;
                 for i in 0..depth {
                     let task = task_mgr
-                        .add_task(&format!("Level {}", i), None, parent_id, None)
+                        .add_task(&format!("Level {}", i), None, parent_id, None, None, None)
                         .await
                         .unwrap();
                     parent_id = Some(task.id);

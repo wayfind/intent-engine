@@ -203,32 +203,25 @@ async fn handle_create(
         },
     };
 
-    // Create the task
-    let mut task = task_mgr
-        .add_task(&name, description.as_deref(), parent_id, Some(&owner))
-        .await?;
-
     // Pre-merge metadata if specified
     let merged_metadata = if !metadata.is_empty() {
         let meta_json = parse_metadata(&metadata)?;
-        merge_metadata(task.metadata.as_deref(), &meta_json)
+        merge_metadata(None, &meta_json)
     } else {
         None
     };
 
-    // Apply priority and metadata in a single update_task call if either is set
-    if priority.is_some() || merged_metadata.is_some() {
-        task = task_mgr
-            .update_task(
-                task.id,
-                TaskUpdate {
-                    priority,
-                    metadata: merged_metadata.as_deref(),
-                    ..Default::default()
-                },
-            )
-            .await?;
-    }
+    // Create the task with priority and metadata
+    let mut task = task_mgr
+        .add_task(
+            &name,
+            description.as_deref(),
+            parent_id,
+            Some(&owner),
+            priority,
+            merged_metadata.as_deref(),
+        )
+        .await?;
 
     // If status is "doing", start the task
     if status == "doing" {

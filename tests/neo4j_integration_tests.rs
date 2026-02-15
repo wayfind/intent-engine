@@ -164,7 +164,7 @@ async fn neo4j_task_start_done_lifecycle() {
     assert_eq!(started.task.status, "doing");
 
     // Done
-    let done = tm.done_task_by_id(task.id).await.unwrap();
+    let done = tm.done_task_by_id(task.id, false).await.unwrap();
     assert_eq!(done.completed_task.status, "done");
 
     teardown(&graph, &pid).await;
@@ -188,7 +188,7 @@ async fn neo4j_task_done_blocked_by_children() {
     tm.start_task(parent.id, false).await.unwrap();
 
     // Cannot complete parent while child is not done
-    let result = tm.done_task_by_id(parent.id).await;
+    let result = tm.done_task_by_id(parent.id, false).await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -843,7 +843,7 @@ async fn neo4j_pick_next_priority_order() {
     )
     .await
     .unwrap();
-    tm.done_task_by_id(parent.id).await.unwrap();
+    tm.done_task_by_id(parent.id, false).await.unwrap();
 
     let all_done = tm.pick_next().await.unwrap();
     assert_eq!(all_done.reason_code.as_deref(), Some("ALL_TASKS_COMPLETED"));
@@ -863,7 +863,7 @@ async fn neo4j_done_task_no_id_uses_focus() {
     let wm = Neo4jWorkspaceManager::new(graph.clone(), pid.clone());
 
     // No focus → error
-    let err = tm.done_task().await;
+    let err = tm.done_task(false).await;
     assert!(err.is_err());
     let msg = err.unwrap_err().to_string();
     assert!(
@@ -892,7 +892,7 @@ async fn neo4j_done_task_no_id_uses_focus() {
     assert_eq!(focus.current_task_id, Some(task.id));
 
     // Done with no ID → uses focus
-    let result = tm.done_task().await.unwrap();
+    let result = tm.done_task(false).await.unwrap();
     assert_eq!(result.completed_task.id, task.id);
     assert_eq!(result.completed_task.status, "done");
 

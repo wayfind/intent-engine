@@ -25,6 +25,13 @@
 pub const TASK_COLUMNS: &str =
     "id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata";
 
+/// Task column list with `t.` table prefix for JOIN queries
+///
+/// Same columns as TASK_COLUMNS but each prefixed with `t.` to avoid
+/// ambiguity when joining with other tables (e.g. dependencies).
+pub const TASK_COLUMNS_PREFIXED: &str =
+    "t.id, t.parent_id, t.name, t.spec, t.status, t.complexity, t.priority, t.first_todo_at, t.first_doing_at, t.first_done_at, t.active_form, t.owner, t.metadata";
+
 /// Task column list without spec (uses NULL placeholder)
 ///
 /// Used when spec is not needed but schema compatibility is required.

@@ -156,7 +156,14 @@ pub async fn create_task(
     // This distinguishes from CLI-created tasks (owner='ai')
     // Note: Priority is set separately via update_task if needed
     let result = task_mgr
-        .add_task(&req.name, req.spec.as_deref(), req.parent_id, None)
+        .add_task(
+            &req.name,
+            req.spec.as_deref(),
+            req.parent_id,
+            None,
+            None,
+            None,
+        )
         .await;
 
     match result {

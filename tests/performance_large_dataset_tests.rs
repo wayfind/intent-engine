@@ -75,7 +75,7 @@ async fn run_dataset_test(total_tasks: usize) {
         let spec = format!("Implement {} functionality for module {}", keyword, i / 100);
 
         let task = task_mgr
-            .add_task(&name, Some(&spec), None, None)
+            .add_task(&name, Some(&spec), None, None, None, None)
             .await
             .unwrap();
 
@@ -474,7 +474,7 @@ async fn test_search_accuracy_detailed() {
             let name = format!("{} #{}", name_template, i);
             let spec = format!("{} - iteration {}", spec_template, i);
             task_mgr
-                .add_task(&name, Some(&spec), None, None)
+                .add_task(&name, Some(&spec), None, None, None, None)
                 .await
                 .unwrap();
         }
@@ -592,6 +592,8 @@ async fn test_concurrent_search_performance() {
             .add_task(
                 &format!("{} task #{}", keyword, i),
                 Some(&format!("Implementation for {}", keyword)),
+                None,
+                None,
                 None,
                 None,
             )

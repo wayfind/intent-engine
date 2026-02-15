@@ -64,7 +64,11 @@ impl Neo4jWorkspaceManager {
     }
 
     /// Set the current focused task for a session.
-    pub async fn set_current_task(&self, task_id: i64, session_id: Option<&str>) -> Result<()> {
+    pub async fn set_current_task(
+        &self,
+        task_id: i64,
+        session_id: Option<&str>,
+    ) -> Result<CurrentTaskResponse> {
         let session_id = crate::workspace::resolve_session_id(session_id);
 
         self.graph
@@ -76,13 +80,13 @@ impl Neo4jWorkspaceManager {
                      SET s.current_task_id = $tid",
                 )
                 .param("pid", self.project_id.clone())
-                .param("sid", session_id)
+                .param("sid", session_id.clone())
                 .param("tid", task_id),
             )
             .await
             .map_err(|e| neo4j_err("set_current_task", e))?;
 
-        Ok(())
+        self.get_current_task(Some(&session_id)).await
     }
 
     /// Clear the current focused task for a session.

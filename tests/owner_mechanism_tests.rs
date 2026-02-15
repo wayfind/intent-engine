@@ -22,7 +22,7 @@ async fn test_cli_task_add_creates_ai_owned_task() -> Result<()> {
 
     // Simulate CLI task creation (should set owner='ai')
     let task = task_mgr
-        .add_task("CLI Test Task", None, None, Some("ai"))
+        .add_task("CLI Test Task", None, None, Some("ai"), None, None)
         .await?;
 
     assert_eq!(task.owner, "ai", "CLI-created task should have owner='ai'");
@@ -37,7 +37,7 @@ async fn test_dashboard_task_add_creates_human_owned_task() -> Result<()> {
 
     // Simulate Dashboard task creation (None defaults to 'human')
     let task = task_mgr
-        .add_task("Dashboard Test Task", None, None, None)
+        .add_task("Dashboard Test Task", None, None, None, None, None)
         .await?;
 
     assert_eq!(
@@ -91,7 +91,7 @@ async fn test_spawn_subtask_creates_ai_owned_task() -> Result<()> {
 
     // Create parent task
     let parent = task_mgr
-        .add_task("Parent Task", None, None, Some("ai"))
+        .add_task("Parent Task", None, None, Some("ai"), None, None)
         .await?;
 
     // Start parent task to set current_task_id
@@ -119,7 +119,7 @@ async fn test_ai_cannot_complete_human_owned_task() -> Result<()> {
 
     // Create human-owned task
     let task = task_mgr
-        .add_task("Human Task", None, None, None) // None = human
+        .add_task("Human Task", None, None, None, None, None) // None = human
         .await?;
 
     // Set as current task
@@ -157,7 +157,7 @@ async fn test_human_can_complete_human_owned_task() -> Result<()> {
 
     // Create human-owned task
     let task = task_mgr
-        .add_task("Human Task", None, None, None) // None = human
+        .add_task("Human Task", None, None, None, None, None) // None = human
         .await?;
 
     // Set as current task and doing status
@@ -192,7 +192,9 @@ async fn test_ai_can_complete_ai_owned_task() -> Result<()> {
     let workspace_mgr = WorkspaceManager::new(&ctx.pool);
 
     // Create AI-owned task
-    let task = task_mgr.add_task("AI Task", None, None, Some("ai")).await?;
+    let task = task_mgr
+        .add_task("AI Task", None, None, Some("ai"), None, None)
+        .await?;
 
     // Set as current task and doing status
     workspace_mgr.set_current_task(task.id, None).await?;
@@ -225,11 +227,13 @@ async fn test_mixed_ownership_in_hierarchy() -> Result<()> {
     let task_mgr = TaskManager::new(&ctx.pool);
 
     // Create human parent
-    let parent = task_mgr.add_task("Human Parent", None, None, None).await?;
+    let parent = task_mgr
+        .add_task("Human Parent", None, None, None, None, None)
+        .await?;
 
     // Create AI child under human parent
     let child = task_mgr
-        .add_task("AI Child", None, Some(parent.id), Some("ai"))
+        .add_task("AI Child", None, Some(parent.id), Some("ai"), None, None)
         .await?;
 
     // Verify ownership is preserved

@@ -215,7 +215,7 @@ impl Neo4jPlanExecutor {
 
                 // Handle done transition
                 if is_becoming_done {
-                    if let Err(e) = task_mgr.done_task_by_id(existing_info.id).await {
+                    if let Err(e) = task_mgr.done_task_by_id(existing_info.id, false).await {
                         return Ok(PlanResult::error(format!(
                             "Cannot complete task '{}': {}\n\n\
                             Please complete all subtasks before marking the parent as done.",

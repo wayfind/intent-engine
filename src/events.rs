@@ -381,7 +381,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None)
+            .add_task("Test task", None, None, None, None, None)
             .await
             .unwrap();
         let event = event_mgr
@@ -410,7 +410,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None)
+            .add_task("Test task", None, None, None, None, None)
             .await
             .unwrap();
 
@@ -447,7 +447,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None)
+            .add_task("Test task", None, None, None, None, None)
             .await
             .unwrap();
 
@@ -482,7 +482,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None)
+            .add_task("Test task", None, None, None, None, None)
             .await
             .unwrap();
 
@@ -500,7 +500,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None)
+            .add_task("Test task", None, None, None, None, None)
             .await
             .unwrap();
         let event = event_mgr
@@ -527,7 +527,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None)
+            .add_task("Test task", None, None, None, None, None)
             .await
             .unwrap();
         let event = event_mgr
@@ -565,7 +565,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None)
+            .add_task("Test task", None, None, None, None, None)
             .await
             .unwrap();
         let event = event_mgr
@@ -601,7 +601,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None)
+            .add_task("Test task", None, None, None, None, None)
             .await
             .unwrap();
 
@@ -635,8 +635,14 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let event_mgr = EventManager::new(ctx.pool());
 
-        let task1 = task_mgr.add_task("Task 1", None, None, None).await.unwrap();
-        let task2 = task_mgr.add_task("Task 2", None, None, None).await.unwrap();
+        let task1 = task_mgr
+            .add_task("Task 1", None, None, None, None, None)
+            .await
+            .unwrap();
+        let task2 = task_mgr
+            .add_task("Task 2", None, None, None, None, None)
+            .await
+            .unwrap();
 
         // Add events to both tasks
         event_mgr

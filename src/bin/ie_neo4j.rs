@@ -642,9 +642,9 @@ async fn handle_task_done(id: Option<i64>, format: String) -> Result<()> {
     let task_mgr = ctx.task_manager();
 
     let result = if let Some(task_id) = id {
-        task_mgr.done_task_by_id(task_id).await?
+        task_mgr.done_task_by_id(task_id, false).await?
     } else {
-        task_mgr.done_task().await?
+        task_mgr.done_task(false).await?
     };
 
     if format == "json" {

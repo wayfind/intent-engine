@@ -772,7 +772,7 @@ impl Neo4jTaskManager {
     /// Start a task: set status to 'doing' and focus the session on it.
     ///
     /// Checks for blocking dependencies (BLOCKED_BY relationships).
-    pub async fn start_task(&self, id: i64, _with_events: bool) -> Result<TaskWithEvents> {
+    pub async fn start_task(&self, id: i64, with_events: bool) -> Result<TaskWithEvents> {
         self.check_task_exists(id).await?;
 
         // Check blocking dependencies (no-op when BLOCKED_BY relationships don't exist yet)
@@ -827,18 +827,23 @@ impl Neo4jTaskManager {
             .await
             .map_err(|e| neo4j_err("start_task commit", e))?;
 
-        let task = self.get_task(id).await?;
-        Ok(TaskWithEvents {
-            task,
-            events_summary: None,
-        })
+        if with_events {
+            self.get_task_with_events(id).await
+        } else {
+            let task = self.get_task(id).await?;
+            Ok(TaskWithEvents {
+                task,
+                events_summary: None,
+            })
+        }
     }
 
     /// Complete a task by ID. Validates children are done first.
     ///
     /// State changes (status + focus) run in a single transaction.
     /// Returns a DoneTaskResponse with next-step suggestion.
-    pub async fn done_task_by_id(&self, id: i64) -> Result<DoneTaskResponse> {
+    pub async fn done_task_by_id(&self, id: i64, is_ai_caller: bool) -> Result<DoneTaskResponse> {
+        let _ = is_ai_caller; // Signature aligned with SQLite; Neo4j does not do LLM synthesis yet
         let task = self.get_task(id).await?;
 
         // Check incomplete children
@@ -926,7 +931,7 @@ impl Neo4jTaskManager {
     }
 
     /// Complete the current focused task.
-    pub async fn done_task(&self) -> Result<DoneTaskResponse> {
+    pub async fn done_task(&self, is_ai_caller: bool) -> Result<DoneTaskResponse> {
         let session_id = crate::workspace::resolve_session_id(None);
 
         let mut result = self
@@ -953,7 +958,7 @@ impl Neo4jTaskManager {
                 .to_string(),
         ))?;
 
-        self.done_task_by_id(id).await
+        self.done_task_by_id(id, is_ai_caller).await
     }
 
     /// Suggest the next task to work on based on context.

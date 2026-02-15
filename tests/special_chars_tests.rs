@@ -31,7 +31,7 @@ async fn test_sql_injection_single_quote() {
     // Attempt SQL injection with single quote
     let malicious_name = "Task'; DROP TABLE tasks; --";
     let task = task_mgr
-        .add_task(malicious_name, None, None, None)
+        .add_task(malicious_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -52,7 +52,7 @@ async fn test_sql_injection_union_select() {
 
     let malicious_name = "Task' UNION SELECT * FROM tasks WHERE '1'='1";
     let task = task_mgr
-        .add_task(malicious_name, None, None, None)
+        .add_task(malicious_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -73,7 +73,7 @@ async fn test_sql_injection_in_spec() {
 
     let malicious_spec = "'; DELETE FROM events WHERE 1=1; --";
     let task = task_mgr
-        .add_task("Normal task", Some(malicious_spec), None, None)
+        .add_task("Normal task", Some(malicious_spec), None, None, None, None)
         .await
         .unwrap();
 
@@ -91,7 +91,7 @@ async fn test_sql_injection_in_event_data() {
     let event_mgr = EventManager::new(&pool);
 
     let task = task_mgr
-        .add_task("Test task", None, None, None)
+        .add_task("Test task", None, None, None, None, None)
         .await
         .unwrap();
 
@@ -120,7 +120,7 @@ async fn test_unicode_chinese_characters() {
 
     let chinese_name = "实现用户认证功能";
     let task = task_mgr
-        .add_task(chinese_name, None, None, None)
+        .add_task(chinese_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -137,7 +137,7 @@ async fn test_unicode_japanese_characters() {
 
     let japanese_name = "タスクを実装する";
     let task = task_mgr
-        .add_task(japanese_name, None, None, None)
+        .add_task(japanese_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -151,7 +151,7 @@ async fn test_unicode_arabic_characters() {
 
     let arabic_name = "تنفيذ المهمة";
     let task = task_mgr
-        .add_task(arabic_name, None, None, None)
+        .add_task(arabic_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -165,7 +165,7 @@ async fn test_emoji_in_task_name() {
 
     let emoji_name = "🚀 Deploy to production 🎉";
     let task = task_mgr
-        .add_task(emoji_name, None, None, None)
+        .add_task(emoji_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -182,7 +182,7 @@ async fn test_complex_emoji_sequences() {
 
     let complex_emoji = "👨‍👩‍👧‍👦 Family task 🏳️‍🌈 🇺🇸";
     let task = task_mgr
-        .add_task(complex_emoji, None, None, None)
+        .add_task(complex_emoji, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -195,7 +195,10 @@ async fn test_mixed_languages() {
     let task_mgr = TaskManager::new(&pool);
 
     let mixed = "实现 authentication 認証 مصادقة with 🔐";
-    let task = task_mgr.add_task(mixed, None, None, None).await.unwrap();
+    let task = task_mgr
+        .add_task(mixed, None, None, None, None, None)
+        .await
+        .unwrap();
 
     assert_eq!(task.name, mixed);
 }
@@ -209,7 +212,7 @@ async fn test_double_quotes_in_name() {
 
     let name_with_quotes = r#"Task with "quoted" text"#;
     let task = task_mgr
-        .add_task(name_with_quotes, None, None, None)
+        .add_task(name_with_quotes, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -227,7 +230,7 @@ async fn test_backslash_in_name() {
 
     let name_with_backslash = r"C:\Users\test\path";
     let task = task_mgr
-        .add_task(name_with_backslash, None, None, None)
+        .add_task(name_with_backslash, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -241,7 +244,7 @@ async fn test_json_control_characters() {
 
     let name_with_controls = "Task\nwith\nnewlines\tand\ttabs";
     let task = task_mgr
-        .add_task(name_with_controls, None, None, None)
+        .add_task(name_with_controls, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -262,7 +265,9 @@ async fn test_null_bytes_rejected() {
     let name_with_null = "Task\0with\0nulls";
 
     // This should either work (with nulls removed) or fail gracefully
-    let result = task_mgr.add_task(name_with_null, None, None, None).await;
+    let result = task_mgr
+        .add_task(name_with_null, None, None, None, None, None)
+        .await;
 
     // Either way, the system should handle it without crashing
     match result {
@@ -286,7 +291,7 @@ async fn test_multiline_task_name() {
 
     let multiline_name = "Task title\nWith description\nAnd multiple lines";
     let task = task_mgr
-        .add_task(multiline_name, None, None, None)
+        .add_task(multiline_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -310,7 +315,7 @@ async fn test_multiline_spec() {
 "#;
 
     let task = task_mgr
-        .add_task("Task", Some(multiline_spec), None, None)
+        .add_task("Task", Some(multiline_spec), None, None, None, None)
         .await
         .unwrap();
 
@@ -324,7 +329,7 @@ async fn test_tabs_and_spaces() {
 
     let name_with_whitespace = "Task\t\twith\t\tmultiple\t\ttabs   and   spaces";
     let task = task_mgr
-        .add_task(name_with_whitespace, None, None, None)
+        .add_task(name_with_whitespace, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -338,7 +343,7 @@ async fn test_carriage_return() {
 
     let name_with_cr = "Task\r\nwith\r\nCRLF";
     let task = task_mgr
-        .add_task(name_with_cr, None, None, None)
+        .add_task(name_with_cr, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -354,7 +359,7 @@ async fn test_very_long_task_name() {
 
     let long_name = "A".repeat(10_000);
     let task = task_mgr
-        .add_task(&long_name, None, None, None)
+        .add_task(&long_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -369,7 +374,7 @@ async fn test_very_long_spec() {
 
     let long_spec = "This is a very long specification. ".repeat(1_000);
     let task = task_mgr
-        .add_task("Task", Some(&long_spec), None, None)
+        .add_task("Task", Some(&long_spec), None, None, None, None)
         .await
         .unwrap();
 
@@ -383,7 +388,10 @@ async fn test_very_long_event_data() {
     let task_mgr = TaskManager::new(&pool);
     let event_mgr = EventManager::new(&pool);
 
-    let task = task_mgr.add_task("Test", None, None, None).await.unwrap();
+    let task = task_mgr
+        .add_task("Test", None, None, None, None, None)
+        .await
+        .unwrap();
 
     let long_data = "Event data. ".repeat(10_000);
     let event = event_mgr
@@ -402,7 +410,10 @@ async fn test_empty_task_name_rejected() {
     let task_mgr = TaskManager::new(&pool);
 
     // Empty name should still be allowed (the spec doesn't forbid it)
-    let task = task_mgr.add_task("", None, None, None).await.unwrap();
+    let task = task_mgr
+        .add_task("", None, None, None, None, None)
+        .await
+        .unwrap();
     assert_eq!(task.name, "");
 }
 
@@ -413,7 +424,7 @@ async fn test_whitespace_only_task_name() {
 
     let whitespace_name = "   \t\n   ";
     let task = task_mgr
-        .add_task(whitespace_name, None, None, None)
+        .add_task(whitespace_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -426,7 +437,7 @@ async fn test_empty_spec() {
     let task_mgr = TaskManager::new(&pool);
 
     let task = task_mgr
-        .add_task("Task", Some(""), None, None)
+        .add_task("Task", Some(""), None, None, None, None)
         .await
         .unwrap();
     assert_eq!(task.spec.as_deref(), Some(""));
@@ -438,7 +449,10 @@ async fn test_empty_event_data() {
     let task_mgr = TaskManager::new(&pool);
     let event_mgr = EventManager::new(&pool);
 
-    let task = task_mgr.add_task("Test", None, None, None).await.unwrap();
+    let task = task_mgr
+        .add_task("Test", None, None, None, None, None)
+        .await
+        .unwrap();
 
     let event = event_mgr.add_event(task.id, "test", "").await.unwrap();
     assert_eq!(event.discussion_data, "");
@@ -453,7 +467,7 @@ async fn test_markdown_in_task_name() {
 
     let markdown_name = "# Task **bold** *italic* `code`";
     let task = task_mgr
-        .add_task(markdown_name, None, None, None)
+        .add_task(markdown_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -467,7 +481,7 @@ async fn test_html_tags_in_name() {
 
     let html_name = "<script>alert('xss')</script>";
     let task = task_mgr
-        .add_task(html_name, None, None, None)
+        .add_task(html_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -481,7 +495,7 @@ async fn test_regex_metacharacters() {
 
     let regex_name = r"Task.*[0-9]+\d{3}(test|prod)$";
     let task = task_mgr
-        .add_task(regex_name, None, None, None)
+        .add_task(regex_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -495,7 +509,7 @@ async fn test_shell_metacharacters() {
 
     let shell_name = "Task && echo 'test' | grep -v 'bad' > /dev/null";
     let task = task_mgr
-        .add_task(shell_name, None, None, None)
+        .add_task(shell_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -508,7 +522,10 @@ async fn test_url_in_task_name() {
     let task_mgr = TaskManager::new(&pool);
 
     let url_name = "Deploy to https://example.com/api?key=value&test=1";
-    let task = task_mgr.add_task(url_name, None, None, None).await.unwrap();
+    let task = task_mgr
+        .add_task(url_name, None, None, None, None, None)
+        .await
+        .unwrap();
 
     assert_eq!(task.name, url_name);
 }
@@ -522,7 +539,7 @@ async fn test_fts5_search_with_quotes() {
     let report_mgr = ReportManager::new(&pool);
 
     task_mgr
-        .add_task(r#"Task with "quotes""#, None, None, None)
+        .add_task(r#"Task with "quotes""#, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -543,7 +560,7 @@ async fn test_fts5_search_with_special_chars() {
     let report_mgr = ReportManager::new(&pool);
 
     task_mgr
-        .add_task("C++ programming task", None, None, None)
+        .add_task("C++ programming task", None, None, None, None, None)
         .await
         .unwrap();
 
@@ -564,13 +581,13 @@ async fn test_fts5_search_unicode() {
 
     // Create task with Chinese characters
     task_mgr
-        .add_task("实现用户认证功能", None, None, None)
+        .add_task("实现用户认证功能", None, None, None, None, None)
         .await
         .unwrap();
 
     // Also create task with mixed content for better FTS5 matching
     task_mgr
-        .add_task("认证 authentication feature", None, None, None)
+        .add_task("认证 authentication feature", None, None, None, None, None)
         .await
         .unwrap();
 
@@ -601,7 +618,10 @@ async fn test_task_name_with_only_spaces() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
 
-    let task = task_mgr.add_task("     ", None, None, None).await.unwrap();
+    let task = task_mgr
+        .add_task("     ", None, None, None, None, None)
+        .await
+        .unwrap();
     assert_eq!(task.name, "     ");
 }
 
@@ -610,7 +630,10 @@ async fn test_task_name_single_character() {
     let (_temp_dir, pool) = setup_test_db().await;
     let task_mgr = TaskManager::new(&pool);
 
-    let task = task_mgr.add_task("A", None, None, None).await.unwrap();
+    let task = task_mgr
+        .add_task("A", None, None, None, None, None)
+        .await
+        .unwrap();
     assert_eq!(task.name, "A");
 }
 
@@ -621,7 +644,7 @@ async fn test_task_name_all_special_chars() {
 
     let special_name = "!@#$%^&*()_+-=[]{}|;':\",./<>?~`";
     let task = task_mgr
-        .add_task(special_name, None, None, None)
+        .add_task(special_name, None, None, None, None, None)
         .await
         .unwrap();
 
@@ -634,7 +657,10 @@ async fn test_repeated_special_characters() {
     let task_mgr = TaskManager::new(&pool);
 
     let repeated = "'''\"\"\"\\\\\\///";
-    let task = task_mgr.add_task(repeated, None, None, None).await.unwrap();
+    let task = task_mgr
+        .add_task(repeated, None, None, None, None, None)
+        .await
+        .unwrap();
 
     assert_eq!(task.name, repeated);
 }

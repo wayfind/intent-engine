@@ -179,16 +179,16 @@ mod tests {
 
         // Create tasks with different statuses
         task_mgr
-            .add_task("Todo task", None, None, None)
+            .add_task("Todo task", None, None, None, None, None)
             .await
             .unwrap();
         let doing = task_mgr
-            .add_task("Doing task", None, None, None)
+            .add_task("Doing task", None, None, None, None, None)
             .await
             .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
         let done = task_mgr
-            .add_task("Done task", None, None, None)
+            .add_task("Done task", None, None, None, None, None)
             .await
             .unwrap();
         task_mgr.start_task(done.id, false).await.unwrap();
@@ -213,8 +213,14 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        task_mgr.add_task("Task 1", None, None, None).await.unwrap();
-        task_mgr.add_task("Task 2", None, None, None).await.unwrap();
+        task_mgr
+            .add_task("Task 1", None, None, None, None, None)
+            .await
+            .unwrap();
+        task_mgr
+            .add_task("Task 2", None, None, None, None, None)
+            .await
+            .unwrap();
 
         let report = report_mgr
             .generate_report(None, None, None, None, false)
@@ -232,11 +238,11 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Todo task", None, None, None)
+            .add_task("Todo task", None, None, None, None, None)
             .await
             .unwrap();
         let doing = task_mgr
-            .add_task("Doing task", None, None, None)
+            .add_task("Doing task", None, None, None, None, None)
             .await
             .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
@@ -258,7 +264,10 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Task 1", None, None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Task 1", None, None, None, None, None)
+            .await
+            .unwrap();
         event_mgr
             .add_event(task.id, "decision", "Test event")
             .await
@@ -298,11 +307,11 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Authentication feature", None, None, None)
+            .add_task("Authentication feature", None, None, None, None, None)
             .await
             .unwrap();
         task_mgr
-            .add_task("Database migration", None, None, None)
+            .add_task("Database migration", None, None, None, None, None)
             .await
             .unwrap();
 
@@ -337,9 +346,18 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         // Create tasks with different statuses
-        task_mgr.add_task("Task A", None, None, None).await.unwrap();
-        task_mgr.add_task("Task B", None, None, None).await.unwrap();
-        let doing = task_mgr.add_task("Task C", None, None, None).await.unwrap();
+        task_mgr
+            .add_task("Task A", None, None, None, None, None)
+            .await
+            .unwrap();
+        task_mgr
+            .add_task("Task B", None, None, None, None, None)
+            .await
+            .unwrap();
+        let doing = task_mgr
+            .add_task("Task C", None, None, None, None, None)
+            .await
+            .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
 
         // Filter with non-existent spec should return consistent summary
@@ -363,11 +381,11 @@ mod tests {
 
         // Create some tasks
         task_mgr
-            .add_task("Old task", None, None, None)
+            .add_task("Old task", None, None, None, None, None)
             .await
             .unwrap();
         task_mgr
-            .add_task("Recent task", None, None, None)
+            .add_task("Recent task", None, None, None, None, None)
             .await
             .unwrap();
 
@@ -394,11 +412,20 @@ mod tests {
                 Some("Implement authentication using JWT"),
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
         task_mgr
-            .add_task("Task 2", Some("Setup database migrations"), None, None)
+            .add_task(
+                "Task 2",
+                Some("Setup database migrations"),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -419,11 +446,11 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Todo task", None, None, None)
+            .add_task("Todo task", None, None, None, None, None)
             .await
             .unwrap();
         let doing = task_mgr
-            .add_task("Doing task", None, None, None)
+            .add_task("Doing task", None, None, None, None, None)
             .await
             .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
@@ -457,11 +484,20 @@ mod tests {
                 Some("Implement JWT authentication"),
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
         task_mgr
-            .add_task("Feature B", Some("Setup OAuth2 integration"), None, None)
+            .add_task(
+                "Feature B",
+                Some("Setup OAuth2 integration"),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -480,13 +516,22 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Auth feature", Some("Implement authentication"), None, None)
+            .add_task(
+                "Auth feature",
+                Some("Implement authentication"),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         task_mgr
             .add_task(
                 "Database setup",
                 Some("Configure authentication database"),
+                None,
+                None,
                 None,
                 None,
             )
@@ -522,7 +567,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        task_mgr.add_task("Task", None, None, None).await.unwrap();
+        task_mgr
+            .add_task("Task", None, None, None, None, None)
+            .await
+            .unwrap();
 
         let report = report_mgr
             .generate_report(Some("7d".to_string()), None, None, None, true)
@@ -541,7 +589,10 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        task_mgr.add_task("Task", None, None, None).await.unwrap();
+        task_mgr
+            .add_task("Task", None, None, None, None, None)
+            .await
+            .unwrap();
 
         let report = report_mgr
             .generate_report(None, None, None, None, true)
@@ -559,7 +610,10 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
         let report_mgr = ReportManager::new(ctx.pool());
 
-        let task = task_mgr.add_task("Task", None, None, None).await.unwrap();
+        let task = task_mgr
+            .add_task("Task", None, None, None, None, None)
+            .await
+            .unwrap();
         event_mgr
             .add_event(task.id, "decision", "Event 1")
             .await
@@ -593,11 +647,25 @@ mod tests {
         let report_mgr = ReportManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Auth feature", Some("JWT implementation"), None, None)
+            .add_task(
+                "Auth feature",
+                Some("JWT implementation"),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let doing = task_mgr
-            .add_task("Auth testing", Some("Write JWT tests"), None, None)
+            .add_task(
+                "Auth testing",
+                Some("Write JWT tests"),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         task_mgr.start_task(doing.id, false).await.unwrap();
