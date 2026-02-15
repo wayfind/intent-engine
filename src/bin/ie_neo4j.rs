@@ -65,15 +65,7 @@ async fn run(cli: Cli) -> Result<()> {
             since,
             until,
             format,
-        } => {
-            if since.is_some() {
-                eprintln!("Warning: --since is not yet supported for Neo4j backend (ignored)");
-            }
-            if until.is_some() {
-                eprintln!("Warning: --until is not yet supported for Neo4j backend (ignored)");
-            }
-            handle_search(query, tasks, events, limit, offset, format).await
-        },
+        } => handle_search(query, tasks, events, limit, offset, since, until, format).await,
 
         _ => {
             eprintln!("Command not yet implemented for Neo4j backend.");
@@ -206,10 +198,10 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 
         TaskCommands::Get {
             id,
-            with_events: _,
-            with_context: _,
+            with_events,
+            with_context,
             format,
-        } => handle_task_get(id, format).await,
+        } => handle_task_get(id, with_events, with_context, format).await,
 
         TaskCommands::Update {
             id,
@@ -245,9 +237,9 @@ async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             sort,
             limit,
             offset,
-            tree: _,
+            tree,
             format,
-        } => handle_task_list(status, parent, sort, limit, offset, format).await,
+        } => handle_task_list(status, parent, sort, limit, offset, tree, format).await,
 
         TaskCommands::Delete {
             id,
@@ -337,16 +329,60 @@ async fn handle_task_create(
     Ok(())
 }
 
-async fn handle_task_get(id: i64, format: String) -> Result<()> {
+async fn handle_task_get(
+    id: i64,
+    with_events: bool,
+    with_context: bool,
+    format: String,
+) -> Result<()> {
     let ctx = Neo4jContext::connect().await?;
     let task_mgr = ctx.task_manager();
 
-    let task = task_mgr.get_task(id).await?;
+    if with_context && with_events {
+        // Single combined fetch: 1 get_task + 6 parallel queries (no duplicate get_task)
+        let (context, events_summary) = task_mgr.get_task_context_with_events(id).await?;
+        let response = json!({
+            "task": context.task,
+            "ancestors": context.ancestors,
+            "siblings": context.siblings,
+            "children": context.children,
+            "dependencies": context.dependencies,
+            "events_summary": events_summary,
+        });
 
-    if format == "json" {
-        println!("{}", serde_json::to_string_pretty(&task)?);
+        if format == "json" {
+            println!("{}", serde_json::to_string_pretty(&response)?);
+        } else {
+            print_task_context(&context);
+            print_events_summary(&events_summary);
+        }
+    } else if with_context {
+        let context = task_mgr.get_task_context(id).await?;
+
+        if format == "json" {
+            println!("{}", serde_json::to_string_pretty(&context)?);
+        } else {
+            print_task_context(&context);
+        }
+    } else if with_events {
+        let task_with_events = task_mgr.get_task_with_events(id).await?;
+
+        if format == "json" {
+            println!("{}", serde_json::to_string_pretty(&task_with_events)?);
+        } else {
+            print_task_summary(&task_with_events.task);
+            if let Some(summary) = &task_with_events.events_summary {
+                print_events_summary(summary);
+            }
+        }
     } else {
-        print_task_summary(&task);
+        let task = task_mgr.get_task(id).await?;
+
+        if format == "json" {
+            println!("{}", serde_json::to_string_pretty(&task)?);
+        } else {
+            print_task_summary(&task);
+        }
     }
 
     Ok(())
@@ -426,6 +462,7 @@ async fn handle_task_list(
     sort: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
+    tree: bool,
     format: String,
 ) -> Result<()> {
     let ctx = Neo4jContext::connect().await?;
@@ -447,39 +484,68 @@ async fn handle_task_list(
 
     let parent_id_opt: Option<Option<i64>> = parent.map(|p| if p == 0 { None } else { Some(p) });
 
-    let result = task_mgr
-        .find_tasks(status.as_deref(), parent_id_opt, sort_by, limit, offset)
-        .await?;
+    if tree {
+        // Tree mode: fetch tasks respecting --parent and --status, render as hierarchy.
+        // --parent N: show subtree rooted at N (fetch children of N).
+        // --parent 0 / omitted: show all tasks as tree.
+        let tasks = if let Some(Some(pid)) = parent_id_opt {
+            // Fetch the parent + all its descendants
+            let mut all = vec![task_mgr.get_task(pid).await?];
+            all.extend(task_mgr.get_descendants(pid).await?);
+            // Apply status filter client-side if requested
+            if let Some(ref s) = status {
+                all.retain(|t| t.status == *s || t.id == pid);
+            }
+            all
+        } else {
+            task_mgr
+                .find_tasks(status.as_deref(), None, sort_by, None, None)
+                .await?
+                .tasks
+        };
 
-    if format == "json" {
-        println!("{}", serde_json::to_string_pretty(&result)?);
-    } else {
-        println!(
-            "Tasks: {} total (showing {})",
-            result.total_count,
-            result.tasks.len()
-        );
-        println!();
-        for task in &result.tasks {
-            let icon = status_icon(&task.status);
-            let parent_info = task
-                .parent_id
-                .map(|p| format!(" (parent: #{})", p))
-                .unwrap_or_default();
-            let priority_info = task
-                .priority
-                .map(|p| format!(" [P{}]", p))
-                .unwrap_or_default();
-            println!(
-                "  {} #{} {}{}{}",
-                icon, task.id, task.name, parent_info, priority_info
-            );
+        if format == "json" {
+            println!("{}", serde_json::to_string_pretty(&tasks)?);
+        } else {
+            println!("Tasks: {} (tree view)", tasks.len());
+            println!();
+            print_task_tree(&tasks);
         }
-        if result.has_more {
+    } else {
+        let result = task_mgr
+            .find_tasks(status.as_deref(), parent_id_opt, sort_by, limit, offset)
+            .await?;
+
+        if format == "json" {
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        } else {
             println!(
-                "\n  ... more results available (use --offset {})",
-                result.offset + result.limit
+                "Tasks: {} total (showing {})",
+                result.total_count,
+                result.tasks.len()
             );
+            println!();
+            for task in &result.tasks {
+                let icon = status_icon(&task.status);
+                let parent_info = task
+                    .parent_id
+                    .map(|p| format!(" (parent: #{})", p))
+                    .unwrap_or_default();
+                let priority_info = task
+                    .priority
+                    .map(|p| format!(" [P{}]", p))
+                    .unwrap_or_default();
+                println!(
+                    "  {} #{} {}{}{}",
+                    icon, task.id, task.name, parent_info, priority_info
+                );
+            }
+            if result.has_more {
+                println!(
+                    "\n  ... more results available (use --offset {})",
+                    result.offset + result.limit
+                );
+            }
         }
     }
 
@@ -770,15 +836,32 @@ async fn handle_plan(format: String) -> Result<()> {
 
 // ── Search Command ──────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_search(
     query: String,
     include_tasks: bool,
     include_events: bool,
     limit: Option<i64>,
     offset: Option<i64>,
+    since: Option<String>,
+    until: Option<String>,
     format: String,
 ) -> Result<()> {
+    use chrono::{DateTime, Utc};
+
     let ctx = Neo4jContext::connect().await?;
+
+    // Parse date filters
+    let since_dt: Option<DateTime<Utc>> = if let Some(ref s) = since {
+        Some(parse_date_filter(s).map_err(IntentError::InvalidInput)?)
+    } else {
+        None
+    };
+    let until_dt: Option<DateTime<Utc>> = if let Some(ref u) = until {
+        Some(parse_date_filter(u).map_err(IntentError::InvalidInput)?)
+    } else {
+        None
+    };
 
     // Mode 1: #ID lookup
     if let Some(task_id) = parse_task_id_query(&query) {
@@ -802,12 +885,45 @@ async fn handle_search(
     // Mode 2: Status keywords (todo/doing/done)
     if let Some(statuses) = parse_status_keywords(&query) {
         let task_mgr = ctx.task_manager();
+
+        // When date filters are used, fetch more tasks initially
+        let fetch_limit = if since_dt.is_some() || until_dt.is_some() {
+            Some(10000)
+        } else {
+            limit
+        };
+
         let mut all_tasks = Vec::new();
         for status in &statuses {
             let result = task_mgr
-                .find_tasks(Some(status), None, None, limit, offset)
+                .find_tasks(Some(status), None, None, fetch_limit, offset)
                 .await?;
             all_tasks.extend(result.tasks);
+        }
+
+        // Apply date filters based on status
+        if since_dt.is_some() || until_dt.is_some() {
+            all_tasks.retain(|task| {
+                let timestamp = match task.status.as_str() {
+                    "done" => task.first_done_at,
+                    "doing" => task.first_doing_at,
+                    _ => task.first_todo_at,
+                };
+                let Some(ts) = timestamp else {
+                    return false;
+                };
+                if let Some(ref since) = since_dt {
+                    if ts < *since {
+                        return false;
+                    }
+                }
+                if let Some(ref until) = until_dt {
+                    if ts > *until {
+                        return false;
+                    }
+                }
+                true
+            });
         }
 
         // Sort by priority then id
@@ -826,9 +942,16 @@ async fn handle_search(
             println!("{}", serde_json::to_string_pretty(&all_tasks)?);
         } else {
             let status_str = statuses.join(", ");
+            let date_filter_str = match (&since, &until) {
+                (Some(s), Some(u)) => format!(" (from {} to {})", s, u),
+                (Some(s), None) => format!(" (since {})", s),
+                (None, Some(u)) => format!(" (until {})", u),
+                (None, None) => String::new(),
+            };
             println!(
-                "Tasks with status [{}]: {} found",
+                "Tasks with status [{}]{}: {} found",
                 status_str,
+                date_filter_str,
                 all_tasks.len()
             );
             println!();
@@ -912,6 +1035,31 @@ async fn handle_search(
     Ok(())
 }
 
+/// Parse a date filter string (duration like "7d" or date like "2025-01-01").
+/// Replicates logic from `src/cli_handlers/other.rs`.
+fn parse_date_filter(input: &str) -> std::result::Result<chrono::DateTime<chrono::Utc>, String> {
+    use chrono::{NaiveDate, TimeZone, Utc};
+    use intent_engine::time_utils::parse_duration;
+
+    let input = input.trim();
+
+    // Try duration format first (e.g., "7d", "1w")
+    if let Ok(dt) = parse_duration(input) {
+        return Ok(dt);
+    }
+
+    // Try date format (YYYY-MM-DD)
+    if let Ok(date) = NaiveDate::parse_from_str(input, "%Y-%m-%d") {
+        let dt = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
+        return Ok(dt);
+    }
+
+    Err(format!(
+        "Invalid date format '{}'. Use duration (7d, 1w) or date (2025-01-01)",
+        input
+    ))
+}
+
 /// Parse a #ID query (e.g., "#123")
 fn parse_task_id_query(query: &str) -> Option<i64> {
     let query = query.trim();
@@ -978,6 +1126,154 @@ fn print_task_summary(task: &intent_engine::db::models::Task) {
     }
     if let Some(meta) = &task.metadata {
         println!("  Metadata: {}", meta);
+    }
+}
+
+/// Print tasks in a hierarchical tree format.
+/// Copied from `src/cli_handlers/task_commands.rs` — pure formatting, no DB access.
+fn print_task_tree(tasks: &[intent_engine::db::models::Task]) {
+    use std::collections::HashMap;
+
+    // Build parent -> children map
+    let mut children_map: HashMap<Option<i64>, Vec<&intent_engine::db::models::Task>> =
+        HashMap::new();
+    for task in tasks {
+        children_map.entry(task.parent_id).or_default().push(task);
+    }
+
+    fn print_subtree(
+        children_map: &HashMap<Option<i64>, Vec<&intent_engine::db::models::Task>>,
+        parent_id: Option<i64>,
+        indent: &str,
+        _is_last: bool,
+    ) {
+        if let Some(children) = children_map.get(&parent_id) {
+            for (i, task) in children.iter().enumerate() {
+                let is_last_child = i == children.len() - 1;
+                let connector = if indent.is_empty() {
+                    ""
+                } else if is_last_child {
+                    "└─ "
+                } else {
+                    "├─ "
+                };
+                let icon = match task.status.as_str() {
+                    "todo" => "○",
+                    "doing" => "●",
+                    "done" => "✓",
+                    _ => "?",
+                };
+                let priority_info = task
+                    .priority
+                    .map(|p| format!(" [P{}]", p))
+                    .unwrap_or_default();
+
+                println!(
+                    "  {}{}{} #{} {}{}",
+                    indent, connector, icon, task.id, task.name, priority_info
+                );
+
+                let new_indent = if indent.is_empty() {
+                    "".to_string()
+                } else if is_last_child {
+                    format!("{}   ", indent)
+                } else {
+                    format!("{}│  ", indent)
+                };
+                print_subtree(children_map, Some(task.id), &new_indent, is_last_child);
+            }
+        }
+    }
+
+    // Start with root-level tasks (parent is None or parent not in our set)
+    let task_ids: std::collections::HashSet<i64> = tasks.iter().map(|t| t.id).collect();
+    let roots: Vec<&intent_engine::db::models::Task> = tasks
+        .iter()
+        .filter(|t| t.parent_id.is_none() || !task_ids.contains(&t.parent_id.unwrap_or(-1)))
+        .collect();
+
+    for (i, task) in roots.iter().enumerate() {
+        let _is_last = i == roots.len() - 1;
+        let icon = match task.status.as_str() {
+            "todo" => "○",
+            "doing" => "●",
+            "done" => "✓",
+            _ => "?",
+        };
+        let priority_info = task
+            .priority
+            .map(|p| format!(" [P{}]", p))
+            .unwrap_or_default();
+        println!("  {} #{} {}{}", icon, task.id, task.name, priority_info);
+        print_subtree(&children_map, Some(task.id), "  ", _is_last);
+    }
+}
+
+fn print_task_context(ctx: &intent_engine::db::models::TaskContext) {
+    let icon = status_icon(&ctx.task.status);
+    println!("{} Task #{}: {}", icon, ctx.task.id, ctx.task.name);
+    println!("  Status: {}", ctx.task.status);
+    if let Some(spec) = &ctx.task.spec {
+        if !spec.is_empty() {
+            println!("  Spec: {}", spec);
+        }
+    }
+    println!("  Owner: {}", ctx.task.owner);
+
+    if !ctx.ancestors.is_empty() {
+        println!("\n  Parent Chain:");
+        for (i, ancestor) in ctx.ancestors.iter().enumerate() {
+            let indent = "  ".repeat(i + 1);
+            let a_icon = status_icon(&ancestor.status);
+            println!(
+                "  {}└─ {} #{}: {}",
+                indent, a_icon, ancestor.id, ancestor.name
+            );
+        }
+    }
+
+    if !ctx.children.is_empty() {
+        println!("\n  Children:");
+        for child in &ctx.children {
+            let c_icon = status_icon(&child.status);
+            println!("    {} #{}: {}", c_icon, child.id, child.name);
+        }
+    }
+
+    if !ctx.siblings.is_empty() {
+        println!("\n  Siblings:");
+        for sibling in &ctx.siblings {
+            let s_icon = status_icon(&sibling.status);
+            println!("    {} #{}: {}", s_icon, sibling.id, sibling.name);
+        }
+    }
+
+    if !ctx.dependencies.blocking_tasks.is_empty() {
+        println!("\n  Depends on:");
+        for dep in &ctx.dependencies.blocking_tasks {
+            let d_icon = status_icon(&dep.status);
+            println!("    {} #{}: {}", d_icon, dep.id, dep.name);
+        }
+    }
+
+    if !ctx.dependencies.blocked_by_tasks.is_empty() {
+        println!("\n  Blocks:");
+        for dep in &ctx.dependencies.blocked_by_tasks {
+            let d_icon = status_icon(&dep.status);
+            println!("    {} #{}: {}", d_icon, dep.id, dep.name);
+        }
+    }
+}
+
+fn print_events_summary(summary: &intent_engine::db::models::EventsSummary) {
+    println!("\n  Events ({}):", summary.total_count);
+    for event in summary.recent_events.iter().take(10) {
+        println!(
+            "    [{}] {} — {}",
+            event.log_type,
+            event.timestamp.format("%Y-%m-%d %H:%M:%S"),
+            event.discussion_data
+        );
     }
 }
 

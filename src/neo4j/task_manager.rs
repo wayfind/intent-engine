@@ -1060,6 +1060,137 @@ impl Neo4jTaskManager {
         Ok(PickNextResponse::no_available_todos())
     }
 
+    // ── Context / Events (Phase 4) ─────────────────────────────
+
+    /// Get tasks that block the given task (this task depends on them).
+    pub async fn get_blocking_tasks(&self, task_id: i64) -> Result<Vec<Task>> {
+        let mut result = self
+            .graph
+            .execute(
+                query(
+                    "MATCH (t:Task {project_id: $pid, id: $id})-[:BLOCKED_BY]->(b:Task {project_id: $pid}) \
+                     RETURN b ORDER BY b.id ASC",
+                )
+                .param("pid", self.project_id.clone())
+                .param("id", task_id),
+            )
+            .await
+            .map_err(|e| neo4j_err("get_blocking_tasks", e))?;
+
+        let mut tasks = Vec::new();
+        while let Some(row) = result
+            .next()
+            .await
+            .map_err(|e| neo4j_err("get_blocking_tasks iterate", e))?
+        {
+            tasks.push(row_to_task(&row, "b")?);
+        }
+        Ok(tasks)
+    }
+
+    /// Get tasks blocked by the given task (they depend on this task).
+    pub async fn get_blocked_by_tasks(&self, task_id: i64) -> Result<Vec<Task>> {
+        let mut result = self
+            .graph
+            .execute(
+                query(
+                    "MATCH (b:Task {project_id: $pid})-[:BLOCKED_BY]->(t:Task {project_id: $pid, id: $id}) \
+                     RETURN b ORDER BY b.id ASC",
+                )
+                .param("pid", self.project_id.clone())
+                .param("id", task_id),
+            )
+            .await
+            .map_err(|e| neo4j_err("get_blocked_by_tasks", e))?;
+
+        let mut tasks = Vec::new();
+        while let Some(row) = result
+            .next()
+            .await
+            .map_err(|e| neo4j_err("get_blocked_by_tasks iterate", e))?
+        {
+            tasks.push(row_to_task(&row, "b")?);
+        }
+        Ok(tasks)
+    }
+
+    /// Get full task context: task + ancestors + siblings + children + dependencies.
+    ///
+    /// Fetches task first (needed for parent_id), then fires the remaining 5
+    /// queries in parallel via `tokio::try_join!` — 2 round-trips total.
+    pub async fn get_task_context(&self, id: i64) -> Result<crate::db::models::TaskContext> {
+        let task = self.get_task(id).await?;
+
+        let (ancestors, siblings, children, blocking_tasks, blocked_by_tasks) = tokio::try_join!(
+            self.get_task_ancestry(id),
+            self.get_siblings(id, task.parent_id),
+            self.get_children(id),
+            self.get_blocking_tasks(id),
+            self.get_blocked_by_tasks(id),
+        )?;
+
+        Ok(crate::db::models::TaskContext {
+            task,
+            ancestors,
+            siblings,
+            children,
+            dependencies: crate::db::models::TaskDependencies {
+                blocking_tasks,
+                blocked_by_tasks,
+            },
+        })
+    }
+
+    /// Get full task context plus events summary in parallel.
+    ///
+    /// Avoids the double `get_task` that would happen if callers composed
+    /// `get_task_context` + `get_task_with_events` sequentially.
+    pub async fn get_task_context_with_events(
+        &self,
+        id: i64,
+    ) -> Result<(
+        crate::db::models::TaskContext,
+        crate::db::models::EventsSummary,
+    )> {
+        let task = self.get_task(id).await?;
+
+        let event_mgr = super::Neo4jEventManager::new(self.graph.clone(), self.project_id.clone());
+
+        let (ancestors, siblings, children, blocking_tasks, blocked_by_tasks, events_summary) = tokio::try_join!(
+            self.get_task_ancestry(id),
+            self.get_siblings(id, task.parent_id),
+            self.get_children(id),
+            self.get_blocking_tasks(id),
+            self.get_blocked_by_tasks(id),
+            event_mgr.get_events_summary(id),
+        )?;
+
+        let context = crate::db::models::TaskContext {
+            task,
+            ancestors,
+            siblings,
+            children,
+            dependencies: crate::db::models::TaskDependencies {
+                blocking_tasks,
+                blocked_by_tasks,
+            },
+        };
+
+        Ok((context, events_summary))
+    }
+
+    /// Get task with events summary (count + recent 10).
+    pub async fn get_task_with_events(&self, id: i64) -> Result<TaskWithEvents> {
+        let task = self.get_task(id).await?;
+        let event_mgr = super::Neo4jEventManager::new(self.graph.clone(), self.project_id.clone());
+        let events_summary = event_mgr.get_events_summary(id).await?;
+
+        Ok(TaskWithEvents {
+            task,
+            events_summary: Some(events_summary),
+        })
+    }
+
     // ── Internal Helpers ────────────────────────────────────────
 
     /// Check if any task in the subtree (self + descendants) is focused by any session.
