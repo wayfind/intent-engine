@@ -2,8 +2,8 @@
 //!
 //! Helper functions for reading stdin, formatting status badges, and printing task contexts.
 
+use crate::db::models::{EventsSummary, Task, TaskContext};
 use crate::error::Result;
-use crate::tasks::TaskContext;
 use std::io::{self, Read};
 
 /// Read from stdin with proper encoding handling (especially for Windows PowerShell)
@@ -44,7 +44,7 @@ pub fn read_stdin() -> Result<String> {
     }
 }
 
-/// Get a status badge icon for task status
+/// Get a status badge icon for task status (arrow style, used in `ie status`)
 pub fn get_status_badge(status: &str) -> &'static str {
     match status {
         "done" => "✓",
@@ -54,11 +54,113 @@ pub fn get_status_badge(status: &str) -> &'static str {
     }
 }
 
+/// Get a status icon for task status (bullet style, used in tree/list views)
+pub fn status_icon(status: &str) -> &'static str {
+    match status {
+        "todo" => "○",
+        "doing" => "●",
+        "done" => "✓",
+        _ => "?",
+    }
+}
+
+/// Print tasks in a hierarchical tree format
+pub fn print_task_tree(tasks: &[crate::db::models::Task]) {
+    use std::collections::HashMap;
+
+    // Build parent -> children map
+    let mut children_map: HashMap<Option<i64>, Vec<&crate::db::models::Task>> = HashMap::new();
+    for task in tasks {
+        children_map.entry(task.parent_id).or_default().push(task);
+    }
+
+    fn print_subtree(
+        children_map: &HashMap<Option<i64>, Vec<&crate::db::models::Task>>,
+        parent_id: Option<i64>,
+        indent: &str,
+        _is_last: bool,
+    ) {
+        if let Some(children) = children_map.get(&parent_id) {
+            for (i, task) in children.iter().enumerate() {
+                let is_last_child = i == children.len() - 1;
+                let connector = if indent.is_empty() {
+                    ""
+                } else if is_last_child {
+                    "└─ "
+                } else {
+                    "├─ "
+                };
+                let icon = status_icon(&task.status);
+                let priority_info = task
+                    .priority
+                    .map(|p| format!(" [P{}]", p))
+                    .unwrap_or_default();
+
+                println!(
+                    "  {}{}{} #{} {}{}",
+                    indent, connector, icon, task.id, task.name, priority_info
+                );
+
+                let new_indent = if indent.is_empty() {
+                    "".to_string()
+                } else if is_last_child {
+                    format!("{}   ", indent)
+                } else {
+                    format!("{}│  ", indent)
+                };
+                print_subtree(children_map, Some(task.id), &new_indent, is_last_child);
+            }
+        }
+    }
+
+    // Start with root-level tasks (parent is None or parent not in our set)
+    let task_ids: std::collections::HashSet<i64> = tasks.iter().map(|t| t.id).collect();
+    let roots: Vec<&crate::db::models::Task> = tasks
+        .iter()
+        .filter(|t| t.parent_id.is_none() || !task_ids.contains(&t.parent_id.unwrap_or(-1)))
+        .collect();
+
+    for (i, task) in roots.iter().enumerate() {
+        let _is_last = i == roots.len() - 1;
+        let icon = status_icon(&task.status);
+        let priority_info = task
+            .priority
+            .map(|p| format!(" [P{}]", p))
+            .unwrap_or_default();
+        println!("  {} #{} {}{}", icon, task.id, task.name, priority_info);
+        print_subtree(&children_map, Some(task.id), "  ", _is_last);
+    }
+}
+
+/// Print a concise task summary
+pub fn print_task_summary(task: &Task) {
+    let icon = status_icon(&task.status);
+    println!("  {} #{} {}", icon, task.id, task.name);
+    println!("  Status: {}", task.status);
+    if let Some(pid) = task.parent_id {
+        println!("  Parent: #{}", pid);
+    }
+    if let Some(p) = task.priority {
+        println!("  Priority: {}", p);
+    }
+    if let Some(spec) = &task.spec {
+        if !spec.is_empty() {
+            println!("  Spec: {}", spec);
+        }
+    }
+    println!("  Owner: {}", task.owner);
+    if let Some(af) = &task.active_form {
+        println!("  Active form: {}", af);
+    }
+    if let Some(meta) = &task.metadata {
+        println!("  Metadata: {}", meta);
+    }
+}
+
 /// Print task context in a human-friendly tree format
-pub fn print_task_context(ctx: &TaskContext) -> Result<()> {
-    // Print task header
-    let badge = get_status_badge(&ctx.task.status);
-    println!("\n{} Task #{}: {}", badge, ctx.task.id, ctx.task.name);
+pub fn print_task_context(ctx: &TaskContext) {
+    let icon = status_icon(&ctx.task.status);
+    println!("\n{} Task #{}: {}", icon, ctx.task.id, ctx.task.name);
     println!("Status: {}", ctx.task.status);
 
     if let Some(spec) = &ctx.task.spec {
@@ -73,10 +175,12 @@ pub fn print_task_context(ctx: &TaskContext) -> Result<()> {
         println!("\nParent Chain:");
         for (i, ancestor) in ctx.ancestors.iter().enumerate() {
             let indent = "  ".repeat(i + 1);
-            let ancestor_badge = get_status_badge(&ancestor.status);
             println!(
                 "{}└─ {} #{}: {}",
-                indent, ancestor_badge, ancestor.id, ancestor.name
+                indent,
+                status_icon(&ancestor.status),
+                ancestor.id,
+                ancestor.name
             );
         }
     }
@@ -85,8 +189,12 @@ pub fn print_task_context(ctx: &TaskContext) -> Result<()> {
     if !ctx.children.is_empty() {
         println!("\nChildren:");
         for child in &ctx.children {
-            let child_badge = get_status_badge(&child.status);
-            println!("  {} #{}: {}", child_badge, child.id, child.name);
+            println!(
+                "  {} #{}: {}",
+                status_icon(&child.status),
+                child.id,
+                child.name
+            );
         }
     }
 
@@ -94,8 +202,12 @@ pub fn print_task_context(ctx: &TaskContext) -> Result<()> {
     if !ctx.siblings.is_empty() {
         println!("\nSiblings:");
         for sibling in &ctx.siblings {
-            let sibling_badge = get_status_badge(&sibling.status);
-            println!("  {} #{}: {}", sibling_badge, sibling.id, sibling.name);
+            println!(
+                "  {} #{}: {}",
+                status_icon(&sibling.status),
+                sibling.id,
+                sibling.name
+            );
         }
     }
 
@@ -103,8 +215,7 @@ pub fn print_task_context(ctx: &TaskContext) -> Result<()> {
     if !ctx.dependencies.blocking_tasks.is_empty() {
         println!("\nDepends on:");
         for dep in &ctx.dependencies.blocking_tasks {
-            let dep_badge = get_status_badge(&dep.status);
-            println!("  {} #{}: {}", dep_badge, dep.id, dep.name);
+            println!("  {} #{}: {}", status_icon(&dep.status), dep.id, dep.name);
         }
     }
 
@@ -112,13 +223,24 @@ pub fn print_task_context(ctx: &TaskContext) -> Result<()> {
     if !ctx.dependencies.blocked_by_tasks.is_empty() {
         println!("\nBlocks:");
         for dep in &ctx.dependencies.blocked_by_tasks {
-            let dep_badge = get_status_badge(&dep.status);
-            println!("  {} #{}: {}", dep_badge, dep.id, dep.name);
+            println!("  {} #{}: {}", status_icon(&dep.status), dep.id, dep.name);
         }
     }
 
     println!();
-    Ok(())
+}
+
+/// Print events summary (recent events with count)
+pub fn print_events_summary(summary: &EventsSummary) {
+    println!("Events ({}):", summary.total_count);
+    for event in summary.recent_events.iter().take(10) {
+        println!(
+            "  [{}] {} — {}",
+            event.log_type,
+            event.timestamp.format("%Y-%m-%d %H:%M:%S"),
+            event.discussion_data
+        );
+    }
 }
 
 #[cfg(test)]
@@ -168,6 +290,14 @@ mod tests {
     }
 
     #[test]
+    fn test_status_icon() {
+        assert_eq!(status_icon("todo"), "○");
+        assert_eq!(status_icon("doing"), "●");
+        assert_eq!(status_icon("done"), "✓");
+        assert_eq!(status_icon("unknown"), "?");
+    }
+
+    #[test]
     fn test_print_task_context_basic() {
         let task = create_test_task(1, "Test Task", "todo", None);
 
@@ -183,8 +313,7 @@ mod tests {
         };
 
         // Should not panic and should execute all branches
-        let result = print_task_context(&ctx);
-        assert!(result.is_ok());
+        print_task_context(&ctx); // should not panic
     }
 
     #[test]
@@ -203,8 +332,7 @@ mod tests {
             },
         };
 
-        let result = print_task_context(&ctx);
-        assert!(result.is_ok());
+        print_task_context(&ctx); // should not panic
     }
 
     #[test]
@@ -224,8 +352,7 @@ mod tests {
             },
         };
 
-        let result = print_task_context(&ctx);
-        assert!(result.is_ok());
+        print_task_context(&ctx); // should not panic
     }
 
     #[test]
@@ -244,8 +371,7 @@ mod tests {
             },
         };
 
-        let result = print_task_context(&ctx);
-        assert!(result.is_ok());
+        print_task_context(&ctx); // should not panic
     }
 
     #[test]
@@ -265,8 +391,7 @@ mod tests {
             },
         };
 
-        let result = print_task_context(&ctx);
-        assert!(result.is_ok());
+        print_task_context(&ctx); // should not panic
     }
 
     #[test]
@@ -285,7 +410,6 @@ mod tests {
             },
         };
 
-        let result = print_task_context(&ctx);
-        assert!(result.is_ok());
+        print_task_context(&ctx); // should not panic
     }
 }

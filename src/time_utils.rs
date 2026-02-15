@@ -64,6 +64,29 @@ pub fn parse_duration(duration: &str) -> Result<DateTime<Utc>> {
     Ok(Utc::now() - offset)
 }
 
+/// Parse a date filter string — either a duration (e.g. "7d", "1w") or a date (e.g. "2025-01-01").
+///
+/// Tries duration format first via `parse_duration`, then falls back to YYYY-MM-DD date parsing.
+pub fn parse_date_filter(input: &str) -> std::result::Result<DateTime<Utc>, String> {
+    let input = input.trim();
+
+    // Try duration format first (e.g., "7d", "1w")
+    if let Ok(dt) = parse_duration(input) {
+        return Ok(dt);
+    }
+
+    // Try date format (YYYY-MM-DD)
+    if let Ok(date) = chrono::NaiveDate::parse_from_str(input, "%Y-%m-%d") {
+        let dt = chrono::TimeZone::from_utc_datetime(&Utc, &date.and_hms_opt(0, 0, 0).unwrap());
+        return Ok(dt);
+    }
+
+    Err(format!(
+        "Invalid date format '{}'. Use duration (7d, 1w) or date (2025-01-01)",
+        input
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,5 +172,29 @@ mod tests {
     fn test_parse_duration_empty() {
         let result = parse_duration("");
         assert!(matches!(result, Err(IntentError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn test_parse_date_filter_duration() {
+        let result = parse_date_filter("7d");
+        assert!(result.is_ok());
+        let dt = result.unwrap();
+        let diff = Utc::now() - dt;
+        assert!((diff - Duration::days(7)).num_seconds().abs() <= 1);
+    }
+
+    #[test]
+    fn test_parse_date_filter_date() {
+        let result = parse_date_filter("2025-06-15");
+        assert!(result.is_ok());
+        let dt = result.unwrap();
+        assert_eq!(dt.format("%Y-%m-%d").to_string(), "2025-06-15");
+    }
+
+    #[test]
+    fn test_parse_date_filter_invalid() {
+        let result = parse_date_filter("not-a-date");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid date format"));
     }
 }

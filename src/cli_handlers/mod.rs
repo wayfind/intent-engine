@@ -23,4 +23,7 @@ pub use other::{
     // handle_session_restore, handle_setup, handle_logs_command, check_session_start_hook
 };
 pub use task_commands::handle_task_command;
-pub use utils::{get_status_badge, print_task_context, read_stdin};
+pub use utils::{
+    get_status_badge, print_events_summary, print_task_context, print_task_summary, read_stdin,
+    status_icon,
+};

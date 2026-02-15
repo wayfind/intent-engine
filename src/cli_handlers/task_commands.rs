@@ -324,7 +324,7 @@ async fn handle_get(id: i64, with_events: bool, with_context: bool, format: Stri
             if format == "json" {
                 println!("{}", serde_json::to_string_pretty(&response)?);
             } else {
-                crate::cli_handlers::print_task_context(&context)?;
+                crate::cli_handlers::print_task_context(&context);
                 if let Some(summary) = &task_with_events.events_summary {
                     println!("Events ({}):", summary.total_count);
                     for event in summary.recent_events.iter().take(10) {
@@ -342,7 +342,7 @@ async fn handle_get(id: i64, with_events: bool, with_context: bool, format: Stri
             if format == "json" {
                 println!("{}", serde_json::to_string_pretty(&context)?);
             } else {
-                crate::cli_handlers::print_task_context(&context)?;
+                crate::cli_handlers::print_task_context(&context);
             }
         }
     } else if with_events {
@@ -352,7 +352,7 @@ async fn handle_get(id: i64, with_events: bool, with_context: bool, format: Stri
             println!("{}", serde_json::to_string_pretty(&task_with_events)?);
         } else {
             let task = &task_with_events.task;
-            print_task_summary(task);
+            super::utils::print_task_summary(task);
             if let Some(summary) = &task_with_events.events_summary {
                 println!("Events ({}):", summary.total_count);
                 for event in summary.recent_events.iter().take(10) {
@@ -380,7 +380,7 @@ async fn handle_get(id: i64, with_events: bool, with_context: bool, format: Stri
             });
             println!("{}", serde_json::to_string_pretty(&response)?);
         } else {
-            print_task_summary(&task);
+            super::utils::print_task_summary(&task);
             if !context.dependencies.blocking_tasks.is_empty() {
                 let ids: Vec<String> = context
                     .dependencies
@@ -498,7 +498,7 @@ async fn handle_update(
         println!("{}", serde_json::to_string_pretty(&task)?);
     } else {
         println!("Task updated: #{} {}", task.id, task.name);
-        print_task_summary(&task);
+        super::utils::print_task_summary(&task);
     }
 
     Ok(())
@@ -550,7 +550,7 @@ async fn handle_list(
             result.tasks.len()
         );
         println!();
-        print_task_tree(&result.tasks);
+        super::utils::print_task_tree(&result.tasks);
         if result.has_more {
             println!(
                 "\n  ... more results available (use --offset {})",
@@ -769,118 +769,6 @@ async fn handle_next(format: String) -> Result<()> {
 // ============================================================================
 // Helper functions
 // ============================================================================
-
-/// Print a concise task summary
-fn print_task_summary(task: &crate::db::models::Task) {
-    let status_icon = match task.status.as_str() {
-        "todo" => "○",
-        "doing" => "●",
-        "done" => "✓",
-        _ => "?",
-    };
-    println!("  {} #{} {}", status_icon, task.id, task.name);
-    println!("  Status: {}", task.status);
-    if let Some(pid) = task.parent_id {
-        println!("  Parent: #{}", pid);
-    }
-    if let Some(p) = task.priority {
-        println!("  Priority: {}", p);
-    }
-    if let Some(spec) = &task.spec {
-        if !spec.is_empty() {
-            println!("  Spec: {}", spec);
-        }
-    }
-    println!("  Owner: {}", task.owner);
-    if let Some(af) = &task.active_form {
-        println!("  Active form: {}", af);
-    }
-    if let Some(meta) = &task.metadata {
-        println!("  Metadata: {}", meta);
-    }
-}
-
-/// Print tasks in a hierarchical tree format
-fn print_task_tree(tasks: &[crate::db::models::Task]) {
-    use std::collections::HashMap;
-
-    // Build parent -> children map
-    let mut children_map: HashMap<Option<i64>, Vec<&crate::db::models::Task>> = HashMap::new();
-    for task in tasks {
-        children_map.entry(task.parent_id).or_default().push(task);
-    }
-
-    // Print tree starting from root tasks
-    fn print_subtree(
-        children_map: &HashMap<Option<i64>, Vec<&crate::db::models::Task>>,
-        parent_id: Option<i64>,
-        indent: &str,
-        _is_last: bool,
-    ) {
-        if let Some(children) = children_map.get(&parent_id) {
-            for (i, task) in children.iter().enumerate() {
-                let is_last_child = i == children.len() - 1;
-                let connector = if indent.is_empty() {
-                    ""
-                } else if is_last_child {
-                    "└─ "
-                } else {
-                    "├─ "
-                };
-                let status_icon = match task.status.as_str() {
-                    "todo" => "○",
-                    "doing" => "●",
-                    "done" => "✓",
-                    _ => "?",
-                };
-                let priority_info = task
-                    .priority
-                    .map(|p| format!(" [P{}]", p))
-                    .unwrap_or_default();
-
-                println!(
-                    "  {}{}{} #{} {}{}",
-                    indent, connector, status_icon, task.id, task.name, priority_info
-                );
-
-                let new_indent = if indent.is_empty() {
-                    "".to_string()
-                } else if is_last_child {
-                    format!("{}   ", indent)
-                } else {
-                    format!("{}│  ", indent)
-                };
-                print_subtree(children_map, Some(task.id), &new_indent, is_last_child);
-            }
-        }
-    }
-
-    // Start with root-level tasks (either parent_id is None or parent not in our set)
-    let task_ids: std::collections::HashSet<i64> = tasks.iter().map(|t| t.id).collect();
-    let roots: Vec<&crate::db::models::Task> = tasks
-        .iter()
-        .filter(|t| t.parent_id.is_none() || !task_ids.contains(&t.parent_id.unwrap_or(-1)))
-        .collect();
-
-    for (i, task) in roots.iter().enumerate() {
-        let _is_last = i == roots.len() - 1;
-        let status_icon = match task.status.as_str() {
-            "todo" => "○",
-            "doing" => "●",
-            "done" => "✓",
-            _ => "?",
-        };
-        let priority_info = task
-            .priority
-            .map(|p| format!(" [P{}]", p))
-            .unwrap_or_default();
-        println!(
-            "  {} #{} {}{}",
-            status_icon, task.id, task.name, priority_info
-        );
-        print_subtree(&children_map, Some(task.id), "  ", _is_last);
-    }
-}
 
 #[cfg(test)]
 mod tests {

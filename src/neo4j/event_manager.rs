@@ -196,63 +196,56 @@ impl Neo4jEventManager {
         Ok(events)
     }
     /// Get events summary for a task: total count + most recent 10 events.
+    ///
+    /// Uses a single Cypher query with a count subquery to avoid two round-trips.
     pub async fn get_events_summary(
         &self,
         task_id: i64,
     ) -> Result<crate::db::models::EventsSummary> {
-        // Count total events for task
-        let mut count_result = self
-            .graph
-            .execute(
-                query(
-                    "MATCH (e:Event {project_id: $pid, task_id: $tid}) \
-                     RETURN count(e) AS cnt",
-                )
-                .param("pid", self.project_id.clone())
-                .param("tid", task_id),
-            )
-            .await
-            .map_err(|e| neo4j_err("get_events_summary count", e))?;
-
-        let total_count: i64 = count_result
-            .next()
-            .await
-            .map_err(|e| neo4j_err("get_events_summary count fetch", e))?
-            .and_then(|row| row.get::<i64>("cnt").ok())
-            .unwrap_or(0);
-
-        // Fetch most recent 10 events
         let mut result = self
             .graph
             .execute(
                 query(
                     "MATCH (e:Event {project_id: $pid, task_id: $tid}) \
-                     RETURN e \
-                     ORDER BY e.timestamp DESC \
-                     LIMIT 10",
+                     WITH e ORDER BY e.timestamp DESC \
+                     WITH collect(e) AS all_events \
+                     RETURN size(all_events) AS cnt, all_events[0..10] AS recent",
                 )
                 .param("pid", self.project_id.clone())
                 .param("tid", task_id),
             )
             .await
-            .map_err(|e| neo4j_err("get_events_summary events", e))?;
+            .map_err(|e| neo4j_err("get_events_summary", e))?;
 
-        let mut recent_events = Vec::new();
-        while let Some(row) = result
+        match result
             .next()
             .await
-            .map_err(|e| neo4j_err("get_events_summary iterate", e))?
+            .map_err(|e| neo4j_err("get_events_summary fetch", e))?
         {
-            let node: neo4rs::Node = row
-                .get("e")
-                .map_err(|e| neo4j_err("get_events_summary node", e))?;
-            recent_events.push(node_to_event(&node)?);
-        }
+            Some(row) => {
+                let total_count: i64 = row
+                    .get("cnt")
+                    .map_err(|e| neo4j_err("get_events_summary cnt", e))?;
 
-        Ok(crate::db::models::EventsSummary {
-            total_count,
-            recent_events,
-        })
+                let recent_nodes: Vec<neo4rs::Node> = row
+                    .get("recent")
+                    .map_err(|e| neo4j_err("get_events_summary recent", e))?;
+
+                let mut recent_events = Vec::with_capacity(recent_nodes.len());
+                for node in &recent_nodes {
+                    recent_events.push(node_to_event(node)?);
+                }
+
+                Ok(crate::db::models::EventsSummary {
+                    total_count,
+                    recent_events,
+                })
+            },
+            None => Ok(crate::db::models::EventsSummary {
+                total_count: 0,
+                recent_events: Vec::new(),
+            }),
+        }
     }
 }
 

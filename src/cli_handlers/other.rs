@@ -7,6 +7,7 @@ use crate::events::EventManager;
 use crate::project::ProjectContext;
 use crate::report::ReportManager;
 use crate::tasks::TaskManager;
+use crate::time_utils::parse_date_filter;
 use crate::workspace::WorkspaceManager;
 use std::path::PathBuf;
 
@@ -222,30 +223,6 @@ fn parse_status_keywords(query: &str) -> Option<Vec<String>> {
     Some(statuses)
 }
 
-/// Parse a date filter string (duration like "7d" or date like "2025-01-01")
-fn parse_date_filter(input: &str) -> std::result::Result<chrono::DateTime<chrono::Utc>, String> {
-    use crate::time_utils::parse_duration;
-    use chrono::{NaiveDate, TimeZone, Utc};
-
-    let input = input.trim();
-
-    // Try duration format first (e.g., "7d", "1w")
-    if let Ok(dt) = parse_duration(input) {
-        return Ok(dt);
-    }
-
-    // Try date format (YYYY-MM-DD)
-    if let Ok(date) = NaiveDate::parse_from_str(input, "%Y-%m-%d") {
-        let dt = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
-        return Ok(dt);
-    }
-
-    Err(format!(
-        "Invalid date format '{}'. Use duration (7d, 1w) or date (2025-01-01)",
-        input
-    ))
-}
-
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_search_command(
     query: &str,
@@ -341,8 +318,9 @@ pub async fn handle_search_command(
         // Collect tasks for each status
         // When date filters are used, fetch more tasks initially
         // (we'll apply limit after filtering)
+        const DATE_FILTER_FETCH_LIMIT: i64 = 10_000;
         let fetch_limit = if since_dt.is_some() || until_dt.is_some() {
-            Some(10000) // Large limit to fetch all relevant tasks
+            Some(DATE_FILTER_FETCH_LIMIT)
         } else {
             limit
         };
@@ -465,6 +443,9 @@ pub async fn handle_search_command(
     }
 
     // Regular FTS5 search
+    if since_dt.is_some() || until_dt.is_some() {
+        eprintln!("Warning: --since/--until are ignored for fulltext search (only apply to status keyword queries)");
+    }
     let search_mgr = SearchManager::new(&ctx.pool);
 
     let results = search_mgr

@@ -7,18 +7,19 @@
 //! Usage:
 //!   NEO4J_URI="neo4j+s://..." NEO4J_PASSWORD="..." ie-neo4j status
 //!
-//! Note on text formatting:
-//!   The status/task display code here is intentionally a simplified subset of
-//!   `src/main.rs` and `src/cli_handlers/task_commands.rs` formatting.
-//!   When the Neo4j backend reaches feature parity, extract shared formatting
-//!   functions to avoid duplication.
+//! Shared formatting (status_icon, print_task_tree, parse_date_filter) lives in
+//! `intent_engine::cli_handlers::utils` and `intent_engine::time_utils`.
 
 use clap::Parser;
 use intent_engine::cli::{Cli, Commands, TaskCommands};
+use intent_engine::cli_handlers::utils::{
+    print_events_summary, print_task_context, print_task_summary, print_task_tree, status_icon,
+};
 use intent_engine::db::models::{NoFocusResponse, TaskBrief, TaskSortBy};
 use intent_engine::error::{IntentError, Result};
 use intent_engine::neo4j::Neo4jContext;
 use intent_engine::tasks::TaskUpdate;
+use intent_engine::time_utils::parse_date_filter;
 use serde_json::json;
 
 #[tokio::main]
@@ -886,9 +887,10 @@ async fn handle_search(
     if let Some(statuses) = parse_status_keywords(&query) {
         let task_mgr = ctx.task_manager();
 
-        // When date filters are used, fetch more tasks initially
+        // When date filters are used, fetch all tasks for client-side filtering
+        const DATE_FILTER_FETCH_LIMIT: i64 = 10_000;
         let fetch_limit = if since_dt.is_some() || until_dt.is_some() {
-            Some(10000)
+            Some(DATE_FILTER_FETCH_LIMIT)
         } else {
             limit
         };
@@ -975,6 +977,9 @@ async fn handle_search(
     }
 
     // Mode 3: Fulltext search
+    if since_dt.is_some() || until_dt.is_some() {
+        eprintln!("Warning: --since/--until are ignored for fulltext search (only apply to status keyword queries)");
+    }
     let search_mgr = ctx.search_manager();
     let results = search_mgr
         .search(&query, include_tasks, include_events, limit, offset)
@@ -1035,31 +1040,6 @@ async fn handle_search(
     Ok(())
 }
 
-/// Parse a date filter string (duration like "7d" or date like "2025-01-01").
-/// Replicates logic from `src/cli_handlers/other.rs`.
-fn parse_date_filter(input: &str) -> std::result::Result<chrono::DateTime<chrono::Utc>, String> {
-    use chrono::{NaiveDate, TimeZone, Utc};
-    use intent_engine::time_utils::parse_duration;
-
-    let input = input.trim();
-
-    // Try duration format first (e.g., "7d", "1w")
-    if let Ok(dt) = parse_duration(input) {
-        return Ok(dt);
-    }
-
-    // Try date format (YYYY-MM-DD)
-    if let Ok(date) = NaiveDate::parse_from_str(input, "%Y-%m-%d") {
-        let dt = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
-        return Ok(dt);
-    }
-
-    Err(format!(
-        "Invalid date format '{}'. Use duration (7d, 1w) or date (2025-01-01)",
-        input
-    ))
-}
-
 /// Parse a #ID query (e.g., "#123")
 fn parse_task_id_query(query: &str) -> Option<i64> {
     let query = query.trim();
@@ -1095,187 +1075,6 @@ fn parse_status_keywords(query: &str) -> Option<Vec<String>> {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
-
-fn status_icon(status: &str) -> &'static str {
-    match status {
-        "todo" => "○",
-        "doing" => "●",
-        "done" => "✓",
-        _ => "?",
-    }
-}
-
-fn print_task_summary(task: &intent_engine::db::models::Task) {
-    let icon = status_icon(&task.status);
-    println!("  {} #{} {}", icon, task.id, task.name);
-    println!("  Status: {}", task.status);
-    if let Some(pid) = task.parent_id {
-        println!("  Parent: #{}", pid);
-    }
-    if let Some(p) = task.priority {
-        println!("  Priority: {}", p);
-    }
-    if let Some(spec) = &task.spec {
-        if !spec.is_empty() {
-            println!("  Spec: {}", spec);
-        }
-    }
-    println!("  Owner: {}", task.owner);
-    if let Some(af) = &task.active_form {
-        println!("  Active form: {}", af);
-    }
-    if let Some(meta) = &task.metadata {
-        println!("  Metadata: {}", meta);
-    }
-}
-
-/// Print tasks in a hierarchical tree format.
-/// Copied from `src/cli_handlers/task_commands.rs` — pure formatting, no DB access.
-fn print_task_tree(tasks: &[intent_engine::db::models::Task]) {
-    use std::collections::HashMap;
-
-    // Build parent -> children map
-    let mut children_map: HashMap<Option<i64>, Vec<&intent_engine::db::models::Task>> =
-        HashMap::new();
-    for task in tasks {
-        children_map.entry(task.parent_id).or_default().push(task);
-    }
-
-    fn print_subtree(
-        children_map: &HashMap<Option<i64>, Vec<&intent_engine::db::models::Task>>,
-        parent_id: Option<i64>,
-        indent: &str,
-        _is_last: bool,
-    ) {
-        if let Some(children) = children_map.get(&parent_id) {
-            for (i, task) in children.iter().enumerate() {
-                let is_last_child = i == children.len() - 1;
-                let connector = if indent.is_empty() {
-                    ""
-                } else if is_last_child {
-                    "└─ "
-                } else {
-                    "├─ "
-                };
-                let icon = match task.status.as_str() {
-                    "todo" => "○",
-                    "doing" => "●",
-                    "done" => "✓",
-                    _ => "?",
-                };
-                let priority_info = task
-                    .priority
-                    .map(|p| format!(" [P{}]", p))
-                    .unwrap_or_default();
-
-                println!(
-                    "  {}{}{} #{} {}{}",
-                    indent, connector, icon, task.id, task.name, priority_info
-                );
-
-                let new_indent = if indent.is_empty() {
-                    "".to_string()
-                } else if is_last_child {
-                    format!("{}   ", indent)
-                } else {
-                    format!("{}│  ", indent)
-                };
-                print_subtree(children_map, Some(task.id), &new_indent, is_last_child);
-            }
-        }
-    }
-
-    // Start with root-level tasks (parent is None or parent not in our set)
-    let task_ids: std::collections::HashSet<i64> = tasks.iter().map(|t| t.id).collect();
-    let roots: Vec<&intent_engine::db::models::Task> = tasks
-        .iter()
-        .filter(|t| t.parent_id.is_none() || !task_ids.contains(&t.parent_id.unwrap_or(-1)))
-        .collect();
-
-    for (i, task) in roots.iter().enumerate() {
-        let _is_last = i == roots.len() - 1;
-        let icon = match task.status.as_str() {
-            "todo" => "○",
-            "doing" => "●",
-            "done" => "✓",
-            _ => "?",
-        };
-        let priority_info = task
-            .priority
-            .map(|p| format!(" [P{}]", p))
-            .unwrap_or_default();
-        println!("  {} #{} {}{}", icon, task.id, task.name, priority_info);
-        print_subtree(&children_map, Some(task.id), "  ", _is_last);
-    }
-}
-
-fn print_task_context(ctx: &intent_engine::db::models::TaskContext) {
-    let icon = status_icon(&ctx.task.status);
-    println!("{} Task #{}: {}", icon, ctx.task.id, ctx.task.name);
-    println!("  Status: {}", ctx.task.status);
-    if let Some(spec) = &ctx.task.spec {
-        if !spec.is_empty() {
-            println!("  Spec: {}", spec);
-        }
-    }
-    println!("  Owner: {}", ctx.task.owner);
-
-    if !ctx.ancestors.is_empty() {
-        println!("\n  Parent Chain:");
-        for (i, ancestor) in ctx.ancestors.iter().enumerate() {
-            let indent = "  ".repeat(i + 1);
-            let a_icon = status_icon(&ancestor.status);
-            println!(
-                "  {}└─ {} #{}: {}",
-                indent, a_icon, ancestor.id, ancestor.name
-            );
-        }
-    }
-
-    if !ctx.children.is_empty() {
-        println!("\n  Children:");
-        for child in &ctx.children {
-            let c_icon = status_icon(&child.status);
-            println!("    {} #{}: {}", c_icon, child.id, child.name);
-        }
-    }
-
-    if !ctx.siblings.is_empty() {
-        println!("\n  Siblings:");
-        for sibling in &ctx.siblings {
-            let s_icon = status_icon(&sibling.status);
-            println!("    {} #{}: {}", s_icon, sibling.id, sibling.name);
-        }
-    }
-
-    if !ctx.dependencies.blocking_tasks.is_empty() {
-        println!("\n  Depends on:");
-        for dep in &ctx.dependencies.blocking_tasks {
-            let d_icon = status_icon(&dep.status);
-            println!("    {} #{}: {}", d_icon, dep.id, dep.name);
-        }
-    }
-
-    if !ctx.dependencies.blocked_by_tasks.is_empty() {
-        println!("\n  Blocks:");
-        for dep in &ctx.dependencies.blocked_by_tasks {
-            let d_icon = status_icon(&dep.status);
-            println!("    {} #{}: {}", d_icon, dep.id, dep.name);
-        }
-    }
-}
-
-fn print_events_summary(summary: &intent_engine::db::models::EventsSummary) {
-    println!("\n  Events ({}):", summary.total_count);
-    for event in summary.recent_events.iter().take(10) {
-        println!(
-            "    [{}] {} — {}",
-            event.log_type,
-            event.timestamp.format("%Y-%m-%d %H:%M:%S"),
-            event.discussion_data
-        );
-    }
-}
 
 /// Parse metadata key=value strings into a JSON object.
 fn parse_metadata(pairs: &[String]) -> Result<serde_json::Value> {
@@ -1497,15 +1296,5 @@ mod tests {
         let new_meta = serde_json::json!({"a": "1"});
         let result = merge_metadata(Some("not-json"), &new_meta);
         assert_eq!(result, Some(r#"{"a":"1"}"#.to_string()));
-    }
-
-    // ── status_icon ──────────────────────────────────────────────
-
-    #[test]
-    fn test_status_icon() {
-        assert_eq!(status_icon("todo"), "○");
-        assert_eq!(status_icon("doing"), "●");
-        assert_eq!(status_icon("done"), "✓");
-        assert_eq!(status_icon("unknown"), "?");
     }
 }
