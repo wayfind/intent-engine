@@ -78,6 +78,22 @@ pub trait TaskBackend: Send + Sync {
 
     fn delete_task(&self, id: i64) -> impl Future<Output = Result<()>> + Send;
 
+    fn delete_task_cascade(&self, id: i64) -> impl Future<Output = Result<usize>> + Send;
+
+    // ── Dependencies ──────────────────────────────────────────────
+
+    fn add_dependency(
+        &self,
+        blocking_id: i64,
+        blocked_id: i64,
+    ) -> impl Future<Output = Result<()>> + Send;
+
+    fn remove_dependency(
+        &self,
+        blocking_id: i64,
+        blocked_id: i64,
+    ) -> impl Future<Output = Result<()>> + Send;
+
     // ── Lifecycle ───────────────────────────────────────────────────
 
     fn start_task(

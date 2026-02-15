@@ -322,7 +322,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_current_task_with_deleted_task() {
+    async fn test_delete_focused_task_is_rejected() {
         let ctx = TestContext::new().await;
         let task_mgr = TaskManager::new(ctx.pool());
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
@@ -333,14 +333,68 @@ mod tests {
             .unwrap();
         workspace_mgr.set_current_task(task.id, None).await.unwrap();
 
-        // Delete the task - this triggers ON DELETE SET NULL in sessions table
+        // Deleting a focused task must be rejected
+        let err = task_mgr.delete_task(task.id).await.unwrap_err();
+        assert!(
+            matches!(err, crate::error::IntentError::ActionNotAllowed(_)),
+            "expected ActionNotAllowed, got: {:?}",
+            err
+        );
+
+        // Task still exists
+        assert!(task_mgr.get_task(task.id).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_cascade_delete_focused_descendant_is_rejected() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        let parent = task_mgr
+            .add_task("Parent", None, None, None, None, None)
+            .await
+            .unwrap();
+        let child = task_mgr
+            .add_task("Child", None, Some(parent.id), None, None, None)
+            .await
+            .unwrap();
+        workspace_mgr
+            .set_current_task(child.id, None)
+            .await
+            .unwrap();
+
+        // Cascade-deleting the parent must be rejected because the child is focused
+        let err = task_mgr.delete_task_cascade(parent.id).await.unwrap_err();
+        assert!(
+            matches!(err, crate::error::IntentError::ActionNotAllowed(_)),
+            "expected ActionNotAllowed, got: {:?}",
+            err
+        );
+
+        // Both tasks still exist
+        assert!(task_mgr.get_task(parent.id).await.is_ok());
+        assert!(task_mgr.get_task(child.id).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_delete_unfocused_task_succeeds() {
+        let ctx = TestContext::new().await;
+        let task_mgr = TaskManager::new(ctx.pool());
+        let workspace_mgr = WorkspaceManager::new(ctx.pool());
+
+        let task = task_mgr
+            .add_task("Test task", None, None, None, None, None)
+            .await
+            .unwrap();
+        workspace_mgr.set_current_task(task.id, None).await.unwrap();
+
+        // Unfocus, then delete succeeds
+        workspace_mgr.clear_current_task(None).await.unwrap();
         task_mgr.delete_task(task.id).await.unwrap();
 
-        let response = workspace_mgr.get_current_task(None).await.unwrap();
-
-        // Due to ON DELETE SET NULL, current_task_id should be None
-        assert!(response.current_task_id.is_none());
-        assert!(response.task.is_none());
+        // Task is gone
+        assert!(task_mgr.get_task(task.id).await.is_err());
     }
 
     #[tokio::test]

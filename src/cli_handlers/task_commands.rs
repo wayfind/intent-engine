@@ -1,67 +1,18 @@
+use crate::backend::{TaskBackend, WorkspaceBackend};
 use crate::cli::TaskCommands;
-use crate::dependencies::add_dependency;
+use crate::db::models::TaskSortBy;
 use crate::error::{IntentError, Result};
-use crate::project::ProjectContext;
-use crate::tasks::{TaskManager, TaskUpdate};
-use crate::workspace::WorkspaceManager;
+use crate::tasks::TaskUpdate;
 use serde_json::json;
 
-/// Parse metadata key=value strings into a JSON object.
-/// "key=value" sets a key, "key=" deletes a key.
-fn parse_metadata(pairs: &[String]) -> Result<serde_json::Value> {
-    let mut map = serde_json::Map::new();
-    for pair in pairs {
-        if let Some(eq_pos) = pair.find('=') {
-            let key = pair[..eq_pos].trim().to_string();
-            let value = pair[eq_pos + 1..].trim().to_string();
-            if key.is_empty() {
-                return Err(IntentError::InvalidInput(format!(
-                    "Invalid metadata: empty key in '{}'",
-                    pair
-                )));
-            }
-            if value.is_empty() {
-                // "key=" means delete
-                map.insert(key, serde_json::Value::Null);
-            } else {
-                map.insert(key, serde_json::Value::String(value));
-            }
-        } else {
-            return Err(IntentError::InvalidInput(format!(
-                "Invalid metadata format: '{}'. Expected 'key=value'",
-                pair
-            )));
-        }
-    }
-    Ok(serde_json::Value::Object(map))
-}
-
-/// Merge new metadata into existing metadata JSON string.
-/// Null values in new_meta mean "delete this key".
-fn merge_metadata(existing: Option<&str>, new_meta: &serde_json::Value) -> Option<String> {
-    let mut base: serde_json::Map<String, serde_json::Value> = existing
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or_default();
-
-    if let serde_json::Value::Object(new_map) = new_meta {
-        for (key, value) in new_map {
-            if value.is_null() {
-                base.remove(key);
-            } else {
-                base.insert(key.clone(), value.clone());
-            }
-        }
-    }
-
-    if base.is_empty() {
-        None
-    } else {
-        Some(serde_json::to_string(&base).unwrap_or_default())
-    }
-}
+use super::utils::{merge_metadata, parse_metadata};
 
 /// Handle all `ie task` subcommands
-pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
+pub async fn handle_task_command(
+    task_mgr: &impl TaskBackend,
+    ws_mgr: &impl WorkspaceBackend,
+    cmd: TaskCommands,
+) -> Result<()> {
     match cmd {
         TaskCommands::Create {
             name,
@@ -76,6 +27,8 @@ pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             format,
         } => {
             handle_create(
+                task_mgr,
+                ws_mgr,
                 name,
                 description,
                 parent,
@@ -95,7 +48,7 @@ pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             with_events,
             with_context,
             format,
-        } => handle_get(id, with_events, with_context, format).await,
+        } => handle_get(task_mgr, id, with_events, with_context, format).await,
 
         TaskCommands::Update {
             id,
@@ -114,6 +67,7 @@ pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             format,
         } => {
             handle_update(
+                task_mgr,
                 id,
                 name,
                 description,
@@ -140,23 +94,23 @@ pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
             offset,
             tree,
             format,
-        } => handle_list(status, parent, sort, limit, offset, tree, format).await,
+        } => handle_list(task_mgr, status, parent, sort, limit, offset, tree, format).await,
 
         TaskCommands::Delete {
             id,
             cascade,
             format,
-        } => handle_delete(id, cascade, format).await,
+        } => handle_delete(task_mgr, id, cascade, format).await,
 
         TaskCommands::Start {
             id,
             description,
             format,
-        } => handle_start(id, description, format).await,
+        } => handle_start(task_mgr, id, description, format).await,
 
-        TaskCommands::Done { id, format } => handle_done(id, format).await,
+        TaskCommands::Done { id, format } => handle_done(task_mgr, id, format).await,
 
-        TaskCommands::Next { format } => handle_next(format).await,
+        TaskCommands::Next { format } => handle_next(task_mgr, format).await,
     }
 }
 
@@ -165,7 +119,9 @@ pub async fn handle_task_command(cmd: TaskCommands) -> Result<()> {
 // ============================================================================
 
 #[allow(clippy::too_many_arguments)]
-async fn handle_create(
+pub async fn handle_create(
+    task_mgr: &impl TaskBackend,
+    ws_mgr: &impl WorkspaceBackend,
     name: String,
     description: Option<String>,
     parent: Option<i64>,
@@ -177,11 +133,6 @@ async fn handle_create(
     blocks: Vec<i64>,
     format: String,
 ) -> Result<()> {
-    let ctx = ProjectContext::load_or_init().await?;
-    let project_path = ctx.root.to_string_lossy().to_string();
-    let task_mgr = TaskManager::with_project_path(&ctx.pool, project_path);
-    let workspace_mgr = WorkspaceManager::new(&ctx.pool);
-
     // Determine parent_id:
     // --parent 0 means root task (no parent)
     // --parent N means use task N as parent
@@ -190,7 +141,7 @@ async fn handle_create(
     let parent_id = match parent {
         Some(0) => {
             // User explicitly requested root task — check if there's a focused task for hint
-            let current = workspace_mgr.get_current_task(None).await?;
+            let current = ws_mgr.get_current_task(None).await?;
             if let Some(task) = &current.task {
                 focused_task_for_hint = Some((task.id, task.name.clone(), task.status.clone()));
             }
@@ -198,7 +149,7 @@ async fn handle_create(
         },
         Some(p) => Some(p),
         None => {
-            let current = workspace_mgr.get_current_task(None).await?;
+            let current = ws_mgr.get_current_task(None).await?;
             current.current_task_id
         },
     };
@@ -242,12 +193,12 @@ async fn handle_create(
 
     // Add blocked-by dependencies (task depends on these)
     for blocking_id in &blocked_by {
-        add_dependency(&ctx.pool, *blocking_id, task.id).await?;
+        task_mgr.add_dependency(*blocking_id, task.id).await?;
     }
 
     // Add blocks dependencies (these tasks depend on this task)
     for blocked_id in &blocks {
-        add_dependency(&ctx.pool, task.id, *blocked_id).await?;
+        task_mgr.add_dependency(task.id, *blocked_id).await?;
     }
 
     // Output
@@ -294,10 +245,13 @@ async fn handle_create(
     Ok(())
 }
 
-async fn handle_get(id: i64, with_events: bool, with_context: bool, format: String) -> Result<()> {
-    let ctx = ProjectContext::load_or_init().await?;
-    let task_mgr = TaskManager::new(&ctx.pool);
-
+pub async fn handle_get(
+    task_mgr: &impl TaskBackend,
+    id: i64,
+    with_events: bool,
+    with_context: bool,
+    format: String,
+) -> Result<()> {
     if with_context {
         // Full context includes ancestors, siblings, children, dependencies
         let context = task_mgr.get_task_context(id).await?;
@@ -317,17 +271,15 @@ async fn handle_get(id: i64, with_events: bool, with_context: bool, format: Stri
             if format == "json" {
                 println!("{}", serde_json::to_string_pretty(&response)?);
             } else {
-                crate::cli_handlers::print_task_context(&context);
+                super::utils::print_task_context(&context);
                 if let Some(summary) = &task_with_events.events_summary {
-                    crate::cli_handlers::print_events_summary(summary);
+                    super::utils::print_events_summary(summary);
                 }
             }
+        } else if format == "json" {
+            println!("{}", serde_json::to_string_pretty(&context)?);
         } else {
-            if format == "json" {
-                println!("{}", serde_json::to_string_pretty(&context)?);
-            } else {
-                crate::cli_handlers::print_task_context(&context);
-            }
+            super::utils::print_task_context(&context);
         }
     } else if with_events {
         let task_with_events = task_mgr.get_task_with_events(id).await?;
@@ -338,7 +290,7 @@ async fn handle_get(id: i64, with_events: bool, with_context: bool, format: Stri
             let task = &task_with_events.task;
             super::utils::print_task_summary(task);
             if let Some(summary) = &task_with_events.events_summary {
-                crate::cli_handlers::print_events_summary(summary);
+                super::utils::print_events_summary(summary);
             }
         }
     } else {
@@ -381,7 +333,8 @@ async fn handle_get(id: i64, with_events: bool, with_context: bool, format: Stri
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn handle_update(
+pub async fn handle_update(
+    task_mgr: &impl TaskBackend,
     id: i64,
     name: Option<String>,
     description: Option<String>,
@@ -397,10 +350,6 @@ async fn handle_update(
     rm_blocks: Vec<i64>,
     format: String,
 ) -> Result<()> {
-    let ctx = ProjectContext::load_or_init().await?;
-    let project_path = ctx.root.to_string_lossy().to_string();
-    let task_mgr = TaskManager::with_project_path(&ctx.pool, project_path);
-
     // Convert parent: 0 means set to root (None), N means set parent to N
     let parent_id_opt: Option<Option<i64>> = parent.map(|p| if p == 0 { None } else { Some(p) });
 
@@ -446,26 +395,18 @@ async fn handle_update(
 
     // Add dependencies
     for blocking_id in &add_blocked_by {
-        add_dependency(&ctx.pool, *blocking_id, id).await?;
+        task_mgr.add_dependency(*blocking_id, id).await?;
     }
     for blocked_id in &add_blocks {
-        add_dependency(&ctx.pool, id, *blocked_id).await?;
+        task_mgr.add_dependency(id, *blocked_id).await?;
     }
 
     // Remove dependencies
     for blocking_id in &rm_blocked_by {
-        sqlx::query("DELETE FROM dependencies WHERE blocking_task_id = ? AND blocked_task_id = ?")
-            .bind(blocking_id)
-            .bind(id)
-            .execute(&ctx.pool)
-            .await?;
+        task_mgr.remove_dependency(*blocking_id, id).await?;
     }
     for blocked_id in &rm_blocks {
-        sqlx::query("DELETE FROM dependencies WHERE blocking_task_id = ? AND blocked_task_id = ?")
-            .bind(id)
-            .bind(blocked_id)
-            .execute(&ctx.pool)
-            .await?;
+        task_mgr.remove_dependency(id, *blocked_id).await?;
     }
 
     // Output
@@ -479,7 +420,8 @@ async fn handle_update(
     Ok(())
 }
 
-async fn handle_list(
+pub async fn handle_list(
+    task_mgr: &impl TaskBackend,
     status: Option<String>,
     parent: Option<i64>,
     sort: Option<String>,
@@ -488,11 +430,6 @@ async fn handle_list(
     tree: bool,
     format: String,
 ) -> Result<()> {
-    use crate::db::models::TaskSortBy;
-
-    let ctx = ProjectContext::load_or_init().await?;
-    let task_mgr = TaskManager::new(&ctx.pool);
-
     // Parse sort option
     let sort_by = match sort.as_deref() {
         Some("id") => Some(TaskSortBy::Id),
@@ -540,12 +477,7 @@ async fn handle_list(
         );
         println!();
         for task in &result.tasks {
-            let status_icon = match task.status.as_str() {
-                "todo" => "○",
-                "doing" => "●",
-                "done" => "✓",
-                _ => "?",
-            };
+            let status_icon = super::utils::status_icon(&task.status);
             let parent_info = task
                 .parent_id
                 .map(|p| format!(" (parent: #{})", p))
@@ -570,22 +502,18 @@ async fn handle_list(
     Ok(())
 }
 
-async fn handle_delete(id: i64, cascade: bool, format: String) -> Result<()> {
-    let ctx = ProjectContext::load_or_init().await?;
-    let project_path = ctx.root.to_string_lossy().to_string();
-    let task_mgr = TaskManager::with_project_path(&ctx.pool, project_path);
-
+pub async fn handle_delete(
+    task_mgr: &impl TaskBackend,
+    id: i64,
+    cascade: bool,
+    format: String,
+) -> Result<()> {
     // Get task info before deletion
     let task = task_mgr.get_task(id).await?;
     let task_name = task.name.clone();
 
     if cascade {
-        // Get descendant count for reporting
-        let descendants = task_mgr.get_descendants(id).await?;
-        let descendant_count = descendants.len();
-
-        // delete_task cascades via ON DELETE CASCADE in SQLite
-        task_mgr.delete_task(id).await?;
+        let descendant_count = task_mgr.delete_task_cascade(id).await?;
 
         if format == "json" {
             let response = json!({
@@ -603,17 +531,12 @@ async fn handle_delete(id: i64, cascade: bool, format: String) -> Result<()> {
         }
     } else {
         // Check if task has children first
-        let child_count: i64 =
-            sqlx::query_scalar::<_, i64>(crate::sql_constants::COUNT_CHILDREN_TOTAL)
-                .bind(id)
-                .fetch_one(&ctx.pool)
-                .await?;
-
-        if child_count > 0 {
+        let children = task_mgr.get_children(id).await?;
+        if !children.is_empty() {
             return Err(IntentError::ActionNotAllowed(format!(
                 "Task #{} has {} child tasks. Use --cascade to delete them too, or delete children first.",
                 id,
-                child_count
+                children.len()
             )));
         }
 
@@ -634,11 +557,12 @@ async fn handle_delete(id: i64, cascade: bool, format: String) -> Result<()> {
     Ok(())
 }
 
-async fn handle_start(id: i64, description: Option<String>, format: String) -> Result<()> {
-    let ctx = ProjectContext::load_or_init().await?;
-    let project_path = ctx.root.to_string_lossy().to_string();
-    let task_mgr = TaskManager::with_project_path(&ctx.pool, project_path);
-
+pub async fn handle_start(
+    task_mgr: &impl TaskBackend,
+    id: i64,
+    description: Option<String>,
+    format: String,
+) -> Result<()> {
     // Update description first if provided
     if let Some(desc) = &description {
         task_mgr
@@ -674,11 +598,11 @@ async fn handle_start(id: i64, description: Option<String>, format: String) -> R
     Ok(())
 }
 
-async fn handle_done(id: Option<i64>, format: String) -> Result<()> {
-    let ctx = ProjectContext::load_or_init().await?;
-    let project_path = ctx.root.to_string_lossy().to_string();
-    let task_mgr = TaskManager::with_project_path(&ctx.pool, project_path);
-
+pub async fn handle_done(
+    task_mgr: &impl TaskBackend,
+    id: Option<i64>,
+    format: String,
+) -> Result<()> {
     // If ID given, complete by ID directly. If not, complete current focus.
     let result = if let Some(task_id) = id {
         task_mgr.done_task_by_id(task_id, false).await?
@@ -693,15 +617,16 @@ async fn handle_done(id: Option<i64>, format: String) -> Result<()> {
         println!("Completed task #{} '{}'", task.id, task.name);
 
         // Show next step suggestion
+        use crate::db::models::NextStepSuggestion;
         match &result.next_step_suggestion {
-            crate::db::models::NextStepSuggestion::ParentIsReady {
+            NextStepSuggestion::ParentIsReady {
                 message,
                 parent_task_id,
                 ..
             } => {
                 println!("  Next: {} (ie task start {})", message, parent_task_id);
             },
-            crate::db::models::NextStepSuggestion::SiblingTasksRemain {
+            NextStepSuggestion::SiblingTasksRemain {
                 message,
                 remaining_siblings_count,
                 ..
@@ -711,13 +636,13 @@ async fn handle_done(id: Option<i64>, format: String) -> Result<()> {
                     message, remaining_siblings_count
                 );
             },
-            crate::db::models::NextStepSuggestion::TopLevelTaskCompleted { message, .. } => {
+            NextStepSuggestion::TopLevelTaskCompleted { message, .. } => {
                 println!("  {}", message);
             },
-            crate::db::models::NextStepSuggestion::NoParentContext { message, .. } => {
+            NextStepSuggestion::NoParentContext { message, .. } => {
                 println!("  {}", message);
             },
-            crate::db::models::NextStepSuggestion::WorkspaceIsClear { message, .. } => {
+            NextStepSuggestion::WorkspaceIsClear { message, .. } => {
                 println!("  {}", message);
             },
         }
@@ -726,10 +651,7 @@ async fn handle_done(id: Option<i64>, format: String) -> Result<()> {
     Ok(())
 }
 
-async fn handle_next(format: String) -> Result<()> {
-    let ctx = ProjectContext::load_or_init().await?;
-    let task_mgr = TaskManager::new(&ctx.pool);
-
+pub async fn handle_next(task_mgr: &impl TaskBackend, format: String) -> Result<()> {
     let result = task_mgr.pick_next().await?;
 
     if format == "json" {
@@ -742,7 +664,7 @@ async fn handle_next(format: String) -> Result<()> {
 }
 
 // ============================================================================
-// Helper functions
+// Tests
 // ============================================================================
 
 #[cfg(test)]

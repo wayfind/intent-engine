@@ -615,6 +615,81 @@ impl Neo4jTaskManager {
         Ok(count)
     }
 
+    /// Add a dependency: blocking_id blocks blocked_id.
+    ///
+    /// Creates a `BLOCKED_BY` relationship from blocked to blocking.
+    /// Checks for cycles via variable-length path traversal.
+    pub async fn add_dependency(&self, blocking_id: i64, blocked_id: i64) -> Result<()> {
+        // Verify both tasks exist
+        self.check_task_exists(blocking_id).await?;
+        self.check_task_exists(blocked_id).await?;
+
+        // Cycle detection: if there's a path from blocking_id to blocked_id via BLOCKED_BY,
+        // adding blocked_id->blocking_id would create a cycle.
+        let mut result = self
+            .graph
+            .execute(
+                query(
+                    "OPTIONAL MATCH path = (a:Task {project_id: $pid, id: $blocking_id})-[:BLOCKED_BY*1..]->(b:Task {project_id: $pid, id: $blocked_id}) \
+                     RETURN path IS NOT NULL AS is_cycle",
+                )
+                .param("pid", self.project_id.clone())
+                .param("blocking_id", blocking_id)
+                .param("blocked_id", blocked_id),
+            )
+            .await
+            .map_err(|e| neo4j_err("add_dependency cycle check", e))?;
+
+        if let Some(row) = result
+            .next()
+            .await
+            .map_err(|e| neo4j_err("add_dependency cycle check fetch", e))?
+        {
+            let is_cycle: bool = row.get("is_cycle").unwrap_or(false);
+            if is_cycle {
+                return Err(IntentError::CircularDependency {
+                    blocking_task_id: blocking_id,
+                    blocked_task_id: blocked_id,
+                });
+            }
+        }
+
+        // Create the relationship (MERGE to be idempotent)
+        self.graph
+            .run(
+                query(
+                    "MATCH (blocked:Task {project_id: $pid, id: $blocked_id}), \
+                           (blocking:Task {project_id: $pid, id: $blocking_id}) \
+                     MERGE (blocked)-[:BLOCKED_BY]->(blocking)",
+                )
+                .param("pid", self.project_id.clone())
+                .param("blocked_id", blocked_id)
+                .param("blocking_id", blocking_id),
+            )
+            .await
+            .map_err(|e| neo4j_err("add_dependency", e))?;
+
+        Ok(())
+    }
+
+    /// Remove a dependency: blocking_id no longer blocks blocked_id.
+    pub async fn remove_dependency(&self, blocking_id: i64, blocked_id: i64) -> Result<()> {
+        self.graph
+            .run(
+                query(
+                    "MATCH (blocked:Task {project_id: $pid, id: $blocked_id})-[r:BLOCKED_BY]->(blocking:Task {project_id: $pid, id: $blocking_id}) \
+                     DELETE r",
+                )
+                .param("pid", self.project_id.clone())
+                .param("blocked_id", blocked_id)
+                .param("blocking_id", blocking_id),
+            )
+            .await
+            .map_err(|e| neo4j_err("remove_dependency", e))?;
+
+        Ok(())
+    }
+
     /// Find tasks with optional filters, sorting, and pagination.
     pub async fn find_tasks(
         &self,
@@ -1739,6 +1814,29 @@ impl crate::backend::TaskBackend for Neo4jTaskManager {
 
     fn delete_task(&self, id: i64) -> impl std::future::Future<Output = Result<()>> + Send {
         self.delete_task(id)
+    }
+
+    fn delete_task_cascade(
+        &self,
+        id: i64,
+    ) -> impl std::future::Future<Output = Result<usize>> + Send {
+        self.delete_task_cascade(id)
+    }
+
+    fn add_dependency(
+        &self,
+        blocking_id: i64,
+        blocked_id: i64,
+    ) -> impl std::future::Future<Output = Result<()>> + Send {
+        self.add_dependency(blocking_id, blocked_id)
+    }
+
+    fn remove_dependency(
+        &self,
+        blocking_id: i64,
+        blocked_id: i64,
+    ) -> impl std::future::Future<Output = Result<()>> + Send {
+        self.remove_dependency(blocking_id, blocked_id)
     }
 
     fn start_task(

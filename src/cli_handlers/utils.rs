@@ -3,7 +3,7 @@
 //! Helper functions for reading stdin, formatting status badges, and printing task contexts.
 
 use crate::db::models::{EventsSummary, Task, TaskContext};
-use crate::error::Result;
+use crate::error::{IntentError, Result};
 use std::io::{self, Read};
 
 /// Read from stdin with proper encoding handling (especially for Windows PowerShell)
@@ -238,6 +238,60 @@ pub fn print_events_summary(summary: &EventsSummary) {
             event.timestamp.format("%Y-%m-%d %H:%M:%S"),
             event.discussion_data
         );
+    }
+}
+
+/// Parse metadata key=value strings into a JSON object.
+/// "key=value" sets a key, "key=" deletes a key.
+pub fn parse_metadata(pairs: &[String]) -> Result<serde_json::Value> {
+    let mut map = serde_json::Map::new();
+    for pair in pairs {
+        if let Some(eq_pos) = pair.find('=') {
+            let key = pair[..eq_pos].trim().to_string();
+            let value = pair[eq_pos + 1..].trim().to_string();
+            if key.is_empty() {
+                return Err(IntentError::InvalidInput(format!(
+                    "Invalid metadata: empty key in '{}'",
+                    pair
+                )));
+            }
+            if value.is_empty() {
+                // "key=" means delete
+                map.insert(key, serde_json::Value::Null);
+            } else {
+                map.insert(key, serde_json::Value::String(value));
+            }
+        } else {
+            return Err(IntentError::InvalidInput(format!(
+                "Invalid metadata format: '{}'. Expected 'key=value'",
+                pair
+            )));
+        }
+    }
+    Ok(serde_json::Value::Object(map))
+}
+
+/// Merge new metadata into existing metadata JSON string.
+/// Null values in new_meta mean "delete this key".
+pub fn merge_metadata(existing: Option<&str>, new_meta: &serde_json::Value) -> Option<String> {
+    let mut base: serde_json::Map<String, serde_json::Value> = existing
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+
+    if let serde_json::Value::Object(new_map) = new_meta {
+        for (key, value) in new_map {
+            if value.is_null() {
+                base.remove(key);
+            } else {
+                base.insert(key.clone(), value.clone());
+            }
+        }
+    }
+
+    if base.is_empty() {
+        None
+    } else {
+        Some(serde_json::to_string(&base).unwrap_or_default())
     }
 }
 

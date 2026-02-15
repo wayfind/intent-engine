@@ -949,9 +949,17 @@ impl<'a> TaskManager<'a> {
         Ok(task)
     }
 
-    /// Delete a task
+    /// Delete a task. Refuses if the task is focused by any session.
     pub async fn delete_task(&self, id: i64) -> Result<()> {
         self.check_task_exists(id).await?;
+
+        // Focus protection
+        if let Some((_, sid)) = self.find_focused_in_set(&[id]).await? {
+            return Err(IntentError::ActionNotAllowed(format!(
+                "Task #{} is focused by session '{}'. Unfocus it first.",
+                id, sid
+            )));
+        }
 
         sqlx::query("DELETE FROM tasks WHERE id = ?")
             .bind(id)
@@ -961,6 +969,68 @@ impl<'a> TaskManager<'a> {
         // Notify WebSocket clients about the task deletion
         self.notify_task_deleted(id).await;
 
+        Ok(())
+    }
+
+    /// Delete a task and all its descendants (cascade).
+    ///
+    /// Refuses if any task in the subtree is focused by any session.
+    /// Returns the number of descendants deleted.
+    pub async fn delete_task_cascade(&self, id: i64) -> Result<usize> {
+        let descendants = self.get_descendants(id).await?;
+
+        // Focus protection: check the task itself + all descendants
+        let mut subtree_ids: Vec<i64> = descendants.iter().map(|t| t.id).collect();
+        subtree_ids.push(id);
+
+        if let Some((tid, sid)) = self.find_focused_in_set(&subtree_ids).await? {
+            return Err(IntentError::ActionNotAllowed(format!(
+                "Cannot cascade delete: task #{} is focused by session '{}'. Unfocus it first.",
+                tid, sid
+            )));
+        }
+
+        let count = descendants.len();
+        self.delete_task(id).await?;
+        Ok(count)
+    }
+
+    /// Check if any task in the given set of IDs is focused by any session.
+    /// Returns `Some((task_id, session_id))` if found, `None` otherwise.
+    async fn find_focused_in_set(&self, task_ids: &[i64]) -> Result<Option<(i64, String)>> {
+        if task_ids.is_empty() {
+            return Ok(None);
+        }
+
+        // Build parameterized IN clause
+        let placeholders: Vec<&str> = task_ids.iter().map(|_| "?").collect();
+        let sql = format!(
+            "SELECT current_task_id, session_id FROM sessions WHERE current_task_id IN ({}) LIMIT 1",
+            placeholders.join(", ")
+        );
+
+        let mut query = sqlx::query_as::<_, (i64, String)>(&sql);
+        for id in task_ids {
+            query = query.bind(id);
+        }
+
+        Ok(query.fetch_optional(self.pool).await?)
+    }
+
+    /// Add a dependency: blocking_id blocks blocked_id.
+    pub async fn add_dependency(&self, blocking_id: i64, blocked_id: i64) -> Result<()> {
+        crate::dependencies::add_dependency(self.pool, blocking_id, blocked_id)
+            .await
+            .map(|_| ())
+    }
+
+    /// Remove a dependency: blocking_id no longer blocks blocked_id.
+    pub async fn remove_dependency(&self, blocking_id: i64, blocked_id: i64) -> Result<()> {
+        sqlx::query("DELETE FROM dependencies WHERE blocking_task_id = ? AND blocked_task_id = ?")
+            .bind(blocking_id)
+            .bind(blocked_id)
+            .execute(self.pool)
+            .await?;
         Ok(())
     }
 
@@ -1961,6 +2031,29 @@ impl crate::backend::TaskBackend for TaskManager<'_> {
 
     fn delete_task(&self, id: i64) -> impl std::future::Future<Output = Result<()>> + Send {
         self.delete_task(id)
+    }
+
+    fn delete_task_cascade(
+        &self,
+        id: i64,
+    ) -> impl std::future::Future<Output = Result<usize>> + Send {
+        self.delete_task_cascade(id)
+    }
+
+    fn add_dependency(
+        &self,
+        blocking_id: i64,
+        blocked_id: i64,
+    ) -> impl std::future::Future<Output = Result<()>> + Send {
+        self.add_dependency(blocking_id, blocked_id)
+    }
+
+    fn remove_dependency(
+        &self,
+        blocking_id: i64,
+        blocked_id: i64,
+    ) -> impl std::future::Future<Output = Result<()>> + Send {
+        self.remove_dependency(blocking_id, blocked_id)
     }
 
     fn start_task(
