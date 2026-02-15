@@ -52,8 +52,6 @@ jobs:
       - name: Generate coverage
         run: |
           # Run coverage on unit tests and current integration tests only
-          # Do NOT use --all-features: it enables test-removed-cli-commands which runs
-          # tests for CLI commands removed in v0.10.0 (task, event, current, etc.)
           cargo llvm-cov --lib --bins --lcov --output-path lcov.info
           cargo llvm-cov --test interface_spec_test --no-clean --lcov --output-path lcov.info
 

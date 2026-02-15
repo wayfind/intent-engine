@@ -85,9 +85,6 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 tokio-tungstenite = "0.24"  # Matches axum's version for WebSocket tests
 
 [features]
-# Feature flag to enable tests for removed CLI commands (v0.10.0 removed: task, event, current, etc.)
-# These tests are disabled by default and can be enabled with: cargo test --features test-removed-cli-commands
-test-removed-cli-commands = []
 # Neo4j graph database backend (ie-neo4j binary)
 neo4j = ["neo4rs"]
 # Integration tests against a live Neo4j instance.
