@@ -108,3 +108,27 @@ impl Neo4jWorkspaceManager {
         Ok(())
     }
 }
+
+impl crate::backend::WorkspaceBackend for Neo4jWorkspaceManager {
+    fn get_current_task(
+        &self,
+        session_id: Option<&str>,
+    ) -> impl std::future::Future<Output = crate::error::Result<CurrentTaskResponse>> + Send {
+        self.get_current_task(session_id)
+    }
+
+    fn set_current_task(
+        &self,
+        task_id: i64,
+        session_id: Option<&str>,
+    ) -> impl std::future::Future<Output = crate::error::Result<CurrentTaskResponse>> + Send {
+        self.set_current_task(task_id, session_id)
+    }
+
+    fn clear_current_task(
+        &self,
+        session_id: Option<&str>,
+    ) -> impl std::future::Future<Output = crate::error::Result<()>> + Send {
+        self.clear_current_task(session_id)
+    }
+}

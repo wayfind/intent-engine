@@ -1,3 +1,4 @@
+pub mod backend;
 pub mod cli;
 pub mod cli_handlers;
 pub mod dashboard;

@@ -249,6 +249,27 @@ impl Neo4jEventManager {
     }
 }
 
+impl crate::backend::EventBackend for Neo4jEventManager {
+    fn add_event(
+        &self,
+        task_id: i64,
+        log_type: &str,
+        discussion_data: &str,
+    ) -> impl std::future::Future<Output = Result<Event>> + Send {
+        self.add_event(task_id, log_type, discussion_data)
+    }
+
+    fn list_events(
+        &self,
+        task_id: Option<i64>,
+        limit: Option<i64>,
+        log_type: Option<String>,
+        since: Option<String>,
+    ) -> impl std::future::Future<Output = Result<Vec<Event>>> + Send {
+        self.list_events(task_id, limit, log_type, since)
+    }
+}
+
 /// Convert a Neo4j Event node to an Event struct.
 pub(crate) fn node_to_event(node: &neo4rs::Node) -> Result<Event> {
     let id: i64 = node.get("id").map_err(|e| neo4j_err("event.id", e))?;

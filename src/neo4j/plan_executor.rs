@@ -572,5 +572,14 @@ impl Neo4jPlanExecutor {
     }
 }
 
+impl crate::backend::PlanBackend for Neo4jPlanExecutor {
+    fn execute(
+        &self,
+        request: &PlanRequest,
+    ) -> impl std::future::Future<Output = Result<crate::plan::PlanResult>> + Send {
+        self.execute(request)
+    }
+}
+
 // Validation functions (validate_dependencies, validate_batch_single_doing,
 // detect_circular_dependencies, tarjan_scc) are in crate::plan_validation.

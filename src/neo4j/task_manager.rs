@@ -1633,6 +1633,142 @@ pub(crate) fn neo4j_err(context: &str, e: impl std::fmt::Display) -> IntentError
     IntentError::OtherError(anyhow::anyhow!("Neo4j {}: {}", context, e))
 }
 
+// ── Backend Trait Impl ──────────────────────────────────────────
+
+impl crate::backend::TaskBackend for Neo4jTaskManager {
+    fn get_task(&self, id: i64) -> impl std::future::Future<Output = Result<Task>> + Send {
+        self.get_task(id)
+    }
+
+    fn get_task_with_events(
+        &self,
+        id: i64,
+    ) -> impl std::future::Future<Output = Result<TaskWithEvents>> + Send {
+        self.get_task_with_events(id)
+    }
+
+    fn get_task_ancestry(
+        &self,
+        task_id: i64,
+    ) -> impl std::future::Future<Output = Result<Vec<Task>>> + Send {
+        self.get_task_ancestry(task_id)
+    }
+
+    fn get_task_context(
+        &self,
+        id: i64,
+    ) -> impl std::future::Future<Output = Result<crate::db::models::TaskContext>> + Send {
+        self.get_task_context(id)
+    }
+
+    fn get_siblings(
+        &self,
+        id: i64,
+        parent_id: Option<i64>,
+    ) -> impl std::future::Future<Output = Result<Vec<Task>>> + Send {
+        self.get_siblings(id, parent_id)
+    }
+
+    fn get_children(&self, id: i64) -> impl std::future::Future<Output = Result<Vec<Task>>> + Send {
+        self.get_children(id)
+    }
+
+    fn get_blocking_tasks(
+        &self,
+        id: i64,
+    ) -> impl std::future::Future<Output = Result<Vec<Task>>> + Send {
+        self.get_blocking_tasks(id)
+    }
+
+    fn get_blocked_by_tasks(
+        &self,
+        id: i64,
+    ) -> impl std::future::Future<Output = Result<Vec<Task>>> + Send {
+        self.get_blocked_by_tasks(id)
+    }
+
+    fn get_descendants(
+        &self,
+        task_id: i64,
+    ) -> impl std::future::Future<Output = Result<Vec<Task>>> + Send {
+        self.get_descendants(task_id)
+    }
+
+    fn get_status(
+        &self,
+        task_id: i64,
+        with_events: bool,
+    ) -> impl std::future::Future<Output = Result<crate::db::models::StatusResponse>> + Send {
+        self.get_status(task_id, with_events)
+    }
+
+    fn get_root_tasks(&self) -> impl std::future::Future<Output = Result<Vec<Task>>> + Send {
+        self.get_root_tasks()
+    }
+
+    fn find_tasks(
+        &self,
+        status: Option<&str>,
+        parent_id: Option<Option<i64>>,
+        sort_by: Option<TaskSortBy>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> impl std::future::Future<Output = Result<PaginatedTasks>> + Send {
+        self.find_tasks(status, parent_id, sort_by, limit, offset)
+    }
+
+    fn add_task(
+        &self,
+        name: &str,
+        spec: Option<&str>,
+        parent_id: Option<i64>,
+        owner: Option<&str>,
+        priority: Option<i32>,
+        metadata: Option<&str>,
+    ) -> impl std::future::Future<Output = Result<Task>> + Send {
+        self.add_task(name, spec, parent_id, owner, priority, metadata)
+    }
+
+    fn update_task(
+        &self,
+        id: i64,
+        update: crate::tasks::TaskUpdate<'_>,
+    ) -> impl std::future::Future<Output = Result<Task>> + Send {
+        self.update_task(id, update)
+    }
+
+    fn delete_task(&self, id: i64) -> impl std::future::Future<Output = Result<()>> + Send {
+        self.delete_task(id)
+    }
+
+    fn start_task(
+        &self,
+        id: i64,
+        with_events: bool,
+    ) -> impl std::future::Future<Output = Result<TaskWithEvents>> + Send {
+        self.start_task(id, with_events)
+    }
+
+    fn done_task(
+        &self,
+        is_ai_caller: bool,
+    ) -> impl std::future::Future<Output = Result<DoneTaskResponse>> + Send {
+        self.done_task(is_ai_caller)
+    }
+
+    fn done_task_by_id(
+        &self,
+        id: i64,
+        is_ai_caller: bool,
+    ) -> impl std::future::Future<Output = Result<DoneTaskResponse>> + Send {
+        self.done_task_by_id(id, is_ai_caller)
+    }
+
+    fn pick_next(&self) -> impl std::future::Future<Output = Result<PickNextResponse>> + Send {
+        self.pick_next()
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────
 
 #[cfg(test)]

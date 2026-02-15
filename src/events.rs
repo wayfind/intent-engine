@@ -368,6 +368,27 @@ pub struct EventSearchResult {
     pub match_snippet: String,
 }
 
+impl crate::backend::EventBackend for EventManager<'_> {
+    fn add_event(
+        &self,
+        task_id: i64,
+        log_type: &str,
+        discussion_data: &str,
+    ) -> impl std::future::Future<Output = Result<Event>> + Send {
+        self.add_event(task_id, log_type, discussion_data)
+    }
+
+    fn list_events(
+        &self,
+        task_id: Option<i64>,
+        limit: Option<i64>,
+        log_type: Option<String>,
+        since: Option<String>,
+    ) -> impl std::future::Future<Output = Result<Vec<Event>>> + Send {
+        self.list_events(task_id, limit, log_type, since)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

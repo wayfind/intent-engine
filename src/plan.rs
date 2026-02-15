@@ -1087,6 +1087,15 @@ pub fn cleanup_included_files(files: &[PathBuf]) {
     }
 }
 
+impl crate::backend::PlanBackend for PlanExecutor<'_> {
+    fn execute(
+        &self,
+        request: &PlanRequest,
+    ) -> impl std::future::Future<Output = crate::error::Result<PlanResult>> + Send {
+        self.execute(request)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
