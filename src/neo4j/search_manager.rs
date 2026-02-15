@@ -264,9 +264,9 @@ impl Neo4jSearchManager {
                     "MATCH (t:Task {project_id: $pid}) \
                      WHERE t.name CONTAINS $q OR t.spec CONTAINS $q \
                      WITH t ORDER BY t.id ASC \
-                     WITH collect(t) AS all \
-                     WITH all, size(all) AS total \
-                     UNWIND all[$offset..($offset + $limit)] AS t \
+                     WITH collect(t) AS items \
+                     WITH items, size(items) AS total \
+                     UNWIND items[$offset..($offset + $limit)] AS t \
                      RETURN t, total",
                 )
                 .param("pid", self.project_id.clone())
@@ -315,9 +315,9 @@ impl Neo4jSearchManager {
                     "MATCH (e:Event {project_id: $pid}) \
                      WHERE e.discussion_data CONTAINS $q \
                      WITH e ORDER BY e.id ASC \
-                     WITH collect(e) AS all \
-                     WITH all, size(all) AS total \
-                     UNWIND all[$offset..($offset + $limit)] AS e \
+                     WITH collect(e) AS items \
+                     WITH items, size(items) AS total \
+                     UNWIND items[$offset..($offset + $limit)] AS e \
                      RETURN e, total",
                 )
                 .param("pid", self.project_id.clone())
