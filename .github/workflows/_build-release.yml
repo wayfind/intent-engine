@@ -130,7 +130,7 @@ jobs:
 
       - name: Upload artifact (Unix)
         if: inputs.os != 'windows-latest'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.asset-name }}
           path: ${{ inputs.asset-name }}.tar.gz
@@ -138,7 +138,7 @@ jobs:
 
       - name: Upload artifact (Windows)
         if: inputs.os == 'windows-latest'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.asset-name }}
           path: ${{ inputs.asset-name }}.zip
