@@ -420,6 +420,7 @@ pub async fn handle_update(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_list(
     task_mgr: &impl TaskBackend,
     status: Option<String>,

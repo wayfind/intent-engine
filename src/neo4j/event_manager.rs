@@ -7,7 +7,7 @@ use super::task_manager::neo4j_err;
 
 /// Event management backed by Neo4j.
 ///
-/// Events are stored as (:Event) nodes with (:Event)-[:BELONGS_TO]->(:Task)
+/// Events are stored as `(:Event)` nodes with `(:Event)-[:BELONGS_TO]->(:Task)`
 /// relationships. IDs are generated from the shared `next_id` counter.
 pub struct Neo4jEventManager {
     graph: Graph,

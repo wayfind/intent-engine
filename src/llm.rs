@@ -749,7 +749,7 @@ mod tests {
         // This test verifies the prompt structure without calling actual LLM
         use chrono::Utc;
 
-        let events = vec![
+        let events = [
             crate::db::models::Event {
                 id: 1,
                 task_id: 1,
@@ -803,7 +803,7 @@ mod tests {
         use chrono::Utc;
 
         let original_spec: Option<&str> = None;
-        let events = vec![crate::db::models::Event {
+        let events = [crate::db::models::Event {
             id: 1,
             task_id: 1,
             log_type: "note".to_string(),

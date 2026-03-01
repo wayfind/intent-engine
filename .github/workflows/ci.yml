@@ -102,8 +102,7 @@ jobs:
       - name: Run integration tests (parallel safe)
         if: ${{ !inputs.skip_tests }}
         run: |
-          cargo test --test integration_tests --verbose
-          cargo test --test interface_spec_test --verbose
+          cargo test --tests --verbose
 
       - name: Clean up test database before doctor command
         run: rm -rf ~/.intent-engine
@@ -252,8 +251,7 @@ jobs:
 
           # Run tests
           cargo test --lib --bins --verbose
-          cargo test --test integration_tests --verbose
-          cargo test --test interface_spec_test --verbose
+          cargo test --tests --verbose
 
   # ============================================================================
   # Security & Dependencies (Daily Schedule)

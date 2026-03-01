@@ -71,12 +71,10 @@ pub async fn handle_dismiss(id: Option<i64>, all: bool, format: &str) -> Result<
 
     if format == "json" {
         println!("{}", json!({ "dismissed": count }));
+    } else if count == 0 {
+        println!("No suggestions to dismiss.");
     } else {
-        if count == 0 {
-            println!("No suggestions to dismiss.");
-        } else {
-            println!("✅ Dismissed {} suggestion(s)", count);
-        }
+        println!("✅ Dismissed {} suggestion(s)", count);
     }
 
     Ok(())
@@ -88,12 +86,10 @@ pub async fn handle_clear(format: &str) -> Result<()> {
 
     if format == "json" {
         println!("{}", json!({ "cleared": count }));
+    } else if count == 0 {
+        println!("No dismissed suggestions to clear.");
     } else {
-        if count == 0 {
-            println!("No dismissed suggestions to clear.");
-        } else {
-            println!("🗑️  Cleared {} dismissed suggestion(s)", count);
-        }
+        println!("🗑️  Cleared {} dismissed suggestion(s)", count);
     }
 
     Ok(())

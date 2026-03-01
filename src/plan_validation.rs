@@ -115,6 +115,7 @@ pub fn tarjan_scc(graph: &[Vec<usize>]) -> Vec<Vec<usize>> {
     let mut lowlink = vec![0; n];
     let mut result = Vec::new();
 
+    #[allow(clippy::too_many_arguments)]
     fn strongconnect(
         v: usize,
         graph: &[Vec<usize>],

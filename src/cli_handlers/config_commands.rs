@@ -128,18 +128,16 @@ async fn handle_list(prefix: Option<&str>, format: &str) -> Result<()> {
             "{}",
             serde_json::to_string_pretty(&json!({ "config": items }))?
         );
+    } else if entries.is_empty() {
+        println!("No configuration entries found.");
     } else {
-        if entries.is_empty() {
-            println!("No configuration entries found.");
-        } else {
-            for (key, value) in &entries {
-                let display_value = if is_sensitive_key(key) {
-                    mask_value(value)
-                } else {
-                    value.clone()
-                };
-                println!("{} = {}", key, display_value);
-            }
+        for (key, value) in &entries {
+            let display_value = if is_sensitive_key(key) {
+                mask_value(value)
+            } else {
+                value.clone()
+            };
+            println!("{} = {}", key, display_value);
         }
     }
 

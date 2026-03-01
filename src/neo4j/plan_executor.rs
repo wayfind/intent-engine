@@ -7,7 +7,7 @@
 //! - Uses `Neo4jTaskManager` methods instead of raw SQL
 //! - Individual operations are NOT wrapped in a transaction (no atomicity guarantee)
 //! - No dashboard notifications (no SQLite DB available)
-//! - Dependencies use BLOCKED_BY relationships (MERGE for idempotency)
+//! - Dependencies use `BLOCKED_BY` relationships (MERGE for idempotency)
 
 use crate::db::models::TaskWithEvents;
 use crate::error::{IntentError, Result};
