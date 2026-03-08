@@ -83,7 +83,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-static
           path: static/
@@ -104,7 +104,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-static
           path: static/
@@ -169,7 +169,7 @@ jobs:
         with:
           shared-key: ${{ matrix.rust }}-${{ matrix.os }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-static
           path: static/
@@ -210,7 +210,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-static
           path: static/
@@ -236,7 +236,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-static
           path: static/
