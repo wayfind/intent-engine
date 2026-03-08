@@ -863,6 +863,10 @@ async fn upgrade_to_v0_15_0(pool: &SqlitePool) -> Result<()> {
     // `new.deleted_at IS NULL`, which would fire on restore operations
     // (deleted→active), causing an attempt to remove a non-existent FTS5 entry
     // and corrupting the index.  Narrow to active→active transitions only.
+    //
+    // tasks_au_softdelete is correct as-is — its WHEN clause
+    // (old.deleted_at IS NULL AND new.deleted_at IS NOT NULL) already narrows
+    // to active→deleted only and does not need to be touched.
     let _ = sqlx::query("DROP TRIGGER IF EXISTS tasks_au_active")
         .execute(pool)
         .await;
@@ -1658,5 +1662,71 @@ mod tests {
             new_name, 0,
             "renamed soft-deleted task must not re-enter FTS"
         );
+    }
+
+    /// Restoring a soft-deleted task (clearing deleted_at) must NOT corrupt the FTS index.
+    ///
+    /// This is the exact scenario fixed in v0.15.0: the old trigger fired on
+    /// deleted→active transitions and tried to remove a non-existent FTS entry,
+    /// corrupting the index.  The fixed trigger only fires on active→active
+    /// (old.deleted_at IS NULL AND new.deleted_at IS NULL), so a restore must be
+    /// a no-op for the trigger — the caller is responsible for re-inserting the
+    /// FTS row explicitly if needed.
+    #[tokio::test]
+    async fn test_fts_restore_does_not_corrupt_fts() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO tasks (name, spec, status) VALUES ('restore_me', 'spec text', 'todo')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Soft-delete — removes from FTS via tasks_au_softdelete trigger
+        sqlx::query("UPDATE tasks SET deleted_at = datetime('now') WHERE name = 'restore_me'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Restore — clears deleted_at; tasks_au_active must NOT fire (old.deleted_at IS NOT NULL)
+        // This is the regression path: the old trigger would attempt
+        // `INSERT INTO tasks_fts(tasks_fts, ...) VALUES('delete', ...)` for a row
+        // that is no longer in the FTS index, corrupting it.
+        sqlx::query("UPDATE tasks SET deleted_at = NULL WHERE name = 'restore_me'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // The trigger does not re-insert on restore; the row is absent from FTS.
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks_fts WHERE tasks_fts MATCH 'restore_me'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            count, 0,
+            "restored task is not in FTS until explicitly re-indexed"
+        );
+
+        // The real proof that the FTS index is not corrupted: insert a new task
+        // and verify it is searchable.  SQLite FTS5 corruption often surfaces only
+        // on the next write or rebuild, not on a read-only COUNT(*).
+        sqlx::query(
+            "INSERT INTO tasks (name, spec, status) VALUES ('healthy_task', 'healthy spec', 'todo')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let healthy: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'healthy_task'")
+                .fetch_one(&pool)
+                .await
+                .expect("FTS must remain functional after restore — index is not corrupted");
+        assert_eq!(healthy, 1, "FTS index must still work after restore");
     }
 }
