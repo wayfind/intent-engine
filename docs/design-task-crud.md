@@ -1,8 +1,8 @@
 # Design: `ie task` CRUD Commands
 
-**Version**: 0.11 (Proposed)
+**Version**: 0.11
 **Date**: 2026-02-06
-**Status**: Draft
+**Status**: Implemented — see `docs/spec-03-interface-current.md` for the authoritative reference
 **Parent Task**: #175
 
 ---

@@ -10,16 +10,17 @@ This guide explains the standard workflow of using Intent-Engine, when to use it
 
 ---
 
-## Core Commands (v0.10.0)
-
-Intent-Engine has 4 core commands:
+## Core Commands (v0.11)
 
 | Command | Purpose | Philosophy |
 |---------|---------|------------|
 | `ie status` | Restore context | Amnesia recovery |
-| `ie plan` | Task operations | Decomposition persistence |
+| `ie task` | Single task CRUD (v0.11+) | Surgical task operations |
+| `ie plan` | Batch task operations (JSON) | Decomposition persistence |
 | `ie log` | Record events | Decision transparency |
 | `ie search` | Find history | Memory retrieval |
+
+**`ie task` vs `ie plan`**: Use `ie task` for single-task operations (create, update, start, done). Use `ie plan` for batch create/update via JSON stdin.
 
 ---
 

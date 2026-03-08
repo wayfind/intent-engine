@@ -10,7 +10,7 @@ Create a task when work requires:
 - Decision tracking ("why did I choose X?")
 - Human-AI collaboration
 
-## Core Commands (v0.10.0)
+## Core Commands (v0.11)
 
 ### 1. Restore Context (Always First)
 ```bash
@@ -20,7 +20,19 @@ ie status 42           # View specific task context
 
 ### 2. Create/Update/Complete Tasks
 ```bash
-# All task operations go through `ie plan` with JSON stdin
+# Single task operations (v0.11+, preferred)
+ie task create "Task name"                          # Create task
+ie task create "Subtask" --parent 42                # Create subtask
+ie task start 42                                    # Start task (doing + focus)
+ie task update 42 --status doing                    # Update status
+ie task done                                        # Complete focused task
+ie task done 42                                     # Complete specific task
+ie task next                                        # Suggest next task
+ie task list --status todo                          # List tasks
+ie task get 42 --with-context                       # Full task details
+ie task delete 42                                   # Delete task
+
+# Batch create/update via JSON stdin
 echo '{"tasks":[...]}' | ie plan
 ```
 
@@ -175,11 +187,12 @@ Session Start:
   ie status                    # Restore context
 
 During Work:
-  ie plan (create/update)      # Task operations
+  ie task start <id>           # Claim and focus a task
+  ie task update / ie plan     # Task operations
   ie log decision "..."        # Record choices
 
 Session End:
-  ie plan (status:done)        # Complete finished work
+  ie task done                 # Complete focused task
   ie status                    # Verify state
 ```
 
@@ -187,7 +200,8 @@ Session End:
 
 Intent-Engine is AI's **external brain**:
 - **ie status** = Amnesia recovery
-- **ie plan** = Decomposition persistence
+- **ie task** = Single task operations (v0.11+)
+- **ie plan** = Batch decomposition via JSON
 - **ie log** = Decision transparency
 - **ie search** = Memory retrieval
 

@@ -1,7 +1,7 @@
 # Intent-Engine User Guide
 
-**Version**: 0.10.4
-**Last Updated**: 2024-12-27
+**Version**: 0.11.0
+**Last Updated**: 2026-03-09
 
 ---
 
@@ -162,6 +162,42 @@ ie status --format json  # JSON output
 - Ancestor chain (parent hierarchy)
 - Sibling tasks (same level)
 - Descendant tasks (children and below)
+
+### ie task (v0.11+)
+
+Single-task CRUD operations. Preferred for individual task management.
+
+```bash
+# Create
+ie task create "Task name"
+ie task create "Subtask" --parent 42
+ie task create "Task" --status doing --priority high
+
+# Read
+ie task get 42
+ie task get 42 --with-context    # Include ancestor/event context
+ie task list                     # List all tasks
+ie task list --status todo       # Filter by status
+ie task list --tree              # Show as tree
+
+# Update
+ie task update 42 --status doing
+ie task update 42 --priority critical
+ie task update 42 --metadata type=epic
+ie task update 42 --spec "## Goal\n..."
+
+# Focus
+ie task start 42                 # Set doing + focus
+ie task done                     # Complete focused task
+ie task done 42                  # Complete specific task
+ie task next                     # Suggest next task to work on
+
+# Delete
+ie task delete 42
+ie task delete 42 --cascade      # Delete task and all children
+```
+
+**`ie task` vs `ie plan`**: Use `ie task` for single operations. Use `ie plan` for batch create/update via JSON stdin.
 
 ### ie plan
 

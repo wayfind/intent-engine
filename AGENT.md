@@ -1,6 +1,6 @@
 # Intent-Engine: AI Agent Guide
 
-**Version**: {{VERSION}}
+**Version**: 0.11
 **Purpose**: This document helps AI agents understand Intent-Engine's core concepts and interface design
 
 ---
@@ -53,19 +53,19 @@ cargo build
 
 > **CRITICAL**: Before working with Intent-Engine, understand the specification hierarchy:
 >
-> **Single Source of Truth**: `docs/INTERFACE_SPEC.md`
+> **Single Source of Truth**: `docs/spec-03-interface-current.md`
 >
-> The INTERFACE_SPEC.md document is the **authoritative blueprint** for all Intent-Engine interfaces:
+> The spec document is the **authoritative blueprint** for all Intent-Engine interfaces:
 > - ✅ **CLI Interface**: Command signatures, parameters, atomic behaviors, JSON output formats
 > - ✅ **Rust API**: Public types, function signatures
 > - ✅ **Data Models**: Exact field names, types, lifecycle semantics
 > - ✅ **Guarantees**: SemVer stability, breaking change policies
 >
 > **This AGENT.md is a derived guide** that explains concepts and patterns.
-> **In case of any conflict**, defer to INTERFACE_SPEC.md.
+> **In case of any conflict**, defer to `docs/spec-03-interface-current.md`.
 >
 > When implementing features, writing tests, or building integrations:
-> 1. Read INTERFACE_SPEC.md first to understand the contract
+> 1. Read `docs/spec-03-interface-current.md` first to understand the contract
 > 2. Use this guide to understand the philosophy and patterns
 > 3. Validate your work against the spec's requirements
 
@@ -537,9 +537,9 @@ task done                               # Parent done (all children done)
 
 ## 📚 Key Documents
 
-- **Authoritative Spec**: `docs/INTERFACE_SPEC.md`
-- **AI Integration**: `CLAUDE.md` and `MIGRATION_v0.10.0.md`
-- **Migration Guide**: `MIGRATION_v0.10.0.md` (v0.9.x → v0.10.0)
+- **Authoritative Spec**: `docs/spec-03-interface-current.md`
+- **AI Integration**: `CLAUDE.md`
+- **Migration Guide**: `docs/archive/MIGRATION_v0.10.0.md` (v0.9.x → v0.10.0)
 - **Test Files**: `tests/interface_spec_test.rs`, Dashboard integration tests
 
 ---
@@ -579,6 +579,6 @@ task done                               # Parent done (all children done)
 
 ---
 
-**Last Updated**: 2025-11-14
-**Spec Version**: {{VERSION}}
+**Last Updated**: 2026-03-09
+**Spec Version**: 0.11
 **Status**: Experimental (Pre-1.0)

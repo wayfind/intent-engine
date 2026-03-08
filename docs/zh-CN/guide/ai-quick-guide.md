@@ -10,7 +10,7 @@
 - 决策追踪（"为什么选择 X？"）
 - 人机协作
 
-## 核心命令 (v0.10.0)
+## 核心命令 (v0.11)
 
 ### 1. 恢复上下文（总是第一步）
 ```bash
@@ -20,7 +20,19 @@ ie status 42           # 查看特定任务上下文
 
 ### 2. 创建/更新/完成任务
 ```bash
-# 所有任务操作通过 `ie plan` + JSON 标准输入
+# 单任务操作（v0.11+，推荐）
+ie task create "任务名"                             # 创建任务
+ie task create "子任务" --parent 42                 # 创建子任务
+ie task start 42                                    # 开始任务（doing + 聚焦）
+ie task update 42 --status doing                    # 更新状态
+ie task done                                        # 完成当前聚焦任务
+ie task done 42                                     # 完成指定任务
+ie task next                                        # 推荐下一个任务
+ie task list --status todo                          # 列出任务
+ie task get 42 --with-context                       # 完整任务详情
+ie task delete 42                                   # 删除任务
+
+# 批量操作（通过 JSON 标准输入）
 echo '{"tasks":[...]}' | ie plan
 ```
 
@@ -175,11 +187,12 @@ ie search "todo doing"
   ie status                    # 恢复上下文
 
 工作中：
-  ie plan (创建/更新)          # 任务操作
+  ie task start <id>           # 认领并聚焦任务
+  ie task update / ie plan     # 任务操作
   ie log decision "..."        # 记录选择
 
 会话结束：
-  ie plan (status:done)        # 完成已完成的工作
+  ie task done                 # 完成当前聚焦任务
   ie status                    # 验证状态
 ```
 
@@ -187,7 +200,8 @@ ie search "todo doing"
 
 Intent-Engine 是 AI 的**外部大脑**：
 - **ie status** = 失忆恢复
-- **ie plan** = 分解持久化
+- **ie task** = 单任务操作（v0.11+）
+- **ie plan** = 批量任务分解（JSON）
 - **ie log** = 决策透明
 - **ie search** = 记忆检索
 
