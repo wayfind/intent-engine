@@ -2717,6 +2717,96 @@ mod tests {
 }
 
 #[cfg(test)]
+mod status_alias_tests {
+    use super::*;
+
+    // ── from_db_str: canonical values ────────────────────────────────────
+    #[test]
+    fn test_from_db_str_canonical() {
+        assert_eq!(TaskStatus::from_db_str("todo"), Some(TaskStatus::Todo));
+        assert_eq!(TaskStatus::from_db_str("doing"), Some(TaskStatus::Doing));
+        assert_eq!(TaskStatus::from_db_str("done"), Some(TaskStatus::Done));
+    }
+
+    // ── from_db_str: alias values (Claude Code / external tool names) ─────
+    #[test]
+    fn test_from_db_str_aliases() {
+        assert_eq!(TaskStatus::from_db_str("pending"), Some(TaskStatus::Todo));
+        assert_eq!(
+            TaskStatus::from_db_str("in_progress"),
+            Some(TaskStatus::Doing)
+        );
+        assert_eq!(TaskStatus::from_db_str("completed"), Some(TaskStatus::Done));
+    }
+
+    #[test]
+    fn test_from_db_str_unknown_returns_none() {
+        assert_eq!(TaskStatus::from_db_str("running"), None);
+        assert_eq!(TaskStatus::from_db_str(""), None);
+        assert_eq!(TaskStatus::from_db_str("TODO"), None); // case-sensitive
+    }
+
+    // ── as_db_str: always produces canonical form ─────────────────────────
+    #[test]
+    fn test_as_db_str_canonical_output() {
+        assert_eq!(TaskStatus::Todo.as_db_str(), "todo");
+        assert_eq!(TaskStatus::Doing.as_db_str(), "doing");
+        assert_eq!(TaskStatus::Done.as_db_str(), "done");
+    }
+
+    // ── Serde: accept alias on deserialisation, emit canonical on serialise
+    #[test]
+    fn test_serde_deserialize_canonical() {
+        let s: TaskStatus = serde_json::from_str(r#""todo""#).unwrap();
+        assert_eq!(s, TaskStatus::Todo);
+        let s: TaskStatus = serde_json::from_str(r#""doing""#).unwrap();
+        assert_eq!(s, TaskStatus::Doing);
+        let s: TaskStatus = serde_json::from_str(r#""done""#).unwrap();
+        assert_eq!(s, TaskStatus::Done);
+    }
+
+    #[test]
+    fn test_serde_deserialize_aliases() {
+        let s: TaskStatus = serde_json::from_str(r#""pending""#).unwrap();
+        assert_eq!(s, TaskStatus::Todo);
+        let s: TaskStatus = serde_json::from_str(r#""in_progress""#).unwrap();
+        assert_eq!(s, TaskStatus::Doing);
+        let s: TaskStatus = serde_json::from_str(r#""completed""#).unwrap();
+        assert_eq!(s, TaskStatus::Done);
+    }
+
+    #[test]
+    fn test_serde_serialize_always_canonical() {
+        // Regardless of how the value was constructed, serialisation must
+        // produce the canonical ie form (todo/doing/done), never aliases.
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Todo).unwrap(),
+            r#""todo""#
+        );
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Doing).unwrap(),
+            r#""doing""#
+        );
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Done).unwrap(),
+            r#""done""#
+        );
+    }
+
+    /// Aliases embedded inside a full TaskTree JSON must also round-trip
+    /// to canonical form after deserialization.
+    #[test]
+    fn test_task_tree_status_alias_roundtrip() {
+        let json = r#"{"name":"T","status":"pending"}"#;
+        let task: TaskTree = serde_json::from_str(json).unwrap();
+        assert_eq!(task.status, Some(TaskStatus::Todo));
+        // Serialised output uses canonical name
+        let out = serde_json::to_string(&task.status.unwrap()).unwrap();
+        assert_eq!(out, r#""todo""#);
+    }
+}
+
+#[cfg(test)]
 mod dataflow_tests {
     use super::*;
     use crate::tasks::TaskManager;

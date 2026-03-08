@@ -226,11 +226,15 @@ async fn migrate_fresh(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // For soft-deleted tasks: remove from FTS when deleted_at is set
+    // For soft-deleted tasks: remove from FTS on the active→deleted transition.
+    // WHEN clause requires old.deleted_at IS NULL so the trigger fires only once
+    // (on the transition), not on every subsequent update to an already-deleted
+    // task. Re-firing on an already-deleted row would attempt to remove a
+    // non-existent FTS entry, which corrupts the FTS5 index.
     sqlx::query(
         r#"
         CREATE TRIGGER IF NOT EXISTS tasks_au_softdelete
-        AFTER UPDATE ON tasks WHEN new.deleted_at IS NOT NULL BEGIN
+        AFTER UPDATE ON tasks WHEN old.deleted_at IS NULL AND new.deleted_at IS NOT NULL BEGIN
             INSERT INTO tasks_fts(tasks_fts, rowid, name, spec)
                 VALUES('delete', old.id, old.name, old.spec);
         END
@@ -665,7 +669,7 @@ async fn upgrade_to_v0_13_0(pool: &SqlitePool) -> Result<()> {
     sqlx::query(
         r#"
         CREATE TRIGGER IF NOT EXISTS tasks_au_softdelete
-        AFTER UPDATE ON tasks WHEN new.deleted_at IS NOT NULL BEGIN
+        AFTER UPDATE ON tasks WHEN old.deleted_at IS NULL AND new.deleted_at IS NOT NULL BEGIN
             INSERT INTO tasks_fts(tasks_fts, rowid, name, spec)
                 VALUES('delete', old.id, old.name, old.spec);
         END
@@ -1467,6 +1471,155 @@ mod tests {
         assert!(
             table_exists(&pool, "dependencies").await,
             "dependencies table must exist after upgrade"
+        );
+    }
+
+    // ── FTS + soft delete interaction ─────────────────────────────────────
+
+    /// After soft-deleting a task the FTS index must not return it.
+    #[tokio::test]
+    async fn test_fts_excludes_soft_deleted_task() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO tasks (name, spec, status) VALUES ('unique_fts_target', 'some spec', 'todo')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Confirm it is searchable before deletion
+        let before: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'unique_fts_target'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(before, 1, "task must be in FTS before soft-delete");
+
+        // Soft-delete via deleted_at (the tasks_au_softdelete trigger fires)
+        sqlx::query(
+            "UPDATE tasks SET deleted_at = datetime('now') WHERE name = 'unique_fts_target'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // FTS must no longer return the task
+        let after: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'unique_fts_target'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(after, 0, "soft-deleted task must be removed from FTS");
+    }
+
+    /// Soft-deleting one task must not affect FTS entries for other tasks.
+    #[tokio::test]
+    async fn test_fts_soft_delete_does_not_affect_siblings() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO tasks (name, spec, status) VALUES ('keep_this_task', 'spec a', 'todo')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO tasks (name, spec, status) VALUES ('delete_this_task', 'spec b', 'todo')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Soft-delete only the second task
+        sqlx::query(
+            "UPDATE tasks SET deleted_at = datetime('now') WHERE name = 'delete_this_task'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // The deleted task must not appear
+        let deleted: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'delete_this_task'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(deleted, 0, "deleted task must not appear in FTS");
+
+        // The surviving task must still be searchable
+        let kept: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'keep_this_task'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(kept, 1, "surviving task must still be in FTS");
+    }
+
+    /// An update to an already-soft-deleted task (e.g. correcting spec while
+    /// archived) must not cause FTS corruption. The softdelete trigger uses
+    /// `old.deleted_at IS NULL AND new.deleted_at IS NOT NULL` so it fires only
+    /// on the active→deleted transition, not on subsequent updates to a deleted
+    /// row. Neither the old nor the new name must appear in FTS after.
+    #[tokio::test]
+    async fn test_fts_update_of_soft_deleted_task_stays_excluded() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let pool = create_pool(&db_path).await.unwrap();
+        run_migrations(&pool).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO tasks (name, spec, status) VALUES ('archived_task', 'old spec', 'todo')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Soft-delete
+        sqlx::query("UPDATE tasks SET deleted_at = datetime('now') WHERE name = 'archived_task'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Update the name while keeping deleted_at set — softdelete trigger does NOT
+        // fire again (old.deleted_at IS NOT NULL); no FTS operation occurs.
+        sqlx::query(
+            "UPDATE tasks SET name = 'archived_task_renamed', spec = 'new spec' \
+             WHERE name = 'archived_task'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Neither old nor new name must appear in FTS
+        let old_name: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'archived_task'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            old_name, 0,
+            "old name of soft-deleted task must not be in FTS"
+        );
+
+        let new_name: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM tasks_fts WHERE name MATCH 'archived_task_renamed'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            new_name, 0,
+            "renamed soft-deleted task must not re-enter FTS"
         );
     }
 }
