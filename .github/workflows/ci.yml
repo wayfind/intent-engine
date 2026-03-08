@@ -47,7 +47,7 @@ jobs:
       - name: Build frontend
         run: cd front-end && npm ci && npm run build
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: frontend-static
           path: static/
@@ -187,7 +187,7 @@ jobs:
 
       - name: Upload artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: test-logs-${{ matrix.os }}-${{ matrix.rust }}
           path: target/*/deps/*.log
