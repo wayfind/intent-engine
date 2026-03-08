@@ -27,6 +27,33 @@ env:
 
 jobs:
   # ============================================================================
+  # Frontend Build — built once, shared as artifact across all Rust jobs.
+  # rust_embed compiles static/ into the binary at build time, so every Rust
+  # job that calls cargo build/test must have static/ present.
+  # ============================================================================
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: front-end/package-lock.json
+
+      - name: Build frontend
+        run: cd front-end && npm ci && npm run build
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: frontend-static
+          path: static/
+          retention-days: 1
+
+  # ============================================================================
   # PR & Push Checks - Fast feedback (<5 minutes)
   # ============================================================================
 
@@ -46,6 +73,7 @@ jobs:
   clippy:
     name: Clippy Lints
     runs-on: ubuntu-latest
+    needs: [build-frontend]
     steps:
       - uses: actions/checkout@v6
 
@@ -55,16 +83,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/download-artifact@v4
         with:
-          node-version: '20'
-
-      - name: Build frontend
-        run: |
-          cd front-end
-          npm ci
-          npm run build
+          name: frontend-static
+          path: static/
 
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
@@ -72,6 +94,7 @@ jobs:
   test-quick:
     name: Quick Tests (Ubuntu/stable)
     runs-on: ubuntu-latest
+    needs: [build-frontend]
     if: github.event_name == 'pull_request' || github.event_name == 'push'
 
     steps:
@@ -81,19 +104,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/download-artifact@v4
         with:
-          node-version: '20'
-
-      - name: Build frontend
-        run: |
-          cd front-end
-          npm ci
-          npm run build
-
-      - name: Build
-        run: cargo build --verbose
+          name: frontend-static
+          path: static/
 
       - name: Run unit and CLI tests
         if: ${{ !inputs.skip_tests }}
@@ -101,8 +115,7 @@ jobs:
 
       - name: Run integration tests (parallel safe)
         if: ${{ !inputs.skip_tests }}
-        run: |
-          cargo test --tests --verbose
+        run: cargo test --tests --verbose
 
       - name: Clean up test database before doctor command
         run: rm -rf ~/.intent-engine
@@ -116,6 +129,7 @@ jobs:
 
   test-full:
     name: Full Tests (${{ matrix.os }} / ${{ matrix.rust }})
+    needs: [build-frontend]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
 
@@ -155,19 +169,10 @@ jobs:
         with:
           shared-key: ${{ matrix.rust }}-${{ matrix.os }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/download-artifact@v4
         with:
-          node-version: '20'
-
-      - name: Build frontend
-        run: |
-          cd front-end
-          npm ci
-          npm run build
-
-      - name: Build
-        run: cargo build --verbose
+          name: frontend-static
+          path: static/
 
       - name: Run unit and CLI tests
         if: ${{ !inputs.skip_tests }}
@@ -175,10 +180,7 @@ jobs:
 
       - name: Run integration tests (parallel safe)
         if: ${{ !inputs.skip_tests }}
-        run: |
-          cargo test --test dashboard_integration_tests --verbose
-          cargo test --test logs_integration_test --verbose
-          cargo test --test interface_spec_test --verbose
+        run: cargo test --test dashboard_integration_tests --test logs_integration_test --test interface_spec_test --verbose
 
       - name: Build release
         run: cargo build --release --verbose
@@ -198,6 +200,7 @@ jobs:
   docs:
     name: Documentation
     runs-on: ubuntu-latest
+    needs: [build-frontend]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'pull_request'
 
     steps:
@@ -206,6 +209,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-static
+          path: static/
 
       - name: Check documentation
         run: cargo doc --no-deps --all-features --document-private-items
@@ -218,6 +226,7 @@ jobs:
   package:
     name: Package Check
     runs-on: ubuntu-latest
+    needs: [build-frontend]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
 
     steps:
@@ -227,16 +236,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/download-artifact@v4
         with:
-          node-version: '20'
-
-      - name: Build frontend
-        run: |
-          cd front-end
-          npm ci
-          npm run build
+          name: frontend-static
+          path: static/
 
       - name: Verify package
         run: |
@@ -319,12 +322,16 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [format, clippy, test-quick, docs]
+    needs: [build-frontend, format, clippy, test-quick, docs]
     if: always() && (github.event_name == 'pull_request' || github.event_name == 'push')
 
     steps:
       - name: Check all jobs
         run: |
+          if [ "${{ needs.build-frontend.result }}" != "success" ]; then
+            echo "❌ Frontend build failed"
+            exit 1
+          fi
           if [ "${{ needs.format.result }}" != "success" ]; then
             echo "❌ Format check failed"
             exit 1
