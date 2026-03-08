@@ -51,42 +51,47 @@ pub const SELECT_TASK_FULL: &str = const_format::formatcp!("SELECT {} FROM tasks
 pub const SELECT_TASK_NO_SPEC: &str =
     const_format::formatcp!("SELECT {} FROM tasks WHERE 1=1", TASK_COLUMNS_NO_SPEC);
 
-/// Check if a task exists by ID
-pub const CHECK_TASK_EXISTS: &str = "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)";
+/// Check if an active (non-deleted) task exists by ID
+pub const CHECK_TASK_EXISTS: &str =
+    "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ? AND deleted_at IS NULL)";
 
-/// Get task name by ID
-pub const SELECT_TASK_NAME: &str = "SELECT name FROM tasks WHERE id = ?";
+/// Get task name by ID (active tasks only)
+pub const SELECT_TASK_NAME: &str = "SELECT name FROM tasks WHERE id = ? AND deleted_at IS NULL";
 
-/// Get task name and parent_id by ID
-pub const SELECT_TASK_NAME_PARENT: &str = "SELECT name, parent_id FROM tasks WHERE id = ?";
+/// Get task name and parent_id by ID (active tasks only)
+pub const SELECT_TASK_NAME_PARENT: &str =
+    "SELECT name, parent_id FROM tasks WHERE id = ? AND deleted_at IS NULL";
 
-/// Get parent_id for a task
-pub const SELECT_TASK_PARENT_ID: &str = "SELECT parent_id FROM tasks WHERE id = ?";
+/// Get parent_id for a task (active tasks only)
+pub const SELECT_TASK_PARENT_ID: &str =
+    "SELECT parent_id FROM tasks WHERE id = ? AND deleted_at IS NULL";
 
-/// Count total tasks
-pub const COUNT_TASKS_TOTAL: &str = "SELECT COUNT(*) FROM tasks";
+/// Count total active tasks
+pub const COUNT_TASKS_TOTAL: &str = "SELECT COUNT(*) FROM tasks WHERE deleted_at IS NULL";
 
-/// Count incomplete subtasks of a parent
+/// Count incomplete active subtasks of a parent
 pub const COUNT_INCOMPLETE_CHILDREN: &str =
-    "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done'";
+    "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND deleted_at IS NULL";
 
-/// Count incomplete children excluding specific task
+/// Count incomplete active children excluding specific task
 pub const COUNT_INCOMPLETE_CHILDREN_EXCLUDE: &str =
-    "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ?";
+    "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ? AND deleted_at IS NULL";
 
-/// Count total children of a parent
-pub const COUNT_CHILDREN_TOTAL: &str = "SELECT COUNT(*) FROM tasks WHERE parent_id = ?";
+/// Count total active children of a parent
+pub const COUNT_CHILDREN_TOTAL: &str =
+    "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND deleted_at IS NULL";
 
-/// Count tasks with 'doing' status
-pub const COUNT_TASKS_DOING: &str = "SELECT COUNT(*) FROM tasks WHERE status = 'doing'";
+/// Count active tasks with 'doing' status
+pub const COUNT_TASKS_DOING: &str =
+    "SELECT COUNT(*) FROM tasks WHERE status = 'doing' AND deleted_at IS NULL";
 
-/// Count incomplete tasks (todo or doing)
+/// Count active incomplete tasks (todo or doing)
 pub const COUNT_TASKS_INCOMPLETE: &str =
-    "SELECT COUNT(*) FROM tasks WHERE status IN ('todo', 'doing')";
+    "SELECT COUNT(*) FROM tasks WHERE status IN ('todo', 'doing') AND deleted_at IS NULL";
 
-/// Count incomplete tasks excluding specific task
+/// Count active incomplete tasks excluding specific task
 pub const COUNT_INCOMPLETE_TASKS_EXCLUDE: &str =
-    "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ?";
+    "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ? AND deleted_at IS NULL";
 
 // ============================================================================
 // Event Queries
@@ -178,7 +183,7 @@ mod tests {
     fn test_check_task_exists() {
         assert_eq!(
             CHECK_TASK_EXISTS,
-            "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)"
+            "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ? AND deleted_at IS NULL)"
         );
     }
 }

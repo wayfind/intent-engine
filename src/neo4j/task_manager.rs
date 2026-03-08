@@ -38,7 +38,7 @@ impl Neo4jTaskManager {
             .execute(
                 query(
                     "MATCH (t:Task {project_id: $pid}) \
-                     WHERE NOT (t)-[:CHILD_OF]->() \
+                     WHERE NOT (t)-[:CHILD_OF]->() AND t.deleted_at IS NULL \
                      RETURN t \
                      ORDER BY \
                        CASE t.status \
@@ -65,14 +65,17 @@ impl Neo4jTaskManager {
         Ok(tasks)
     }
 
-    /// Get a single task by ID.
+    /// Get a single active (non-deleted) task by ID.
     pub async fn get_task(&self, task_id: i64) -> Result<Task> {
         let mut result = self
             .graph
             .execute(
-                query("MATCH (t:Task {project_id: $pid, id: $id}) RETURN t")
-                    .param("pid", self.project_id.clone())
-                    .param("id", task_id),
+                query(
+                    "MATCH (t:Task {project_id: $pid, id: $id}) \
+                     WHERE t.deleted_at IS NULL RETURN t",
+                )
+                .param("pid", self.project_id.clone())
+                .param("id", task_id),
             )
             .await
             .map_err(|e| neo4j_err("get_task query", e))?;
@@ -537,7 +540,7 @@ impl Neo4jTaskManager {
         self.get_task(id).await
     }
 
-    /// Delete a task by ID. Does NOT cascade to children.
+    /// Soft-delete a task by ID. Does NOT cascade to children.
     ///
     /// Refuses to delete tasks that are focused by any session.
     pub async fn delete_task(&self, id: i64) -> Result<()> {
@@ -551,11 +554,13 @@ impl Neo4jTaskManager {
             )));
         }
 
+        let now = chrono::Utc::now().to_rfc3339();
         self.graph
             .run(
-                query("MATCH (t:Task {project_id: $pid, id: $id}) DETACH DELETE t")
+                query("MATCH (t:Task {project_id: $pid, id: $id}) SET t.deleted_at = $now")
                     .param("pid", self.project_id.clone())
-                    .param("id", id),
+                    .param("id", id)
+                    .param("now", now),
             )
             .await
             .map_err(|e| neo4j_err("delete_task", e))?;
@@ -563,10 +568,9 @@ impl Neo4jTaskManager {
         Ok(())
     }
 
-    /// Delete a task and all its descendants (cascade).
+    /// Soft-delete a task and all its descendants (cascade).
     ///
     /// Refuses if any task in the subtree is focused by any session.
-    /// All deletions run in a single transaction.
     pub async fn delete_task_cascade(&self, id: i64) -> Result<usize> {
         self.check_task_exists(id).await?;
 
@@ -578,39 +582,27 @@ impl Neo4jTaskManager {
             )));
         }
 
-        // Count descendants before deletion for reporting
+        // Count active descendants before soft-deleting for reporting
         let descendants = self.get_descendants(id).await?;
         let count = descendants.len();
 
-        // Transaction: delete all descendants then the task itself
-        let mut txn = self
-            .graph
-            .start_txn()
-            .await
-            .map_err(|e| neo4j_err("delete_task_cascade start txn", e))?;
-
-        txn.run(
-            query(
-                "MATCH (desc:Task {project_id: $pid})-[:CHILD_OF*1..]->(t:Task {project_id: $pid, id: $id}) \
-                 DETACH DELETE desc",
-            )
-            .param("pid", self.project_id.clone())
-            .param("id", id),
-        )
-        .await
-        .map_err(|e| neo4j_err("delete_task_cascade descendants", e))?;
-
-        txn.run(
-            query("MATCH (t:Task {project_id: $pid, id: $id}) DETACH DELETE t")
+        // Soft-delete root task and all descendants in one Cypher statement
+        let now = chrono::Utc::now().to_rfc3339();
+        self.graph
+            .run(
+                query(
+                    "MATCH (root:Task {project_id: $pid, id: $id}) \
+                     WHERE root.deleted_at IS NULL \
+                     OPTIONAL MATCH (root)-[:CHILD_OF*0..]->(desc:Task {project_id: $pid}) \
+                     WHERE desc.deleted_at IS NULL \
+                     SET root.deleted_at = $now, desc.deleted_at = $now",
+                )
                 .param("pid", self.project_id.clone())
-                .param("id", id),
-        )
-        .await
-        .map_err(|e| neo4j_err("delete_task_cascade self", e))?;
-
-        txn.commit()
+                .param("id", id)
+                .param("now", now),
+            )
             .await
-            .map_err(|e| neo4j_err("delete_task_cascade commit", e))?;
+            .map_err(|e| neo4j_err("delete_task_cascade", e))?;
 
         Ok(count)
     }
@@ -703,8 +695,11 @@ impl Neo4jTaskManager {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
 
-        // Build WHERE conditions
-        let mut where_parts = vec!["t.project_id = $pid".to_string()];
+        // Build WHERE conditions (always exclude soft-deleted tasks)
+        let mut where_parts = vec![
+            "t.project_id = $pid".to_string(),
+            "t.deleted_at IS NULL".to_string(),
+        ];
         let mut has_status_filter = false;
         let mut has_parent_filter = false;
 
@@ -1352,9 +1347,12 @@ impl Neo4jTaskManager {
         let mut result = self
             .graph
             .execute(
-                query("MATCH (t:Task {project_id: $pid, id: $id}) RETURN t.id AS id")
-                    .param("pid", self.project_id.clone())
-                    .param("id", id),
+                query(
+                    "MATCH (t:Task {project_id: $pid, id: $id}) \
+                     WHERE t.deleted_at IS NULL RETURN t.id AS id",
+                )
+                .param("pid", self.project_id.clone())
+                .param("id", id),
             )
             .await
             .map_err(|e| neo4j_err("check_task_exists", e))?;

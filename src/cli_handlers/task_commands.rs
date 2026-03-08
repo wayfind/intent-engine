@@ -7,6 +7,17 @@ use serde_json::json;
 
 use super::utils::{merge_metadata, parse_metadata};
 
+/// Resolve a user-supplied status string to the canonical ie form.
+///
+/// Delegates to [`crate::plan::TaskStatus::from_db_str`] so that the alias
+/// mapping lives in exactly one place. Unknown values are passed through
+/// unchanged; the backend will reject them with a proper error message.
+fn normalize_status(s: &str) -> &str {
+    crate::plan::TaskStatus::from_db_str(s)
+        .map(|ts| ts.as_db_str())
+        .unwrap_or(s)
+}
+
 /// Handle all `ie task` subcommands
 pub async fn handle_task_command(
     task_mgr: &impl TaskBackend,
@@ -133,6 +144,8 @@ pub async fn handle_create(
     blocks: Vec<i64>,
     format: String,
 ) -> Result<()> {
+    let status = normalize_status(&status);
+
     // Determine parent_id:
     // --parent 0 means root task (no parent)
     // --parent N means use task N as parent
@@ -350,6 +363,9 @@ pub async fn handle_update(
     rm_blocks: Vec<i64>,
     format: String,
 ) -> Result<()> {
+    // Normalize status aliases before any comparison
+    let status = status.as_deref().map(normalize_status).map(str::to_owned);
+
     // Convert parent: 0 means set to root (None), N means set parent to N
     let parent_id_opt: Option<Option<i64>> = parent.map(|p| if p == 0 { None } else { Some(p) });
 
@@ -431,6 +447,8 @@ pub async fn handle_list(
     tree: bool,
     format: String,
 ) -> Result<()> {
+    let status = status.as_deref().map(normalize_status).map(str::to_owned);
+
     // Parse sort option
     let sort_by = match sort.as_deref() {
         Some("id") => Some(TaskSortBy::Id),

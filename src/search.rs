@@ -375,7 +375,7 @@ impl<'a> SearchManager<'a> {
                     rank
                 FROM tasks_fts
                 INNER JOIN tasks t ON tasks_fts.rowid = t.id
-                WHERE tasks_fts MATCH ?
+                WHERE tasks_fts MATCH ? AND t.deleted_at IS NULL
                 {}
                 LIMIT ? OFFSET ?
                 "#,

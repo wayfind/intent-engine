@@ -28,7 +28,35 @@ pub use workspace_manager::Neo4jWorkspaceManager;
 ///
 /// Shared by task_manager and event_manager. Uses Counter nodes
 /// with atomic SET to guarantee uniqueness under concurrent access.
+///
+/// **Concurrency assumption**: This relies on Neo4j write transactions being
+/// serialised at the server level (which holds for single-instance Community
+/// and Enterprise editions). On a Causal Cluster with multiple write replicas
+/// (rare in practice), the `SET c.next_id = c.next_id + 1` is NOT atomic
+/// across replicas and could produce duplicate IDs. Re-evaluate if this
+/// codebase is ever deployed against a multi-primary cluster.
+///
+/// If the Counter node is missing (e.g. accidentally deleted), automatically
+/// rebuilds it from the current maximum ID in the data, then retries once.
 pub(crate) async fn next_id(graph: &Graph, project_id: &str, entity: &str) -> Result<i64> {
+    if let Some(id) = try_next_id(graph, project_id, entity).await? {
+        return Ok(id);
+    }
+    // Counter node missing — rebuild from existing data and retry once
+    rebuild_counter(graph, project_id, entity).await?;
+    try_next_id(graph, project_id, entity)
+        .await?
+        .ok_or_else(|| {
+            IntentError::OtherError(anyhow::anyhow!(
+                "Counter rebuild failed for entity '{}'",
+                entity
+            ))
+        })
+}
+
+/// Attempt to atomically fetch-and-increment a Counter node.
+/// Returns `Ok(None)` if the Counter node does not exist.
+async fn try_next_id(graph: &Graph, project_id: &str, entity: &str) -> Result<Option<i64>> {
     let mut result = graph
         .execute(
             query(
@@ -41,23 +69,66 @@ pub(crate) async fn next_id(graph: &Graph, project_id: &str, entity: &str) -> Re
         )
         .await
         .map_err(|e| {
-            IntentError::OtherError(anyhow::anyhow!("Neo4j next_id({}): {}", entity, e))
+            IntentError::OtherError(anyhow::anyhow!("Neo4j try_next_id({}): {}", entity, e))
         })?;
 
     match result.next().await.map_err(|e| {
-        IntentError::OtherError(anyhow::anyhow!("Neo4j next_id({}) fetch: {}", entity, e))
+        IntentError::OtherError(anyhow::anyhow!(
+            "Neo4j try_next_id({}) fetch: {}",
+            entity,
+            e
+        ))
     })? {
         Some(row) => {
             let id: i64 = row.get("id").map_err(|e| {
-                IntentError::OtherError(anyhow::anyhow!("Neo4j next_id({}) value: {}", entity, e))
+                IntentError::OtherError(anyhow::anyhow!(
+                    "Neo4j try_next_id({}) value: {}",
+                    entity,
+                    e
+                ))
             })?;
-            Ok(id)
+            Ok(Some(id))
         },
-        None => Err(IntentError::OtherError(anyhow::anyhow!(
-            "Counter node missing for entity '{}'. Schema not initialized?",
-            entity
-        ))),
+        None => Ok(None),
     }
+}
+
+/// Rebuild a missing Counter node by computing MAX(id)+1 from existing data.
+///
+/// Uses MERGE so it is safe to call even if the Counter was recreated
+/// concurrently — in that case it only bumps the counter up, never down.
+async fn rebuild_counter(graph: &Graph, project_id: &str, entity: &str) -> Result<()> {
+    let node_label = match entity {
+        "task" => "Task",
+        "event" => "Event",
+        other => {
+            return Err(IntentError::OtherError(anyhow::anyhow!(
+                "Unknown counter entity: {}",
+                other
+            )))
+        },
+    };
+
+    graph
+        .run(
+            query(&format!(
+                "OPTIONAL MATCH (n:{node_label} {{project_id: $pid}}) \
+                 WITH COALESCE(MAX(n.id) + 1, 1) AS start_id \
+                 MERGE (c:Counter {{project_id: $pid, entity: $entity}}) \
+                 ON CREATE SET c.next_id = start_id \
+                 ON MATCH SET c.next_id = CASE \
+                     WHEN c.next_id <= start_id THEN start_id \
+                     ELSE c.next_id END"
+            ))
+            .param("pid", project_id.to_string())
+            .param("entity", entity.to_string()),
+        )
+        .await
+        .map_err(|e| {
+            IntentError::OtherError(anyhow::anyhow!("rebuild_counter({}): {}", entity, e))
+        })?;
+
+    Ok(())
 }
 
 /// Central context holding the Neo4j graph connection and project identity.

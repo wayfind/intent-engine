@@ -342,18 +342,14 @@ impl<'a> TaskManager<'a> {
         Ok(())
     }
 
-    /// Delete a task within a transaction (no notification)
+    /// Soft-delete a task and all its descendants within a transaction (no notification).
     ///
     /// Used by PlanExecutor for batch delete operations.
     /// WebSocket notification is sent after transaction commit via notify_batch_changed().
     ///
-    /// **Warning**: Due to `ON DELETE CASCADE` on `parent_id`, deleting a parent task
-    /// will also delete all descendant tasks. The returned `DeleteTaskResult` includes
-    /// the count of descendants that will be cascade-deleted.
-    ///
     /// Returns `DeleteTaskResult` with:
-    /// - `found`: whether the task existed
-    /// - `descendant_count`: number of descendants that will be cascade-deleted
+    /// - `found`: whether the task existed and was active
+    /// - `descendant_count`: number of active descendants soft-deleted
     ///
     /// Note: Focus protection is handled by the caller (PlanExecutor) BEFORE
     /// calling this function, using `find_focused_in_subtree_in_tx`.
@@ -362,11 +358,12 @@ impl<'a> TaskManager<'a> {
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         task_id: i64,
     ) -> Result<DeleteTaskResult> {
-        // Check if task exists and count descendants before deletion
-        let task_info: Option<(i64,)> = sqlx::query_as("SELECT id FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .fetch_optional(&mut **tx)
-            .await?;
+        // Check if active task exists
+        let task_info: Option<(i64,)> =
+            sqlx::query_as("SELECT id FROM tasks WHERE id = ? AND deleted_at IS NULL")
+                .bind(task_id)
+                .fetch_optional(&mut **tx)
+                .await?;
 
         if task_info.is_none() {
             return Ok(DeleteTaskResult {
@@ -375,14 +372,26 @@ impl<'a> TaskManager<'a> {
             });
         }
 
-        // Count descendants that will be cascade-deleted
+        // Count active descendants before soft-deleting
         let descendant_count = self.count_descendants_in_tx(tx, task_id).await?;
 
-        // Perform the delete (CASCADE will handle children)
-        sqlx::query("DELETE FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .execute(&mut **tx)
-            .await?;
+        // Soft-delete the entire subtree in one statement via recursive CTE
+        let now = chrono::Utc::now();
+        sqlx::query(
+            r#"
+            WITH RECURSIVE subtree(id) AS (
+                SELECT id FROM tasks WHERE id = ? AND deleted_at IS NULL
+                UNION ALL
+                SELECT t.id FROM tasks t JOIN subtree s ON t.parent_id = s.id
+                WHERE t.deleted_at IS NULL
+            )
+            UPDATE tasks SET deleted_at = ? WHERE id IN (SELECT id FROM subtree)
+            "#,
+        )
+        .bind(task_id)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
 
         Ok(DeleteTaskResult {
             found: true,
@@ -390,20 +399,21 @@ impl<'a> TaskManager<'a> {
         })
     }
 
-    /// Count all descendants of a task (children, grandchildren, etc.)
+    /// Count all active descendants of a task (children, grandchildren, etc.)
     async fn count_descendants_in_tx(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         task_id: i64,
     ) -> Result<i64> {
-        // Use recursive CTE to count all descendants
+        // Use recursive CTE to count all active descendants
         let count: (i64,) = sqlx::query_as(
             r#"
             WITH RECURSIVE descendants AS (
-                SELECT id FROM tasks WHERE parent_id = ?
+                SELECT id FROM tasks WHERE parent_id = ? AND deleted_at IS NULL
                 UNION ALL
                 SELECT t.id FROM tasks t
                 INNER JOIN descendants d ON t.parent_id = d.id
+                WHERE t.deleted_at IS NULL
             )
             SELECT COUNT(*) FROM descendants
             "#,
@@ -430,15 +440,16 @@ impl<'a> TaskManager<'a> {
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         task_id: i64,
     ) -> Result<Option<(i64, String)>> {
-        // Use recursive CTE to get all task IDs in the subtree (including the root)
+        // Use recursive CTE to get all active task IDs in the subtree (including the root)
         // Then check if any of them is focused by ANY session
         let row: Option<(i64, String)> = sqlx::query_as(
             r#"
             WITH RECURSIVE subtree AS (
-                SELECT id FROM tasks WHERE id = ?
+                SELECT id FROM tasks WHERE id = ? AND deleted_at IS NULL
                 UNION ALL
                 SELECT t.id FROM tasks t
                 INNER JOIN subtree s ON t.parent_id = s.id
+                WHERE t.deleted_at IS NULL
             )
             SELECT s.current_task_id, s.session_id FROM sessions s
             WHERE s.current_task_id IN (SELECT id FROM subtree)
@@ -528,7 +539,7 @@ impl<'a> TaskManager<'a> {
             r#"
             SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
             FROM tasks
-            WHERE id = ?
+            WHERE id = ? AND deleted_at IS NULL
             "#,
         )
         .bind(id)
@@ -611,7 +622,7 @@ impl<'a> TaskManager<'a> {
     pub async fn get_siblings(&self, id: i64, parent_id: Option<i64>) -> Result<Vec<Task>> {
         if let Some(parent_id) = parent_id {
             sqlx::query_as::<_, Task>(&format!(
-                "SELECT {} FROM tasks WHERE parent_id = ? AND id != ? ORDER BY priority ASC NULLS LAST, id ASC",
+                "SELECT {} FROM tasks WHERE parent_id = ? AND id != ? AND deleted_at IS NULL ORDER BY priority ASC NULLS LAST, id ASC",
                 crate::sql_constants::TASK_COLUMNS
             ))
             .bind(parent_id)
@@ -621,7 +632,7 @@ impl<'a> TaskManager<'a> {
             .map_err(Into::into)
         } else {
             sqlx::query_as::<_, Task>(&format!(
-                "SELECT {} FROM tasks WHERE parent_id IS NULL AND id != ? ORDER BY priority ASC NULLS LAST, id ASC",
+                "SELECT {} FROM tasks WHERE parent_id IS NULL AND id != ? AND deleted_at IS NULL ORDER BY priority ASC NULLS LAST, id ASC",
                 crate::sql_constants::TASK_COLUMNS
             ))
             .bind(id)
@@ -634,7 +645,7 @@ impl<'a> TaskManager<'a> {
     /// Get direct children of a task.
     pub async fn get_children(&self, id: i64) -> Result<Vec<Task>> {
         sqlx::query_as::<_, Task>(&format!(
-            "SELECT {} FROM tasks WHERE parent_id = ? ORDER BY priority ASC NULLS LAST, id ASC",
+            "SELECT {} FROM tasks WHERE parent_id = ? AND deleted_at IS NULL ORDER BY priority ASC NULLS LAST, id ASC",
             crate::sql_constants::TASK_COLUMNS
         ))
         .bind(id)
@@ -648,7 +659,7 @@ impl<'a> TaskManager<'a> {
         sqlx::query_as::<_, Task>(&format!(
             "SELECT {} FROM tasks t \
              JOIN dependencies d ON t.id = d.blocking_task_id \
-             WHERE d.blocked_task_id = ? \
+             WHERE d.blocked_task_id = ? AND t.deleted_at IS NULL \
              ORDER BY t.priority ASC NULLS LAST, t.id ASC",
             crate::sql_constants::TASK_COLUMNS_PREFIXED
         ))
@@ -663,7 +674,7 @@ impl<'a> TaskManager<'a> {
         sqlx::query_as::<_, Task>(&format!(
             "SELECT {} FROM tasks t \
              JOIN dependencies d ON t.id = d.blocked_task_id \
-             WHERE d.blocking_task_id = ? \
+             WHERE d.blocking_task_id = ? AND t.deleted_at IS NULL \
              ORDER BY t.priority ASC NULLS LAST, t.id ASC",
             crate::sql_constants::TASK_COLUMNS_PREFIXED
         ))
@@ -682,7 +693,7 @@ impl<'a> TaskManager<'a> {
                 SELECT id, parent_id, name, spec, status, complexity, priority,
                        first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
                 FROM tasks
-                WHERE parent_id = ?
+                WHERE parent_id = ? AND deleted_at IS NULL
 
                 UNION ALL
 
@@ -690,6 +701,7 @@ impl<'a> TaskManager<'a> {
                        t.first_todo_at, t.first_doing_at, t.first_done_at, t.active_form, t.owner, t.metadata
                 FROM tasks t
                 INNER JOIN descendants d ON t.parent_id = d.id
+                WHERE t.deleted_at IS NULL
             )
             SELECT * FROM descendants
             ORDER BY parent_id NULLS FIRST, priority ASC NULLS LAST, id ASC
@@ -749,7 +761,7 @@ impl<'a> TaskManager<'a> {
             SELECT id, parent_id, name, spec, status, complexity, priority,
                    first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
             FROM tasks
-            WHERE parent_id IS NULL
+            WHERE parent_id IS NULL AND deleted_at IS NULL
             ORDER BY
                 CASE status
                     WHEN 'doing' THEN 0
@@ -809,12 +821,17 @@ impl<'a> TaskManager<'a> {
         // Check task exists
         let task = self.get_task(id).await?;
 
-        // Validate status if provided
-        if let Some(s) = status {
-            if !["todo", "doing", "done"].contains(&s) {
-                return Err(IntentError::InvalidInput(format!("Invalid status: {}", s)));
+        // Normalize and validate status. Accepts canonical values (todo/doing/done) and
+        // aliases (pending/in_progress/completed). Always stores the canonical form so that
+        // no alias ever reaches the database.
+        let status = if let Some(s) = status {
+            match crate::plan::TaskStatus::from_db_str(s) {
+                Some(ts) => Some(ts.as_db_str()),
+                None => return Err(IntentError::InvalidInput(format!("Invalid status: {}", s))),
             }
-        }
+        } else {
+            None
+        };
 
         // Check for circular dependency if parent_id is being changed
         if let Some(Some(pid)) = parent_id {
@@ -949,7 +966,7 @@ impl<'a> TaskManager<'a> {
         Ok(task)
     }
 
-    /// Delete a task. Refuses if the task is focused by any session.
+    /// Soft-delete a task. Refuses if the task is focused by any session.
     pub async fn delete_task(&self, id: i64) -> Result<()> {
         self.check_task_exists(id).await?;
 
@@ -961,7 +978,9 @@ impl<'a> TaskManager<'a> {
             )));
         }
 
-        sqlx::query("DELETE FROM tasks WHERE id = ?")
+        let now = chrono::Utc::now();
+        sqlx::query("UPDATE tasks SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL")
+            .bind(now)
             .bind(id)
             .execute(self.pool)
             .await?;
@@ -972,10 +991,10 @@ impl<'a> TaskManager<'a> {
         Ok(())
     }
 
-    /// Delete a task and all its descendants (cascade).
+    /// Soft-delete a task and all its descendants (cascade).
     ///
     /// Refuses if any task in the subtree is focused by any session.
-    /// Returns the number of descendants deleted.
+    /// Returns the number of descendants soft-deleted.
     pub async fn delete_task_cascade(&self, id: i64) -> Result<usize> {
         let descendants = self.get_descendants(id).await?;
 
@@ -991,7 +1010,35 @@ impl<'a> TaskManager<'a> {
         }
 
         let count = descendants.len();
-        self.delete_task(id).await?;
+
+        // SAFETY NOTE: There is a narrow race window between the focus check above and
+        // the UPDATE below. Another session could focus a subtask in that interval,
+        // and we would soft-delete it anyway. Closing this properly requires wrapping
+        // the focus check and the UPDATE in the same SQLite transaction with a
+        // serializable isolation level. Acceptable for now because this is a
+        // single-user CLI tool, but must be fixed before multi-user concurrent access.
+
+        // Soft-delete the entire subtree in one statement via recursive CTE
+        let now = chrono::Utc::now();
+        sqlx::query(
+            r#"
+            WITH RECURSIVE subtree(id) AS (
+                SELECT id FROM tasks WHERE id = ? AND deleted_at IS NULL
+                UNION ALL
+                SELECT t.id FROM tasks t JOIN subtree s ON t.parent_id = s.id
+                WHERE t.deleted_at IS NULL
+            )
+            UPDATE tasks SET deleted_at = ? WHERE id IN (SELECT id FROM subtree)
+            "#,
+        )
+        .bind(id)
+        .bind(now)
+        .execute(self.pool)
+        .await?;
+
+        // Notify WebSocket clients about the task deletion
+        self.notify_task_deleted(id).await;
+
         Ok(count)
     }
 
@@ -1051,13 +1098,17 @@ impl<'a> TaskManager<'a> {
         // Resolve session_id for FocusAware sorting
         let session_id = crate::workspace::resolve_session_id(None);
 
-        // Build WHERE clause
-        let mut where_clause = String::from("WHERE 1=1");
+        // Build WHERE clause (always exclude soft-deleted tasks)
+        let mut where_clause = String::from("WHERE deleted_at IS NULL");
         let mut conditions = Vec::new();
 
         if let Some(s) = status {
+            let canonical = match crate::plan::TaskStatus::from_db_str(s) {
+                Some(ts) => ts.as_db_str(),
+                None => return Err(IntentError::InvalidInput(format!("Invalid status: {}", s))),
+            };
             where_clause.push_str(" AND status = ?");
-            conditions.push(s.to_string());
+            conditions.push(canonical.to_string());
         }
 
         if let Some(pid) = parent_id {
@@ -1159,7 +1210,7 @@ impl<'a> TaskManager<'a> {
                 COALESCE(SUM(CASE WHEN status = 'todo' THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN status = 'doing' THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0)
-            FROM tasks"#,
+            FROM tasks WHERE deleted_at IS NULL"#,
         )
         .fetch_one(self.pool)
         .await?;
@@ -1256,7 +1307,7 @@ impl<'a> TaskManager<'a> {
     ) -> Result<NextStepSuggestion> {
         if let Some(parent_task_id) = parent_id {
             let remaining_siblings: i64 = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ?",
+                "SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND status != 'done' AND id != ? AND deleted_at IS NULL",
             )
             .bind(parent_task_id)
             .bind(id)
@@ -1307,7 +1358,7 @@ impl<'a> TaskManager<'a> {
                 })
             } else {
                 let remaining_tasks: i64 = sqlx::query_scalar::<_, i64>(
-                    "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ?",
+                    "SELECT COUNT(*) FROM tasks WHERE status != 'done' AND id != ? AND deleted_at IS NULL",
                 )
                 .bind(id)
                 .fetch_one(&mut **tx)
@@ -1416,13 +1467,14 @@ impl<'a> TaskManager<'a> {
         let session_id = crate::workspace::resolve_session_id(None);
         let mut tx = self.pool.begin().await?;
 
-        // Get the task info (name, parent_id, owner) by ID
-        let task_info: (String, Option<i64>, String) =
-            sqlx::query_as("SELECT name, parent_id, owner FROM tasks WHERE id = ?")
-                .bind(id)
-                .fetch_optional(&mut *tx)
-                .await?
-                .ok_or(IntentError::TaskNotFound(id))?;
+        // Get the task info (name, parent_id, owner) by ID — exclude soft-deleted tasks
+        let task_info: (String, Option<i64>, String) = sqlx::query_as(
+            "SELECT name, parent_id, owner FROM tasks WHERE id = ? AND deleted_at IS NULL",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(IntentError::TaskNotFound(id))?;
         let (task_name, parent_id, owner) = task_info;
 
         // Human Task Protection: AI cannot complete human-owned tasks
@@ -1617,7 +1669,7 @@ impl<'a> TaskManager<'a> {
             r#"
                         SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
                         FROM tasks
-                        WHERE status = 'todo'
+                        WHERE status = 'todo' AND deleted_at IS NULL
                         ORDER BY
                             COALESCE(priority, 0) ASC,
                             COALESCE(complexity, 5) ASC,
@@ -1702,12 +1754,12 @@ impl<'a> TaskManager<'a> {
                         SELECT id, parent_id, name, spec, status, complexity, priority,
                                first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
                         FROM tasks
-                        WHERE parent_id = ? AND status = 'doing'
+                        WHERE parent_id = ? AND status = 'doing' AND deleted_at IS NULL
                           AND NOT EXISTS (
                             SELECT 1 FROM dependencies d
                             JOIN tasks bt ON d.blocking_task_id = bt.id
                             WHERE d.blocked_task_id = tasks.id
-                              AND bt.status != 'done'
+                              AND bt.status != 'done' AND bt.deleted_at IS NULL
                           )
                         ORDER BY COALESCE(priority, 999999) ASC, id ASC
                         LIMIT 1
@@ -1727,12 +1779,12 @@ impl<'a> TaskManager<'a> {
                             SELECT id, parent_id, name, spec, status, complexity, priority,
                                    first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
                             FROM tasks
-                            WHERE parent_id = ? AND status = 'todo'
+                            WHERE parent_id = ? AND status = 'todo' AND deleted_at IS NULL
                               AND NOT EXISTS (
                                 SELECT 1 FROM dependencies d
                                 JOIN tasks bt ON d.blocking_task_id = bt.id
                                 WHERE d.blocked_task_id = tasks.id
-                                  AND bt.status != 'done'
+                                  AND bt.status != 'done' AND bt.deleted_at IS NULL
                               )
                             ORDER BY COALESCE(priority, 999999) ASC, id ASC
                             LIMIT 1
@@ -1755,12 +1807,12 @@ impl<'a> TaskManager<'a> {
                 SELECT id, parent_id, name, spec, status, complexity, priority,
                        first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
                 FROM tasks
-                WHERE parent_id IS NULL AND status = 'doing' AND id != ?
+                WHERE parent_id IS NULL AND status = 'doing' AND id != ? AND deleted_at IS NULL
                   AND NOT EXISTS (
                     SELECT 1 FROM dependencies d
                     JOIN tasks bt ON d.blocking_task_id = bt.id
                     WHERE d.blocked_task_id = tasks.id
-                      AND bt.status != 'done'
+                      AND bt.status != 'done' AND bt.deleted_at IS NULL
                   )
                 ORDER BY COALESCE(priority, 999999) ASC, id ASC
                 LIMIT 1
@@ -1775,12 +1827,12 @@ impl<'a> TaskManager<'a> {
                 SELECT id, parent_id, name, spec, status, complexity, priority,
                        first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
                 FROM tasks
-                WHERE parent_id IS NULL AND status = 'doing'
+                WHERE parent_id IS NULL AND status = 'doing' AND deleted_at IS NULL
                   AND NOT EXISTS (
                     SELECT 1 FROM dependencies d
                     JOIN tasks bt ON d.blocking_task_id = bt.id
                     WHERE d.blocked_task_id = tasks.id
-                      AND bt.status != 'done'
+                      AND bt.status != 'done' AND bt.deleted_at IS NULL
                   )
                 ORDER BY COALESCE(priority, 999999) ASC, id ASC
                 LIMIT 1
@@ -1801,12 +1853,12 @@ impl<'a> TaskManager<'a> {
             SELECT id, parent_id, name, spec, status, complexity, priority,
                    first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
             FROM tasks
-            WHERE parent_id IS NULL AND status = 'todo'
+            WHERE parent_id IS NULL AND status = 'todo' AND deleted_at IS NULL
               AND NOT EXISTS (
                 SELECT 1 FROM dependencies d
                 JOIN tasks bt ON d.blocking_task_id = bt.id
                 WHERE d.blocked_task_id = tasks.id
-                  AND bt.status != 'done'
+                  AND bt.status != 'done' AND bt.deleted_at IS NULL
               )
             ORDER BY COALESCE(priority, 999999) ASC, id ASC
             LIMIT 1
@@ -1832,7 +1884,7 @@ impl<'a> TaskManager<'a> {
 
         // Check if all tasks are completed
         let todo_or_doing_count: i64 = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM tasks WHERE status IN ('todo', 'doing')",
+            "SELECT COUNT(*) FROM tasks WHERE status IN ('todo', 'doing') AND deleted_at IS NULL",
         )
         .fetch_one(self.pool)
         .await?;
@@ -4132,7 +4184,7 @@ mod tests {
         // Verify both tasks are in doing status
         let doing_tasks: Vec<Task> = sqlx::query_as(
             r#"SELECT id, parent_id, name, spec, status, complexity, priority, first_todo_at, first_doing_at, first_done_at, active_form, owner, metadata
-             FROM tasks WHERE status = 'doing' ORDER BY id"#
+             FROM tasks WHERE status = 'doing' AND deleted_at IS NULL ORDER BY id"#
         )
         .fetch_all(ctx.pool())
         .await

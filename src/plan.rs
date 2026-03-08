@@ -95,8 +95,11 @@ where
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
+    #[serde(alias = "pending")]
     Todo,
+    #[serde(alias = "in_progress")]
     Doing,
+    #[serde(alias = "completed")]
     Done,
 }
 
@@ -110,22 +113,13 @@ impl TaskStatus {
         }
     }
 
-    /// Create from database string representation
+    /// Create from database string representation (accepts canonical and alias values)
     pub fn from_db_str(s: &str) -> Option<Self> {
         match s {
-            "todo" => Some(TaskStatus::Todo),
-            "doing" => Some(TaskStatus::Doing),
-            "done" => Some(TaskStatus::Done),
+            "todo" | "pending" => Some(TaskStatus::Todo),
+            "doing" | "in_progress" => Some(TaskStatus::Doing),
+            "done" | "completed" => Some(TaskStatus::Done),
             _ => None,
-        }
-    }
-
-    /// Convert to string representation for JSON API
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            TaskStatus::Todo => "todo",
-            TaskStatus::Doing => "doing",
-            TaskStatus::Done => "done",
         }
     }
 }
@@ -3271,11 +3265,12 @@ mod delete_tests {
         let task_id = *result1.task_id_map.get("Task to delete").unwrap();
 
         // Verify task exists
-        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .fetch_one(&ctx.pool)
-            .await
-            .unwrap();
+        let exists: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ? AND deleted_at IS NULL")
+                .bind(task_id)
+                .fetch_one(&ctx.pool)
+                .await
+                .unwrap();
         assert_eq!(exists.0, 1, "Task should exist");
 
         // Delete by id only (no name)
@@ -3301,11 +3296,12 @@ mod delete_tests {
         assert_eq!(result2.updated_count, 0);
 
         // Verify task no longer exists
-        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .fetch_one(&ctx.pool)
-            .await
-            .unwrap();
+        let exists: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ? AND deleted_at IS NULL")
+                .bind(task_id)
+                .fetch_one(&ctx.pool)
+                .await
+                .unwrap();
         assert_eq!(exists.0, 0, "Task should be deleted");
     }
 
@@ -3372,11 +3368,12 @@ mod delete_tests {
         assert_eq!(result2.deleted_count, 1);
 
         // Verify task no longer exists
-        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .fetch_one(&ctx.pool)
-            .await
-            .unwrap();
+        let exists: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ? AND deleted_at IS NULL")
+                .bind(task_id)
+                .fetch_one(&ctx.pool)
+                .await
+                .unwrap();
         assert_eq!(exists.0, 0, "Task should be deleted");
     }
 
@@ -3471,11 +3468,12 @@ mod delete_tests {
         assert_eq!(result2.deleted_count, 1, "Should delete 1 task");
 
         // Verify "To Delete" no longer exists
-        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
-            .bind(delete_id)
-            .fetch_one(&ctx.pool)
-            .await
-            .unwrap();
+        let exists: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ? AND deleted_at IS NULL")
+                .bind(delete_id)
+                .fetch_one(&ctx.pool)
+                .await
+                .unwrap();
         assert_eq!(exists.0, 0, "Deleted task should not exist");
     }
 
@@ -3609,8 +3607,8 @@ mod delete_tests {
             result2.warnings
         );
 
-        // Verify all tasks are gone
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks")
+        // Verify all tasks are gone (soft-deleted)
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE deleted_at IS NULL")
             .fetch_one(&ctx.pool)
             .await
             .unwrap();
@@ -3846,11 +3844,12 @@ mod delete_tests {
         assert_eq!(result2.deleted_count, 0, "Nothing should be deleted");
 
         // Verify task still exists
-        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .fetch_one(&ctx.pool)
-            .await
-            .unwrap();
+        let exists: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ? AND deleted_at IS NULL")
+                .bind(task_id)
+                .fetch_one(&ctx.pool)
+                .await
+                .unwrap();
         assert_eq!(exists.0, 1, "Focused task should NOT be deleted");
 
         // Clean up env var
@@ -3936,11 +3935,12 @@ mod delete_tests {
         );
 
         // Verify task is actually deleted
-        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .fetch_one(&ctx.pool)
-            .await
-            .unwrap();
+        let exists: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ? AND deleted_at IS NULL")
+                .bind(task_id)
+                .fetch_one(&ctx.pool)
+                .await
+                .unwrap();
         assert_eq!(exists.0, 0, "Task should be deleted");
     }
 
@@ -4365,11 +4365,12 @@ mod delete_tests {
         );
 
         // Verify task still exists
-        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .fetch_one(&ctx.pool)
-            .await
-            .unwrap();
+        let exists: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ? AND deleted_at IS NULL")
+                .bind(task_id)
+                .fetch_one(&ctx.pool)
+                .await
+                .unwrap();
         assert_eq!(exists.0, 1, "Task should still exist");
     }
 
@@ -4455,11 +4456,12 @@ mod delete_tests {
         );
 
         // Verify task still exists
-        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .fetch_one(&ctx.pool)
-            .await
-            .unwrap();
+        let exists: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ? AND deleted_at IS NULL")
+                .bind(task_id)
+                .fetch_one(&ctx.pool)
+                .await
+                .unwrap();
         assert_eq!(exists.0, 1, "Task should still exist");
 
         // Clean up
