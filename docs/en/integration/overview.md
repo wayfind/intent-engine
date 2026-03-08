@@ -11,6 +11,7 @@ Intent-Engine can be integrated into various AI tools and workflows. This guide 
 | [Claude Code Plugin](claude-code-system-prompt.md) | Claude Code | Minimal | Full | **Recommended** - One-click install |
 | [System Prompt](claude-code-system-prompt.md) | Claude Code | Low | Full | Manual setup alternative |
 | [Direct CLI Call](generic-llm.md) | Any AI Tool | Low | Full | Universal solution, adapt to any AI tool |
+| [Parallel Agents](parallel-agents.md) | Any AI Tool | Low | Full | Multiple agents on same project |
 
 ---
 
@@ -33,6 +34,10 @@ The plugin automatically:
 1. Install Intent-Engine: `cargo install intent-engine`
 2. Follow [System Prompt Guide](claude-code-system-prompt.md) to setup
 3. Add system prompt to Claude Code configuration
+
+### Running Multiple Agents in Parallel?
+
+Refer to [Parallel Agents Guide](parallel-agents.md). The `IE_SESSION_ID` environment variable is the first-class interface — each agent gets an isolated focus with no configuration changes to Intent-Engine itself.
 
 ### Using Other AI Tools?
 
@@ -84,6 +89,7 @@ Refer to [Generic Integration Guide](generic-llm.md) to have AI call Intent-Engi
 | Auto Session Start | ✅ | ❌ | ❌ |
 | Zero Configuration | ✅ | ❌ | ❌ |
 | Cross-Platform | ✅ | ✅ | ✅ |
+| **Parallel Agents** | ✅ (via hook) | ✅ (via hook) | ✅ (via `IE_SESSION_ID`) |
 | Setup Cost | Minimal | Low | Low |
 | Maintenance Cost | None | Low | Medium |
 
@@ -93,6 +99,9 @@ Refer to [Generic Integration Guide](generic-llm.md) to have AI call Intent-Engi
 
 ```
 Start
+  │
+  ├─ Need parallel agents on the same project?
+  │   └─ Yes → Set IE_SESSION_ID per agent → Parallel Agents Guide
   │
   ├─ Using Claude Code?
   │   ├─ Yes → Plugin install (Recommended)
@@ -137,6 +146,7 @@ Select the integration method that suits you based on the comparison table above
 - **Claude Code (Plugin)**: `claude plugin install intent-engine`
 - **Claude Code (System Prompt)**: [claude-code-system-prompt.md](claude-code-system-prompt.md)
 - **Generic Integration**: [generic-llm.md](generic-llm.md)
+- **Parallel Agents**: [parallel-agents.md](parallel-agents.md)
 
 ### 3. Verify Integration
 
