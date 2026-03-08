@@ -49,18 +49,18 @@ cat > ~/.claude/hooks/ie-session-init.sh << 'EOF'
 # Do NOT use set -e here: hook failure is non-fatal and should not block the session.
 
 # Read session_id from Claude Code's SessionStart JSON.
-# Fall back to "-1" if jq is missing or the field is absent.
-session_id=$(cat | jq -r '.session_id // "-1"' 2>/dev/null) || session_id="-1"
+# Fall back to "" if jq is missing or the session_id field is absent.
+session_id=$(cat | jq -r '.session_id // empty' 2>/dev/null) || session_id=""
 
 # Inject IE_SESSION_ID into Claude Code's environment file so that every
 # subsequent Bash tool call in this session inherits the correct value.
 # CLAUDE_ENV_FILE is provided by Claude Code and sourced before each Bash call.
-if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "$session_id" ] && [ "$session_id" != "-1" ]; then
+if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "$session_id" ]; then
     echo "export IE_SESSION_ID=\"$session_id\"" >> "$CLAUDE_ENV_FILE"
 fi
 
 # Show current task context for this session (output is visible to Claude).
-if command -v ie &>/dev/null && [ -n "$session_id" ] && [ "$session_id" != "-1" ]; then
+if command -v ie &>/dev/null && [ -n "$session_id" ]; then
     IE_SESSION_ID="$session_id" ie status 2>/dev/null || true
 fi
 EOF
@@ -78,7 +78,7 @@ chmod +x ~/.claude/hooks/ie-session-init.sh
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/ie-session-init.sh"
+            "command": "$HOME/.claude/hooks/ie-session-init.sh"
           }
         ]
       }
