@@ -417,7 +417,7 @@ impl Neo4jPlanExecutor {
     /// Build BLOCKED_BY relationships from depends_on declarations.
     ///
     /// For each task with depends_on entries, creates:
-    ///   (blocked_task)-[:BLOCKED_BY]->(blocking_task)
+    ///   `(blocked_task)-[:BLOCKED_BY]->(blocking_task)`
     /// where blocking_task is the task that must complete first.
     async fn build_dependencies(
         &self,
