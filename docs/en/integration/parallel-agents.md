@@ -2,6 +2,10 @@
 
 Intent-Engine supports multiple AI agents working in parallel on the same project via **session isolation**. Each agent maintains its own independent focus (current task) without interfering with others.
 
+**You don't need this if** you're a single user working on a single project — the default session handles everything automatically.
+
+**You need this when** multiple terminals, processes, or agents are hitting the same project database simultaneously and need independent focus state.
+
 ---
 
 ## The Contract: `IE_SESSION_ID`
