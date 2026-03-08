@@ -140,6 +140,9 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     if version < (0, 14, 0) {
         upgrade_to_v0_14_0(pool).await?;
     }
+    if version < (0, 15, 0) {
+        upgrade_to_v0_15_0(pool).await?;
+    }
 
     Ok(())
 }
@@ -212,11 +215,16 @@ async fn migrate_fresh(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // For active tasks: keep FTS in sync when deleted_at remains NULL
+    // For active tasks: keep FTS in sync on active→active updates.
+    // Both old and new WHEN conditions are required so the trigger fires only
+    // when the row remains active. Using only `new.deleted_at IS NULL` would
+    // also fire on a restore (deleted→active), where the FTS entry no longer
+    // exists — attempting to 'delete' a non-existent FTS5 entry corrupts the
+    // index (SQLITE_CORRUPT, code 267).
     sqlx::query(
         r#"
         CREATE TRIGGER IF NOT EXISTS tasks_au_active
-        AFTER UPDATE ON tasks WHEN new.deleted_at IS NULL BEGIN
+        AFTER UPDATE ON tasks WHEN old.deleted_at IS NULL AND new.deleted_at IS NULL BEGIN
             INSERT INTO tasks_fts(tasks_fts, rowid, name, spec)
                 VALUES('delete', old.id, old.name, old.spec);
             INSERT INTO tasks_fts(rowid, name, spec) VALUES (new.id, new.name, new.spec);
@@ -423,7 +431,7 @@ async fn migrate_fresh(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    set_schema_version(pool, "0.14.0").await?;
+    set_schema_version(pool, "0.15.0").await?;
     Ok(())
 }
 
@@ -656,7 +664,7 @@ async fn upgrade_to_v0_13_0(pool: &SqlitePool) -> Result<()> {
     sqlx::query(
         r#"
         CREATE TRIGGER IF NOT EXISTS tasks_au_active
-        AFTER UPDATE ON tasks WHEN new.deleted_at IS NULL BEGIN
+        AFTER UPDATE ON tasks WHEN old.deleted_at IS NULL AND new.deleted_at IS NULL BEGIN
             INSERT INTO tasks_fts(tasks_fts, rowid, name, spec)
                 VALUES('delete', old.id, old.name, old.spec);
             INSERT INTO tasks_fts(rowid, name, spec) VALUES (new.id, new.name, new.spec);
@@ -843,6 +851,35 @@ async fn upgrade_to_v0_14_0(pool: &SqlitePool) -> Result<()> {
     }
 
     set_schema_version(pool, "0.14.0").await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Incremental upgrade: 0.14.x → 0.15.0
+// ---------------------------------------------------------------------------
+
+async fn upgrade_to_v0_15_0(pool: &SqlitePool) -> Result<()> {
+    // Fix tasks_au_active trigger: the original WHEN clause only checked
+    // `new.deleted_at IS NULL`, which would fire on restore operations
+    // (deleted→active), causing an attempt to remove a non-existent FTS5 entry
+    // and corrupting the index.  Narrow to active→active transitions only.
+    let _ = sqlx::query("DROP TRIGGER IF EXISTS tasks_au_active")
+        .execute(pool)
+        .await;
+
+    sqlx::query(
+        r#"CREATE TRIGGER IF NOT EXISTS tasks_au_active
+AFTER UPDATE ON tasks WHEN old.deleted_at IS NULL AND new.deleted_at IS NULL BEGIN
+    INSERT INTO tasks_fts(tasks_fts, rowid, name, spec)
+        VALUES('delete', old.id, old.name, old.spec);
+    INSERT INTO tasks_fts(rowid, name, spec) VALUES (new.id, new.name, new.spec);
+END"#,
+    )
+    .execute(pool)
+    .await
+    .map_err(crate::error::IntentError::DatabaseError)?;
+
+    set_schema_version(pool, "0.15.0").await?;
     Ok(())
 }
 
@@ -1267,14 +1304,14 @@ mod tests {
         let pool = create_pool(&db_path).await.unwrap();
         run_migrations(&pool).await.unwrap();
 
-        // Verify schema version is set to 0.14.0
+        // Verify schema version is set to 0.15.0
         let version: String =
             sqlx::query_scalar("SELECT value FROM workspace_state WHERE key = 'schema_version'")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
 
-        assert_eq!(version, "0.14.0");
+        assert_eq!(version, "0.15.0");
     }
 
     #[tokio::test]
@@ -1305,7 +1342,7 @@ mod tests {
                 .await
                 .unwrap();
 
-        assert_eq!(version, "0.14.0");
+        assert_eq!(version, "0.15.0");
     }
 
     #[tokio::test]
@@ -1360,8 +1397,8 @@ mod tests {
         let version = detect_schema_version(&pool).await.unwrap();
         assert_eq!(
             version,
-            (0, 14, 0),
-            "after migration detect must return (0,14,0)"
+            (0, 15, 0),
+            "after migration detect must return (0,15,0)"
         );
     }
 
@@ -1431,7 +1468,7 @@ mod tests {
             "old schema without owner should be detected as (0,1,0)"
         );
 
-        // Run migrations — should upgrade from (0,1,0) to (0,14,0)
+        // Run migrations — should upgrade from (0,1,0) to (0,15,0)
         run_migrations(&pool).await.unwrap();
 
         // Verify final version
@@ -1440,7 +1477,7 @@ mod tests {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(version, "0.14.0");
+        assert_eq!(version, "0.15.0");
 
         // Verify legacy data is intact
         let task_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tasks")
