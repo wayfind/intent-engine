@@ -50,7 +50,7 @@ cat > ~/.claude/hooks/ie-session-init.sh << 'EOF'
 
 # Read session_id from Claude Code's SessionStart JSON.
 # Fall back to "" if jq is missing or the session_id field is absent.
-session_id=$(cat | jq -r '.session_id // empty' 2>/dev/null) || session_id=""
+session_id=$(jq -r '.session_id // empty' 2>/dev/null) || session_id=""
 
 # Inject IE_SESSION_ID into Claude Code's environment file so that every
 # subsequent Bash tool call in this session inherits the correct value.
