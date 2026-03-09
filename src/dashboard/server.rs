@@ -51,9 +51,15 @@ pub struct AppState {
 
 impl AppState {
     /// Get database pool for a project (opens on demand - SQLite is fast)
-    pub async fn get_db_pool(&self, project_path: &PathBuf) -> Result<SqlitePool, String> {
+    pub async fn get_db_pool(&self, project_path: &std::path::Path) -> Result<SqlitePool, String> {
+        // known_projects is keyed by canonical paths (see DashboardServer::run).
+        // On Windows, Path::canonicalize() prepends the \\?\ extended-path prefix,
+        // so a non-canonical lookup will always miss.  Normalize here.
+        let canonical = project_path
+            .canonicalize()
+            .unwrap_or_else(|_| project_path.to_path_buf());
         let projects = self.known_projects.read().await;
-        if let Some(info) = projects.get(project_path) {
+        if let Some(info) = projects.get(&canonical) {
             let db_url = format!("sqlite://{}", info.db_path.display());
             SqlitePool::connect(&db_url)
                 .await
@@ -106,14 +112,16 @@ impl AppState {
 
     /// Switch active project
     pub async fn switch_active_project(&self, path: PathBuf) -> Result<(), String> {
+        // Normalize to canonical path so the lookup matches the HashMap key.
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
         let projects = self.known_projects.read().await;
-        if !projects.contains_key(&path) {
+        if !projects.contains_key(&canonical) {
             return Err(format!("Project not registered: {}", path.display()));
         }
         drop(projects);
 
         let mut active = self.active_project_path.write().await;
-        *active = path;
+        *active = canonical;
         Ok(())
     }
 
@@ -264,9 +272,15 @@ impl DashboardServer {
         // Create shutdown channel for graceful shutdown
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
+        // Use canonical path so active_project_path matches the HashMap key.
+        let active_canonical = self
+            .project_path
+            .canonicalize()
+            .unwrap_or_else(|_| self.project_path.clone());
+
         let state = AppState {
             known_projects: Arc::new(RwLock::new(known_projects)),
-            active_project_path: Arc::new(RwLock::new(self.project_path.clone())),
+            active_project_path: Arc::new(RwLock::new(active_canonical)),
             host_project: host_project_info,
             port: self.port,
             ws_state,
