@@ -634,7 +634,7 @@ async fn neo4j_search_events() {
     em.add_event(
         task.id,
         "decision".to_string(),
-        "Chose PostgreSQL over MySQL for better JSON support",
+        "Chose PostgreSQL over MySQL for better JSON support".to_string(),
     )
     .await
     .unwrap();
@@ -848,7 +848,7 @@ async fn neo4j_find_tasks_filter_sort_paginate() {
     use intent_engine::db::models::TaskSortBy;
     let sorted = tm
         .find_tasks(
-            Some("todo"),
+            Some("todo".to_string()),
             Some(Some(parent.id)),
             Some(TaskSortBy::Priority),
             None,

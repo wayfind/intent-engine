@@ -248,8 +248,8 @@ impl Neo4jPlanExecutor {
 
                 let new_task = task_mgr
                     .add_task(
-                        task_name,
-                        task.spec.as_deref(),
+                        task_name.clone(),
+                        task.spec.clone(),
                         None, // parent set later
                         Some("ai".to_string()),
                         task.priority.as_ref().map(|p| p.to_int()),
@@ -365,7 +365,7 @@ impl Neo4jPlanExecutor {
                         if let Some(task_id) = task_id_map.get(task_name) {
                             task_mgr
                                 .update_task(
-                                    task_id,
+                                    *task_id,
                                     TaskUpdate {
                                         parent_id: Some(Some(default_parent)),
                                         ..Default::default()
@@ -389,7 +389,7 @@ impl Neo4jPlanExecutor {
         let focused_task_response: Option<TaskWithEvents> = if let Some(doing_task) = doing_task {
             if let Some(task_name) = &doing_task.name {
                 if let Some(task_id) = task_id_map.get(task_name) {
-                    let response = task_mgr.start_task(task_id, true).await?;
+                    let response = task_mgr.start_task(*task_id, true).await?;
                     Some(response)
                 } else {
                     None
@@ -450,10 +450,10 @@ impl Neo4jPlanExecutor {
 
                 // Check for circular dependency via Neo4j path query:
                 // Would creating blocked->BLOCKED_BY->blocking create a cycle?
-                if self.would_create_cycle(blocked_id, *blocking_id).await? {
+                if self.would_create_cycle(*blocked_id, *blocking_id).await? {
                     return Err(IntentError::CircularDependency {
                         blocking_task_id: *blocking_id,
-                        blocked_task_id: blocked_id,
+                        blocked_task_id: *blocked_id,
                     });
                 }
 
@@ -467,7 +467,7 @@ impl Neo4jPlanExecutor {
                              MERGE (blocked)-[:BLOCKED_BY]->(blocking)",
                         )
                         .param("pid", self.project_id.clone())
-                        .param("blocked_id", blocked_id)
+                        .param("blocked_id", *blocked_id)
                         .param("blocking_id", *blocking_id),
                     )
                     .await
