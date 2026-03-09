@@ -5,6 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-03-09
+
+### Bug Fixes
+
+- Trigger homebrew workflow via workflow_run instead of release event
+- Correct binary name in install.ps1 and remove obsolete MCP script
+- Prevent unbound variable error in ie-manager.sh EXIT trap
+- Resolve clippy warnings in plan.rs
+- Require CI pass before release
+- Exclude removed CLI tests from code coverage
+- Correct npm package name to @origintask/intent-engine
+- Merge and optimize system prompt
+- Remove done_task side-effect and raw SQL bypass in task_commands
+- Add tests, language detection, and cost documentation for LLM synthesis
+- Address critical issues from Linus code review
+- Production-ready fixes - all P0/P1 issues resolved
+- Address Linus code review — dedup, tests, correctness
+- Unify events summary format and remove dead _is_last parameter
+- Rename Cypher variable `all` to `items` in CONTAINS queries
+- Resolve CI failures — Clippy, docs, security vulns, integration test target
+- Soft delete, status aliases, FK enforcement, versioned migrations
+- Add v0.15.0 migration to fix tasks_au_active trigger asymmetry
+- Resolve CI failures — broken doc link and wrong integration test target
+- Run full integration suite on cross-platform matrix; document FTS restore gap
+- Eliminate env-var races in tests; remove redundant lib test runs from CI
+- Notify all cascade-deleted tasks; drop dead serial_test import
+- Resolve Windows dashboard 500 errors — canonical path mismatch
+- Systematic canonical path normalization in dashboard server
+- Four correctness issues found in Linus review
+- Enforce canonical path invariant in global projects registry
+- Correct &String/&i64 call sites missed under --all-features
+
+### Documentation
+
+- Update CHANGELOG for v0.10.11
+- Restructure README installation section
+- Add quick note for Claude Code users to use plugin install
+- Restructure README for better marketing and technical clarity
+- Fix parallel description - multi-agent with session isolation
+- Add dependency graph feature for MapReduce orchestration
+- Reframe as foundation for long-running tasks
+- Restructure README with progressive narrative
+- Optimize README layout with side-by-side comparisons
+- Simplify README - replace tables with lists
+- Add direct binary download option via ie-manager.sh
+- Fix URLs, add Dashboard section to all READMEs
+- Add prompt-testing skill for A/B testing system prompts
+- Move prompt-testing skill to .claude/skills for Claude Code compatibility
+- Add prompt-testing command for OpenCode
+- Add parallel agent guide and fix hook script issues
+- Fix hook script semantics and tilde expansion in settings.json
+- Remove useless cat in hook script jq invocation
+- Add when-to-use guidance to parallel agents intro
+- Fix stale references, version numbers, and missing ie task commands
+
+### Features
+
+- Add OpenCode plugin for cross-session task memory
+- Add `ie task` CRUD subcommands for Claude Code Task Management parity
+- Add `ie config` commands and LLM client infrastructure
+- Implement LLM-powered task description synthesis (Use Case 2)
+- Implement background async task structure analysis
+- Add Neo4j graph database backend (ie-neo4j binary)
+- Add Neo4j plan executor and search manager (Phase 3)
+- Add BLOCKED_BY dependencies, search optimizations, and Neo4j integration tests
+- Ie-neo4j Phase 4 — feature parity polish (with-context, with-events, tree, since/until)
+- Add Backend trait abstraction for SQLite/Neo4j polymorphism
+
+### Miscellaneous Tasks
+
+- Build frontend once and share as artifact across all Rust jobs
+- Copy frontend artifact into extracted package before build/test
+
+### Refactor
+
+- Remove redundant install scripts, keep only ie-manager
+- Replace update_task 10 positional params with TaskUpdate struct
+- Extract shared next_step_suggestion logic from done_task methods
+- Deduplicate CLI formatting helpers across SQLite and Neo4j binaries
+- Unify SQLite/Neo4j API signatures for Backend trait preparation
+- Genericize CLI handlers via Backend traits, eliminating ~700 lines from ie_neo4j
+- Unify search command + fix RPITIT &str soundness hole in backend traits
+
+### Testing
+
+- Remove 15 dead test files and add 10 Neo4j integration tests
+- Add status alias and FTS soft-delete coverage; fix softdelete trigger
+- Add FTS restore regression test and clarify v0.15.0 migration comments
+
 ## [0.10.11] - 2026-01-01
 
 ### Bug Fixes
