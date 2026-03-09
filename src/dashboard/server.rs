@@ -20,6 +20,18 @@ use tower_http::{
 
 use super::websocket;
 
+/// Canonicalize a path, falling back to the original if the path does not
+/// exist yet.  On Windows, `Path::canonicalize()` prepends the `\\?\`
+/// extended-path prefix, so every key stored in `known_projects` and every
+/// value stored in `active_project_path` must go through this helper.
+///
+/// Invariant: ALL keys in `known_projects` and `active_project_path` are
+/// canonical.  Methods that write to these data structures call this helper;
+/// methods that read from them perform direct lookups.
+fn canonical_path(path: &std::path::Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
 /// Embedded static assets (HTML, CSS, JS)
 #[derive(RustEmbed)]
 #[folder = "static/"]
@@ -52,14 +64,10 @@ pub struct AppState {
 impl AppState {
     /// Get database pool for a project (opens on demand - SQLite is fast)
     pub async fn get_db_pool(&self, project_path: &std::path::Path) -> Result<SqlitePool, String> {
-        // known_projects is keyed by canonical paths (see DashboardServer::run).
-        // On Windows, Path::canonicalize() prepends the \\?\ extended-path prefix,
-        // so a non-canonical lookup will always miss.  Normalize here.
-        let canonical = project_path
-            .canonicalize()
-            .unwrap_or_else(|_| project_path.to_path_buf());
+        // Normalize the lookup key: known_projects is keyed by canonical paths.
+        let key = canonical_path(project_path);
         let projects = self.known_projects.read().await;
-        if let Some(info) = projects.get(&canonical) {
+        if let Some(info) = projects.get(&key) {
             let db_url = format!("sqlite://{}", info.db_path.display());
             SqlitePool::connect(&db_url)
                 .await
@@ -92,14 +100,16 @@ impl AppState {
             .unwrap_or("unknown")
             .to_string();
 
+        // Canonicalize before inserting so the key matches all other entries.
+        let canonical = canonical_path(&path);
         let info = ProjectInfo {
             name,
-            path: path.clone(),
+            path: canonical.clone(),
             db_path,
         };
 
         let mut projects = self.known_projects.write().await;
-        projects.insert(path, info);
+        projects.insert(canonical, info);
         Ok(())
     }
 
@@ -112,8 +122,7 @@ impl AppState {
 
     /// Switch active project
     pub async fn switch_active_project(&self, path: PathBuf) -> Result<(), String> {
-        // Normalize to canonical path so the lookup matches the HashMap key.
-        let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+        let canonical = canonical_path(&path);
         let projects = self.known_projects.read().await;
         if !projects.contains_key(&canonical) {
             return Err(format!("Project not registered: {}", path.display()));
@@ -126,15 +135,20 @@ impl AppState {
     }
 
     /// Remove a project from known projects and global registry
-    pub async fn remove_project(&self, path: &PathBuf) -> Result<(), String> {
-        // Don't allow removing the host project
-        if path.as_path() == std::path::Path::new(&self.host_project.path) {
+    pub async fn remove_project(&self, path: &std::path::Path) -> Result<(), String> {
+        let canonical = canonical_path(path);
+
+        // Don't allow removing the host project. Compare canonical forms on
+        // both sides: host_project.path may be a non-canonical display string.
+        let host_canonical = canonical_path(std::path::Path::new(&self.host_project.path));
+        if canonical == host_canonical {
             return Err("Cannot remove the host project".to_string());
         }
 
-        // Remove from known projects
+        // Remove from known projects. Use canonical key — non-canonical remove
+        // silently returns None and the project stays in the map.
         let mut projects = self.known_projects.write().await;
-        projects.remove(path);
+        projects.remove(&canonical);
 
         // Remove from global registry
         let path_str = path.to_string_lossy().to_string();
@@ -210,28 +224,25 @@ impl DashboardServer {
 
     /// Run the Dashboard server
     pub async fn run(self) -> Result<()> {
-        // Initialize known projects with the host project
+        // Initialize known projects with the host project.
+        // canonical_path() is the single normalization point: every key written
+        // into this map goes through it, so all reads can do plain lookups.
         let mut known_projects = HashMap::new();
+        let host_canonical = canonical_path(&self.project_path);
         let host_info = ProjectInfo {
             name: self.project_name.clone(),
-            path: self.project_path.clone(),
+            path: host_canonical.clone(),
             db_path: self.db_path.clone(),
         };
-        // Use canonical path string as key for consistent comparison on Windows
-        let host_key = self
-            .project_path
-            .canonicalize()
-            .unwrap_or_else(|_| self.project_path.clone());
-        known_projects.insert(host_key, host_info);
+        known_projects.insert(host_canonical.clone(), host_info);
 
         // Load projects from global registry
         let registry = crate::global_projects::ProjectsRegistry::load();
         for entry in registry.projects {
             let path = PathBuf::from(&entry.path);
-            // Use canonical path for comparison to handle Windows path normalization
-            let canonical_path = path.canonicalize().unwrap_or_else(|_| path.clone());
-            // Skip if already added (host project)
-            if known_projects.contains_key(&canonical_path) {
+            let key = canonical_path(&path);
+            // Skip if already added (e.g. host project)
+            if known_projects.contains_key(&key) {
                 continue;
             }
             let db_path = path.join(".intent-engine").join("project.db");
@@ -243,7 +254,7 @@ impl DashboardServer {
                         .to_string()
                 });
                 known_projects.insert(
-                    canonical_path,
+                    key,
                     ProjectInfo {
                         name,
                         path,
@@ -272,15 +283,10 @@ impl DashboardServer {
         // Create shutdown channel for graceful shutdown
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
-        // Use canonical path so active_project_path matches the HashMap key.
-        let active_canonical = self
-            .project_path
-            .canonicalize()
-            .unwrap_or_else(|_| self.project_path.clone());
-
         let state = AppState {
             known_projects: Arc::new(RwLock::new(known_projects)),
-            active_project_path: Arc::new(RwLock::new(active_canonical)),
+            // active_project_path must match the HashMap key (already canonical).
+            active_project_path: Arc::new(RwLock::new(host_canonical)),
             host_project: host_project_info,
             port: self.port,
             ws_state,
