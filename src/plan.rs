@@ -3327,7 +3327,6 @@ mod parent_id_tests {
 mod delete_tests {
     use super::*;
     use crate::test_utils::test_helpers::TestContext;
-    use serial_test::serial;
 
     #[tokio::test]
     async fn test_delete_task_by_id_only() {

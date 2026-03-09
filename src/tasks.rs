@@ -1026,12 +1026,11 @@ impl<'a> TaskManager<'a> {
 
         let count = descendants.len();
 
-        // SAFETY NOTE: There is a narrow race window between the focus check above and
-        // the UPDATE below. Another session could focus a subtask in that interval,
-        // and we would soft-delete it anyway. Closing this properly requires wrapping
-        // the focus check and the UPDATE in the same SQLite transaction with a
-        // serializable isolation level. Acceptable for now because this is a
-        // single-user CLI tool, but must be fixed before multi-user concurrent access.
+        // TODO: The focus check above and the UPDATE below are not atomic.
+        // Another session could focus a subtask in the window between them,
+        // and we would soft-delete it anyway.  Fix: wrap both operations in
+        // a single SQLite transaction with serializable isolation before
+        // enabling multi-user concurrent access.
 
         // Soft-delete the entire subtree in one statement via recursive CTE
         let now = chrono::Utc::now();
@@ -1051,8 +1050,12 @@ impl<'a> TaskManager<'a> {
         .execute(self.pool)
         .await?;
 
-        // Notify WebSocket clients about the task deletion
-        self.notify_task_deleted(id).await;
+        // Notify WebSocket clients for every deleted node, not just the root.
+        // Dashboard subscribers track individual task IDs; cascade-deleted
+        // descendants must each receive a deletion event or they become stale.
+        for &deleted_id in &subtree_ids {
+            self.notify_task_deleted(deleted_id).await;
+        }
 
         Ok(count)
     }
