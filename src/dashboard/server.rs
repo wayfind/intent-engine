@@ -101,7 +101,10 @@ impl AppState {
             .to_string();
 
         // Canonicalize before inserting so the key matches all other entries.
+        // db_path is also canonicalized: derived paths inherit the Windows \\?\
+        // prefix from their base, and future callers may compare db_path values.
         let canonical = canonical_path(&path);
+        let db_path = canonical_path(&db_path);
         let info = ProjectInfo {
             name,
             path: canonical.clone(),
@@ -150,8 +153,9 @@ impl AppState {
         let mut projects = self.known_projects.write().await;
         projects.remove(&canonical);
 
-        // Remove from global registry
-        let path_str = path.to_string_lossy().to_string();
+        // Remove from global registry using the canonical form so the lookup
+        // matches however the path was stored (Windows \\?\ prefix consistency).
+        let path_str = canonical.to_string_lossy().to_string();
         crate::global_projects::remove_project(&path_str);
 
         Ok(())

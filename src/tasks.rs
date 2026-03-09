@@ -1024,8 +1024,6 @@ impl<'a> TaskManager<'a> {
             )));
         }
 
-        let count = descendants.len();
-
         // TODO: The focus check above and the UPDATE below are not atomic.
         // Another session could focus a subtask in the window between them,
         // and we would soft-delete it anyway.  Fix: wrap both operations in
@@ -1053,11 +1051,16 @@ impl<'a> TaskManager<'a> {
         // Notify WebSocket clients for every deleted node, not just the root.
         // Dashboard subscribers track individual task IDs; cascade-deleted
         // descendants must each receive a deletion event or they become stale.
+        // Notification order: descendants first, then root.  This is intentional:
+        // a client receiving a child deletion may query the parent; delivering
+        // the parent deletion last ensures the parent is already marked deleted
+        // by the time clients re-query it.
         for &deleted_id in &subtree_ids {
             self.notify_task_deleted(deleted_id).await;
         }
 
-        Ok(count)
+        // subtree_ids = descendants + root, so this is the true total deleted count.
+        Ok(subtree_ids.len())
     }
 
     /// Check if any task in the given set of IDs is focused by any session.
