@@ -1,3 +1,6 @@
+//! **SQLite-only**: These functions operate directly on the `workspace_state`
+//! table and are not available in the Neo4j backend.
+
 use crate::cli::ConfigCommands;
 use crate::error::{IntentError, Result};
 use crate::project::ProjectContext;

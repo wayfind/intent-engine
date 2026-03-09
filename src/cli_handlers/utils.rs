@@ -241,6 +241,42 @@ pub fn print_events_summary(summary: &EventsSummary) {
     }
 }
 
+/// Check if query is a `#ID` format (e.g., `"#123"`, `"#1"`).
+/// Returns `Some(id)` if it is a task ID query, `None` otherwise.
+pub fn parse_task_id_query(query: &str) -> Option<i64> {
+    let query = query.trim();
+    if !query.starts_with('#') || query.len() < 2 {
+        return None;
+    }
+    query[1..].parse::<i64>().ok()
+}
+
+/// Check if query is a status keyword combination (`todo`, `doing`, `done`).
+/// Returns `Some(statuses)` if all words are valid status keywords, `None` otherwise.
+pub fn parse_status_keywords(query: &str) -> Option<Vec<String>> {
+    let query_lower = query.to_lowercase();
+    let words: Vec<&str> = query_lower.split_whitespace().collect();
+
+    if words.is_empty() {
+        return None;
+    }
+
+    let valid_statuses = ["todo", "doing", "done"];
+    let mut statuses: Vec<String> = Vec::new();
+
+    for word in words {
+        if valid_statuses.contains(&word) {
+            if !statuses.iter().any(|s| s == word) {
+                statuses.push(word.to_string());
+            }
+        } else {
+            return None;
+        }
+    }
+
+    Some(statuses)
+}
+
 /// Parse metadata key=value strings into a JSON object.
 /// "key=value" sets a key, "key=" deletes a key.
 pub fn parse_metadata(pairs: &[String]) -> Result<serde_json::Value> {
@@ -463,5 +499,94 @@ mod tests {
         };
 
         print_task_context(&ctx); // should not panic
+    }
+
+    // ============================================================================
+    // parse_task_id_query tests
+    // ============================================================================
+
+    #[test]
+    fn test_parse_task_id_query_valid() {
+        assert_eq!(parse_task_id_query("#1"), Some(1));
+        assert_eq!(parse_task_id_query("#123"), Some(123));
+        assert_eq!(parse_task_id_query("#999999"), Some(999999));
+    }
+
+    #[test]
+    fn test_parse_task_id_query_with_whitespace() {
+        assert_eq!(parse_task_id_query("  #1  "), Some(1));
+        assert_eq!(parse_task_id_query("\t#42\n"), Some(42));
+    }
+
+    #[test]
+    fn test_parse_task_id_query_invalid() {
+        assert_eq!(parse_task_id_query("123"), None);
+        assert_eq!(parse_task_id_query("task"), None);
+        assert_eq!(parse_task_id_query("#"), None);
+        assert_eq!(parse_task_id_query("#abc"), None);
+        assert_eq!(parse_task_id_query("#1a"), None);
+        assert_eq!(parse_task_id_query("#a1"), None);
+        assert_eq!(parse_task_id_query("#123 task"), None);
+        assert_eq!(parse_task_id_query("task #123"), None);
+        assert_eq!(parse_task_id_query("#-1"), Some(-1));
+        assert_eq!(parse_task_id_query(""), None);
+    }
+
+    // ============================================================================
+    // parse_status_keywords tests
+    // ============================================================================
+
+    #[test]
+    fn test_parse_status_keywords_valid() {
+        assert_eq!(
+            parse_status_keywords("todo"),
+            Some(vec!["todo".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("doing"),
+            Some(vec!["doing".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("done"),
+            Some(vec!["done".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_parse_status_keywords_multiple() {
+        let result = parse_status_keywords("todo doing");
+        assert!(result.is_some());
+        let statuses = result.unwrap();
+        assert!(statuses.contains(&"todo".to_string()));
+        assert!(statuses.contains(&"doing".to_string()));
+    }
+
+    #[test]
+    fn test_parse_status_keywords_case_insensitive() {
+        assert_eq!(
+            parse_status_keywords("TODO"),
+            Some(vec!["todo".to_string()])
+        );
+        assert_eq!(
+            parse_status_keywords("DoInG"),
+            Some(vec!["doing".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_parse_status_keywords_invalid() {
+        assert_eq!(parse_status_keywords("todo task"), None);
+        assert_eq!(parse_status_keywords("search term"), None);
+        assert_eq!(parse_status_keywords(""), None);
+        assert_eq!(parse_status_keywords("   "), None);
+    }
+
+    #[test]
+    fn test_parse_status_keywords_dedup() {
+        let result = parse_status_keywords("todo todo todo");
+        assert!(result.is_some());
+        let statuses = result.unwrap();
+        assert_eq!(statuses.len(), 1);
+        assert_eq!(statuses[0], "todo");
     }
 }

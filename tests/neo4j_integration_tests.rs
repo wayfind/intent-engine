@@ -66,7 +66,14 @@ async fn neo4j_task_create_get_update() {
 
     // Create
     let task = tm
-        .add_task("Test Task", Some("A spec"), None, Some("ai"), None, None)
+        .add_task(
+            "Test Task".to_string(),
+            Some("A spec".to_string()),
+            None,
+            Some("ai".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(task.name, "Test Task");
@@ -102,15 +109,22 @@ async fn neo4j_task_parent_child_hierarchy() {
     let tm = Neo4jTaskManager::new(graph.clone(), pid.clone());
 
     let parent = tm
-        .add_task("Parent", None, None, None, None, None)
+        .add_task("Parent".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     let child = tm
-        .add_task("Child", None, Some(parent.id), None, None, None)
+        .add_task("Child".to_string(), None, Some(parent.id), None, None, None)
         .await
         .unwrap();
     let grandchild = tm
-        .add_task("Grandchild", None, Some(child.id), None, None, None)
+        .add_task(
+            "Grandchild".to_string(),
+            None,
+            Some(child.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -131,7 +145,14 @@ async fn neo4j_task_parent_child_hierarchy() {
 
     // Siblings
     let child2 = tm
-        .add_task("Child2", None, Some(parent.id), None, None, None)
+        .add_task(
+            "Child2".to_string(),
+            None,
+            Some(parent.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let siblings = tm.get_siblings(child.id, Some(parent.id)).await.unwrap();
@@ -148,8 +169,8 @@ async fn neo4j_task_start_done_lifecycle() {
 
     let task = tm
         .add_task(
-            "Lifecycle Task",
-            Some("do the thing"),
+            "Lifecycle Task".to_string(),
+            Some("do the thing".to_string()),
             None,
             None,
             None,
@@ -176,11 +197,18 @@ async fn neo4j_task_done_blocked_by_children() {
     let tm = Neo4jTaskManager::new(graph.clone(), pid.clone());
 
     let parent = tm
-        .add_task("Parent", Some("parent spec"), None, None, None, None)
+        .add_task(
+            "Parent".to_string(),
+            Some("parent spec".to_string()),
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let _child = tm
-        .add_task("Child", None, Some(parent.id), None, None, None)
+        .add_task("Child".to_string(), None, Some(parent.id), None, None, None)
         .await
         .unwrap();
 
@@ -206,15 +234,29 @@ async fn neo4j_task_delete_cascade() {
     let tm = Neo4jTaskManager::new(graph.clone(), pid.clone());
 
     let parent = tm
-        .add_task("Parent", None, None, None, None, None)
+        .add_task("Parent".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     let _child = tm
-        .add_task("Child1", None, Some(parent.id), None, None, None)
+        .add_task(
+            "Child1".to_string(),
+            None,
+            Some(parent.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let _child2 = tm
-        .add_task("Child2", None, Some(parent.id), None, None, None)
+        .add_task(
+            "Child2".to_string(),
+            None,
+            Some(parent.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -362,7 +404,7 @@ async fn neo4j_plan_delete_by_id() {
 
     // Create a task first
     let task = tm
-        .add_task("To Delete", None, None, None, None, None)
+        .add_task("To Delete".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -516,8 +558,8 @@ async fn neo4j_search_tasks_fulltext() {
     let sm = Neo4jSearchManager::new(graph.clone(), pid.clone());
 
     tm.add_task(
-        "Implement authentication",
-        Some("JWT tokens for user login"),
+        "Implement authentication".to_string(),
+        Some("JWT tokens for user login".to_string()),
         None,
         None,
         None,
@@ -526,8 +568,8 @@ async fn neo4j_search_tasks_fulltext() {
     .await
     .unwrap();
     tm.add_task(
-        "Fix database bug",
-        Some("Connection pool timeout"),
+        "Fix database bug".to_string(),
+        Some("Connection pool timeout".to_string()),
         None,
         None,
         None,
@@ -553,9 +595,16 @@ async fn neo4j_search_tasks_contains_cjk() {
     let tm = Neo4jTaskManager::new(graph.clone(), pid.clone());
     let sm = Neo4jSearchManager::new(graph.clone(), pid.clone());
 
-    tm.add_task("实现用户认证", Some("使用JWT令牌"), None, None, None, None)
-        .await
-        .unwrap();
+    tm.add_task(
+        "实现用户认证".to_string(),
+        Some("使用JWT令牌".to_string()),
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     // Short CJK query uses CONTAINS fallback (no index delay needed)
     let results = sm
@@ -579,12 +628,12 @@ async fn neo4j_search_events() {
     let sm = Neo4jSearchManager::new(graph.clone(), pid.clone());
 
     let task = tm
-        .add_task("Event Host", None, None, None, None, None)
+        .add_task("Event Host".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     em.add_event(
         task.id,
-        "decision",
+        "decision".to_string(),
         "Chose PostgreSQL over MySQL for better JSON support",
     )
     .await
@@ -623,17 +672,25 @@ async fn neo4j_event_crud() {
     let em = Neo4jEventManager::new(graph.clone(), pid.clone());
 
     let task = tm
-        .add_task("Event Target", None, None, None, None, None)
+        .add_task("Event Target".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
     // Add events
     let e1 = em
-        .add_event(task.id, "decision", "Chose approach A")
+        .add_event(
+            task.id,
+            "decision".to_string(),
+            "Chose approach A".to_string(),
+        )
         .await
         .unwrap();
     let e2 = em
-        .add_event(task.id, "blocker", "Waiting for API access")
+        .add_event(
+            task.id,
+            "blocker".to_string(),
+            "Waiting for API access".to_string(),
+        )
         .await
         .unwrap();
 
@@ -655,7 +712,9 @@ async fn neo4j_event_crud() {
     assert_eq!(decisions.len(), 1);
 
     // Event for non-existent task
-    let err = em.add_event(99999, "note", "ghost").await;
+    let err = em
+        .add_event(99999, "note".to_string(), "ghost".to_string())
+        .await;
     assert!(err.is_err());
 
     teardown(&graph, &pid).await;
@@ -670,7 +729,14 @@ async fn neo4j_workspace_focus() {
     let wm = Neo4jWorkspaceManager::new(graph.clone(), pid.clone());
 
     let task = tm
-        .add_task("Focus Target", Some("focus spec"), None, None, None, None)
+        .add_task(
+            "Focus Target".to_string(),
+            Some("focus spec".to_string()),
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -701,17 +767,24 @@ async fn neo4j_find_tasks_filter_sort_paginate() {
 
     // Create a parent with children in mixed statuses
     let parent = tm
-        .add_task("Filter Parent", None, None, None, None, None)
+        .add_task("Filter Parent".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     let t1 = tm
-        .add_task("Todo A", None, Some(parent.id), None, Some(2), None)
+        .add_task(
+            "Todo A".to_string(),
+            None,
+            Some(parent.id),
+            None,
+            Some(2),
+            None,
+        )
         .await
         .unwrap();
     let t2 = tm
         .add_task(
-            "Doing B",
-            Some("spec"),
+            "Doing B".to_string(),
+            Some("spec".to_string()),
             Some(parent.id),
             None,
             Some(1),
@@ -721,17 +794,24 @@ async fn neo4j_find_tasks_filter_sort_paginate() {
         .unwrap();
     tm.start_task(t2.id, false).await.unwrap();
     let t3 = tm
-        .add_task("Todo C", None, Some(parent.id), None, Some(3), None)
+        .add_task(
+            "Todo C".to_string(),
+            None,
+            Some(parent.id),
+            None,
+            Some(3),
+            None,
+        )
         .await
         .unwrap();
     let _root2 = tm
-        .add_task("Root Unrelated", None, None, None, None, None)
+        .add_task("Root Unrelated".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
     // Filter by status
     let doing = tm
-        .find_tasks(Some("doing"), None, None, None, None)
+        .find_tasks(Some("doing".to_string()), None, None, None, None)
         .await
         .unwrap();
     assert!(doing.tasks.iter().all(|t| t.status == "doing"));
@@ -784,7 +864,9 @@ async fn neo4j_find_tasks_filter_sort_paginate() {
     // Clean up focus before teardown
     let wm = Neo4jWorkspaceManager::new(graph.clone(), pid.clone());
     let session_id = resolve_session_id(None);
-    wm.clear_current_task(Some(&session_id)).await.unwrap();
+    wm.clear_current_task(Some(session_id.as_str()))
+        .await
+        .unwrap();
 
     teardown(&graph, &pid).await;
 }
@@ -801,15 +883,36 @@ async fn neo4j_pick_next_priority_order() {
 
     // Create a parent with subtasks, start the parent to set focus
     let parent = tm
-        .add_task("Parent", Some("spec"), None, None, None, None)
+        .add_task(
+            "Parent".to_string(),
+            Some("spec".to_string()),
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let child_a = tm
-        .add_task("Child A", None, Some(parent.id), None, None, None)
+        .add_task(
+            "Child A".to_string(),
+            None,
+            Some(parent.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let child_b = tm
-        .add_task("Child B", None, Some(parent.id), None, None, None)
+        .add_task(
+            "Child B".to_string(),
+            None,
+            Some(parent.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     tm.start_task(parent.id, false).await.unwrap();
@@ -851,7 +954,9 @@ async fn neo4j_pick_next_priority_order() {
     // Clean up focus before teardown
     let wm = Neo4jWorkspaceManager::new(graph.clone(), pid.clone());
     let session_id = resolve_session_id(None);
-    wm.clear_current_task(Some(&session_id)).await.unwrap();
+    wm.clear_current_task(Some(session_id.as_str()))
+        .await
+        .unwrap();
 
     teardown(&graph, &pid).await;
 }
@@ -875,8 +980,8 @@ async fn neo4j_done_task_no_id_uses_focus() {
     // Create, start (which sets focus), then done via focus
     let task = tm
         .add_task(
-            "Focus Done",
-            Some("will complete via focus"),
+            "Focus Done".to_string(),
+            Some("will complete via focus".to_string()),
             None,
             None,
             None,
@@ -888,7 +993,10 @@ async fn neo4j_done_task_no_id_uses_focus() {
 
     // Verify focus is set
     let session_id = resolve_session_id(None);
-    let focus = wm.get_current_task(Some(&session_id)).await.unwrap();
+    let focus = wm
+        .get_current_task(Some(session_id.as_str()))
+        .await
+        .unwrap();
     assert_eq!(focus.current_task_id, Some(task.id));
 
     // Done with no ID → uses focus
@@ -907,7 +1015,7 @@ async fn neo4j_delete_task_no_cascade() {
 
     // Leaf node delete succeeds
     let leaf = tm
-        .add_task("Leaf", None, None, None, None, None)
+        .add_task("Leaf".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     tm.delete_task(leaf.id).await.unwrap();
@@ -915,7 +1023,14 @@ async fn neo4j_delete_task_no_cascade() {
 
     // Focused task cannot be deleted
     let focused = tm
-        .add_task("Focused", Some("spec"), None, None, None, None)
+        .add_task(
+            "Focused".to_string(),
+            Some("spec".to_string()),
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     tm.start_task(focused.id, false).await.unwrap();
@@ -931,7 +1046,9 @@ async fn neo4j_delete_task_no_cascade() {
 
     // Clean up: clear focus before teardown
     let session_id = resolve_session_id(None);
-    wm.clear_current_task(Some(&session_id)).await.unwrap();
+    wm.clear_current_task(Some(session_id.as_str()))
+        .await
+        .unwrap();
 
     teardown(&graph, &pid).await;
 }
@@ -944,23 +1061,44 @@ async fn neo4j_get_task_context_full() {
     // Build: root -> parent -> [target, sibling]
     //        blocker --BLOCKED_BY--> target
     let root = tm
-        .add_task("Root", None, None, None, None, None)
+        .add_task("Root".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     let parent = tm
-        .add_task("Parent", None, Some(root.id), None, None, None)
+        .add_task("Parent".to_string(), None, Some(root.id), None, None, None)
         .await
         .unwrap();
     let target = tm
-        .add_task("Target", None, Some(parent.id), None, None, None)
+        .add_task(
+            "Target".to_string(),
+            None,
+            Some(parent.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let sibling = tm
-        .add_task("Sibling", None, Some(parent.id), None, None, None)
+        .add_task(
+            "Sibling".to_string(),
+            None,
+            Some(parent.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let child = tm
-        .add_task("Child of Target", None, Some(target.id), None, None, None)
+        .add_task(
+            "Child of Target".to_string(),
+            None,
+            Some(target.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -1018,16 +1156,20 @@ async fn neo4j_get_task_with_events() {
     let em = Neo4jEventManager::new(graph.clone(), pid.clone());
 
     let task = tm
-        .add_task("Event Rich", None, None, None, None, None)
+        .add_task("Event Rich".to_string(), None, None, None, None, None)
         .await
         .unwrap();
-    em.add_event(task.id, "decision", "Chose Rust")
+    em.add_event(task.id, "decision".to_string(), "Chose Rust".to_string())
         .await
         .unwrap();
-    em.add_event(task.id, "blocker", "Waiting for review")
-        .await
-        .unwrap();
-    em.add_event(task.id, "note", "Progress update")
+    em.add_event(
+        task.id,
+        "blocker".to_string(),
+        "Waiting for review".to_string(),
+    )
+    .await
+    .unwrap();
+    em.add_event(task.id, "note".to_string(), "Progress update".to_string())
         .await
         .unwrap();
 
@@ -1098,16 +1240,23 @@ async fn neo4j_get_root_tasks_ordering() {
     let tm = Neo4jTaskManager::new(graph.clone(), pid.clone());
 
     let r1 = tm
-        .add_task("Root Todo", None, None, None, None, None)
+        .add_task("Root Todo".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     let r2 = tm
-        .add_task("Root Doing", Some("spec"), None, None, None, None)
+        .add_task(
+            "Root Doing".to_string(),
+            Some("spec".to_string()),
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     tm.start_task(r2.id, false).await.unwrap();
     let child = tm
-        .add_task("Not Root", None, Some(r1.id), None, None, None)
+        .add_task("Not Root".to_string(), None, Some(r1.id), None, None, None)
         .await
         .unwrap();
 
@@ -1133,7 +1282,9 @@ async fn neo4j_get_root_tasks_ordering() {
     // Clean up focus before teardown
     let wm = Neo4jWorkspaceManager::new(graph.clone(), pid.clone());
     let session_id = resolve_session_id(None);
-    wm.clear_current_task(Some(&session_id)).await.unwrap();
+    wm.clear_current_task(Some(session_id.as_str()))
+        .await
+        .unwrap();
 
     teardown(&graph, &pid).await;
 }
@@ -1146,13 +1297,13 @@ async fn neo4j_get_status_full_response() {
 
     // Build hierarchy: root -> [target, sibling]; target -> descendant
     let root = tm
-        .add_task("Status Root", None, None, None, None, None)
+        .add_task("Status Root".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     let target = tm
         .add_task(
-            "Status Target",
-            Some("spec"),
+            "Status Target".to_string(),
+            Some("spec".to_string()),
             Some(root.id),
             None,
             None,
@@ -1161,16 +1312,30 @@ async fn neo4j_get_status_full_response() {
         .await
         .unwrap();
     let _sibling = tm
-        .add_task("Status Sibling", None, Some(root.id), None, None, None)
+        .add_task(
+            "Status Sibling".to_string(),
+            None,
+            Some(root.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let _desc = tm
-        .add_task("Descendant", None, Some(target.id), None, None, None)
+        .add_task(
+            "Descendant".to_string(),
+            None,
+            Some(target.id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
     // Add an event
-    em.add_event(target.id, "note", "Testing status")
+    em.add_event(target.id, "note".to_string(), "Testing status".to_string())
         .await
         .unwrap();
 
@@ -1220,7 +1385,7 @@ async fn neo4j_plan_with_default_parent() {
 
     // Create parent
     let parent = tm
-        .add_task("Default Parent", None, None, None, None, None)
+        .add_task("Default Parent".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 

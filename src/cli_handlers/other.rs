@@ -1,12 +1,13 @@
 // Note: CurrentAction and EventCommands removed in v0.10.1 CLI simplification
 // These functions are kept for potential Dashboard/MCP use but not exposed in CLI
 // use crate::cli::{CurrentAction, EventCommands};
+use crate::backend::{SearchBackend, TaskBackend};
 use crate::cli_handlers::read_stdin;
+use crate::cli_handlers::utils::{parse_status_keywords, parse_task_id_query};
 use crate::error::{IntentError, Result};
 use crate::events::EventManager;
 use crate::project::ProjectContext;
 use crate::report::ReportManager;
-use crate::tasks::TaskManager;
 use crate::time_utils::parse_date_filter;
 use crate::workspace::WorkspaceManager;
 use std::path::PathBuf;
@@ -142,9 +143,7 @@ pub async fn handle_event_command(cmd: EventCommands) -> Result<()> {
                     ))?
             };
 
-            let event = event_mgr
-                .add_event(target_task_id, &log_type, &data)
-                .await?;
+            let event = event_mgr.add_event(target_task_id, log_type, data).await?;
             println!("{}", serde_json::to_string_pretty(&event)?);
         },
 
@@ -167,21 +166,6 @@ pub async fn handle_event_command(cmd: EventCommands) -> Result<()> {
     Ok(())
 }
 
-/// Check if query is a #ID format (e.g., "#123", "#1")
-/// Returns Some(id) if it's a task ID query, None otherwise
-fn parse_task_id_query(query: &str) -> Option<i64> {
-    let query = query.trim();
-
-    // Must start with # and have at least one digit after
-    if !query.starts_with('#') || query.len() < 2 {
-        return None;
-    }
-
-    // The rest must be all digits
-    let id_part = &query[1..];
-    id_part.parse::<i64>().ok()
-}
-
 /// Safely truncate a UTF-8 string to a maximum number of characters
 /// Returns the truncated string with "..." appended if truncation occurred
 fn truncate_str(s: &str, max_chars: usize) -> String {
@@ -194,37 +178,9 @@ fn truncate_str(s: &str, max_chars: usize) -> String {
     }
 }
 
-/// Check if query is a status keyword combination (todo, doing, done)
-/// Returns Some(statuses) if it's a status query, None otherwise
-fn parse_status_keywords(query: &str) -> Option<Vec<String>> {
-    let query_lower = query.to_lowercase();
-    let words: Vec<&str> = query_lower.split_whitespace().collect();
-
-    // Must have at least one word
-    if words.is_empty() {
-        return None;
-    }
-
-    // All words must be status keywords
-    let valid_statuses = ["todo", "doing", "done"];
-    let mut statuses: Vec<String> = Vec::new();
-
-    for word in words {
-        if valid_statuses.contains(&word) {
-            if !statuses.iter().any(|s| s == word) {
-                statuses.push(word.to_string());
-            }
-        } else {
-            // Found a non-status word, not a status query
-            return None;
-        }
-    }
-
-    Some(statuses)
-}
-
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_search_command(
+    task_mgr: &(impl TaskBackend + SearchBackend),
     query: &str,
     include_tasks: bool,
     include_events: bool,
@@ -234,10 +190,7 @@ pub async fn handle_search_command(
     until: Option<String>,
     format: &str,
 ) -> Result<()> {
-    use crate::search::SearchManager;
     use chrono::{DateTime, Utc};
-
-    let ctx = ProjectContext::load_or_init().await?;
 
     // Parse date filters
     let since_dt: Option<DateTime<Utc>> = if let Some(ref s) = since {
@@ -254,7 +207,6 @@ pub async fn handle_search_command(
 
     // Check if query is a #ID format (e.g., "#123", "#1")
     if let Some(task_id) = parse_task_id_query(query) {
-        let task_mgr = TaskManager::new(&ctx.pool);
         match task_mgr.get_task(task_id).await {
             Ok(task) => {
                 if format == "json" {
@@ -312,9 +264,6 @@ pub async fn handle_search_command(
 
     // Check if query is a status keyword combination
     if let Some(statuses) = parse_status_keywords(query) {
-        // Use TaskManager::find_tasks for status filtering
-        let task_mgr = TaskManager::new(&ctx.pool);
-
         // Collect tasks for each status
         // When date filters are used, fetch more tasks initially
         // (we'll apply limit after filtering)
@@ -328,7 +277,7 @@ pub async fn handle_search_command(
         let mut all_tasks = Vec::new();
         for status in &statuses {
             let result = task_mgr
-                .find_tasks(Some(status), None, None, fetch_limit, offset)
+                .find_tasks(Some(status.clone()), None, None, fetch_limit, offset)
                 .await?;
             all_tasks.extend(result.tasks);
         }
@@ -446,10 +395,14 @@ pub async fn handle_search_command(
     if since_dt.is_some() || until_dt.is_some() {
         eprintln!("Warning: --since/--until are ignored for fulltext search (only apply to status keyword queries)");
     }
-    let search_mgr = SearchManager::new(&ctx.pool);
-
-    let results = search_mgr
-        .search(query, include_tasks, include_events, limit, offset, false)
+    let results = task_mgr
+        .search(
+            query.to_string(),
+            include_tasks,
+            include_events,
+            limit,
+            offset,
+        )
         .await?;
 
     if format == "json" {
@@ -792,49 +745,6 @@ mod tests {
     use super::*;
 
     // ============================================================================
-    // parse_task_id_query tests
-    // ============================================================================
-
-    #[test]
-    fn test_parse_task_id_query_valid() {
-        assert_eq!(parse_task_id_query("#1"), Some(1));
-        assert_eq!(parse_task_id_query("#123"), Some(123));
-        assert_eq!(parse_task_id_query("#999999"), Some(999999));
-    }
-
-    #[test]
-    fn test_parse_task_id_query_with_whitespace() {
-        assert_eq!(parse_task_id_query("  #1  "), Some(1));
-        assert_eq!(parse_task_id_query("\t#42\n"), Some(42));
-    }
-
-    #[test]
-    fn test_parse_task_id_query_invalid() {
-        // Not starting with #
-        assert_eq!(parse_task_id_query("123"), None);
-        assert_eq!(parse_task_id_query("task"), None);
-
-        // Only #
-        assert_eq!(parse_task_id_query("#"), None);
-
-        // # followed by non-digits
-        assert_eq!(parse_task_id_query("#abc"), None);
-        assert_eq!(parse_task_id_query("#1a"), None);
-        assert_eq!(parse_task_id_query("#a1"), None);
-
-        // Mixed content
-        assert_eq!(parse_task_id_query("#123 task"), None);
-        assert_eq!(parse_task_id_query("task #123"), None);
-
-        // Negative numbers (technically parsed, but task IDs are positive in practice)
-        // Note: i64::parse accepts negative, so #-1 returns Some(-1)
-        assert_eq!(parse_task_id_query("#-1"), Some(-1));
-
-        // Empty
-        assert_eq!(parse_task_id_query(""), None);
-    }
-
-    // ============================================================================
     // truncate_str tests (UTF-8 safe truncation)
     // ============================================================================
 
@@ -892,67 +802,5 @@ mod tests {
 
         let result = truncate_str(emoji, 3);
         assert_eq!(result, "..."); // All replaced by ...
-    }
-
-    // ============================================================================
-    // parse_status_keywords tests
-    // ============================================================================
-
-    #[test]
-    fn test_parse_status_keywords_valid() {
-        assert_eq!(
-            parse_status_keywords("todo"),
-            Some(vec!["todo".to_string()])
-        );
-        assert_eq!(
-            parse_status_keywords("doing"),
-            Some(vec!["doing".to_string()])
-        );
-        assert_eq!(
-            parse_status_keywords("done"),
-            Some(vec!["done".to_string()])
-        );
-    }
-
-    #[test]
-    fn test_parse_status_keywords_multiple() {
-        let result = parse_status_keywords("todo doing");
-        assert!(result.is_some());
-        let statuses = result.unwrap();
-        assert!(statuses.contains(&"todo".to_string()));
-        assert!(statuses.contains(&"doing".to_string()));
-    }
-
-    #[test]
-    fn test_parse_status_keywords_case_insensitive() {
-        assert_eq!(
-            parse_status_keywords("TODO"),
-            Some(vec!["todo".to_string()])
-        );
-        assert_eq!(
-            parse_status_keywords("DoInG"),
-            Some(vec!["doing".to_string()])
-        );
-    }
-
-    #[test]
-    fn test_parse_status_keywords_invalid() {
-        // Mixed with non-status words
-        assert_eq!(parse_status_keywords("todo task"), None);
-        assert_eq!(parse_status_keywords("search term"), None);
-
-        // Empty
-        assert_eq!(parse_status_keywords(""), None);
-        assert_eq!(parse_status_keywords("   "), None);
-    }
-
-    #[test]
-    fn test_parse_status_keywords_dedup() {
-        // Duplicate statuses should be deduplicated
-        let result = parse_status_keywords("todo todo todo");
-        assert!(result.is_some());
-        let statuses = result.unwrap();
-        assert_eq!(statuses.len(), 1);
-        assert_eq!(statuses[0], "todo");
     }
 }

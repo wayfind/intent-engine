@@ -1,3 +1,6 @@
+//! **SQLite-only**: These functions operate on LLM suggestion tables via
+//! `crate::llm` and are not available in the Neo4j backend.
+
 use crate::error::Result;
 use crate::llm::{
     clear_dismissed_suggestions, dismiss_all_suggestions, dismiss_suggestion,

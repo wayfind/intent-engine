@@ -17,11 +17,25 @@ async fn test_start_task_blocked_by_incomplete_dependency() {
 
     // Create two tasks
     let task1 = manager
-        .add_task("Task A", None, None, Some("human"), None, None)
+        .add_task(
+            "Task A".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task B", None, None, Some("human"), None, None)
+        .add_task(
+            "Task B".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -50,11 +64,25 @@ async fn test_start_task_allowed_after_dependency_completed() {
 
     // Create two tasks
     let task1 = manager
-        .add_task("Task A", None, None, Some("human"), None, None)
+        .add_task(
+            "Task A".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task B", None, None, Some("human"), None, None)
+        .add_task(
+            "Task B".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -83,15 +111,36 @@ async fn test_start_task_blocked_by_multiple_dependencies() {
 
     // Create three tasks
     let task1 = manager
-        .add_task("Task 1", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task 2", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 2".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task3 = manager
-        .add_task("Task 3", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 3".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -123,15 +172,36 @@ async fn test_start_task_with_partial_dependencies_completed() {
 
     // Create three tasks
     let task1 = manager
-        .add_task("Task 1", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task 2", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 2".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task3 = manager
-        .add_task("Task 3", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 3".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -167,7 +237,14 @@ async fn test_start_task_no_dependencies_allowed() {
 
     // Create a task with no dependencies
     let task = manager
-        .add_task("Independent Task", None, None, Some("human"), None, None)
+        .add_task(
+            "Independent Task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -187,11 +264,25 @@ async fn test_start_task_blocked_by_doing_dependency() {
 
     // Create two tasks
     let task1 = manager
-        .add_task("Task A", None, None, Some("human"), None, None)
+        .add_task(
+            "Task A".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task B", None, None, Some("human"), None, None)
+        .add_task(
+            "Task B".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 

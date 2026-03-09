@@ -26,8 +26,8 @@ impl Neo4jEventManager {
     pub async fn add_event(
         &self,
         task_id: i64,
-        log_type: &str,
-        discussion_data: &str,
+        log_type: String,
+        discussion_data: String,
     ) -> Result<Event> {
         // Verify task exists
         let mut check = self
@@ -67,8 +67,8 @@ impl Neo4jEventManager {
                 .param("pid", self.project_id.clone())
                 .param("tid", task_id)
                 .param("eid", id)
-                .param("log_type", log_type.to_string())
-                .param("data", discussion_data.to_string())
+                .param("log_type", log_type.clone())
+                .param("data", discussion_data.clone())
                 .param("ts", timestamp_str),
             )
             .await
@@ -83,8 +83,8 @@ impl Neo4jEventManager {
                 id,
                 task_id,
                 timestamp: now,
-                log_type: log_type.to_string(),
-                discussion_data: discussion_data.to_string(),
+                log_type,
+                discussion_data,
             }),
             None => Err(IntentError::OtherError(anyhow::anyhow!(
                 "add_event: CREATE did not return a node"
@@ -253,8 +253,8 @@ impl crate::backend::EventBackend for Neo4jEventManager {
     fn add_event(
         &self,
         task_id: i64,
-        log_type: &str,
-        discussion_data: &str,
+        log_type: String,
+        discussion_data: String,
     ) -> impl std::future::Future<Output = Result<Event>> + Send {
         self.add_event(task_id, log_type, discussion_data)
     }

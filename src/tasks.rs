@@ -152,12 +152,12 @@ impl<'a> TaskManager<'a> {
     #[tracing::instrument(skip(self), fields(task_name = %name))]
     pub async fn add_task(
         &self,
-        name: &str,
-        spec: Option<&str>,
+        name: String,
+        spec: Option<String>,
         parent_id: Option<i64>,
-        owner: Option<&str>,
+        owner: Option<String>,
         priority: Option<i32>,
-        metadata: Option<&str>,
+        metadata: Option<String>,
     ) -> Result<Task> {
         // Check for circular dependency if parent_id is provided
         if let Some(pid) = parent_id {
@@ -165,7 +165,7 @@ impl<'a> TaskManager<'a> {
         }
 
         let now = Utc::now();
-        let owner = owner.unwrap_or("human");
+        let owner = owner.as_deref().unwrap_or("human").to_string();
 
         let result = sqlx::query(
             r#"
@@ -1105,7 +1105,7 @@ impl<'a> TaskManager<'a> {
     /// Find tasks with optional filters, sorting, and pagination
     pub async fn find_tasks(
         &self,
-        status: Option<&str>,
+        status: Option<String>,
         parent_id: Option<Option<i64>>,
         sort_by: Option<TaskSortBy>,
         limit: Option<i64>,
@@ -1124,7 +1124,7 @@ impl<'a> TaskManager<'a> {
         let mut conditions = Vec::new();
 
         if let Some(s) = status {
-            let canonical = match crate::plan::TaskStatus::from_db_str(s) {
+            let canonical = match crate::plan::TaskStatus::from_db_str(&s) {
                 Some(ts) => ts.as_db_str(),
                 None => return Err(IntentError::InvalidInput(format!("Invalid status: {}", s))),
             };
@@ -1631,7 +1631,14 @@ impl<'a> TaskManager<'a> {
 
         // Create the subtask with AI ownership (CLI operation)
         let subtask = self
-            .add_task(name, spec, Some(parent_id), Some("ai"), None, None)
+            .add_task(
+                name.to_string(),
+                spec.map(|s| s.to_string()),
+                Some(parent_id),
+                Some("ai".to_string()),
+                None,
+                None,
+            )
             .await?;
 
         // Start the new subtask (sets status to doing and updates current_task_id)
@@ -2073,7 +2080,7 @@ impl crate::backend::TaskBackend for TaskManager<'_> {
 
     fn find_tasks(
         &self,
-        status: Option<&str>,
+        status: Option<String>,
         parent_id: Option<Option<i64>>,
         sort_by: Option<TaskSortBy>,
         limit: Option<i64>,
@@ -2084,12 +2091,12 @@ impl crate::backend::TaskBackend for TaskManager<'_> {
 
     fn add_task(
         &self,
-        name: &str,
-        spec: Option<&str>,
+        name: String,
+        spec: Option<String>,
         parent_id: Option<i64>,
-        owner: Option<&str>,
+        owner: Option<String>,
         priority: Option<i32>,
-        metadata: Option<&str>,
+        metadata: Option<String>,
     ) -> impl std::future::Future<Output = Result<Task>> + Send {
         self.add_task(name, spec, parent_id, owner, priority, metadata)
     }
@@ -2157,6 +2164,25 @@ impl crate::backend::TaskBackend for TaskManager<'_> {
     }
 }
 
+impl crate::backend::SearchBackend for TaskManager<'_> {
+    fn search(
+        &self,
+        query: String,
+        include_tasks: bool,
+        include_events: bool,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> impl std::future::Future<Output = Result<crate::db::models::PaginatedSearchResults>> + Send
+    {
+        use crate::search::SearchManager;
+        let mgr = SearchManager::new(self.pool);
+        async move {
+            mgr.search(&query, include_tasks, include_events, limit, offset, false)
+                .await
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2184,15 +2210,15 @@ mod tests {
 
         // Create tasks with different statuses
         let task1 = manager
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task2 = manager
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let _task3 = manager
-            .add_task("Task 3", None, None, None, None, None)
+            .add_task("Task 3".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -2233,7 +2259,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -2251,7 +2277,14 @@ mod tests {
 
         let spec = "This is a task specification";
         let task = manager
-            .add_task("Test task", Some(spec), None, None, None, None)
+            .add_task(
+                "Test task".to_string(),
+                Some(spec.to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2265,11 +2298,18 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let parent = manager
-            .add_task("Parent task", None, None, None, None, None)
+            .add_task("Parent task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let child = manager
-            .add_task("Child task", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child task".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2282,7 +2322,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let created = manager
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let retrieved = manager.get_task(created.id).await.unwrap();
@@ -2306,7 +2346,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Original name", None, None, None, None, None)
+            .add_task("Original name".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let updated = manager
@@ -2329,7 +2369,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let updated = manager
@@ -2353,7 +2393,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.delete_task(task.id).await.unwrap();
@@ -2368,11 +2408,11 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         manager
-            .add_task("Todo task", None, None, None, None, None)
+            .add_task("Todo task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let doing_task = manager
-            .add_task("Doing task", None, None, None, None, None)
+            .add_task("Doing task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
@@ -2387,11 +2427,11 @@ mod tests {
             .unwrap();
 
         let todo_result = manager
-            .find_tasks(Some("todo"), None, None, None, None)
+            .find_tasks(Some("todo".to_string()), None, None, None, None)
             .await
             .unwrap();
         let doing_result = manager
-            .find_tasks(Some("doing"), None, None, None, None)
+            .find_tasks(Some("doing".to_string()), None, None, None, None)
             .await
             .unwrap();
 
@@ -2406,15 +2446,29 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let parent = manager
-            .add_task("Parent", None, None, None, None, None)
+            .add_task("Parent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
-            .add_task("Child 1", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child 1".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         manager
-            .add_task("Child 2", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child 2".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2432,7 +2486,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let started = manager.start_task(task.id, false).await.unwrap();
@@ -2460,7 +2514,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -2486,7 +2540,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.start_task(task.id, false).await.unwrap();
@@ -2522,11 +2576,11 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let parent = manager
-            .add_task("Parent", None, None, None, None, None)
+            .add_task("Parent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
-            .add_task("Child", None, Some(parent.id), None, None, None)
+            .add_task("Child".to_string(), None, Some(parent.id), None, None, None)
             .await
             .unwrap();
 
@@ -2543,11 +2597,11 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let parent = manager
-            .add_task("Parent", None, None, None, None, None)
+            .add_task("Parent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let child = manager
-            .add_task("Child", None, Some(parent.id), None, None, None)
+            .add_task("Child".to_string(), None, Some(parent.id), None, None, None)
             .await
             .unwrap();
 
@@ -2581,11 +2635,11 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task1 = manager
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task2 = manager
-            .add_task("Task 2", None, Some(task1.id), None, None, None)
+            .add_task("Task 2".to_string(), None, Some(task1.id), None, None, None)
             .await
             .unwrap();
 
@@ -2612,7 +2666,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let result = manager
-            .add_task("Test", None, Some(999), None, None, None)
+            .add_task("Test".to_string(), None, Some(999), None, None, None)
             .await;
         assert!(matches!(result, Err(IntentError::TaskNotFound(999))));
     }
@@ -2623,7 +2677,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let updated = manager
@@ -2649,7 +2703,7 @@ mod tests {
 
         // Create and start a parent task
         let parent = manager
-            .add_task("Parent task", None, None, None, None, None)
+            .add_task("Parent task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.start_task(parent.id, false).await.unwrap();
@@ -2702,7 +2756,7 @@ mod tests {
         // Create 10 todo tasks
         for i in 1..=10 {
             manager
-                .add_task(&format!("Task {}", i), None, None, None, None, None)
+                .add_task(format!("Task {}", i), None, None, None, None, None)
                 .await
                 .unwrap();
         }
@@ -2734,14 +2788,14 @@ mod tests {
         // Create 10 todo tasks
         for i in 1..=10 {
             manager
-                .add_task(&format!("Task {}", i), None, None, None, None, None)
+                .add_task(format!("Task {}", i), None, None, None, None, None)
                 .await
                 .unwrap();
         }
 
         // Start 2 tasks
         let result = manager
-            .find_tasks(Some("todo"), None, None, None, None)
+            .find_tasks(Some("todo".to_string()), None, None, None, None)
             .await
             .unwrap();
         manager.start_task(result.tasks[0].id, false).await.unwrap();
@@ -2771,7 +2825,7 @@ mod tests {
         // Create 10 tasks
         for i in 1..=10 {
             manager
-                .add_task(&format!("Task {}", i), None, None, None, None, None)
+                .add_task(format!("Task {}", i), None, None, None, None, None)
                 .await
                 .unwrap();
         }
@@ -2792,7 +2846,7 @@ mod tests {
 
         // Create tasks with different priorities
         let low = manager
-            .add_task("Low priority", None, None, None, None, None)
+            .add_task("Low priority".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
@@ -2807,7 +2861,7 @@ mod tests {
             .unwrap();
 
         let high = manager
-            .add_task("High priority", None, None, None, None, None)
+            .add_task("High priority".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
@@ -2822,7 +2876,7 @@ mod tests {
             .unwrap();
 
         let medium = manager
-            .add_task("Medium priority", None, None, None, None, None)
+            .add_task("Medium priority".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
@@ -2853,7 +2907,7 @@ mod tests {
 
         // Create tasks with different complexities (same priority)
         let complex = manager
-            .add_task("Complex", None, None, None, None, None)
+            .add_task("Complex".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
@@ -2869,7 +2923,7 @@ mod tests {
             .unwrap();
 
         let simple = manager
-            .add_task("Simple", None, None, None, None, None)
+            .add_task("Simple".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
@@ -2885,7 +2939,7 @@ mod tests {
             .unwrap();
 
         let medium = manager
-            .add_task("Medium", None, None, None, None, None)
+            .add_task("Medium".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
@@ -2917,19 +2971,40 @@ mod tests {
 
         // Create parent with multiple children
         let parent = manager
-            .add_task("Parent Task", None, None, None, None, None)
+            .add_task("Parent Task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let child1 = manager
-            .add_task("Child 1", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child 1".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let child2 = manager
-            .add_task("Child 2", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child 2".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let _child3 = manager
-            .add_task("Child 3", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child 3".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -2973,11 +3048,18 @@ mod tests {
 
         // Create top-level task with children
         let parent = manager
-            .add_task("Epic Task", None, None, None, None, None)
+            .add_task("Epic Task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let child = manager
-            .add_task("Sub Task", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Sub Task".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3010,11 +3092,25 @@ mod tests {
 
         // Create multiple standalone tasks
         let task1 = manager
-            .add_task("Standalone Task 1", None, None, None, None, None)
+            .add_task(
+                "Standalone Task 1".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let _task2 = manager
-            .add_task("Standalone Task 2", None, None, None, None, None)
+            .add_task(
+                "Standalone Task 2".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3047,11 +3143,11 @@ mod tests {
 
         // Create two tasks, focus on task_a
         let task_a = manager
-            .add_task("Task A", None, None, None, None, None)
+            .add_task("Task A".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task_b = manager
-            .add_task("Task B", None, None, None, None, None)
+            .add_task("Task B".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.start_task(task_a.id, false).await.unwrap();
@@ -3085,7 +3181,7 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Focused task", None, None, None, None, None)
+            .add_task("Focused task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.start_task(task.id, false).await.unwrap();
@@ -3116,7 +3212,14 @@ mod tests {
 
         // Create a human-owned task and set it to doing
         let task = manager
-            .add_task("Human task", None, None, Some("human"), None, None)
+            .add_task(
+                "Human task".to_string(),
+                None,
+                None,
+                Some("human".to_string()),
+                None,
+                None,
+            )
             .await
             .unwrap();
         manager
@@ -3148,11 +3251,18 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let parent = manager
-            .add_task("Parent", None, None, None, None, None)
+            .add_task("Parent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager
-            .add_task("Incomplete child", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Incomplete child".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3179,10 +3289,10 @@ mod tests {
         // Create and complete a task
         let task = manager
             .add_task(
-                "Test Task",
-                Some("Original spec"),
+                "Test Task".to_string(),
+                Some("Original spec".to_string()),
                 None,
-                Some("ai"),
+                Some("ai".to_string()),
                 None,
                 None,
             )
@@ -3191,7 +3301,7 @@ mod tests {
 
         // Add some events
         event_mgr
-            .add_event(task.id, "decision", "Test decision")
+            .add_event(task.id, "decision".to_string(), "Test decision".to_string())
             .await
             .unwrap();
 
@@ -3217,7 +3327,14 @@ mod tests {
 
         // Create AI-owned task
         let ai_task = manager
-            .add_task("AI Task", Some("AI spec"), None, Some("ai"), None, None)
+            .add_task(
+                "AI Task".to_string(),
+                Some("AI spec".to_string()),
+                None,
+                Some("ai".to_string()),
+                None,
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(ai_task.owner, "ai");
@@ -3225,10 +3342,10 @@ mod tests {
         // Create human-owned task
         let human_task = manager
             .add_task(
-                "Human Task",
-                Some("Human spec"),
+                "Human Task".to_string(),
+                Some("Human spec".to_string()),
                 None,
-                Some("human"),
+                Some("human".to_string()),
                 None,
                 None,
             )
@@ -3252,7 +3369,14 @@ mod tests {
         let manager = TaskManager::new(ctx.pool());
 
         let task = manager
-            .add_task("Synthesis Test", Some("Original"), None, None, None, None)
+            .add_task(
+                "Synthesis Test".to_string(),
+                Some("Original".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3276,18 +3400,32 @@ mod tests {
 
         // Create parent task and set as current
         let parent = manager
-            .add_task("Parent task", None, None, None, None, None)
+            .add_task("Parent task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.start_task(parent.id, false).await.unwrap();
 
         // Create subtasks with different priorities
         let subtask1 = manager
-            .add_task("Subtask 1", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Subtask 1".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let subtask2 = manager
-            .add_task("Subtask 2", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Subtask 2".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3329,11 +3467,11 @@ mod tests {
 
         // Create top-level tasks with different priorities
         let task1 = manager
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task2 = manager
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -3388,7 +3526,7 @@ mod tests {
 
         // Create task and mark as done
         let task = manager
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.start_task(task.id, false).await.unwrap();
@@ -3409,14 +3547,21 @@ mod tests {
 
         // Create a parent task that's in "doing" status
         let parent = manager
-            .add_task("Parent task", None, None, None, None, None)
+            .add_task("Parent task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.start_task(parent.id, false).await.unwrap();
 
         // Create a subtask also in "doing" status (no "todo" subtasks)
         let subtask = manager
-            .add_task("Subtask", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Subtask".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         // Switch to subtask (this will set parent back to todo, so we need to manually set subtask to doing)
@@ -3466,14 +3611,21 @@ mod tests {
 
         // Create parent and set as current
         let parent = manager
-            .add_task("Parent", None, None, None, None, None)
+            .add_task("Parent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.start_task(parent.id, false).await.unwrap();
 
         // Create multiple subtasks with various priorities
         let sub1 = manager
-            .add_task("Priority 10", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Priority 10".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         manager
@@ -3488,7 +3640,14 @@ mod tests {
             .unwrap();
 
         let sub2 = manager
-            .add_task("Priority 1", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Priority 1".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         manager
@@ -3503,7 +3662,14 @@ mod tests {
             .unwrap();
 
         let sub3 = manager
-            .add_task("Priority 5", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Priority 5".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         manager
@@ -3532,14 +3698,14 @@ mod tests {
 
         // Create parent without subtasks and set as current
         let parent = manager
-            .add_task("Parent", None, None, None, None, None)
+            .add_task("Parent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         manager.start_task(parent.id, false).await.unwrap();
 
         // Create another top-level task
         let top_level = manager
-            .add_task("Top level task", None, None, None, None, None)
+            .add_task("Top level task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -3559,17 +3725,17 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test", None, None, None, None, None)
+            .add_task("Test".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
         // Add some events
         event_mgr
-            .add_event(task.id, "progress", "Event 1")
+            .add_event(task.id, "progress".to_string(), "Event 1".to_string())
             .await
             .unwrap();
         event_mgr
-            .add_event(task.id, "decision", "Event 2")
+            .add_event(task.id, "decision".to_string(), "Event 2".to_string())
             .await
             .unwrap();
 
@@ -3601,14 +3767,14 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test", None, None, None, None, None)
+            .add_task("Test".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
         // Add 20 events
         for i in 0..20 {
             event_mgr
-                .add_event(task.id, "test", &format!("Event {}", i))
+                .add_event(task.id, "test".to_string(), format!("Event {}", i))
                 .await
                 .unwrap();
         }
@@ -3626,7 +3792,7 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test", None, None, None, None, None)
+            .add_task("Test".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -3643,7 +3809,7 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -3658,11 +3824,11 @@ mod tests {
         let task_mgr = TaskManager::new(ctx.pool());
 
         task_mgr
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         task_mgr
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -3680,7 +3846,7 @@ mod tests {
 
         // Create a single root task with no relations
         let task = task_mgr
-            .add_task("Root task", None, None, None, None, None)
+            .add_task("Root task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -3707,15 +3873,15 @@ mod tests {
 
         // Create multiple root tasks (siblings)
         let task1 = task_mgr
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task2 = task_mgr
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task3 = task_mgr
-            .add_task("Task 3", None, None, None, None, None)
+            .add_task("Task 3".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -3745,11 +3911,18 @@ mod tests {
 
         // Create parent-child relationship
         let parent = task_mgr
-            .add_task("Parent task", None, None, None, None, None)
+            .add_task("Parent task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let child = task_mgr
-            .add_task("Child task", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child task".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3778,19 +3951,40 @@ mod tests {
 
         // Create parent with multiple children
         let parent = task_mgr
-            .add_task("Parent task", None, None, None, None, None)
+            .add_task("Parent task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let child1 = task_mgr
-            .add_task("Child 1", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child 1".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let child2 = task_mgr
-            .add_task("Child 2", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child 2".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let child3 = task_mgr
-            .add_task("Child 3", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Child 3".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3820,15 +4014,22 @@ mod tests {
 
         // Create 3-level hierarchy: grandparent -> parent -> child
         let grandparent = task_mgr
-            .add_task("Grandparent", None, None, None, None, None)
+            .add_task("Grandparent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let parent = task_mgr
-            .add_task("Parent", None, Some(grandparent.id), None, None, None)
+            .add_task(
+                "Parent".to_string(),
+                None,
+                Some(grandparent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let child = task_mgr
-            .add_task("Child", None, Some(parent.id), None, None, None)
+            .add_task("Child".to_string(), None, Some(parent.id), None, None, None)
             .await
             .unwrap();
 
@@ -3864,23 +4065,37 @@ mod tests {
         //  └─ Child2
 
         let root = task_mgr
-            .add_task("Root", None, None, None, None, None)
+            .add_task("Root".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let child1 = task_mgr
-            .add_task("Child1", None, Some(root.id), None, None, None)
+            .add_task("Child1".to_string(), None, Some(root.id), None, None, None)
             .await
             .unwrap();
         let child2 = task_mgr
-            .add_task("Child2", None, Some(root.id), None, None, None)
+            .add_task("Child2".to_string(), None, Some(root.id), None, None, None)
             .await
             .unwrap();
         let grandchild1 = task_mgr
-            .add_task("Grandchild1", None, Some(child1.id), None, None, None)
+            .add_task(
+                "Grandchild1".to_string(),
+                None,
+                Some(child1.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let grandchild2 = task_mgr
-            .add_task("Grandchild2", None, Some(child1.id), None, None, None)
+            .add_task(
+                "Grandchild2".to_string(),
+                None,
+                Some(child1.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -3918,13 +4133,20 @@ mod tests {
 
         // Create parent with children having different priorities
         let parent = task_mgr
-            .add_task("Parent", None, None, None, None, None)
+            .add_task("Parent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
         // Add children with priorities (lower number = higher priority)
         let child_low = task_mgr
-            .add_task("Low priority", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Low priority".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let _ = task_mgr
@@ -3939,7 +4161,14 @@ mod tests {
             .unwrap();
 
         let child_high = task_mgr
-            .add_task("High priority", None, Some(parent.id), None, None, None)
+            .add_task(
+                "High priority".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let _ = task_mgr
@@ -3954,7 +4183,14 @@ mod tests {
             .unwrap();
 
         let child_medium = task_mgr
-            .add_task("Medium priority", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Medium priority".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let _ = task_mgr
@@ -3994,7 +4230,7 @@ mod tests {
 
         // Create siblings with mixed null and set priorities
         let task1 = task_mgr
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let _ = task_mgr
@@ -4009,13 +4245,13 @@ mod tests {
             .unwrap();
 
         let task2 = task_mgr
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         // task2 has NULL priority
 
         let task3 = task_mgr
-            .add_task("Task 3", None, None, None, None, None)
+            .add_task("Task 3".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let _ = task_mgr
@@ -4048,7 +4284,7 @@ mod tests {
 
         // Create 4 tasks with different priorities
         let critical = task_mgr
-            .add_task("Critical Task", None, None, None, None, None)
+            .add_task("Critical Task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         task_mgr
@@ -4063,7 +4299,7 @@ mod tests {
             .unwrap();
 
         let low = task_mgr
-            .add_task("Low Task", None, None, None, None, None)
+            .add_task("Low Task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         task_mgr
@@ -4078,7 +4314,7 @@ mod tests {
             .unwrap();
 
         let high = task_mgr
-            .add_task("High Task", None, None, None, None, None)
+            .add_task("High Task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         task_mgr
@@ -4093,7 +4329,7 @@ mod tests {
             .unwrap();
 
         let medium = task_mgr
-            .add_task("Medium Task", None, None, None, None, None)
+            .add_task("Medium Task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         task_mgr
@@ -4125,7 +4361,7 @@ mod tests {
 
         // Create a parent task and set it as current
         let parent = task_mgr
-            .add_task("Parent", None, None, None, None, None)
+            .add_task("Parent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let parent_started = task_mgr.start_task(parent.id, false).await.unwrap();
@@ -4136,7 +4372,14 @@ mod tests {
 
         // Create two subtasks with same priority: one doing, one todo
         let doing_subtask = task_mgr
-            .add_task("Doing Subtask", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Doing Subtask".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         task_mgr.start_task(doing_subtask.id, false).await.unwrap();
@@ -4147,7 +4390,14 @@ mod tests {
             .unwrap();
 
         let _todo_subtask = task_mgr
-            .add_task("Todo Subtask", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Todo Subtask".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -4173,7 +4423,7 @@ mod tests {
 
         // Create and start task A
         let task_a = task_mgr
-            .add_task("Task A", None, None, None, None, None)
+            .add_task("Task A".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task_a_started = task_mgr.start_task(task_a.id, false).await.unwrap();
@@ -4185,7 +4435,7 @@ mod tests {
 
         // Create and start task B
         let task_b = task_mgr
-            .add_task("Task B", None, None, None, None, None)
+            .add_task("Task B".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task_b_started = task_mgr.start_task(task_b.id, false).await.unwrap();
@@ -4223,7 +4473,7 @@ mod tests {
         // Create 15 tasks
         for i in 0..15 {
             task_mgr
-                .add_task(&format!("Task {}", i), None, None, None, None, None)
+                .add_task(format!("Task {}", i), None, None, None, None, None)
                 .await
                 .unwrap();
         }

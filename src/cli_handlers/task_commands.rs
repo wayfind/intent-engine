@@ -178,12 +178,12 @@ pub async fn handle_create(
     // Create the task with priority and metadata
     let mut task = task_mgr
         .add_task(
-            &name,
-            description.as_deref(),
+            name,
+            description,
             parent_id,
-            Some(&owner),
+            Some(owner),
             priority,
-            merged_metadata.as_deref(),
+            merged_metadata,
         )
         .await?;
 
@@ -468,7 +468,7 @@ pub async fn handle_list(
     let parent_id_opt: Option<Option<i64>> = parent.map(|p| if p == 0 { None } else { Some(p) });
 
     let result = task_mgr
-        .find_tasks(status.as_deref(), parent_id_opt, sort_by, limit, offset)
+        .find_tasks(status, parent_id_opt, sort_by, limit, offset)
         .await?;
 
     if format == "json" {

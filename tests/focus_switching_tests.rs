@@ -51,7 +51,7 @@ async fn test_focus_switch_from_none() {
     let mgr = TaskManager::new(&pool);
 
     // Create a task
-    mgr.add_task("Task A", None, None, None, None, None)
+    mgr.add_task("Task A".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -75,10 +75,10 @@ async fn test_focus_switch_between_tasks() {
     let mgr = TaskManager::new(&pool);
 
     // Create two tasks
-    mgr.add_task("Task A", None, None, None, None, None)
+    mgr.add_task("Task A".to_string(), None, None, None, None, None)
         .await
         .unwrap();
-    mgr.add_task("Task B", None, None, None, None, None)
+    mgr.add_task("Task B".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -116,13 +116,13 @@ async fn test_paused_state_is_derived() {
     let mgr = TaskManager::new(&pool);
 
     // Create 3 tasks
-    mgr.add_task("Task A", None, None, None, None, None)
+    mgr.add_task("Task A".to_string(), None, None, None, None, None)
         .await
         .unwrap();
-    mgr.add_task("Task B", None, None, None, None, None)
+    mgr.add_task("Task B".to_string(), None, None, None, None, None)
         .await
         .unwrap();
-    mgr.add_task("Task C", None, None, None, None, None)
+    mgr.add_task("Task C".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -165,10 +165,10 @@ async fn test_resume_paused_task() {
     let mgr = TaskManager::new(&pool);
 
     // Create two tasks
-    mgr.add_task("Task A", None, None, None, None, None)
+    mgr.add_task("Task A".to_string(), None, None, None, None, None)
         .await
         .unwrap();
-    mgr.add_task("Task B", None, None, None, None, None)
+    mgr.add_task("Task B".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -198,7 +198,7 @@ async fn test_start_already_focused_task() {
     let (_temp_dir, pool) = setup_test_db().await;
     let mgr = TaskManager::new(&pool);
 
-    mgr.add_task("Task A", None, None, None, None, None)
+    mgr.add_task("Task A".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -227,13 +227,13 @@ async fn test_focus_with_parent_child_cascade() {
     let mgr = TaskManager::new(&pool);
 
     // Create parent-child hierarchy
-    mgr.add_task("Parent", None, None, None, None, None)
+    mgr.add_task("Parent".to_string(), None, None, None, None, None)
         .await
         .unwrap();
-    mgr.add_task("Child A", None, Some(1), None, None, None)
+    mgr.add_task("Child A".to_string(), None, Some(1), None, None, None)
         .await
         .unwrap();
-    mgr.add_task("Child B", None, Some(1), None, None, None)
+    mgr.add_task("Child B".to_string(), None, Some(1), None, None, None)
         .await
         .unwrap();
 
@@ -271,7 +271,7 @@ async fn test_multiple_paused_tasks() {
 
     // Create 5 tasks
     for i in 1..=5 {
-        mgr.add_task(&format!("Task {}", i), None, None, None, None, None)
+        mgr.add_task(format!("Task {}", i), None, None, None, None, None)
             .await
             .unwrap();
     }
@@ -314,13 +314,13 @@ async fn test_done_removes_from_paused_pool() {
     let mgr = TaskManager::new(&pool);
 
     // Create 3 tasks
-    mgr.add_task("Task A", None, None, None, None, None)
+    mgr.add_task("Task A".to_string(), None, None, None, None, None)
         .await
         .unwrap();
-    mgr.add_task("Task B", None, None, None, None, None)
+    mgr.add_task("Task B".to_string(), None, None, None, None, None)
         .await
         .unwrap();
-    mgr.add_task("Task C", None, None, None, None, None)
+    mgr.add_task("Task C".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 

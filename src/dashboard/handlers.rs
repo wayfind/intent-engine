@@ -56,7 +56,7 @@ pub async fn list_tasks(
 
     match task_mgr
         .find_tasks(
-            query.status.as_deref(),
+            query.status,
             parent_filter,
             sort_by,
             query.limit,
@@ -157,8 +157,8 @@ pub async fn create_task(
     // Note: Priority is set separately via update_task if needed
     let result = task_mgr
         .add_task(
-            &req.name,
-            req.spec.as_deref(),
+            req.name.clone(),
+            req.spec.clone(),
             req.parent_id,
             None,
             None,
@@ -654,7 +654,7 @@ pub async fn create_event(
 
     // add_event signature: (task_id, log_type, discussion_data)
     match event_mgr
-        .add_event(task_id, &req.event_type, &req.data)
+        .add_event(task_id, req.event_type.clone(), req.data.clone())
         .await
     {
         Ok(event) => (StatusCode::CREATED, Json(ApiResponse { data: event })).into_response(),

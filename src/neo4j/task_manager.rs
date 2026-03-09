@@ -273,12 +273,12 @@ impl Neo4jTaskManager {
     /// The parent_id is also stored as a denormalized node property.
     pub async fn add_task(
         &self,
-        name: &str,
-        spec: Option<&str>,
+        name: String,
+        spec: Option<String>,
         parent_id: Option<i64>,
-        owner: Option<&str>,
+        owner: Option<String>,
         priority: Option<i32>,
-        metadata: Option<&str>,
+        metadata: Option<String>,
     ) -> Result<Task> {
         // Validate parent exists if provided
         if let Some(pid) = parent_id {
@@ -287,7 +287,7 @@ impl Neo4jTaskManager {
 
         let id = super::next_id(&self.graph, &self.project_id, "task").await?;
         let now = Utc::now().to_rfc3339();
-        let owner = owner.unwrap_or("human");
+        let owner = owner.as_deref().unwrap_or("human").to_string();
 
         // Create node with all properties in one shot.
         // Use COALESCE-style approach: always set core properties,
@@ -330,12 +330,12 @@ impl Neo4jTaskManager {
         let mut q = query(&cypher)
             .param("pid", self.project_id.clone())
             .param("id", id)
-            .param("name", name.to_string())
-            .param("owner", owner.to_string())
+            .param("name", name)
+            .param("owner", owner)
             .param("now", now);
 
         if let Some(s) = spec {
-            q = q.param("spec", s.to_string());
+            q = q.param("spec", s);
         }
         if let Some(pid) = parent_id {
             q = q.param("parent_id", pid);
@@ -344,7 +344,7 @@ impl Neo4jTaskManager {
             q = q.param("priority", p as i64);
         }
         if let Some(m) = metadata {
-            q = q.param("metadata", m.to_string());
+            q = q.param("metadata", m);
         }
 
         let mut result = self
@@ -685,7 +685,7 @@ impl Neo4jTaskManager {
     /// Find tasks with optional filters, sorting, and pagination.
     pub async fn find_tasks(
         &self,
-        status: Option<&str>,
+        status: Option<String>,
         parent_id: Option<Option<i64>>,
         sort_by: Option<TaskSortBy>,
         limit: Option<i64>,
@@ -762,9 +762,11 @@ impl Neo4jTaskManager {
             )
         };
 
+        let status_value = status.as_deref().map(str::to_string);
+
         let mut count_q = query(&count_cypher).param("pid", self.project_id.clone());
         if has_status_filter {
-            count_q = count_q.param("filter_status", status.unwrap().to_string());
+            count_q = count_q.param("filter_status", status_value.clone().unwrap());
         }
         if has_parent_filter {
             count_q = count_q.param("parent_id", parent_id.unwrap().unwrap());
@@ -807,7 +809,7 @@ impl Neo4jTaskManager {
             .param("limit", limit);
 
         if has_status_filter {
-            main_q = main_q.param("filter_status", status.unwrap().to_string());
+            main_q = main_q.param("filter_status", status_value.unwrap());
         }
         if has_parent_filter {
             main_q = main_q.param("parent_id", parent_id.unwrap().unwrap());
@@ -1781,7 +1783,7 @@ impl crate::backend::TaskBackend for Neo4jTaskManager {
 
     fn find_tasks(
         &self,
-        status: Option<&str>,
+        status: Option<String>,
         parent_id: Option<Option<i64>>,
         sort_by: Option<TaskSortBy>,
         limit: Option<i64>,
@@ -1792,12 +1794,12 @@ impl crate::backend::TaskBackend for Neo4jTaskManager {
 
     fn add_task(
         &self,
-        name: &str,
-        spec: Option<&str>,
+        name: String,
+        spec: Option<String>,
         parent_id: Option<i64>,
-        owner: Option<&str>,
+        owner: Option<String>,
         priority: Option<i32>,
-        metadata: Option<&str>,
+        metadata: Option<String>,
     ) -> impl std::future::Future<Output = Result<Task>> + Send {
         self.add_task(name, spec, parent_id, owner, priority, metadata)
     }
@@ -1862,6 +1864,25 @@ impl crate::backend::TaskBackend for Neo4jTaskManager {
 
     fn pick_next(&self) -> impl std::future::Future<Output = Result<PickNextResponse>> + Send {
         self.pick_next()
+    }
+}
+
+impl crate::backend::SearchBackend for Neo4jTaskManager {
+    fn search(
+        &self,
+        query: String,
+        include_tasks: bool,
+        include_events: bool,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> impl std::future::Future<Output = Result<crate::db::models::PaginatedSearchResults>> + Send
+    {
+        use crate::neo4j::search_manager::Neo4jSearchManager;
+        let mgr = Neo4jSearchManager::new(self.graph.clone(), self.project_id.clone());
+        async move {
+            mgr.search(&query, include_tasks, include_events, limit, offset)
+                .await
+        }
     }
 }
 

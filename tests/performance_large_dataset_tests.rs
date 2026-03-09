@@ -75,7 +75,14 @@ async fn run_dataset_test(total_tasks: usize) {
         let spec = format!("Implement {} functionality for module {}", keyword, i / 100);
 
         let task = task_mgr
-            .add_task(&name, Some(&spec), None, None, None, None)
+            .add_task(
+                name.to_string(),
+                Some(spec.to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -189,8 +196,8 @@ async fn run_dataset_test(total_tasks: usize) {
         let _ = event_mgr
             .add_event(
                 task_id,
-                "progress",
-                "Made significant progress on this task",
+                "progress".to_string(),
+                "Made significant progress on this task".to_string(),
             )
             .await;
     }
@@ -378,7 +385,7 @@ async fn run_dataset_test(total_tasks: usize) {
 
     let start = Instant::now();
     let result = task_mgr
-        .find_tasks(Some("todo"), None, None, None, None)
+        .find_tasks(Some("todo".to_string()), None, None, None, None)
         .await
         .unwrap();
     let find_duration = start.elapsed();
@@ -474,7 +481,14 @@ async fn test_search_accuracy_detailed() {
             let name = format!("{} #{}", name_template, i);
             let spec = format!("{} - iteration {}", spec_template, i);
             task_mgr
-                .add_task(&name, Some(&spec), None, None, None, None)
+                .add_task(
+                    name.to_string(),
+                    Some(spec.to_string()),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await
                 .unwrap();
         }
@@ -590,8 +604,8 @@ async fn test_concurrent_search_performance() {
 
         task_mgr
             .add_task(
-                &format!("{} task #{}", keyword, i),
-                Some(&format!("Implementation for {}", keyword)),
+                format!("{} task #{}", keyword, i),
+                Some(format!("Implementation for {}", keyword)),
                 None,
                 None,
                 None,

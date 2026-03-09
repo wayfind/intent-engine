@@ -7,8 +7,8 @@
 use std::future::Future;
 
 use crate::db::models::{
-    DoneTaskResponse, Event, PaginatedTasks, PickNextResponse, StatusResponse, Task, TaskContext,
-    TaskSortBy, TaskWithEvents,
+    DoneTaskResponse, Event, PaginatedSearchResults, PaginatedTasks, PickNextResponse,
+    StatusResponse, Task, TaskContext, TaskSortBy, TaskWithEvents,
 };
 use crate::error::Result;
 use crate::plan::{PlanRequest, PlanResult};
@@ -51,7 +51,7 @@ pub trait TaskBackend: Send + Sync {
 
     fn find_tasks(
         &self,
-        status: Option<&str>,
+        status: Option<String>,
         parent_id: Option<Option<i64>>,
         sort_by: Option<TaskSortBy>,
         limit: Option<i64>,
@@ -62,12 +62,12 @@ pub trait TaskBackend: Send + Sync {
 
     fn add_task(
         &self,
-        name: &str,
-        spec: Option<&str>,
+        name: String,
+        spec: Option<String>,
         parent_id: Option<i64>,
-        owner: Option<&str>,
+        owner: Option<String>,
         priority: Option<i32>,
-        metadata: Option<&str>,
+        metadata: Option<String>,
     ) -> impl Future<Output = Result<Task>> + Send;
 
     fn update_task(
@@ -140,8 +140,8 @@ pub trait EventBackend: Send + Sync {
     fn add_event(
         &self,
         task_id: i64,
-        log_type: &str,
-        discussion_data: &str,
+        log_type: String,
+        discussion_data: String,
     ) -> impl Future<Output = Result<Event>> + Send;
 
     fn list_events(
@@ -156,4 +156,17 @@ pub trait EventBackend: Send + Sync {
 /// Batch plan execution.
 pub trait PlanBackend: Send + Sync {
     fn execute(&self, request: &PlanRequest) -> impl Future<Output = Result<PlanResult>> + Send;
+}
+
+/// Full-text and status-keyword search operations.
+pub trait SearchBackend: Send + Sync {
+    /// Unified search across tasks and events.
+    fn search(
+        &self,
+        query: String,
+        include_tasks: bool,
+        include_events: bool,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> impl Future<Output = Result<PaginatedSearchResults>> + Send;
 }

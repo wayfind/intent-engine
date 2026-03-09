@@ -22,11 +22,25 @@ async fn test_pick_next_skips_blocked_task() {
 
     // Create two todo tasks
     let task1 = manager
-        .add_task("Task 1 - Blocking", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1 - Blocking".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task 2 - Blocked", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 2 - Blocked".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -49,11 +63,25 @@ async fn test_pick_next_recommends_after_blocking_complete() {
 
     // Create two todo tasks
     let task1 = manager
-        .add_task("Task 1 - Blocking", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1 - Blocking".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task 2 - Blocked", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 2 - Blocked".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -87,19 +115,33 @@ async fn test_pick_next_multiple_dependencies() {
 
     // Create three tasks
     let task1 = manager
-        .add_task("Task 1 - Blocker A", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1 - Blocker A".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task 2 - Blocker B", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 2 - Blocker B".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task3 = manager
         .add_task(
-            "Task 3 - Blocked by both",
+            "Task 3 - Blocked by both".to_string(),
             None,
             None,
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )
@@ -156,15 +198,22 @@ async fn test_pick_next_blocked_subtask() {
 
     // Create parent task and two subtasks
     let parent = manager
-        .add_task("Parent Task", None, None, Some("human"), None, None)
+        .add_task(
+            "Parent Task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let subtask1 = manager
         .add_task(
-            "Subtask 1 - Blocker",
+            "Subtask 1 - Blocker".to_string(),
             None,
             Some(parent.id),
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )
@@ -172,10 +221,10 @@ async fn test_pick_next_blocked_subtask() {
         .unwrap();
     let subtask2 = manager
         .add_task(
-            "Subtask 2 - Blocked",
+            "Subtask 2 - Blocked".to_string(),
             None,
             Some(parent.id),
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )
@@ -205,11 +254,25 @@ async fn test_pick_next_no_available_tasks_due_to_blocking() {
 
     // Create two tasks
     let task1 = manager
-        .add_task("Task 1 - Blocked", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1 - Blocked".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task 2 - Blocking", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 2 - Blocking".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -248,10 +311,10 @@ async fn test_pick_next_respects_priority_with_blocking() {
     // Create three tasks with different priorities
     let task1 = manager
         .add_task(
-            "Task 1 - Low Priority",
+            "Task 1 - Low Priority".to_string(),
             None,
             None,
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )
@@ -259,10 +322,10 @@ async fn test_pick_next_respects_priority_with_blocking() {
         .unwrap();
     let task2 = manager
         .add_task(
-            "Task 2 - High Priority",
+            "Task 2 - High Priority".to_string(),
             None,
             None,
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )
@@ -270,10 +333,10 @@ async fn test_pick_next_respects_priority_with_blocking() {
         .unwrap();
     let task3 = manager
         .add_task(
-            "Task 3 - Medium Priority",
+            "Task 3 - Medium Priority".to_string(),
             None,
             None,
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )
@@ -337,10 +400,10 @@ async fn test_pick_next_unblocked_task_normal_behavior() {
     // Create tasks without any dependencies
     let task1 = manager
         .add_task(
-            "Task 1 - No Dependencies",
+            "Task 1 - No Dependencies".to_string(),
             None,
             None,
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )
@@ -348,10 +411,10 @@ async fn test_pick_next_unblocked_task_normal_behavior() {
         .unwrap();
     let task2 = manager
         .add_task(
-            "Task 2 - No Dependencies",
+            "Task 2 - No Dependencies".to_string(),
             None,
             None,
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )

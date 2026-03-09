@@ -251,7 +251,7 @@ impl Neo4jPlanExecutor {
                         task_name,
                         task.spec.as_deref(),
                         None, // parent set later
-                        Some("ai"),
+                        Some("ai".to_string()),
                         task.priority.as_ref().map(|p| p.to_int()),
                         None, // metadata
                     )
@@ -362,7 +362,7 @@ impl Neo4jPlanExecutor {
                         && task.parent_name.is_none()
                         && task.explicit_parent_id.is_none()
                     {
-                        if let Some(&task_id) = task_id_map.get(task_name) {
+                        if let Some(task_id) = task_id_map.get(task_name) {
                             task_mgr
                                 .update_task(
                                     task_id,
@@ -388,7 +388,7 @@ impl Neo4jPlanExecutor {
 
         let focused_task_response: Option<TaskWithEvents> = if let Some(doing_task) = doing_task {
             if let Some(task_name) = &doing_task.name {
-                if let Some(&task_id) = task_id_map.get(task_name) {
+                if let Some(task_id) = task_id_map.get(task_name) {
                     let response = task_mgr.start_task(task_id, true).await?;
                     Some(response)
                 } else {
@@ -436,7 +436,7 @@ impl Neo4jPlanExecutor {
             };
 
             let blocked_id = match task_id_map.get(task_name) {
-                Some(&id) => id,
+                Some(id) => id,
                 None => continue,
             };
 

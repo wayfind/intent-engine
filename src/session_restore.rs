@@ -270,7 +270,7 @@ impl<'a> SessionRestoreManager<'a> {
         // 3. Get top 5 pending tasks by priority (limited query)
         let top_pending_result = task_mgr
             .find_tasks(
-                Some("todo"),
+                Some("todo".to_string()),
                 None,
                 Some(TaskSortBy::Priority),
                 Some(5),
@@ -464,7 +464,7 @@ mod tests {
         // Create a task and set it as current
         let task_mgr = TaskManager::new(pool);
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -494,13 +494,27 @@ mod tests {
 
         // Create parent task
         let parent = task_mgr
-            .add_task("Parent task", Some("Parent spec"), None, None, None, None)
+            .add_task(
+                "Parent task".to_string(),
+                Some("Parent spec".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
         // Create 3 siblings (1 done, 1 doing, 1 todo)
         let sibling1 = task_mgr
-            .add_task("Sibling 1", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Sibling 1".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         task_mgr
@@ -516,8 +530,8 @@ mod tests {
 
         let current = task_mgr
             .add_task(
-                "Current task",
-                Some("Current spec"),
+                "Current task".to_string(),
+                Some("Current spec".to_string()),
                 Some(parent.id),
                 None,
                 None,
@@ -541,31 +555,52 @@ mod tests {
             .unwrap();
 
         let _sibling3 = task_mgr
-            .add_task("Sibling 3", None, Some(parent.id), None, None, None)
+            .add_task(
+                "Sibling 3".to_string(),
+                None,
+                Some(parent.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
         // Add children to current task
         let _child1 = task_mgr
-            .add_task("Child 1", None, Some(current.id), None, None, None)
+            .add_task(
+                "Child 1".to_string(),
+                None,
+                Some(current.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let _child2 = task_mgr
-            .add_task("Child 2", None, Some(current.id), None, None, None)
+            .add_task(
+                "Child 2".to_string(),
+                None,
+                Some(current.id),
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
         // Add events
         event_mgr
-            .add_event(current.id, "decision", "Decision 1")
+            .add_event(current.id, "decision".to_string(), "Decision 1".to_string())
             .await
             .unwrap();
         event_mgr
-            .add_event(current.id, "blocker", "Blocker 1")
+            .add_event(current.id, "blocker".to_string(), "Blocker 1".to_string())
             .await
             .unwrap();
         event_mgr
-            .add_event(current.id, "note", "Note 1")
+            .add_event(current.id, "note".to_string(), "Note 1".to_string())
             .await
             .unwrap();
 
@@ -623,7 +658,14 @@ mod tests {
         // Create task with long spec
         let long_spec = "a".repeat(200);
         let task = task_mgr
-            .add_task("Test task", Some(&long_spec), None, None, None, None)
+            .add_task(
+                "Test task".to_string(),
+                Some(long_spec.to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         workspace_mgr.set_current_task(task.id, None).await.unwrap();
@@ -650,11 +692,11 @@ mod tests {
 
         // Create some tasks but no current task
         task_mgr
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         task_mgr
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -692,7 +734,7 @@ mod tests {
 
         // Create task
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         workspace_mgr.set_current_task(task.id, None).await.unwrap();
@@ -700,7 +742,7 @@ mod tests {
         // Add 10 events
         for i in 0..10 {
             event_mgr
-                .add_event(task.id, "note", &format!("Event {}", i))
+                .add_event(task.id, "note".to_string(), format!("Event {}", i))
                 .await
                 .unwrap();
         }
@@ -725,7 +767,7 @@ mod tests {
 
         // Create task
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         workspace_mgr.set_current_task(task.id, None).await.unwrap();
@@ -733,7 +775,7 @@ mod tests {
         // Add 10 events
         for i in 0..10 {
             event_mgr
-                .add_event(task.id, "note", &format!("Event {}", i))
+                .add_event(task.id, "note".to_string(), format!("Event {}", i))
                 .await
                 .unwrap();
         }

@@ -27,7 +27,11 @@ pub async fn handle_log(
     let event_type_str = event_type.as_str();
 
     let event = event_mgr
-        .add_event(target_task_id, event_type_str, message)
+        .add_event(
+            target_task_id,
+            event_type_str.to_string(),
+            message.to_string(),
+        )
         .await?;
 
     if format == "json" {

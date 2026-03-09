@@ -66,8 +66,8 @@ pub fn detect_circular_dependencies(flat_tasks: &[FlatTask]) -> Result<()> {
     let mut graph: Vec<Vec<usize>> = vec![Vec::new(); flat_tasks.len()];
     for (idx, task) in flat_tasks.iter().enumerate() {
         for dep_name in &task.depends_on {
-            if let Some(&dep_idx) = name_to_idx.get(dep_name.as_str()) {
-                graph[idx].push(dep_idx);
+            if let Some(dep_idx) = name_to_idx.get(dep_name.as_str()) {
+                graph[idx].push(*dep_idx);
             }
         }
     }

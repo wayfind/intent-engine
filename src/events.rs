@@ -109,8 +109,8 @@ impl<'a> EventManager<'a> {
     pub async fn add_event(
         &self,
         task_id: i64,
-        log_type: &str,
-        discussion_data: &str,
+        log_type: String,
+        discussion_data: String,
     ) -> Result<Event> {
         // Check if task exists
         let task_exists: bool =
@@ -132,8 +132,8 @@ impl<'a> EventManager<'a> {
             "#,
         )
         .bind(task_id)
-        .bind(log_type)
-        .bind(discussion_data)
+        .bind(&log_type)
+        .bind(&discussion_data)
         .bind(now)
         .execute(self.pool)
         .await?;
@@ -144,8 +144,8 @@ impl<'a> EventManager<'a> {
             id,
             task_id,
             timestamp: now,
-            log_type: log_type.to_string(),
-            discussion_data: discussion_data.to_string(),
+            log_type,
+            discussion_data,
         };
 
         // Notify WebSocket clients about the new event
@@ -372,8 +372,8 @@ impl crate::backend::EventBackend for EventManager<'_> {
     fn add_event(
         &self,
         task_id: i64,
-        log_type: &str,
-        discussion_data: &str,
+        log_type: String,
+        discussion_data: String,
     ) -> impl std::future::Future<Output = Result<Event>> + Send {
         self.add_event(task_id, log_type, discussion_data)
     }
@@ -402,11 +402,11 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let event = event_mgr
-            .add_event(task.id, "decision", "Test decision")
+            .add_event(task.id, "decision".to_string(), "Test decision".to_string())
             .await
             .unwrap();
 
@@ -420,7 +420,9 @@ mod tests {
         let ctx = TestContext::new().await;
         let event_mgr = EventManager::new(ctx.pool());
 
-        let result = event_mgr.add_event(999, "decision", "Test").await;
+        let result = event_mgr
+            .add_event(999, "decision".to_string(), "Test".to_string())
+            .await;
         assert!(matches!(result, Err(IntentError::TaskNotFound(999))));
     }
 
@@ -431,21 +433,21 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
         // Add multiple events
         event_mgr
-            .add_event(task.id, "decision", "Decision 1")
+            .add_event(task.id, "decision".to_string(), "Decision 1".to_string())
             .await
             .unwrap();
         event_mgr
-            .add_event(task.id, "blocker", "Blocker 1")
+            .add_event(task.id, "blocker".to_string(), "Blocker 1".to_string())
             .await
             .unwrap();
         event_mgr
-            .add_event(task.id, "milestone", "Milestone 1")
+            .add_event(task.id, "milestone".to_string(), "Milestone 1".to_string())
             .await
             .unwrap();
 
@@ -468,14 +470,14 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
         // Add 5 events
         for i in 0..5 {
             event_mgr
-                .add_event(task.id, "test", &format!("Event {}", i))
+                .add_event(task.id, "test".to_string(), format!("Event {}", i))
                 .await
                 .unwrap();
         }
@@ -503,7 +505,7 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -521,11 +523,15 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let event = event_mgr
-            .add_event(task.id, "decision", "Initial decision")
+            .add_event(
+                task.id,
+                "decision".to_string(),
+                "Initial decision".to_string(),
+            )
             .await
             .unwrap();
 
@@ -548,11 +554,15 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let event = event_mgr
-            .add_event(task.id, "decision", "Initial decision")
+            .add_event(
+                task.id,
+                "decision".to_string(),
+                "Initial decision".to_string(),
+            )
             .await
             .unwrap();
 
@@ -586,11 +596,11 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let event = event_mgr
-            .add_event(task.id, "decision", "To be deleted")
+            .add_event(task.id, "decision".to_string(), "To be deleted".to_string())
             .await
             .unwrap();
 
@@ -622,21 +632,21 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
         // Add events of different types
         event_mgr
-            .add_event(task.id, "decision", "Decision 1")
+            .add_event(task.id, "decision".to_string(), "Decision 1".to_string())
             .await
             .unwrap();
         event_mgr
-            .add_event(task.id, "blocker", "Blocker 1")
+            .add_event(task.id, "blocker".to_string(), "Blocker 1".to_string())
             .await
             .unwrap();
         event_mgr
-            .add_event(task.id, "decision", "Decision 2")
+            .add_event(task.id, "decision".to_string(), "Decision 2".to_string())
             .await
             .unwrap();
 
@@ -657,21 +667,29 @@ mod tests {
         let event_mgr = EventManager::new(ctx.pool());
 
         let task1 = task_mgr
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task2 = task_mgr
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
         // Add events to both tasks
         event_mgr
-            .add_event(task1.id, "decision", "Task 1 Decision")
+            .add_event(
+                task1.id,
+                "decision".to_string(),
+                "Task 1 Decision".to_string(),
+            )
             .await
             .unwrap();
         event_mgr
-            .add_event(task2.id, "decision", "Task 2 Decision")
+            .add_event(
+                task2.id,
+                "decision".to_string(),
+                "Task 2 Decision".to_string(),
+            )
             .await
             .unwrap();
 

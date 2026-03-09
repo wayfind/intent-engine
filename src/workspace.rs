@@ -123,7 +123,7 @@ impl<'a> WorkspaceManager<'a> {
         .execute(self.pool)
         .await?;
 
-        self.get_current_task(Some(&session_id)).await
+        self.get_current_task(Some(session_id.as_str())).await
     }
 
     /// Clear the current task for a session
@@ -220,7 +220,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -247,11 +247,11 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task1 = task_mgr
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task2 = task_mgr
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -278,7 +278,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         workspace_mgr.set_current_task(task.id, None).await.unwrap();
@@ -296,7 +296,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let response = workspace_mgr.set_current_task(task.id, None).await.unwrap();
@@ -328,7 +328,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         workspace_mgr.set_current_task(task.id, None).await.unwrap();
@@ -352,11 +352,11 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let parent = task_mgr
-            .add_task("Parent", None, None, None, None, None)
+            .add_task("Parent".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let child = task_mgr
-            .add_task("Child", None, Some(parent.id), None, None, None)
+            .add_task("Child".to_string(), None, Some(parent.id), None, None, None)
             .await
             .unwrap();
         workspace_mgr
@@ -384,7 +384,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         workspace_mgr.set_current_task(task.id, None).await.unwrap();
@@ -404,7 +404,14 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", Some("Task spec"), None, None, None, None)
+            .add_task(
+                "Test task".to_string(),
+                Some("Task spec".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -425,7 +432,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -444,11 +451,11 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task1 = task_mgr
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task2 = task_mgr
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -485,11 +492,11 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task1 = task_mgr
-            .add_task("Task 1", None, None, None, None, None)
+            .add_task("Task 1".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         let task2 = task_mgr
-            .add_task("Task 2", None, None, None, None, None)
+            .add_task("Task 2".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 
@@ -526,7 +533,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Test task", None, None, None, None, None)
+            .add_task("Test task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         workspace_mgr.set_current_task(task.id, None).await.unwrap();
@@ -547,7 +554,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Task", None, None, None, None, None)
+            .add_task("Task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
         workspace_mgr
@@ -575,7 +582,7 @@ mod tests {
         let workspace_mgr = WorkspaceManager::new(ctx.pool());
 
         let task = task_mgr
-            .add_task("Task", None, None, None, None, None)
+            .add_task("Task".to_string(), None, None, None, None, None)
             .await
             .unwrap();
 

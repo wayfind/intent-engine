@@ -93,7 +93,14 @@ async fn test_task_depends_on_self() {
 
     // Create a task
     let task = manager
-        .add_task("Task 1", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -113,15 +120,36 @@ async fn test_task_circular_dependency_detection() {
 
     // Create three tasks
     let task1 = manager
-        .add_task("Task 1", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
-        .add_task("Task 2", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 2".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task3 = manager
-        .add_task("Task 3", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 3".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -149,7 +177,14 @@ async fn test_task_depends_on_nonexistent_task() {
 
     // Create one task
     let task = manager
-        .add_task("Task 1", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -173,7 +208,14 @@ async fn test_task_update_invalid_priority() {
 
     // Create a task
     let task = manager
-        .add_task("Test Task", None, None, Some("human"), None, None)
+        .add_task(
+            "Test Task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -200,15 +242,36 @@ async fn test_pick_next_with_multiple_tasks() {
 
     // Create multiple tasks
     let task1 = manager
-        .add_task("Task 1", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .add_task("Task 2", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 2".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .add_task("Task 3", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 3".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -227,7 +290,14 @@ async fn test_pick_next_with_all_tasks_completed() {
 
     // Create a task
     let task = manager
-        .add_task("Task 1", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -254,17 +324,24 @@ async fn test_task_done_with_uncompleted_children() {
 
     // Create parent task
     let parent = manager
-        .add_task("Parent Task", None, None, Some("human"), None, None)
+        .add_task(
+            "Parent Task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
     // Create child task
     manager
         .add_task(
-            "Child Task",
+            "Child Task".to_string(),
             None,
             Some(parent.id),
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )

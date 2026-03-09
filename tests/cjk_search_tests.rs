@@ -31,8 +31,8 @@ async fn test_chinese_single_char_search() {
     // 创建任务
     task_mgr
         .add_task(
-            "实现用户认证功能",
-            Some("使用JWT实现登录"),
+            "实现用户认证功能".to_string(),
+            Some("使用JWT实现登录".to_string()),
             None,
             None,
             None,
@@ -87,15 +87,15 @@ async fn test_chinese_two_char_search() {
     let search_mgr = SearchManager::new(&pool);
 
     task_mgr
-        .add_task("实现用户认证", None, None, None, None, None)
+        .add_task("实现用户认证".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     task_mgr
-        .add_task("添加数据库索引", None, None, None, None, None)
+        .add_task("添加数据库索引".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     task_mgr
-        .add_task("优化查询性能", None, None, None, None, None)
+        .add_task("优化查询性能".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -143,8 +143,8 @@ async fn test_chinese_multi_char_search() {
 
     task_mgr
         .add_task(
-            "实现JWT用户认证功能",
-            Some("基于Token的认证机制"),
+            "实现JWT用户认证功能".to_string(),
+            Some("基于Token的认证机制".to_string()),
             None,
             None,
             None,
@@ -154,8 +154,8 @@ async fn test_chinese_multi_char_search() {
         .unwrap();
     task_mgr
         .add_task(
-            "优化数据库查询性能",
-            Some("添加索引提升查询速度"),
+            "优化数据库查询性能".to_string(),
+            Some("添加索引提升查询速度".to_string()),
             None,
             None,
             None,
@@ -220,8 +220,8 @@ async fn test_mixed_language_search() {
 
     task_mgr
         .add_task(
-            "实现JWT认证",
-            Some("JSON Web Token认证"),
+            "实现JWT认证".to_string(),
+            Some("JSON Web Token认证".to_string()),
             None,
             None,
             None,
@@ -231,8 +231,8 @@ async fn test_mixed_language_search() {
         .unwrap();
     task_mgr
         .add_task(
-            "添加API接口",
-            Some("RESTful API设计"),
+            "添加API接口".to_string(),
+            Some("RESTful API设计".to_string()),
             None,
             None,
             None,
@@ -241,7 +241,7 @@ async fn test_mixed_language_search() {
         .await
         .unwrap();
     task_mgr
-        .add_task("配置OAuth2流程", None, None, None, None, None)
+        .add_task("配置OAuth2流程".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -312,8 +312,8 @@ async fn test_japanese_search() {
 
     task_mgr
         .add_task(
-            "ユーザー認証を実装",
-            Some("JWTトークンを使用"),
+            "ユーザー認証を実装".to_string(),
+            Some("JWTトークンを使用".to_string()),
             None,
             None,
             None,
@@ -322,7 +322,14 @@ async fn test_japanese_search() {
         .await
         .unwrap();
     task_mgr
-        .add_task("データベース索引", Some("性能向上"), None, None, None, None)
+        .add_task(
+            "データベース索引".to_string(),
+            Some("性能向上".to_string()),
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -378,7 +385,7 @@ async fn test_edge_cases() {
 
     // 标点符号
     task_mgr
-        .add_task("实现：用户认证", None, None, None, None, None)
+        .add_task("实现：用户认证".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     let results = search_mgr
@@ -390,7 +397,7 @@ async fn test_edge_cases() {
 
     // 数字混合
     task_mgr
-        .add_task("实现OAuth2认证", None, None, None, None, None)
+        .add_task("实现OAuth2认证".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     let results = search_mgr
@@ -402,7 +409,7 @@ async fn test_edge_cases() {
 
     // 空格
     task_mgr
-        .add_task("实现 用户 认证", None, None, None, None, None)
+        .add_task("实现 用户 认证".to_string(), None, None, None, None, None)
         .await
         .unwrap();
     let results = search_mgr
@@ -415,8 +422,8 @@ async fn test_edge_cases() {
     // Spec中的搜索
     task_mgr
         .add_task(
-            "任务标题",
-            Some("描述中包含用户信息"),
+            "任务标题".to_string(),
+            Some("描述中包含用户信息".to_string()),
             None,
             None,
             None,
@@ -446,8 +453,8 @@ async fn test_search_performance() {
     for i in 0..1000 {
         task_mgr
             .add_task(
-                &format!("任务{}: 实现功能{}", i, i % 10),
-                Some(&format!("这是任务{}的详细说明，包含各种关键词", i)),
+                format!("任务{}: 实现功能{}", i, i % 10),
+                Some(format!("这是任务{}的详细说明，包含各种关键词", i)),
                 None,
                 None,
                 None,
@@ -497,7 +504,7 @@ async fn test_empty_and_special_queries() {
     let search_mgr = SearchManager::new(&pool);
 
     task_mgr
-        .add_task("测试任务", None, None, None, None, None)
+        .add_task("测试任务".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -525,7 +532,7 @@ async fn test_case_sensitivity() {
     let search_mgr = SearchManager::new(&pool);
 
     task_mgr
-        .add_task("Implement API", None, None, None, None, None)
+        .add_task("Implement API".to_string(), None, None, None, None, None)
         .await
         .unwrap();
 
@@ -553,8 +560,8 @@ async fn test_korean_search() {
 
     task_mgr
         .add_task(
-            "사용자 인증 구현",
-            Some("JWT 토큰 사용"),
+            "사용자 인증 구현".to_string(),
+            Some("JWT 토큰 사용".to_string()),
             None,
             None,
             None,

@@ -155,8 +155,13 @@ async fn run(cli: &Cli) -> Result<()> {
             until,
             format,
         } => {
-            handle_search_command(&query, tasks, events, limit, offset, since, until, &format)
-                .await?
+            let ctx = ProjectContext::load_or_init().await?;
+            let project_path = ctx.root.to_string_lossy().to_string();
+            let task_mgr = TaskManager::with_project_path(&ctx.pool, project_path);
+            handle_search_command(
+                &task_mgr, &query, tasks, events, limit, offset, since, until, &format,
+            )
+            .await?
         },
 
         Commands::Init { at, force } => handle_init_command(at, force).await?,

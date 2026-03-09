@@ -410,10 +410,10 @@ pub fn classify_operations(
             }
         } else if let Some(name) = &task.name {
             // Try name lookup
-            if let Some(&id) = existing_names.get(name) {
+            if let Some(id) = existing_names.get(name) {
                 // Name found in DB → update
                 Operation::Update {
-                    id,
+                    id: *id,
                     task: task.clone(),
                 }
             } else {
@@ -819,9 +819,9 @@ impl<'a> PlanExecutor<'a> {
                         && task.parent_name.is_none()
                         && task.explicit_parent_id.is_none()
                     {
-                        if let Some(&task_id) = task_id_map.get(task_name) {
+                        if let Some(task_id) = task_id_map.get(task_name) {
                             task_mgr
-                                .set_parent_in_tx(&mut tx, task_id, default_parent)
+                                .set_parent_in_tx(&mut tx, *task_id, default_parent)
                                 .await?;
                         }
                     }
@@ -849,9 +849,9 @@ impl<'a> PlanExecutor<'a> {
         let focused_task_response = if let Some(doing_task) = doing_task {
             // Get the task ID from the map
             if let Some(task_name) = &doing_task.name {
-                if let Some(&task_id) = task_id_map.get(task_name) {
+                if let Some(task_id) = task_id_map.get(task_name) {
                     // Call task_start with events to get full context
-                    let response = task_mgr.start_task(task_id, true).await?;
+                    let response = task_mgr.start_task(*task_id, true).await?;
                     Some(response)
                 } else {
                     None

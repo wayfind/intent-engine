@@ -20,7 +20,14 @@ async fn test_priority_critical() {
 
     // Add a task
     let task = manager
-        .add_task("Test Task", None, None, Some("human"), None, None)
+        .add_task(
+            "Test Task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -47,7 +54,14 @@ async fn test_priority_high() {
     let manager = TaskManager::new(db.pool());
 
     let task = manager
-        .add_task("Test Task", None, None, Some("human"), None, None)
+        .add_task(
+            "Test Task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -73,7 +87,14 @@ async fn test_priority_medium() {
     let manager = TaskManager::new(db.pool());
 
     let task = manager
-        .add_task("Test Task", None, None, Some("human"), None, None)
+        .add_task(
+            "Test Task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -99,7 +120,14 @@ async fn test_priority_low() {
     let manager = TaskManager::new(db.pool());
 
     let task = manager
-        .add_task("Test Task", None, None, Some("human"), None, None)
+        .add_task(
+            "Test Task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -125,7 +153,14 @@ async fn test_priority_case_insensitive() {
     let manager = TaskManager::new(db.pool());
 
     let task = manager
-        .add_task("Test Task", None, None, Some("human"), None, None)
+        .add_task(
+            "Test Task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -183,15 +218,22 @@ async fn test_priority_ordering_still_works() {
 
     // Create tasks with different priorities
     let task1 = manager
-        .add_task("Low priority task", None, None, Some("human"), None, None)
+        .add_task(
+            "Low priority task".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let task2 = manager
         .add_task(
-            "Critical priority task",
+            "Critical priority task".to_string(),
             None,
             None,
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )
@@ -199,10 +241,10 @@ async fn test_priority_ordering_still_works() {
         .unwrap();
     let task3 = manager
         .add_task(
-            "Medium priority task",
+            "Medium priority task".to_string(),
             None,
             None,
-            Some("human"),
+            Some("human".to_string()),
             None,
             None,
         )
@@ -269,17 +311,38 @@ async fn test_task_list_filtering() {
 
     // Add some tasks
     let task1 = manager
-        .add_task("Task 1", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 1".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     let _task2 = manager
-        .add_task("Task 2", None, None, Some("human"), None, None)
+        .add_task(
+            "Task 2".to_string(),
+            None,
+            None,
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 
     // Create a subtask
     let _subtask = manager
-        .add_task("Subtask 1", None, Some(task1.id), Some("human"), None, None)
+        .add_task(
+            "Subtask 1".to_string(),
+            None,
+            Some(task1.id),
+            Some("human".to_string()),
+            None,
+            None,
+        )
         .await
         .unwrap();
 

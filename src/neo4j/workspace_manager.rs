@@ -86,7 +86,7 @@ impl Neo4jWorkspaceManager {
             .await
             .map_err(|e| neo4j_err("set_current_task", e))?;
 
-        self.get_current_task(Some(&session_id)).await
+        self.get_current_task(Some(session_id.as_str())).await
     }
 
     /// Clear the current focused task for a session.
