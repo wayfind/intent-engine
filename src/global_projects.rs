@@ -7,6 +7,19 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// Canonicalize a path to a consistent string representation.
+///
+/// On Windows, `Path::canonicalize()` prepends the `\\?\` extended-path
+/// prefix; without this helper two strings referring to the same physical
+/// path can compare unequal.  Falls back to the original string if the
+/// path does not exist yet (e.g. during registration of a new project).
+fn canonical_path_str(path: &Path) -> String {
+    path.canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .to_string()
+}
+
 const GLOBAL_DIR: &str = ".intent-engine";
 const PROJECTS_FILE: &str = "projects.json";
 
@@ -65,9 +78,13 @@ impl ProjectsRegistry {
         std::fs::write(&path, content)
     }
 
-    /// Register or update a project
+    /// Register or update a project.
+    ///
+    /// The path is canonicalized before storage so that the same physical
+    /// directory is never recorded twice regardless of how the caller spells
+    /// the path (relative vs absolute, Windows `\\?\` prefix, symlinks, etc).
     pub fn register_project(&mut self, project_path: &Path) {
-        let path_str = project_path.to_string_lossy().to_string();
+        let path_str = canonical_path_str(project_path);
         let now = Utc::now();
 
         // Check if project already exists
@@ -88,10 +105,14 @@ impl ProjectsRegistry {
         }
     }
 
-    /// Remove a project from the registry
+    /// Remove a project from the registry.
+    ///
+    /// The path is canonicalized before lookup so that the caller does not
+    /// need to know which form was used when the entry was registered.
     pub fn remove_project(&mut self, project_path: &str) -> bool {
+        let canonical = canonical_path_str(Path::new(project_path));
         let initial_len = self.projects.len();
-        self.projects.retain(|p| p.path != project_path);
+        self.projects.retain(|p| p.path != canonical);
         self.projects.len() < initial_len
     }
 
@@ -165,6 +186,32 @@ mod tests {
         // Remove project
         let path_str = temp.path().to_string_lossy().to_string();
         assert!(registry.remove_project(&path_str));
+        assert_eq!(registry.projects.len(), 0);
+    }
+
+    #[test]
+    fn test_registry_canonical_invariant() {
+        // Both register and remove canonicalize internally, so the caller
+        // does not need to pass canonical paths for the operations to match.
+        let mut registry = ProjectsRegistry::default();
+        let temp = TempDir::new().unwrap();
+
+        // Register via canonical path (what canonicalize() would return)
+        let canonical = temp.path().canonicalize().unwrap();
+        registry.register_project(&canonical);
+        assert_eq!(registry.projects.len(), 1);
+
+        // Re-register via the original (possibly non-canonical) path —
+        // must be treated as the same project, not a duplicate.
+        registry.register_project(temp.path());
+        assert_eq!(registry.projects.len(), 1, "same project registered twice");
+
+        // Remove via the original path string — must find the canonical entry.
+        let raw_str = temp.path().to_string_lossy().to_string();
+        assert!(
+            registry.remove_project(&raw_str),
+            "remove via raw path must find canonical entry"
+        );
         assert_eq!(registry.projects.len(), 0);
     }
 

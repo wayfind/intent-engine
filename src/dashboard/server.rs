@@ -153,8 +153,9 @@ impl AppState {
         let mut projects = self.known_projects.write().await;
         projects.remove(&canonical);
 
-        // Remove from global registry using the canonical form so the lookup
-        // matches however the path was stored (Windows \\?\ prefix consistency).
+        // Remove from global registry.  global_projects::remove_project
+        // canonicalizes the path internally, but passing canonical here is
+        // harmless and makes the intent explicit.
         let path_str = canonical.to_string_lossy().to_string();
         crate::global_projects::remove_project(&path_str);
 
