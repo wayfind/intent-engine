@@ -967,6 +967,21 @@ impl<'a> TaskManager<'a> {
     }
 
     /// Soft-delete a task. Refuses if the task is focused by any session.
+    ///
+    /// # FTS note
+    ///
+    /// The `tasks_au_softdelete` trigger removes the task from the FTS index on
+    /// the active→deleted transition.  There is intentionally **no restore path**
+    /// in the application layer.  If a `restore_task` function is ever added, it
+    /// must manually re-insert the row into the FTS index:
+    ///
+    /// ```sql
+    /// INSERT INTO tasks_fts(rowid, name, spec) VALUES (?, ?, ?);
+    /// ```
+    ///
+    /// The `tasks_au_active` trigger does NOT fire on a deleted→active transition
+    /// (WHEN clause requires `old.deleted_at IS NULL`), so the application is
+    /// solely responsible for FTS repair on restore.
     pub async fn delete_task(&self, id: i64) -> Result<()> {
         self.check_task_exists(id).await?;
 

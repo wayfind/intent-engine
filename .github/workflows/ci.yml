@@ -178,9 +178,9 @@ jobs:
         if: ${{ !inputs.skip_tests }}
         run: cargo test --lib --bins --verbose
 
-      - name: Run integration tests (parallel safe)
+      - name: Run integration tests
         if: ${{ !inputs.skip_tests }}
-        run: cargo test --test dashboard_integration_tests --test logs_integration_test --test interface_spec_test --verbose
+        run: cargo test --tests --verbose
 
       - name: Build release
         run: cargo build --release --verbose
