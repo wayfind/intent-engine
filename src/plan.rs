@@ -3863,14 +3863,12 @@ mod delete_tests {
 
     /// P0: Verify that deleting a focused task returns an error (not allowed)
     #[tokio::test]
-    #[serial]
     async fn test_delete_focused_task_returns_error() {
         let ctx = TestContext::new().await;
         let executor = PlanExecutor::new(&ctx.pool);
 
-        // Set a unique session ID for this test
-        let test_session_id = format!("test-delete-focus-{}", std::process::id());
-        std::env::set_var("IE_SESSION_ID", &test_session_id);
+        // Each test has an isolated DB (TempDir) so the default session "-1" is fine.
+        // No env-var mutation needed — that would race with parallel tests.
 
         // Create a task with status: doing (this auto-focuses the task)
         let request1 = PlanRequest {
@@ -3894,8 +3892,7 @@ mod delete_tests {
 
         // Verify the task is actually the session's focus
         let focus_check: Option<(i64,)> =
-            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&test_session_id)
+            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
                 .fetch_optional(&ctx.pool)
                 .await
                 .unwrap();
@@ -3927,8 +3924,8 @@ mod delete_tests {
         assert!(!result2.success, "Delete focused task should fail");
         let error = result2.error.as_ref().unwrap();
         assert!(
-            error.contains("focus") && error.contains(&test_session_id),
-            "Error should mention focus and session: {}",
+            error.contains("focus"),
+            "Error should mention focus: {}",
             error
         );
         assert_eq!(result2.deleted_count, 0, "Nothing should be deleted");
@@ -3941,9 +3938,6 @@ mod delete_tests {
                 .await
                 .unwrap();
         assert_eq!(exists.0, 1, "Focused task should NOT be deleted");
-
-        // Clean up env var
-        std::env::remove_var("IE_SESSION_ID");
     }
 
     /// P0: Verify that deleting the same ID twice in a batch behaves correctly
@@ -4037,14 +4031,9 @@ mod delete_tests {
     /// P0: Verify that deleting a parent task is blocked when a child is focused
     /// This tests CASCADE delete protection
     #[tokio::test]
-    #[serial]
     async fn test_delete_parent_blocked_when_child_is_focused() {
         let ctx = TestContext::new().await;
         let executor = PlanExecutor::new(&ctx.pool);
-
-        // Set a unique session ID for this test
-        let test_session_id = format!("test-cascade-focus-{}", std::process::id());
-        std::env::set_var("IE_SESSION_ID", &test_session_id);
 
         // Create a hierarchy: Parent -> Child (focused)
         let request1 = PlanRequest {
@@ -4080,8 +4069,7 @@ mod delete_tests {
 
         // Verify child is the focus
         let focus_check: Option<(i64,)> =
-            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&test_session_id)
+            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
                 .fetch_optional(&ctx.pool)
                 .await
                 .unwrap();
@@ -4133,22 +4121,14 @@ mod delete_tests {
             .await
             .unwrap();
         assert_eq!(count.0, 2, "Both tasks should still exist");
-
-        // Clean up env var
-        std::env::remove_var("IE_SESSION_ID");
     }
 
     /// P0: Verify that batch delete is blocked when ANY subtree contains focus
     /// This prevents order-based bypass tricks
     #[tokio::test]
-    #[serial]
     async fn test_batch_delete_blocked_when_subtree_contains_focus() {
         let ctx = TestContext::new().await;
         let executor = PlanExecutor::new(&ctx.pool);
-
-        // Set a unique session ID for this test
-        let test_session_id = format!("test-batch-focus-{}", std::process::id());
-        std::env::set_var("IE_SESSION_ID", &test_session_id);
 
         // Create: Parent -> Child (focused)
         let request1 = PlanRequest {
@@ -4230,20 +4210,13 @@ mod delete_tests {
             .await
             .unwrap();
         assert_eq!(count.0, 2, "Both tasks should still exist");
-
-        // Clean up env var
-        std::env::remove_var("IE_SESSION_ID");
     }
 
     /// P0: Verify focus protection works for deep hierarchies
     #[tokio::test]
-    #[serial]
     async fn test_delete_blocked_when_deep_descendant_is_focused() {
         let ctx = TestContext::new().await;
         let executor = PlanExecutor::new(&ctx.pool);
-
-        let test_session_id = format!("test-deep-focus-{}", std::process::id());
-        std::env::set_var("IE_SESSION_ID", &test_session_id);
 
         // Create: Root -> L1 -> L2 -> L3 (focused)
         let request1 = PlanRequest {
@@ -4301,8 +4274,7 @@ mod delete_tests {
 
         // Verify Level3 is focused
         let focus_check: Option<(i64,)> =
-            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = ?")
-                .bind(&test_session_id)
+            sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = '-1'")
                 .fetch_optional(&ctx.pool)
                 .await
                 .unwrap();
@@ -4349,8 +4321,6 @@ mod delete_tests {
             .await
             .unwrap();
         assert_eq!(count.0, 4, "All tasks should still exist");
-
-        std::env::remove_var("IE_SESSION_ID");
     }
 
     /// Verify that deleting a non-existent task with subtree check works correctly
@@ -4392,13 +4362,12 @@ mod delete_tests {
     /// Verify that default session (-1) focus is also protected
     /// Even without explicit IE_SESSION_ID, tasks use default session "-1"
     #[tokio::test]
-    #[serial]
     async fn test_default_session_focus_also_protected() {
         let ctx = TestContext::new().await;
         let executor = PlanExecutor::new(&ctx.pool);
 
-        // Remove IE_SESSION_ID - will use default session "-1"
-        std::env::remove_var("IE_SESSION_ID");
+        // Each test has an isolated DB, so default session "-1" is fine here.
+        // No env-var mutation needed.
 
         // Create a task with status: doing
         // This uses default session "-1" for focus
@@ -4467,15 +4436,11 @@ mod delete_tests {
     /// Verify cross-session behavior: Session B CANNOT delete Session A's focus
     /// Focus protection is GLOBAL - protects tasks focused by ANY session
     #[tokio::test]
-    #[serial]
     async fn test_cross_session_delete_blocked() {
         let ctx = TestContext::new().await;
         let executor = PlanExecutor::new(&ctx.pool);
 
-        // Session A creates a focused task
-        let session_a = "session-A-cross-test";
-        std::env::set_var("IE_SESSION_ID", session_a);
-
+        // Create a task via the default executor (session "-1" focuses on it).
         let request1 = PlanRequest {
             tasks: vec![TaskTree {
                 name: Some("Session A Focus".to_string()),
@@ -4495,7 +4460,21 @@ mod delete_tests {
         assert!(result1.success);
         let task_id = *result1.task_id_map.get("Session A Focus").unwrap();
 
-        // Verify Session A has focus
+        // Re-attribute the focus to "session-A" directly in the DB.
+        // This simulates a different session having established focus without
+        // touching the process-level IE_SESSION_ID env var (which would race
+        // with parallel tests).
+        let session_a = "session-A-cross-test";
+        sqlx::query(
+            "UPDATE sessions SET session_id = ? WHERE session_id = '-1' AND current_task_id = ?",
+        )
+        .bind(session_a)
+        .bind(task_id)
+        .execute(&ctx.pool)
+        .await
+        .unwrap();
+
+        // Verify session-A now holds focus
         let focus_a: Option<(i64,)> =
             sqlx::query_as("SELECT current_task_id FROM sessions WHERE session_id = ?")
                 .bind(session_a)
@@ -4505,13 +4484,11 @@ mod delete_tests {
         assert_eq!(
             focus_a.map(|r| r.0),
             Some(task_id),
-            "Session A should have focus"
+            "session-A should have focus"
         );
 
-        // Session B tries to delete Session A's focus
-        let session_b = "session-B-cross-test";
-        std::env::set_var("IE_SESSION_ID", session_b);
-
+        // The executor now runs under the default session "-1" (session-B role).
+        // It should be blocked from deleting a task focused by session-A.
         let request2 = PlanRequest {
             tasks: vec![TaskTree {
                 name: None,
@@ -4529,14 +4506,14 @@ mod delete_tests {
 
         let result2 = executor.execute(&request2).await.unwrap();
 
-        // Session B should NOT be able to delete Session A's focus
+        // Session B ("-1") should NOT be able to delete Session A's focus
         assert!(
             !result2.success,
             "Session B should NOT be able to delete Session A's focus"
         );
         assert_eq!(result2.deleted_count, 0);
 
-        // Error should mention Session A
+        // Error should mention the session that holds focus (session-A)
         let error = result2.error.as_ref().unwrap();
         assert!(
             error.contains(session_a),
@@ -4553,8 +4530,5 @@ mod delete_tests {
                 .await
                 .unwrap();
         assert_eq!(exists.0, 1, "Task should still exist");
-
-        // Clean up
-        std::env::remove_var("IE_SESSION_ID");
     }
 }

@@ -109,11 +109,7 @@ jobs:
           name: frontend-static
           path: static/
 
-      - name: Run unit and CLI tests
-        if: ${{ !inputs.skip_tests }}
-        run: cargo test --lib --bins --verbose
-
-      - name: Run integration tests (parallel safe)
+      - name: Run all tests
         if: ${{ !inputs.skip_tests }}
         run: cargo test --tests --verbose
 
@@ -174,11 +170,7 @@ jobs:
           name: frontend-static
           path: static/
 
-      - name: Run unit and CLI tests
-        if: ${{ !inputs.skip_tests }}
-        run: cargo test --lib --bins --verbose
-
-      - name: Run integration tests
+      - name: Run all tests
         if: ${{ !inputs.skip_tests }}
         run: cargo test --tests --verbose
 
