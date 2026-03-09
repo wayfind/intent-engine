@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Four correctness issues found in Linus review
 - Enforce canonical path invariant in global projects registry
 - Correct &String/&i64 call sites missed under --all-features
+- Exclude skipped check-runs from CI verification in release workflow
 
 ### Documentation
 
@@ -59,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove useless cat in hook script jq invocation
 - Add when-to-use guidance to parallel agents intro
 - Fix stale references, version numbers, and missing ie task commands
+- Update CHANGELOG for v0.11.0
 
 ### Features
 
