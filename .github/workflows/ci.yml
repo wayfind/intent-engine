@@ -250,6 +250,13 @@ jobs:
           # Extract and test
           tar -xzf "$PKG_FILE" -C target/package/
           PKG_DIR=$(find target/package -maxdepth 1 -name "intent-engine-*" -type d | head -n 1)
+
+          # static/ is not included in the crate (it's a build artifact).
+          # build.rs skips frontend build in CI, so rust_embed would embed an
+          # empty directory, producing a binary that silently lacks the dashboard.
+          # Copy the pre-built artifact so the package build is faithful.
+          cp -r static/ "$PKG_DIR/static/"
+
           cd "$PKG_DIR"
           cargo build --release --verbose
 
