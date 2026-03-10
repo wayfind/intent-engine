@@ -13,6 +13,12 @@ readme = "README.md"
 keywords = ["cli", "task-management", "intent", "database", "workflow"]
 categories = ["command-line-utilities", "database"]
 default-run = "ie"
+exclude = [
+    "front-end/node_modules",
+    "front-end/dist",
+    "docs",
+    ".github",
+]
 
 # cargo-binstall configuration
 # Helps cargo-binstall automatically download the right binary for your platform
