@@ -16,7 +16,11 @@ default-run = "ie"
 exclude = [
     "front-end/node_modules",
     "front-end/dist",
-    "docs",
+    "docs/archive",
+    "docs/zh-CN",
+    "docs/en",
+    "docs/ai_feedback",
+    "docs/design",
     ".github",
 ]
 
