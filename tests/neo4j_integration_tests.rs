@@ -741,17 +741,19 @@ async fn neo4j_workspace_focus() {
         .unwrap();
 
     // Set focus
-    let session_id = "test-session-1";
-    wm.set_current_task(task.id, Some(session_id))
+    let session_id = "test-session-1".to_string();
+    wm.set_current_task(task.id, Some(session_id.clone()))
         .await
         .unwrap();
 
     // Get focus
-    let response = wm.get_current_task(Some(session_id)).await.unwrap();
+    let response = wm.get_current_task(Some(session_id.clone())).await.unwrap();
     assert_eq!(response.current_task_id, Some(task.id));
 
     // Clear focus
-    wm.clear_current_task(Some(session_id)).await.unwrap();
+    wm.clear_current_task(Some(session_id.clone()))
+        .await
+        .unwrap();
     let cleared = wm.get_current_task(Some(session_id)).await.unwrap();
     assert_eq!(cleared.current_task_id, None);
 
@@ -864,9 +866,7 @@ async fn neo4j_find_tasks_filter_sort_paginate() {
     // Clean up focus before teardown
     let wm = Neo4jWorkspaceManager::new(graph.clone(), pid.clone());
     let session_id = resolve_session_id(None);
-    wm.clear_current_task(Some(session_id.as_str()))
-        .await
-        .unwrap();
+    wm.clear_current_task(Some(session_id)).await.unwrap();
 
     teardown(&graph, &pid).await;
 }
@@ -954,9 +954,7 @@ async fn neo4j_pick_next_priority_order() {
     // Clean up focus before teardown
     let wm = Neo4jWorkspaceManager::new(graph.clone(), pid.clone());
     let session_id = resolve_session_id(None);
-    wm.clear_current_task(Some(session_id.as_str()))
-        .await
-        .unwrap();
+    wm.clear_current_task(Some(session_id)).await.unwrap();
 
     teardown(&graph, &pid).await;
 }
@@ -993,10 +991,7 @@ async fn neo4j_done_task_no_id_uses_focus() {
 
     // Verify focus is set
     let session_id = resolve_session_id(None);
-    let focus = wm
-        .get_current_task(Some(session_id.as_str()))
-        .await
-        .unwrap();
+    let focus = wm.get_current_task(Some(session_id)).await.unwrap();
     assert_eq!(focus.current_task_id, Some(task.id));
 
     // Done with no ID → uses focus
@@ -1046,9 +1041,7 @@ async fn neo4j_delete_task_no_cascade() {
 
     // Clean up: clear focus before teardown
     let session_id = resolve_session_id(None);
-    wm.clear_current_task(Some(session_id.as_str()))
-        .await
-        .unwrap();
+    wm.clear_current_task(Some(session_id)).await.unwrap();
 
     teardown(&graph, &pid).await;
 }
@@ -1282,9 +1275,7 @@ async fn neo4j_get_root_tasks_ordering() {
     // Clean up focus before teardown
     let wm = Neo4jWorkspaceManager::new(graph.clone(), pid.clone());
     let session_id = resolve_session_id(None);
-    wm.clear_current_task(Some(session_id.as_str()))
-        .await
-        .unwrap();
+    wm.clear_current_task(Some(session_id)).await.unwrap();
 
     teardown(&graph, &pid).await;
 }

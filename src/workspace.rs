@@ -44,8 +44,11 @@ impl<'a> WorkspaceManager<'a> {
 
     /// Get the current task for a session
     #[tracing::instrument(skip(self))]
-    pub async fn get_current_task(&self, session_id: Option<&str>) -> Result<CurrentTaskResponse> {
-        let session_id = resolve_session_id(session_id);
+    pub async fn get_current_task(
+        &self,
+        session_id: Option<String>,
+    ) -> Result<CurrentTaskResponse> {
+        let session_id = resolve_session_id(session_id.as_deref());
 
         // Try to get from sessions table first
         let current_task_id: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
@@ -93,9 +96,9 @@ impl<'a> WorkspaceManager<'a> {
     pub async fn set_current_task(
         &self,
         task_id: i64,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> Result<CurrentTaskResponse> {
-        let session_id = resolve_session_id(session_id);
+        let session_id = resolve_session_id(session_id.as_deref());
 
         // Check if task exists
         let task_exists: bool =
@@ -123,12 +126,12 @@ impl<'a> WorkspaceManager<'a> {
         .execute(self.pool)
         .await?;
 
-        self.get_current_task(Some(session_id.as_str())).await
+        self.get_current_task(Some(session_id)).await
     }
 
     /// Clear the current task for a session
-    pub async fn clear_current_task(&self, session_id: Option<&str>) -> Result<()> {
-        let session_id = resolve_session_id(session_id);
+    pub async fn clear_current_task(&self, session_id: Option<String>) -> Result<()> {
+        let session_id = resolve_session_id(session_id.as_deref());
 
         sqlx::query(
             "UPDATE sessions SET current_task_id = NULL, last_active_at = datetime('now') WHERE session_id = ?"
@@ -175,7 +178,7 @@ impl<'a> WorkspaceManager<'a> {
 impl crate::backend::WorkspaceBackend for WorkspaceManager<'_> {
     fn get_current_task(
         &self,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> impl std::future::Future<Output = Result<CurrentTaskResponse>> + Send {
         self.get_current_task(session_id)
     }
@@ -183,14 +186,14 @@ impl crate::backend::WorkspaceBackend for WorkspaceManager<'_> {
     fn set_current_task(
         &self,
         task_id: i64,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> impl std::future::Future<Output = Result<CurrentTaskResponse>> + Send {
         self.set_current_task(task_id, session_id)
     }
 
     fn clear_current_task(
         &self,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> impl std::future::Future<Output = Result<()>> + Send {
         self.clear_current_task(session_id)
     }
@@ -461,21 +464,21 @@ mod tests {
 
         // Set different tasks for different sessions
         workspace_mgr
-            .set_current_task(task1.id, Some("session-a"))
+            .set_current_task(task1.id, Some("session-a".to_string()))
             .await
             .unwrap();
         workspace_mgr
-            .set_current_task(task2.id, Some("session-b"))
+            .set_current_task(task2.id, Some("session-b".to_string()))
             .await
             .unwrap();
 
         // Each session should see its own task
         let response_a = workspace_mgr
-            .get_current_task(Some("session-a"))
+            .get_current_task(Some("session-a".to_string()))
             .await
             .unwrap();
         let response_b = workspace_mgr
-            .get_current_task(Some("session-b"))
+            .get_current_task(Some("session-b".to_string()))
             .await
             .unwrap();
 
@@ -502,17 +505,17 @@ mod tests {
 
         // Update same session's task
         workspace_mgr
-            .set_current_task(task1.id, Some("session-x"))
+            .set_current_task(task1.id, Some("session-x".to_string()))
             .await
             .unwrap();
         workspace_mgr
-            .set_current_task(task2.id, Some("session-x"))
+            .set_current_task(task2.id, Some("session-x".to_string()))
             .await
             .unwrap();
 
         // Should only have one session entry with the latest task
         let response = workspace_mgr
-            .get_current_task(Some("session-x"))
+            .get_current_task(Some("session-x".to_string()))
             .await
             .unwrap();
         assert_eq!(response.current_task_id, Some(task2.id));
@@ -558,18 +561,18 @@ mod tests {
             .await
             .unwrap();
         workspace_mgr
-            .set_current_task(task.id, Some("test-session"))
+            .set_current_task(task.id, Some("test-session".to_string()))
             .await
             .unwrap();
 
         // Clear the current task
         workspace_mgr
-            .clear_current_task(Some("test-session"))
+            .clear_current_task(Some("test-session".to_string()))
             .await
             .unwrap();
 
         let response = workspace_mgr
-            .get_current_task(Some("test-session"))
+            .get_current_task(Some("test-session".to_string()))
             .await
             .unwrap();
         assert!(response.current_task_id.is_none());
@@ -588,7 +591,7 @@ mod tests {
 
         // Create a session
         workspace_mgr
-            .set_current_task(task.id, Some("old-session"))
+            .set_current_task(task.id, Some("old-session".to_string()))
             .await
             .unwrap();
 
@@ -602,7 +605,7 @@ mod tests {
 
         // Create a recent session
         workspace_mgr
-            .set_current_task(task.id, Some("new-session"))
+            .set_current_task(task.id, Some("new-session".to_string()))
             .await
             .unwrap();
 
@@ -612,14 +615,14 @@ mod tests {
 
         // Old session should be gone
         let response = workspace_mgr
-            .get_current_task(Some("old-session"))
+            .get_current_task(Some("old-session".to_string()))
             .await
             .unwrap();
         assert!(response.current_task_id.is_none());
 
         // New session should still exist
         let response = workspace_mgr
-            .get_current_task(Some("new-session"))
+            .get_current_task(Some("new-session".to_string()))
             .await
             .unwrap();
         assert_eq!(response.current_task_id, Some(task.id));

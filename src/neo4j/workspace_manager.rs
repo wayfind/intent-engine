@@ -20,8 +20,11 @@ impl Neo4jWorkspaceManager {
     }
 
     /// Get the current focused task for a session.
-    pub async fn get_current_task(&self, session_id: Option<&str>) -> Result<CurrentTaskResponse> {
-        let session_id = crate::workspace::resolve_session_id(session_id);
+    pub async fn get_current_task(
+        &self,
+        session_id: Option<String>,
+    ) -> Result<CurrentTaskResponse> {
+        let session_id = crate::workspace::resolve_session_id(session_id.as_deref());
 
         let mut result = self
             .graph
@@ -67,9 +70,9 @@ impl Neo4jWorkspaceManager {
     pub async fn set_current_task(
         &self,
         task_id: i64,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> Result<CurrentTaskResponse> {
-        let session_id = crate::workspace::resolve_session_id(session_id);
+        let session_id = crate::workspace::resolve_session_id(session_id.as_deref());
 
         self.graph
             .run(
@@ -86,12 +89,12 @@ impl Neo4jWorkspaceManager {
             .await
             .map_err(|e| neo4j_err("set_current_task", e))?;
 
-        self.get_current_task(Some(session_id.as_str())).await
+        self.get_current_task(Some(session_id)).await
     }
 
     /// Clear the current focused task for a session.
-    pub async fn clear_current_task(&self, session_id: Option<&str>) -> Result<()> {
-        let session_id = crate::workspace::resolve_session_id(session_id);
+    pub async fn clear_current_task(&self, session_id: Option<String>) -> Result<()> {
+        let session_id = crate::workspace::resolve_session_id(session_id.as_deref());
 
         self.graph
             .run(
@@ -112,7 +115,7 @@ impl Neo4jWorkspaceManager {
 impl crate::backend::WorkspaceBackend for Neo4jWorkspaceManager {
     fn get_current_task(
         &self,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> impl std::future::Future<Output = crate::error::Result<CurrentTaskResponse>> + Send {
         self.get_current_task(session_id)
     }
@@ -120,14 +123,14 @@ impl crate::backend::WorkspaceBackend for Neo4jWorkspaceManager {
     fn set_current_task(
         &self,
         task_id: i64,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> impl std::future::Future<Output = crate::error::Result<CurrentTaskResponse>> + Send {
         self.set_current_task(task_id, session_id)
     }
 
     fn clear_current_task(
         &self,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> impl std::future::Future<Output = crate::error::Result<()>> + Send {
         self.clear_current_task(session_id)
     }

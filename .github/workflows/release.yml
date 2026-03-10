@@ -53,15 +53,59 @@ jobs:
         run: |
           echo "Checking CI status for commit: ${{ steps.sha.outputs.sha }}"
 
+          # Must match the terminal gate job name in .github/workflows/ci.yml
+          # (job id: ci-success, display name: CI Success).
+          EXPECTED_CHECKS=(
+            "CI Success"
+          )
+
           # Wait for CI to complete (max 10 minutes)
           for i in {1..20}; do
-            STATUS=$(gh api repos/${{ github.repository }}/commits/${{ steps.sha.outputs.sha }}/check-runs \
-              --jq '[.check_runs[] | select(.name | test("CI Success|Quick Tests|Clippy")) | select(.conclusion != "skipped")] |
-                    if length == 0 then "pending"
-                    elif all(.conclusion == "success") then "success"
-                    elif any(.conclusion == "failure") then "failure"
-                    elif any(.status == "in_progress" or .status == "queued") then "pending"
-                    else "unknown" end')
+            CHECK_RUNS=$(gh api repos/${{ github.repository }}/commits/${{ steps.sha.outputs.sha }}/check-runs \
+              --jq '.check_runs | map({name, status, conclusion})')
+
+            MISSING_CHECKS=()
+            FAILED_CHECKS=()
+            PENDING_CHECKS=()
+
+            for CHECK_NAME in "${EXPECTED_CHECKS[@]}"; do
+              MATCH_COUNT=$(echo "$CHECK_RUNS" | jq --arg name "$CHECK_NAME" '[.[] | select(.name == $name)] | length')
+
+              if [ "$MATCH_COUNT" -eq 0 ]; then
+                MISSING_CHECKS+=("$CHECK_NAME")
+                continue
+              fi
+
+              FAILED_COUNT=$(echo "$CHECK_RUNS" | jq --arg name "$CHECK_NAME" '
+                [.[]
+                 | select(.name == $name)
+                 | select(.conclusion == "failure"
+                          or .conclusion == "cancelled"
+                          or .conclusion == "timed_out"
+                          or .conclusion == "action_required"
+                          or .conclusion == "startup_failure"
+                          or .conclusion == "stale")] | length')
+
+              if [ "$FAILED_COUNT" -gt 0 ]; then
+                DETAILS=$(echo "$CHECK_RUNS" | jq -c --arg name "$CHECK_NAME" '[.[] | select(.name == $name)]')
+                FAILED_CHECKS+=("$CHECK_NAME => $DETAILS")
+                continue
+              fi
+
+              SUCCESS_COUNT=$(echo "$CHECK_RUNS" | jq --arg name "$CHECK_NAME" '[.[] | select(.name == $name and .conclusion == "success")] | length')
+              if [ "$SUCCESS_COUNT" -lt "$MATCH_COUNT" ]; then
+                DETAILS=$(echo "$CHECK_RUNS" | jq -c --arg name "$CHECK_NAME" '[.[] | select(.name == $name)]')
+                PENDING_CHECKS+=("$CHECK_NAME => $DETAILS")
+              fi
+            done
+
+            if [ "${#FAILED_CHECKS[@]}" -gt 0 ]; then
+              STATUS="failure"
+            elif [ "${#MISSING_CHECKS[@]}" -gt 0 ] || [ "${#PENDING_CHECKS[@]}" -gt 0 ]; then
+              STATUS="pending"
+            else
+              STATUS="success"
+            fi
 
             echo "Attempt $i: CI status = $STATUS"
 
@@ -70,7 +114,17 @@ jobs:
               exit 0
             elif [ "$STATUS" == "failure" ]; then
               echo "❌ CI failed! Cannot release."
+              printf 'Failed checks:\n'
+              printf '  - %s\n' "${FAILED_CHECKS[@]}"
               exit 1
+            fi
+
+            if [ "${#MISSING_CHECKS[@]}" -gt 0 ]; then
+              echo "Missing checks: ${MISSING_CHECKS[*]}"
+            fi
+            if [ "${#PENDING_CHECKS[@]}" -gt 0 ]; then
+              printf 'Pending checks:\n'
+              printf '  - %s\n' "${PENDING_CHECKS[@]}"
             fi
 
             echo "⏳ CI still running, waiting 30s..."
@@ -78,6 +132,13 @@ jobs:
           done
 
           echo "❌ Timeout waiting for CI. Status: $STATUS"
+          if [ "${#MISSING_CHECKS[@]}" -gt 0 ]; then
+            echo "Missing checks at timeout: ${MISSING_CHECKS[*]}"
+          fi
+          if [ "${#PENDING_CHECKS[@]}" -gt 0 ]; then
+            printf 'Pending checks at timeout:\n'
+            printf '  - %s\n' "${PENDING_CHECKS[@]}"
+          fi
           exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -184,14 +245,6 @@ jobs:
           VERSION="${{ steps.tag.outputs.tag }}"
           echo "Generating release notes for $VERSION"
 
-          # Get version from Cargo.toml
-          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
-
-          # Generate changelog if CHANGELOG.md exists
-          if [ -f "CHANGELOG.md" ]; then
-            CHANGELOG=$(sed -n "/^## \[$CARGO_VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$ d')
-          fi
-
           # Create release notes file
           cat > release_notes.md << 'EOF'
           ## 🚀 What's Changed
@@ -229,49 +282,11 @@ jobs:
 
           ## 📚 Documentation
 
-      - name: Delete existing release if it exists
-        run: |
-          set +e  # Don't exit on error
+          - User guide: https://github.com/${{ github.repository }}/tree/main/docs/help
+          - Full interface spec: https://github.com/${{ github.repository }}/tree/main/docs/spec-03-interface-current.md
+          EOF
 
-          echo "Checking for existing release for tag: ${{ github.ref_name }}"
-
-          # Try to get release info
-          RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}")
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-
-          echo "HTTP Status: $HTTP_CODE"
-
-          if [ "$HTTP_CODE" = "200" ]; then
-            RELEASE_ID=$(echo "$BODY" | jq -r '.id')
-            echo "Found existing release with ID: $RELEASE_ID"
-
-            # Delete the release
-            DELETE_RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID")
-
-            DELETE_CODE=$(echo "$DELETE_RESPONSE" | tail -n1)
-
-            if [ "$DELETE_CODE" = "204" ]; then
-              echo "✅ Release deleted successfully"
-              sleep 3  # Wait for GitHub to process
-            else
-              echo "⚠️ Failed to delete release. HTTP code: $DELETE_CODE"
-              echo "Response: $(echo "$DELETE_RESPONSE" | sed '$d')"
-            fi
-          elif [ "$HTTP_CODE" = "404" ]; then
-            echo "✅ No existing release found (fresh tag)"
-          else
-            echo "⚠️ Unexpected HTTP code when checking release: $HTTP_CODE"
-            echo "Response: $BODY"
-          fi
-
-          set -e  # Re-enable exit on error
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          test -s release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -282,7 +297,6 @@ jobs:
           files: artifacts/**/*
           draft: false
           prerelease: false
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

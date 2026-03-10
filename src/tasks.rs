@@ -1011,42 +1011,27 @@ impl<'a> TaskManager<'a> {
     /// Refuses if any task in the subtree is focused by any session.
     /// Returns the number of descendants soft-deleted.
     pub async fn delete_task_cascade(&self, id: i64) -> Result<usize> {
-        let descendants = self.get_descendants(id).await?;
+        self.check_task_exists(id).await?;
 
-        // Focus protection: check the task itself + all descendants
-        let mut subtree_ids: Vec<i64> = descendants.iter().map(|t| t.id).collect();
-        subtree_ids.push(id);
+        let mut tx = self.pool.begin().await?;
 
-        if let Some((tid, sid)) = self.find_focused_in_set(&subtree_ids).await? {
+        // Capture subtree ids in the same transaction for consistent post-commit notifications.
+        let subtree_ids = self.get_subtree_ids_in_tx(&mut tx, id).await?;
+
+        // Focus protection + soft-delete are in one transaction to avoid TOCTOU.
+        if let Some((tid, sid)) = self.find_focused_in_subtree_in_tx(&mut tx, id).await? {
             return Err(IntentError::ActionNotAllowed(format!(
                 "Cannot cascade delete: task #{} is focused by session '{}'. Unfocus it first.",
                 tid, sid
             )));
         }
 
-        // TODO: The focus check above and the UPDATE below are not atomic.
-        // Another session could focus a subtask in the window between them,
-        // and we would soft-delete it anyway.  Fix: wrap both operations in
-        // a single SQLite transaction with serializable isolation before
-        // enabling multi-user concurrent access.
+        let delete_result = self.delete_task_in_tx(&mut tx, id).await?;
+        if !delete_result.found {
+            return Err(IntentError::TaskNotFound(id));
+        }
 
-        // Soft-delete the entire subtree in one statement via recursive CTE
-        let now = chrono::Utc::now();
-        sqlx::query(
-            r#"
-            WITH RECURSIVE subtree(id) AS (
-                SELECT id FROM tasks WHERE id = ? AND deleted_at IS NULL
-                UNION ALL
-                SELECT t.id FROM tasks t JOIN subtree s ON t.parent_id = s.id
-                WHERE t.deleted_at IS NULL
-            )
-            UPDATE tasks SET deleted_at = ? WHERE id IN (SELECT id FROM subtree)
-            "#,
-        )
-        .bind(id)
-        .bind(now)
-        .execute(self.pool)
-        .await?;
+        tx.commit().await?;
 
         // Notify WebSocket clients for every deleted node, not just the root.
         // Dashboard subscribers track individual task IDs; cascade-deleted
@@ -1059,8 +1044,34 @@ impl<'a> TaskManager<'a> {
             self.notify_task_deleted(deleted_id).await;
         }
 
-        // subtree_ids = descendants + root, so this is the true total deleted count.
-        Ok(subtree_ids.len())
+        Ok(delete_result.descendant_count as usize)
+    }
+
+    /// Return active subtree IDs (descendants first, then root) within a transaction.
+    async fn get_subtree_ids_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        task_id: i64,
+    ) -> Result<Vec<i64>> {
+        let mut ids: Vec<i64> = sqlx::query_scalar(
+            r#"
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM tasks WHERE parent_id = ? AND deleted_at IS NULL
+                UNION ALL
+                SELECT t.id FROM tasks t
+                INNER JOIN descendants d ON t.parent_id = d.id
+                WHERE t.deleted_at IS NULL
+            )
+            SELECT id FROM descendants
+            ORDER BY id ASC
+            "#,
+        )
+        .bind(task_id)
+        .fetch_all(&mut **tx)
+        .await?;
+
+        ids.push(task_id);
+        Ok(ids)
     }
 
     /// Check if any task in the given set of IDs is focused by any session.

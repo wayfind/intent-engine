@@ -120,18 +120,18 @@ pub trait TaskBackend: Send + Sync {
 pub trait WorkspaceBackend: Send + Sync {
     fn get_current_task(
         &self,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> impl Future<Output = Result<CurrentTaskResponse>> + Send;
 
     fn set_current_task(
         &self,
         task_id: i64,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> impl Future<Output = Result<CurrentTaskResponse>> + Send;
 
     fn clear_current_task(
         &self,
-        session_id: Option<&str>,
+        session_id: Option<String>,
     ) -> impl Future<Output = Result<()>> + Send;
 }
 
