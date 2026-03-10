@@ -1011,8 +1011,6 @@ impl<'a> TaskManager<'a> {
     /// Refuses if any task in the subtree is focused by any session.
     /// Returns the number of descendants soft-deleted.
     pub async fn delete_task_cascade(&self, id: i64) -> Result<usize> {
-        self.check_task_exists(id).await?;
-
         let mut tx = self.pool.begin().await?;
 
         // Capture subtree ids in the same transaction for consistent post-commit notifications.
@@ -1047,7 +1045,9 @@ impl<'a> TaskManager<'a> {
         Ok(delete_result.descendant_count as usize)
     }
 
-    /// Return active subtree IDs (descendants first, then root) within a transaction.
+    /// Return active subtree IDs within a transaction.
+    ///
+    /// Ordering guarantee: descendants are returned in stable `id ASC`, then root is appended last.
     async fn get_subtree_ids_in_tx(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
