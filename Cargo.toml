@@ -70,7 +70,7 @@ mime_guess = "2.0"
 open = "5.3"
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rand = "0.9"
+rand = "0.10"
 neo4rs = { version = "0.8", optional = true }
 
 # Unix process management
@@ -88,7 +88,7 @@ tempfile = "3.8"
 assert_cmd = "2.0"
 predicates = "3.0"
 criterion = { version = "0.7", features = ["async_tokio"] }
-rand = "0.9"
+rand = "0.10"
 serial_test = "3.0"
 filetime = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
