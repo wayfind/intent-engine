@@ -56,7 +56,7 @@ jobs:
           cargo llvm-cov --test interface_spec_test --no-clean --lcov --output-path lcov.info
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: lcov.info
           flags: unittests
